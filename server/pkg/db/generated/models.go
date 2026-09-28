@@ -826,6 +826,7 @@ type Issue struct {
 	LastActivityAt     pgtype.Timestamptz `json:"last_activity_at"`
 	TriageState        pgtype.Text        `json:"triage_state"`
 	DuplicateOfIssueID pgtype.UUID        `json:"duplicate_of_issue_id"`
+	LastCommentAt      pgtype.Timestamptz `json:"last_comment_at"`
 }
 
 type IssueChildEvent struct {
@@ -856,6 +857,16 @@ type IssueLabel struct {
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 	ResourceType string             `json:"resource_type"`
 	Description  string             `json:"description"`
+}
+
+type IssueMember struct {
+	IssueID     pgtype.UUID        `json:"issue_id"`
+	WorkspaceID pgtype.UUID        `json:"workspace_id"`
+	MemberType  string             `json:"member_type"`
+	MemberID    pgtype.UUID        `json:"member_id"`
+	AddedByType pgtype.Text        `json:"added_by_type"`
+	AddedByID   pgtype.UUID        `json:"added_by_id"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
 type IssuePrAutomation struct {

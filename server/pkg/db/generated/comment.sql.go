@@ -228,7 +228,8 @@ WITH touched_issue AS (
     UPDATE issue SET
         updated_at = now(),
         revision = revision + 1,
-        last_activity_at = GREATEST(COALESCE(last_activity_at, updated_at), now())
+        last_activity_at = GREATEST(COALESCE(last_activity_at, updated_at), now()),
+        last_comment_at = now()
     WHERE issue.id = $1 AND issue.workspace_id = $2
     RETURNING issue.id, issue.workspace_id, issue.revision
 ), inserted_comment AS (
@@ -2142,7 +2143,11 @@ func (q *Queries) TombstoneComment(ctx context.Context, arg TombstoneCommentPara
 const touchIssueForCommentDelete = `-- name: TouchIssueForCommentDelete :one
 UPDATE issue
 SET revision = revision + 1,
-    last_activity_at = GREATEST(COALESCE(last_activity_at, updated_at), now())
+    last_activity_at = GREATEST(COALESCE(last_activity_at, updated_at), now()),
+    last_comment_at = (
+        SELECT MAX(c.created_at) FROM comment c
+        WHERE c.issue_id = $1 AND c.workspace_id = $2 AND c.deleted_at IS NULL
+    )
 WHERE id = $1 AND workspace_id = $2
 RETURNING revision
 `
@@ -2155,6 +2160,7 @@ type TouchIssueForCommentDeleteParams struct {
 // A delete counts as activity on its issue, like CreateComment and
 // UpdateComment. Runs inside the delete transaction after the comment rows
 // changed, so a delete that lost its race never touches the issue.
+// last_comment_at falls back to the newest comment still visible.
 func (q *Queries) TouchIssueForCommentDelete(ctx context.Context, arg TouchIssueForCommentDeleteParams) (int64, error) {
 	row := q.db.QueryRow(ctx, touchIssueForCommentDelete, arg.IssueID, arg.WorkspaceID)
 	var revision int64

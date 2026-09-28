@@ -453,7 +453,8 @@ WITH touched_issue AS (
     UPDATE issue SET
         updated_at = now(),
         revision = revision + 1,
-        last_activity_at = GREATEST(COALESCE(last_activity_at, updated_at), now())
+        last_activity_at = GREATEST(COALESCE(last_activity_at, updated_at), now()),
+        last_comment_at = now()
     WHERE issue.id = sqlc.arg(issue_id) AND issue.workspace_id = sqlc.arg(workspace_id)
     RETURNING issue.id, issue.workspace_id, issue.revision
 ), inserted_comment AS (
@@ -699,9 +700,14 @@ RETURNING comment.id, comment.parent_id;
 -- A delete counts as activity on its issue, like CreateComment and
 -- UpdateComment. Runs inside the delete transaction after the comment rows
 -- changed, so a delete that lost its race never touches the issue.
+-- last_comment_at falls back to the newest comment still visible.
 UPDATE issue
 SET revision = revision + 1,
-    last_activity_at = GREATEST(COALESCE(last_activity_at, updated_at), now())
+    last_activity_at = GREATEST(COALESCE(last_activity_at, updated_at), now()),
+    last_comment_at = (
+        SELECT MAX(c.created_at) FROM comment c
+        WHERE c.issue_id = @issue_id AND c.workspace_id = @workspace_id AND c.deleted_at IS NULL
+    )
 WHERE id = @issue_id AND workspace_id = @workspace_id
 RETURNING revision;
 

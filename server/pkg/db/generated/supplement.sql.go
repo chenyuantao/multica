@@ -267,7 +267,8 @@ WITH locked_task AS MATERIALIZED (
     UPDATE issue i SET
         updated_at = now(),
         revision = revision + 1,
-        last_activity_at = GREATEST(COALESCE(last_activity_at, updated_at), now())
+        last_activity_at = GREATEST(COALESCE(last_activity_at, updated_at), now()),
+        last_comment_at = now()
     FROM locked_task t
     WHERE i.id = t.issue_id AND i.workspace_id = $3
     RETURNING i.id, i.workspace_id, i.revision
