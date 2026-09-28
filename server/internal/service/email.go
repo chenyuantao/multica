@@ -1,13 +1,16 @@
 package service
 
 import (
+	"bytes"
 	"crypto/tls"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"html"
 	"mime"
 	"mime/quotedprintable"
 	"net"
+	"net/http"
 	"net/smtp"
 	"os"
 	"strings"
@@ -33,6 +36,9 @@ type EmailService struct {
 	smtpTLSInsecure bool
 	smtpTLSImplicit bool
 	smtpEHLOName    string
+	// verificationWebhookURL is a WeCom group-bot webhook. When set, login
+	// codes are pushed to that group instead of emailed.
+	verificationWebhookURL string
 }
 
 type smtpAuthClient interface {
@@ -224,6 +230,11 @@ func NewEmailService() *EmailService {
 		client = resend.NewClient(apiKey)
 	}
 
+	verificationWebhookURL := strings.TrimSpace(os.Getenv("VERIFICATION_WEBHOOK_URL"))
+	if verificationWebhookURL != "" {
+		fmt.Println("EmailService: verification codes are pushed to VERIFICATION_WEBHOOK_URL")
+	}
+
 	switch {
 	case smtpHost != "":
 		tlsLabel := "starttls"
@@ -247,7 +258,41 @@ func NewEmailService() *EmailService {
 		smtpTLSInsecure: smtpTLSInsecure,
 		smtpTLSImplicit: smtpTLSImplicit,
 		smtpEHLOName:    smtpEHLOName,
+
+		verificationWebhookURL: verificationWebhookURL,
 	}
+}
+
+// sendVerificationWebhook posts the code as a WeCom group-bot text message.
+func (s *EmailService) sendVerificationWebhook(to, code string) error {
+	payload, err := json.Marshal(map[string]any{
+		"msgtype": "text",
+		"text": map[string]string{
+			"content": fmt.Sprintf("Multica 登录验证码：%s\n邮箱：%s\n10 分钟内有效。", code, to),
+		},
+	})
+	if err != nil {
+		return err
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Post(s.verificationWebhookURL, "application/json", bytes.NewReader(payload))
+	if err != nil {
+		return fmt.Errorf("verification webhook: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		ErrCode int    `json:"errcode"`
+		ErrMsg  string `json:"errmsg"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return fmt.Errorf("verification webhook: status %d: decode response: %w", resp.StatusCode, err)
+	}
+	if resp.StatusCode != http.StatusOK || result.ErrCode != 0 {
+		return fmt.Errorf("verification webhook: status %d errcode %d: %s", resp.StatusCode, result.ErrCode, result.ErrMsg)
+	}
+	return nil
 }
 
 // sendSMTP delivers an HTML email via an SMTP server.
@@ -336,8 +381,12 @@ func (s *EmailService) sendSMTP(to, subject, htmlBody string) error {
 
 // SendVerificationCode sends a one-time login code. The code is server-generated
 // (6-digit numeric) so no user-controlled text reaches the email body here.
-// Delivery priority: SMTP relay → Resend API → DEV stdout.
+// Delivery priority: verification webhook → SMTP relay → Resend API → DEV stdout.
 func (s *EmailService) SendVerificationCode(to, code string) error {
+	if s.verificationWebhookURL != "" {
+		return s.sendVerificationWebhook(to, code)
+	}
+
 	body := fmt.Sprintf(
 		`<div style="font-family: sans-serif; max-width: 400px; margin: 0 auto;">
 			<h2>Your verification code</h2>
