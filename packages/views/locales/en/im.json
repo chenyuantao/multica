@@ -26,7 +26,10 @@
     "failed": "Not sent",
     "retry": "Retry",
     "toggle_panel": "Toggle chat details",
-    "load_failed": "Couldn't load messages"
+    "load_failed": "Couldn't load messages",
+    "back": "Back to chats",
+    "settings": "Chat settings",
+    "not_found": "This chat isn't available"
   },
   "composer": {
     "placeholder": "Message {{title}} — @ to address one agent",
@@ -46,7 +49,11 @@
     "online": "Online",
     "unstable": "Unstable",
     "offline": "Offline",
-    "remove_failed": "Couldn't remove member"
+    "remove_failed": "Couldn't remove member",
+    "name": "Chat name",
+    "rename": "Rename chat",
+    "rename_failed": "Couldn't rename the chat",
+    "back": "Back to chat"
   },
   "new_chat": {
     "title": "New group chat",

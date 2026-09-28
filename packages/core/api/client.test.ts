@@ -25,6 +25,21 @@ describe("ApiClient status reorder", () => {
   });
 });
 
+describe("ApiClient group chat rename", () => {
+  it("patches the title and tolerates a malformed response", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: 42 }), {
+      status: 200, headers: { "Content-Type": "application/json" },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new ApiClient("https://api.example.test");
+    const result = await client.renameGroupChat("chat-1", "Launch room");
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe("https://api.example.test/api/group-chats/chat-1");
+    expect(fetchMock.mock.calls[0]?.[1]?.method).toBe("PATCH");
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ title: "Launch room" });
+    expect(result).toBeNull();
+  });
+});
+
 describe("ApiClient agent conversation-starter compatibility", () => {
   const prompt = {
     label: "Review a PR",

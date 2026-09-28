@@ -24,7 +24,10 @@
     "failed": "发送失败",
     "retry": "重试",
     "toggle_panel": "显示或隐藏群聊详情",
-    "load_failed": "消息加载失败"
+    "load_failed": "消息加载失败",
+    "back": "返回群聊列表",
+    "settings": "群聊设置",
+    "not_found": "该群聊不存在或你已不在群内"
   },
   "composer": {
     "placeholder": "发消息到 {{title}} — 输入 @ 指定一个智能体",
@@ -44,7 +47,11 @@
     "online": "在线",
     "unstable": "不稳定",
     "offline": "离线",
-    "remove_failed": "移除成员失败"
+    "remove_failed": "移除成员失败",
+    "name": "群聊名称",
+    "rename": "修改群聊名称",
+    "rename_failed": "群聊名称修改失败",
+    "back": "返回群聊"
   },
   "new_chat": {
     "title": "新建群聊",

@@ -3,13 +3,14 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { CircleMinus, HardDrive, UserPlus } from "lucide-react";
-import { useRemoveGroupChatMember } from "@multica/core/group-chats";
+import { CircleMinus, HardDrive, Pencil, UserPlus } from "lucide-react";
+import { useRemoveGroupChatMember, useRenameGroupChat } from "@multica/core/group-chats";
 import { runtimeDisplayName, runtimeListOptions } from "@multica/core/runtimes";
 import { useActorName } from "@multica/core/workspace/hooks";
 import type { Agent, AgentRuntime, GroupChat, GroupChatMember } from "@multica/core/types";
 import { cn } from "@multica/ui/lib/utils";
 import { Button } from "@multica/ui/components/ui/button";
+import { Input } from "@multica/ui/components/ui/input";
 import { ActorAvatar } from "../common/actor-avatar";
 import { useT } from "../i18n";
 import { AddMemberDialog } from "./add-member-dialog";
@@ -19,13 +20,15 @@ interface ChatDetailsPanelProps {
   wsId: string;
   chat: GroupChat;
   userId: string;
+  /** `page` fills the screen as the mobile settings level instead of a side column. */
+  variant?: "aside" | "page";
 }
 
 type Availability = "online" | "unstable" | "offline";
 
 const EMPTY_RUNTIMES: AgentRuntime[] = [];
 
-export function ChatDetailsPanel({ wsId, chat, userId }: ChatDetailsPanelProps) {
+export function ChatDetailsPanel({ wsId, chat, userId, variant = "aside" }: ChatDetailsPanelProps) {
   const { t } = useT("im");
   const { getActorName } = useActorName();
   const { agentList } = useChatDirectory(wsId);
@@ -68,7 +71,16 @@ export function ChatDetailsPanel({ wsId, chat, userId }: ChatDetailsPanelProps) 
     isCreator && !(m.member_type === "member" && m.member_id === chat.creator_id);
 
   return (
-    <aside className="flex h-full w-80 shrink-0 flex-col gap-5 overflow-y-auto border-l bg-muted/40 px-4 pt-16 pb-4">
+    <aside
+      className={cn(
+        "flex flex-col gap-5 overflow-y-auto bg-muted/40 px-4 pb-4",
+        variant === "aside" ? "h-full w-80 shrink-0 border-l pt-16" : "min-h-0 w-full flex-1 pt-4",
+      )}
+    >
+      <PanelSection title={t(($) => $.panel.name)}>
+        <ChatNameRow wsId={wsId} chat={chat} />
+      </PanelSection>
+
       <PanelSection title={t(($) => $.panel.agents)}>
         {agentMembers.length === 0 ? (
           <p className="px-3 py-3 text-label text-muted-foreground">{t(($) => $.panel.no_agents)}</p>
@@ -140,6 +152,62 @@ export function ChatDetailsPanel({ wsId, chat, userId }: ChatDetailsPanelProps) 
         </PanelSection>
       )}
     </aside>
+  );
+}
+
+function ChatNameRow({ wsId, chat }: { wsId: string; chat: GroupChat }) {
+  const { t } = useT("im");
+  const rename = useRenameGroupChat(wsId, chat.id);
+  const [draft, setDraft] = useState<string | null>(null);
+
+  const save = async () => {
+    if (draft === null) return;
+    const title = draft.trim();
+    if (!title || title === chat.title) {
+      setDraft(null);
+      return;
+    }
+    try {
+      await rename.mutateAsync(title);
+      setDraft(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t(($) => $.panel.rename_failed));
+    }
+  };
+
+  if (draft !== null) {
+    return (
+      <div className="px-2 py-1.5">
+        <Input
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={() => void save()}
+          onKeyDown={(e) => {
+            if (e.nativeEvent.isComposing) return;
+            if (e.key === "Enter") {
+              e.preventDefault();
+              void save();
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              setDraft(null);
+            }
+          }}
+          disabled={rename.isPending}
+          aria-label={t(($) => $.panel.name)}
+          className="h-8"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-3 px-3 py-2">
+      <span className="min-w-0 flex-1 truncate text-body font-medium">{chat.title}</span>
+      <Button variant="ghost" size="icon-xs" onClick={() => setDraft(chat.title)} aria-label={t(($) => $.panel.rename)}>
+        <Pencil className="text-muted-foreground" />
+      </Button>
+    </div>
   );
 }
 

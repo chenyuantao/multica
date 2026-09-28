@@ -24,7 +24,10 @@
     "failed": "未送信",
     "retry": "再試行",
     "toggle_panel": "チャット詳細の表示を切り替え",
-    "load_failed": "メッセージを読み込めませんでした"
+    "load_failed": "メッセージを読み込めませんでした",
+    "back": "チャット一覧に戻る",
+    "settings": "チャット設定",
+    "not_found": "このチャットは利用できません"
   },
   "composer": {
     "placeholder": "{{title}} にメッセージ — @ でエージェントを 1 つ指定",
@@ -44,7 +47,11 @@
     "online": "オンライン",
     "unstable": "不安定",
     "offline": "オフライン",
-    "remove_failed": "メンバーを削除できませんでした"
+    "remove_failed": "メンバーを削除できませんでした",
+    "name": "チャット名",
+    "rename": "チャット名を変更",
+    "rename_failed": "チャット名を変更できませんでした",
+    "back": "チャットに戻る"
   },
   "new_chat": {
     "title": "新しいグループチャット",

@@ -24,7 +24,10 @@
     "failed": "전송되지 않음",
     "retry": "다시 시도",
     "toggle_panel": "채팅 정보 표시 전환",
-    "load_failed": "메시지를 불러오지 못했습니다"
+    "load_failed": "메시지를 불러오지 못했습니다",
+    "back": "채팅 목록으로",
+    "settings": "채팅 설정",
+    "not_found": "이 채팅을 사용할 수 없습니다"
   },
   "composer": {
     "placeholder": "{{title}}에 메시지 보내기 — @로 에이전트 하나 지정",
@@ -44,7 +47,11 @@
     "online": "온라인",
     "unstable": "불안정",
     "offline": "오프라인",
-    "remove_failed": "멤버를 제거하지 못했습니다"
+    "remove_failed": "멤버를 제거하지 못했습니다",
+    "name": "채팅 이름",
+    "rename": "채팅 이름 변경",
+    "rename_failed": "채팅 이름을 변경하지 못했습니다",
+    "back": "채팅으로 돌아가기"
   },
   "new_chat": {
     "title": "새 그룹 채팅",

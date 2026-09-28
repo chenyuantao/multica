@@ -25,6 +25,20 @@ export function useCreateGroupChat(wsId: string) {
   });
 }
 
+export function useRenameGroupChat(wsId: string, chatId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (title: string) => api.renameGroupChat(chatId, title),
+    onSuccess: (chat) => {
+      if (!chat) return;
+      qc.setQueryData<GroupChat[]>(groupChatKeys.list(wsId), (old) =>
+        old?.map((c) => (c.id === chat.id ? { ...c, title: chat.title } : c)),
+      );
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: groupChatKeys.list(wsId) }),
+  });
+}
+
 export function useAddGroupChatMember(wsId: string, chatId: string) {
   const qc = useQueryClient();
   return useMutation({

@@ -4500,6 +4500,16 @@ export class ApiClient {
     return chat;
   }
 
+  async renameGroupChat(chatId: string, title: string): Promise<GroupChat | null> {
+    const raw = await this.fetch<unknown>(`/api/group-chats/${chatId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ title }),
+    });
+    return parseWithFallback<GroupChat | null>(raw, GroupChatSchema, null, {
+      endpoint: "PATCH /api/group-chats/:id",
+    });
+  }
+
   async addGroupChatMember(chatId: string, member: GroupChatMemberRef): Promise<GroupChat | null> {
     const raw = await this.fetch<unknown>(`/api/group-chats/${chatId}/members`, {
       method: "POST",

@@ -26,7 +26,10 @@
     "failed": "Non envoyé",
     "retry": "Réessayer",
     "toggle_panel": "Afficher ou masquer les détails",
-    "load_failed": "Impossible de charger les messages"
+    "load_failed": "Impossible de charger les messages",
+    "back": "Retour aux discussions",
+    "settings": "Paramètres de la discussion",
+    "not_found": "Cette discussion n'est pas disponible"
   },
   "composer": {
     "placeholder": "Message à {{title}} — @ pour solliciter un agent",
@@ -46,7 +49,11 @@
     "online": "En ligne",
     "unstable": "Instable",
     "offline": "Hors ligne",
-    "remove_failed": "Impossible de retirer le membre"
+    "remove_failed": "Impossible de retirer le membre",
+    "name": "Nom de la discussion",
+    "rename": "Renommer la discussion",
+    "rename_failed": "Impossible de renommer la discussion",
+    "back": "Retour à la discussion"
   },
   "new_chat": {
     "title": "Nouvelle discussion de groupe",
