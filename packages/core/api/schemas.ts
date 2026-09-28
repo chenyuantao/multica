@@ -1129,6 +1129,32 @@ export const EMPTY_COMMENT: Comment = {
   resolved_by_id: null,
 };
 
+export const GroupChatMemberSchema = z.object({
+  // Unknown member kinds degrade to "member" so the roster still renders.
+  member_type: z.enum(["member", "agent"]).catch("member"),
+  member_id: z.string(),
+  added_by_type: z.string().nullable().default(null),
+  added_by_id: z.string().nullable().default(null),
+  created_at: z.string().default(""),
+}).loose();
+
+export const GroupChatSchema = z.object({
+  id: z.string(),
+  workspace_id: z.string(),
+  identifier: z.string().default(""),
+  title: z.string(),
+  creator_type: z.string().default("member"),
+  creator_id: z.string().default(""),
+  created_at: z.string().default(""),
+  last_comment_at: z.string().nullable().default(null),
+  last_message: CommentSchema.nullable().default(null).catch(null),
+  members: z.array(GroupChatMemberSchema).default([]),
+}).loose();
+
+export const GroupChatsListSchema = z.object({
+  chats: z.array(GroupChatSchema).default([]),
+}).loose();
+
 const CommentTriggerPreviewAgentSchema = z.object({
   id: z.string(),
   name: z.string().default(""),

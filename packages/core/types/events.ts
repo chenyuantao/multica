@@ -64,6 +64,7 @@ export type WSEventType =
   | "chat:session_read"
   | "chat:session_deleted"
   | "chat:session_updated"
+  | "group_chat:updated"
   | "project:created"
   | "project:updated"
   | "project:deleted"
@@ -230,6 +231,11 @@ export interface CommentCreatedPayload {
 export interface CommentUpdatedPayload {
   comment: Comment;
   issue_revision?: number;
+}
+
+export interface GroupChatUpdatedPayload {
+  issue_id: string;
+  recipient_id?: string;
 }
 
 export interface CommentDeletedPayload {
@@ -623,6 +629,7 @@ export interface WSEventPayloadMap {
   "chat:session_read": ChatSessionReadPayload;
   "chat:session_deleted": ChatSessionDeletedPayload;
   "chat:session_updated": unknown;
+  "group_chat:updated": GroupChatUpdatedPayload;
   "project:created": ProjectCreatedPayload;
   "project:updated": ProjectUpdatedPayload;
   "project:deleted": ProjectDeletedPayload;

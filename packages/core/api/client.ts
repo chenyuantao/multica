@@ -475,7 +475,15 @@ import {
   type IssueView,
   type IssueViewPreference,
   type CreateIssueViewRequest,
+  GroupChatSchema,
+  GroupChatsListSchema,
 } from "./schemas";
+import type {
+  CreateGroupChatRequest,
+  GroupChat,
+  GroupChatMemberRef,
+  GroupChatMemberType,
+} from "../types/group-chat";
 
 /** Identifies the calling client to the server.
  *  Sent on every HTTP request as X-Client-Platform / X-Client-Version /
@@ -4465,6 +4473,53 @@ export class ApiClient {
   }
 
   // Pins
+  // Group chats — issues with members; messages go through the comment API.
+  async listGroupChats(): Promise<GroupChat[]> {
+    const raw = await this.fetch<unknown>("/api/group-chats");
+    return parseWithFallback<{ chats: GroupChat[] }>(raw, GroupChatsListSchema, { chats: [] }, {
+      endpoint: "GET /api/group-chats",
+    }).chats;
+  }
+
+  async getGroupChat(chatId: string): Promise<GroupChat | null> {
+    const raw = await this.fetch<unknown>(`/api/group-chats/${chatId}`);
+    return parseWithFallback<GroupChat | null>(raw, GroupChatSchema, null, {
+      endpoint: "GET /api/group-chats/:id",
+    });
+  }
+
+  async createGroupChat(data: CreateGroupChatRequest): Promise<GroupChat> {
+    const raw = await this.fetch<unknown>("/api/group-chats", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+    const chat = parseWithFallback<GroupChat | null>(raw, GroupChatSchema, null, {
+      endpoint: "POST /api/group-chats",
+    });
+    if (!chat) throw new Error("Invalid group chat response");
+    return chat;
+  }
+
+  async addGroupChatMember(chatId: string, member: GroupChatMemberRef): Promise<GroupChat | null> {
+    const raw = await this.fetch<unknown>(`/api/group-chats/${chatId}/members`, {
+      method: "POST",
+      body: JSON.stringify(member),
+    });
+    return parseWithFallback<GroupChat | null>(raw, GroupChatSchema, null, {
+      endpoint: "POST /api/group-chats/:id/members",
+    });
+  }
+
+  async removeGroupChatMember(
+    chatId: string,
+    memberType: GroupChatMemberType,
+    memberId: string,
+  ): Promise<void> {
+    await this.fetch(`/api/group-chats/${chatId}/members/${memberType}/${memberId}`, {
+      method: "DELETE",
+    });
+  }
+
   async listPins(): Promise<PinnedItem[]> {
     // include=view is the capability opt-in: the server withholds view pins
     // from clients that don't declare support (old builds treated any

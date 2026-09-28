@@ -79,6 +79,7 @@ export const RESERVED_SLUGS: ReadonlySet<string> = new Set([
   // things). `workspaces` covers the global `/workspaces/new` workspace-creation
   // page; `teams` is reserved for future team management.
   "issues",
+  "im",
   "projects",
   "autopilots",
   "agents",

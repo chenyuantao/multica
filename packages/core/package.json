@@ -105,6 +105,7 @@
     "./autopilots": "./autopilots/index.ts",
     "./autopilots/queries": "./autopilots/queries.ts",
     "./autopilots/mutations": "./autopilots/mutations.ts",
+    "./group-chats": "./group-chats/index.ts",
     "./pins": "./pins/index.ts",
     "./pins/queries": "./pins/queries.ts",
     "./pins/mutations": "./pins/mutations.ts",
