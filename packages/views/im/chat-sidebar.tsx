@@ -22,10 +22,12 @@ interface ChatSidebarProps {
   userId: string;
   onSelect: (chatId: string) => void;
   onNewChat: () => void;
-  onCollapse: () => void;
+  /** Omitted on mobile, where the list is its own full-screen level. */
+  onCollapse?: () => void;
+  className?: string;
 }
 
-export function ChatSidebar({ chats, isLoading, isError, selectedId, userId, onSelect, onNewChat, onCollapse }: ChatSidebarProps) {
+export function ChatSidebar({ chats, isLoading, isError, selectedId, userId, onSelect, onNewChat, onCollapse, className }: ChatSidebarProps) {
   const { t } = useT("im");
   const paths = useWorkspacePaths();
   const [query, setQuery] = useState("");
@@ -36,15 +38,17 @@ export function ChatSidebar({ chats, isLoading, isError, selectedId, userId, onS
   );
 
   return (
-    <aside className="flex h-full w-72 shrink-0 flex-col border-r bg-muted/40">
+    <aside className={cn("flex h-full w-72 shrink-0 flex-col border-r bg-muted/40", className)}>
       <div className="relative flex h-12 shrink-0 items-center justify-end gap-1 px-3">
         <div className="absolute inset-0 -z-0">
           <DragStrip />
         </div>
         <div className="relative flex gap-1" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
-          <Button variant="ghost" size="icon-sm" onClick={onCollapse} aria-label={t(($) => $.sidebar.toggle)}>
-            <PanelLeft />
-          </Button>
+          {onCollapse && (
+            <Button variant="ghost" size="icon-sm" onClick={onCollapse} aria-label={t(($) => $.sidebar.toggle)}>
+              <PanelLeft />
+            </Button>
+          )}
           <Button variant="ghost" size="icon-sm" onClick={onNewChat} aria-label={t(($) => $.sidebar.new_chat)}>
             <SquarePen />
           </Button>

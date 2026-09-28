@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { PanelRight, RotateCw } from "lucide-react";
+import { ChevronLeft, MoreHorizontal, PanelRight, RotateCw } from "lucide-react";
 import { groupChatMessagesOptions, useSendGroupChatMessage } from "@multica/core/group-chats";
 import { useActorName } from "@multica/core/workspace/hooks";
 import type { Comment, GroupChat } from "@multica/core/types";
@@ -11,6 +11,7 @@ import { Button } from "@multica/ui/components/ui/button";
 import { ActorAvatar } from "../common/actor-avatar";
 import { RichContent } from "../rich-content";
 import { useLocale, useT } from "../i18n";
+import { AppLink } from "../navigation";
 import { DragStrip } from "../platform";
 import { ChatComposer } from "./chat-composer";
 import { dayRelation, formatClock, needsTimeSeparator, type ComposerMention } from "./im-utils";
@@ -27,6 +28,8 @@ interface ChatThreadProps {
   userId: string;
   panelOpen: boolean;
   onTogglePanel: () => void;
+  /** Mobile stacked layout: links back to the chat list and on to chat settings. */
+  mobileNav?: { backHref: string; settingsHref: string };
 }
 
 const EMPTY_COMMENTS: Comment[] = [];
@@ -40,7 +43,7 @@ function toneFor(id: string): string {
   return NAME_TONES[Math.abs(h) % NAME_TONES.length] ?? "text-brand";
 }
 
-export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel }: ChatThreadProps) {
+export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, mobileNav }: ChatThreadProps) {
   const { t } = useT("im");
   const { getActorName } = useActorName();
   const { data = EMPTY_COMMENTS, isError } = useQuery(groupChatMessagesOptions(wsId, chat.id));
@@ -94,10 +97,22 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel }: Cha
 
   return (
     <section className="flex h-full min-w-0 flex-1 flex-col bg-background">
-      <header className="relative flex h-14 shrink-0 items-center gap-3 border-b px-5">
+      <header className={cn("relative flex h-14 shrink-0 items-center gap-3 border-b", mobileNav ? "px-2" : "px-5")}>
         <div className="absolute inset-0">
           <DragStrip />
         </div>
+        {mobileNav && (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="relative"
+            nativeButton={false}
+            render={<AppLink href={mobileNav.backHref} />}
+            aria-label={t(($) => $.thread.back)}
+          >
+            <ChevronLeft />
+          </Button>
+        )}
         <div className="relative min-w-0 flex-1">
           <h1 className="truncate text-body-lg font-semibold">{chat.title}</h1>
           <p className="truncate text-caption text-muted-foreground">
@@ -107,20 +122,33 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel }: Cha
             })}
           </p>
         </div>
-        <Button
-          variant={panelOpen ? "secondary" : "ghost"}
-          size="icon-sm"
-          className="relative"
-          style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-          onClick={onTogglePanel}
-          aria-pressed={panelOpen}
-          aria-label={t(($) => $.thread.toggle_panel)}
-        >
-          <PanelRight />
-        </Button>
+        {mobileNav ? (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="relative"
+            nativeButton={false}
+            render={<AppLink href={mobileNav.settingsHref} />}
+            aria-label={t(($) => $.thread.settings)}
+          >
+            <MoreHorizontal />
+          </Button>
+        ) : (
+          <Button
+            variant={panelOpen ? "secondary" : "ghost"}
+            size="icon-sm"
+            className="relative"
+            style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+            onClick={onTogglePanel}
+            aria-pressed={panelOpen}
+            aria-label={t(($) => $.thread.toggle_panel)}
+          >
+            <PanelRight />
+          </Button>
+        )}
       </header>
 
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+      <div ref={scrollRef} className={cn("min-h-0 flex-1 overflow-y-auto py-4", mobileNav ? "px-3" : "px-5")}>
         {isError ? (
           <p className="py-10 text-center text-body text-muted-foreground">{t(($) => $.thread.load_failed)}</p>
         ) : messages.length === 0 && pending.length === 0 ? (
