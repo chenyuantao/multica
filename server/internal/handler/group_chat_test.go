@@ -92,6 +92,23 @@ func TestGroupChatMembershipLifecycle(t *testing.T) {
 		"content": "[@Out](mention://agent/" + agentOut + ") please look",
 	}), "id", chat.ID)).Want(http.StatusBadRequest)
 
+	// Any chat member can rename the chat; outsiders cannot see it.
+	renameAs := func(userID, title string) *testutil.Response {
+		return testutil.Call(t, testHandler.UpdateGroupChat, withURLParam(groupChatRequestAs(t, userID, "PATCH", "/api/group-chats/"+chat.ID, map[string]string{
+			"title": title,
+		}), "id", chat.ID))
+	}
+	var renamed GroupChatResponse
+	renameAs(memberB, "  Launch war room  ").Want(http.StatusOK).JSON(&renamed)
+	if renamed.Title != "Launch war room" || len(renamed.Members) != 3 {
+		t.Fatalf("renamed chat = %q with %d members, want trimmed title and unchanged members", renamed.Title, len(renamed.Members))
+	}
+	renameAs(memberB, "   ").Want(http.StatusBadRequest)
+	renameAs(outsider, "Hijacked").Want(http.StatusNotFound)
+	if listed := containsChat(listChatsAs(testUserID)); listed == nil || listed.Title != "Launch war room" {
+		t.Fatalf("listed chat after rename = %+v, want new title", listed)
+	}
+
 	var created CommentResponse
 	testutil.Call(t, testHandler.CreateComment, withURLParam(groupChatRequestAs(t, memberB, "POST", "/api/issues/"+chat.ID+"/comments", map[string]string{
 		"content": "Onboarding looks good",

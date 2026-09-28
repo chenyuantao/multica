@@ -2006,6 +2006,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 				r.Post("/", h.CreateGroupChat)
 				r.Route("/{id}", func(r chi.Router) {
 					r.Get("/", h.GetGroupChat)
+					r.Patch("/", h.UpdateGroupChat)
 					r.Post("/members", h.AddGroupChatMember)
 					r.Delete("/members/{memberType}/{memberId}", h.RemoveGroupChatMember)
 				})

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -324,6 +325,44 @@ func (h *Handler) CreateGroupChat(w http.ResponseWriter, r *http.Request) {
 	}
 	h.publishGroupChatUpdated(uuidToString(member.WorkspaceID), userID, res.Issue.ID)
 	writeJSON(w, http.StatusCreated, groupChatToResponse(res.Issue, prefix, members, nil))
+}
+
+type UpdateGroupChatRequest struct {
+	Title string `json:"title"`
+}
+
+// UpdateGroupChat renames a chat. Any chat member may rename it; membership
+// changes stay creator-only.
+func (h *Handler) UpdateGroupChat(w http.ResponseWriter, r *http.Request) {
+	userID, ok := requireUserID(w, r)
+	if !ok {
+		return
+	}
+	issue, members, ok := h.loadGroupChat(w, r)
+	if !ok {
+		return
+	}
+	var req UpdateGroupChatRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	title := strings.TrimSpace(sanitizeNullBytes(req.Title))
+	if title == "" {
+		writeError(w, http.StatusBadRequest, "title is required")
+		return
+	}
+	if title != issue.Title {
+		updated, err := h.IssueService.UpdateContent(r.Context(), issue, service.IssueContentPatch{Title: &title})
+		if err != nil {
+			slog.Warn("rename group chat failed", append(logger.RequestAttrs(r), "error", err)...)
+			writeError(w, http.StatusInternalServerError, "failed to rename chat")
+			return
+		}
+		issue = updated
+		h.publishGroupChatUpdated(uuidToString(issue.WorkspaceID), userID, issue.ID)
+	}
+	writeJSON(w, http.StatusOK, groupChatToResponse(issue, h.getIssuePrefix(r.Context(), issue.WorkspaceID), members, nil))
 }
 
 func (h *Handler) AddGroupChatMember(w http.ResponseWriter, r *http.Request) {
