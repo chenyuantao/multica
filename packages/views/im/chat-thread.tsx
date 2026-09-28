@@ -267,7 +267,7 @@ function Bubble({ mine, time, children }: { mine?: boolean; time: string; childr
   return (
     <div
       className={cn(
-        "relative max-w-[min(34rem,80%)] rounded-2xl px-3.5 py-2 text-body",
+        "relative max-w-[min(34rem,80%)] rounded-2xl px-3.5 py-2 text-body [&_.mention]:text-inherit!",
         mine ? "bg-brand text-brand-foreground [&_a]:text-brand-foreground [&_a]:underline" : "bg-muted text-foreground",
       )}
     >
@@ -283,7 +283,7 @@ function PendingRow({ message, onRetry }: { message: PendingMessage; onRetry: ()
   const { t } = useT("im");
   return (
     <div className="mt-1 flex flex-col items-end gap-1">
-      <div className={cn("max-w-[min(34rem,80%)] rounded-2xl bg-brand px-3.5 py-2 text-body text-brand-foreground", message.status === "sending" && "opacity-70")}>
+      <div className={cn("max-w-[min(34rem,80%)] rounded-2xl bg-brand px-3.5 py-2 text-body text-brand-foreground [&_.mention]:text-inherit!", message.status === "sending" && "opacity-70")}>
         <RichContent content={message.content} density="compact" />
       </div>
       {message.status === "sending" ? (

@@ -2,7 +2,6 @@
   "sidebar": {
     "search": "검색",
     "new_chat": "새 그룹 채팅",
-    "toggle": "채팅 목록 표시 전환",
     "empty": "아직 그룹 채팅이 없습니다",
     "no_results": "일치하는 채팅이 없습니다",
     "load_failed": "채팅을 불러오지 못했습니다",

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronLeft, MessagesSquare, PanelLeft } from "lucide-react";
+import { ChevronLeft, MessagesSquare } from "lucide-react";
 import { useAuthStore } from "@multica/core/auth";
 import { useWorkspaceId } from "@multica/core/hooks";
 import { useWorkspacePaths } from "@multica/core/paths";
@@ -35,7 +35,6 @@ export function ImPage() {
   const paths = useWorkspacePaths();
   const isMobile = useIsMobile();
   const { data = EMPTY_CHATS, isLoading, isError } = useQuery(groupChatListOptions(wsId));
-  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [panelOpen, setPanelOpen] = useState(true);
   const [newChatOpen, setNewChatOpen] = useState(false);
 
@@ -106,32 +105,17 @@ export function ImPage() {
 
   return (
     <div className="flex h-svh w-full overflow-hidden bg-background text-foreground">
-      {sidebarOpen && (
-        <ChatSidebar
-          chats={chats}
-          isLoading={isLoading}
-          isError={isError}
-          selectedId={selected?.id ?? null}
-          userId={userId}
-          onSelect={select}
-          onNewChat={() => setNewChatOpen(true)}
-          onCollapse={() => setSidebarOpen(false)}
-        />
-      )}
+      <ChatSidebar
+        chats={chats}
+        isLoading={isLoading}
+        isError={isError}
+        selectedId={selected?.id ?? null}
+        userId={userId}
+        onSelect={select}
+        onNewChat={() => setNewChatOpen(true)}
+      />
 
       <div className="relative flex min-w-0 flex-1">
-        {!sidebarOpen && (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className="absolute top-3 left-3 z-10"
-            style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-            onClick={() => setSidebarOpen(true)}
-            aria-label={t(($) => $.sidebar.toggle)}
-          >
-            <PanelLeft />
-          </Button>
-        )}
         {selected ? (
           <>
             <ChatThread

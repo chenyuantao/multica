@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { PanelLeft, Search, Settings, SquarePen, LayoutGrid } from "lucide-react";
+import { Search, Settings, SquarePen, LayoutGrid } from "lucide-react";
 import type { GroupChat } from "@multica/core/types";
 import { useWorkspacePaths } from "@multica/core/paths";
 import { useActorName } from "@multica/core/workspace/hooks";
@@ -22,12 +22,10 @@ interface ChatSidebarProps {
   userId: string;
   onSelect: (chatId: string) => void;
   onNewChat: () => void;
-  /** Omitted on mobile, where the list is its own full-screen level. */
-  onCollapse?: () => void;
   className?: string;
 }
 
-export function ChatSidebar({ chats, isLoading, isError, selectedId, userId, onSelect, onNewChat, onCollapse, className }: ChatSidebarProps) {
+export function ChatSidebar({ chats, isLoading, isError, selectedId, userId, onSelect, onNewChat, className }: ChatSidebarProps) {
   const { t } = useT("im");
   const paths = useWorkspacePaths();
   const [query, setQuery] = useState("");
@@ -39,32 +37,27 @@ export function ChatSidebar({ chats, isLoading, isError, selectedId, userId, onS
 
   return (
     <aside className={cn("flex h-full w-72 shrink-0 flex-col border-r bg-muted/40", className)}>
-      <div className="relative flex h-12 shrink-0 items-center justify-end gap-1 px-3">
+      <div className="relative flex h-12 shrink-0 items-center px-3">
         <div className="absolute inset-0 -z-0">
           <DragStrip />
         </div>
-        <div className="relative flex gap-1" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
-          {onCollapse && (
-            <Button variant="ghost" size="icon-sm" onClick={onCollapse} aria-label={t(($) => $.sidebar.toggle)}>
-              <PanelLeft />
-            </Button>
-          )}
+        <div
+          className="relative flex min-w-0 flex-1 items-center gap-1"
+          style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+        >
+          <div className="relative min-w-0 flex-1">
+            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t(($) => $.sidebar.search)}
+              aria-label={t(($) => $.sidebar.search)}
+              className="h-8 rounded-full bg-background pl-8"
+            />
+          </div>
           <Button variant="ghost" size="icon-sm" onClick={onNewChat} aria-label={t(($) => $.sidebar.new_chat)}>
             <SquarePen />
           </Button>
-        </div>
-      </div>
-
-      <div className="px-3 pb-2">
-        <div className="relative">
-          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={t(($) => $.sidebar.search)}
-            aria-label={t(($) => $.sidebar.search)}
-            className="h-8 rounded-full bg-background pl-8"
-          />
         </div>
       </div>
 

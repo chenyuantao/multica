@@ -2,7 +2,6 @@
   "sidebar": {
     "search": "搜索",
     "new_chat": "新建群聊",
-    "toggle": "显示或隐藏群聊列表",
     "empty": "还没有群聊",
     "no_results": "没有匹配的群聊",
     "load_failed": "群聊加载失败",

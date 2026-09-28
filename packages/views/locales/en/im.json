@@ -2,7 +2,6 @@
   "sidebar": {
     "search": "Search",
     "new_chat": "New group chat",
-    "toggle": "Toggle chat list",
     "empty": "No group chats yet",
     "no_results": "No matching chats",
     "load_failed": "Couldn't load chats",

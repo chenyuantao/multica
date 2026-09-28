@@ -2,7 +2,6 @@
   "sidebar": {
     "search": "Rechercher",
     "new_chat": "Nouvelle discussion de groupe",
-    "toggle": "Afficher ou masquer la liste des discussions",
     "empty": "Aucune discussion de groupe pour l'instant",
     "no_results": "Aucune discussion correspondante",
     "load_failed": "Impossible de charger les discussions",
