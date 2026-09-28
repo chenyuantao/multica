@@ -1,0 +1,71 @@
+{
+  "sidebar": {
+    "search": "Search",
+    "new_chat": "New group chat",
+    "toggle": "Toggle chat list",
+    "empty": "No group chats yet",
+    "no_results": "No matching chats",
+    "load_failed": "Couldn't load chats",
+    "no_messages": "No messages yet",
+    "preview": "{{name}}: {{text}}",
+    "chats": "Group chats",
+    "settings": "Settings",
+    "workspace": "Back to workspace"
+  },
+  "thread": {
+    "subtitle": "Group · {{people}} · {{agents}}",
+    "people_one": "{{count}} person",
+    "people_other": "{{count}} people",
+    "agents_one": "{{count}} agent",
+    "agents_other": "{{count}} agents",
+    "select": "Select a chat",
+    "no_messages": "No messages yet",
+    "today": "Today {{time}}",
+    "yesterday": "Yesterday {{time}}",
+    "sending": "Sending…",
+    "failed": "Not sent",
+    "retry": "Retry",
+    "toggle_panel": "Toggle chat details",
+    "load_failed": "Couldn't load messages"
+  },
+  "composer": {
+    "placeholder": "Message {{title}} — @ to address one agent",
+    "send": "Send",
+    "no_agents": "No agents in this chat",
+    "mention": "Mention an agent"
+  },
+  "panel": {
+    "people": "People in this chat",
+    "agents": "Agents in this chat",
+    "runs": "Where runs happen",
+    "add_member": "Add member…",
+    "remove": "Remove {{name}}",
+    "creator": "Creator",
+    "you": "You",
+    "no_agents": "No agents yet",
+    "online": "Online",
+    "unstable": "Unstable",
+    "offline": "Offline",
+    "remove_failed": "Couldn't remove member"
+  },
+  "new_chat": {
+    "title": "New group chat",
+    "description": "Only people and agents in the chat can see it.",
+    "name_label": "Name",
+    "name_placeholder": "Launch room",
+    "members_label": "Members",
+    "create": "Create",
+    "cancel": "Cancel",
+    "failed": "Couldn't create the chat"
+  },
+  "add_member": {
+    "title": "Add member",
+    "description": "They'll see the whole conversation.",
+    "search": "Search people and agents",
+    "empty": "Everyone is already here",
+    "people": "People",
+    "agents": "Agents",
+    "add": "Add",
+    "failed": "Couldn't add member"
+  }
+}

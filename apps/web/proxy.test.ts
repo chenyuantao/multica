@@ -57,6 +57,7 @@ describe("proxy legacy workspace route redirects", () => {
   };
 
   it.each([
+    ["im", "/acme/im"],
     ["issues", "/acme/issues"],
     ["projects", "/acme/projects"],
     ["agents", "/acme/agents"],

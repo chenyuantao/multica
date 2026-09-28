@@ -10,8 +10,10 @@ import { isOfficialMarketingHost } from "./lib/public-host";
 // Old workspace-scoped route segments that existed before the URL refactor
 // (pre-#1131). Any URL with these as the FIRST segment is a legacy URL that
 // needs to be rewritten to /{slug}/{route}/... so old bookmarks, deep links,
-// and post-revert-and-reapply users don't hit 404.
+// and post-revert-and-reapply users don't hit 404. `im` is not legacy: `/im`
+// is the advertised short entry to group chats and resolves the same way.
 const LEGACY_ROUTE_SEGMENTS = new Set([
+  "im",
   "issues",
   "projects",
   "agents",

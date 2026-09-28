@@ -1,0 +1,69 @@
+{
+  "sidebar": {
+    "search": "検索",
+    "new_chat": "新しいグループチャット",
+    "toggle": "チャット一覧の表示を切り替え",
+    "empty": "グループチャットはまだありません",
+    "no_results": "一致するチャットはありません",
+    "load_failed": "チャットを読み込めませんでした",
+    "no_messages": "まだメッセージはありません",
+    "preview": "{{name}}: {{text}}",
+    "chats": "グループチャット",
+    "settings": "設定",
+    "workspace": "ワークスペースに戻る"
+  },
+  "thread": {
+    "subtitle": "グループ · {{people}} · {{agents}}",
+    "people_other": "{{count}} 人",
+    "agents_other": "エージェント {{count}} 件",
+    "select": "チャットを選択",
+    "no_messages": "まだメッセージはありません",
+    "today": "今日 {{time}}",
+    "yesterday": "昨日 {{time}}",
+    "sending": "送信中…",
+    "failed": "未送信",
+    "retry": "再試行",
+    "toggle_panel": "チャット詳細の表示を切り替え",
+    "load_failed": "メッセージを読み込めませんでした"
+  },
+  "composer": {
+    "placeholder": "{{title}} にメッセージ — @ でエージェントを 1 つ指定",
+    "send": "送信",
+    "no_agents": "このチャットにエージェントはいません",
+    "mention": "エージェントをメンション"
+  },
+  "panel": {
+    "people": "このチャットのメンバー",
+    "agents": "このチャットのエージェント",
+    "runs": "実行場所",
+    "add_member": "メンバーを追加…",
+    "remove": "{{name}} を削除",
+    "creator": "作成者",
+    "you": "あなた",
+    "no_agents": "エージェントはまだいません",
+    "online": "オンライン",
+    "unstable": "不安定",
+    "offline": "オフライン",
+    "remove_failed": "メンバーを削除できませんでした"
+  },
+  "new_chat": {
+    "title": "新しいグループチャット",
+    "description": "チャット内のメンバーとエージェントだけが閲覧できます。",
+    "name_label": "名前",
+    "name_placeholder": "ローンチルーム",
+    "members_label": "メンバー",
+    "create": "作成",
+    "cancel": "キャンセル",
+    "failed": "チャットを作成できませんでした"
+  },
+  "add_member": {
+    "title": "メンバーを追加",
+    "description": "追加された相手は会話履歴をすべて閲覧できます。",
+    "search": "メンバーとエージェントを検索",
+    "empty": "全員がすでに参加しています",
+    "people": "メンバー",
+    "agents": "エージェント",
+    "add": "追加",
+    "failed": "メンバーを追加できませんでした"
+  }
+}

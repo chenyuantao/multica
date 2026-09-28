@@ -1,0 +1,71 @@
+{
+  "sidebar": {
+    "search": "Rechercher",
+    "new_chat": "Nouvelle discussion de groupe",
+    "toggle": "Afficher ou masquer la liste des discussions",
+    "empty": "Aucune discussion de groupe pour l'instant",
+    "no_results": "Aucune discussion correspondante",
+    "load_failed": "Impossible de charger les discussions",
+    "no_messages": "Aucun message pour l'instant",
+    "preview": "{{name}} : {{text}}",
+    "chats": "Discussions de groupe",
+    "settings": "Paramètres",
+    "workspace": "Retour à l'espace de travail"
+  },
+  "thread": {
+    "subtitle": "Groupe · {{people}} · {{agents}}",
+    "people_one": "{{count}} personne",
+    "people_other": "{{count}} personnes",
+    "agents_one": "{{count}} agent",
+    "agents_other": "{{count}} agents",
+    "select": "Sélectionnez une discussion",
+    "no_messages": "Aucun message pour l'instant",
+    "today": "Aujourd'hui {{time}}",
+    "yesterday": "Hier {{time}}",
+    "sending": "Envoi…",
+    "failed": "Non envoyé",
+    "retry": "Réessayer",
+    "toggle_panel": "Afficher ou masquer les détails",
+    "load_failed": "Impossible de charger les messages"
+  },
+  "composer": {
+    "placeholder": "Message à {{title}} — @ pour solliciter un agent",
+    "send": "Envoyer",
+    "no_agents": "Aucun agent dans cette discussion",
+    "mention": "Mentionner un agent"
+  },
+  "panel": {
+    "people": "Membres de la discussion",
+    "agents": "Agents de la discussion",
+    "runs": "Où s'exécutent les runs",
+    "add_member": "Ajouter un membre…",
+    "remove": "Retirer {{name}}",
+    "creator": "Créateur",
+    "you": "Vous",
+    "no_agents": "Aucun agent pour l'instant",
+    "online": "En ligne",
+    "unstable": "Instable",
+    "offline": "Hors ligne",
+    "remove_failed": "Impossible de retirer le membre"
+  },
+  "new_chat": {
+    "title": "Nouvelle discussion de groupe",
+    "description": "Seuls les membres et agents de la discussion peuvent la voir.",
+    "name_label": "Nom",
+    "name_placeholder": "Salle de lancement",
+    "members_label": "Membres",
+    "create": "Créer",
+    "cancel": "Annuler",
+    "failed": "Impossible de créer la discussion"
+  },
+  "add_member": {
+    "title": "Ajouter un membre",
+    "description": "Cette personne verra toute la conversation.",
+    "search": "Rechercher des membres et des agents",
+    "empty": "Tout le monde est déjà là",
+    "people": "Membres",
+    "agents": "Agents",
+    "add": "Ajouter",
+    "failed": "Impossible d'ajouter le membre"
+  }
+}

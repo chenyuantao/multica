@@ -1,0 +1,69 @@
+{
+  "sidebar": {
+    "search": "搜索",
+    "new_chat": "新建群聊",
+    "toggle": "显示或隐藏群聊列表",
+    "empty": "还没有群聊",
+    "no_results": "没有匹配的群聊",
+    "load_failed": "群聊加载失败",
+    "no_messages": "还没有消息",
+    "preview": "{{name}}：{{text}}",
+    "chats": "群聊",
+    "settings": "设置",
+    "workspace": "返回工作区"
+  },
+  "thread": {
+    "subtitle": "群聊 · {{people}} · {{agents}}",
+    "people_other": "{{count}} 位成员",
+    "agents_other": "{{count}} 个智能体",
+    "select": "选择一个群聊",
+    "no_messages": "还没有消息",
+    "today": "今天 {{time}}",
+    "yesterday": "昨天 {{time}}",
+    "sending": "发送中…",
+    "failed": "发送失败",
+    "retry": "重试",
+    "toggle_panel": "显示或隐藏群聊详情",
+    "load_failed": "消息加载失败"
+  },
+  "composer": {
+    "placeholder": "发消息到 {{title}} — 输入 @ 指定一个智能体",
+    "send": "发送",
+    "no_agents": "群聊里还没有智能体",
+    "mention": "@ 一个智能体"
+  },
+  "panel": {
+    "people": "群聊成员",
+    "agents": "群聊中的智能体",
+    "runs": "运行位置",
+    "add_member": "添加成员…",
+    "remove": "移除 {{name}}",
+    "creator": "创建者",
+    "you": "你",
+    "no_agents": "还没有智能体",
+    "online": "在线",
+    "unstable": "不稳定",
+    "offline": "离线",
+    "remove_failed": "移除成员失败"
+  },
+  "new_chat": {
+    "title": "新建群聊",
+    "description": "只有群聊内的成员和智能体能看到它。",
+    "name_label": "名称",
+    "name_placeholder": "发布讨论组",
+    "members_label": "成员",
+    "create": "创建",
+    "cancel": "取消",
+    "failed": "群聊创建失败"
+  },
+  "add_member": {
+    "title": "添加成员",
+    "description": "对方能看到完整的聊天记录。",
+    "search": "搜索成员和智能体",
+    "empty": "所有人都已在群聊中",
+    "people": "成员",
+    "agents": "智能体",
+    "add": "添加",
+    "failed": "添加成员失败"
+  }
+}
