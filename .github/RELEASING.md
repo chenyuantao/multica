@@ -4,11 +4,23 @@
 
 Release from a reviewed commit on `main` by creating and pushing a new semantic
 version tag such as `v0.18.4`. The Release workflow intentionally has no manual
-trigger: a tag push is the only event that can publish binaries, Homebrew
-formulae, and container images.
+trigger: a tag push is the only event that publishes binaries, Homebrew
+formulae, the Helm chart, and the `latest` / version container tags. Branch
+pushes publish moving image tags separately; see [Branch images](#branch-images).
 
 The verification job runs the Go tests and `govulncheck` before any publishing
 job starts. The vulnerability scan is fail-closed by default.
+
+## Branch images
+
+`.github/workflows/branch-images.yml` runs on every branch push. It builds
+multi-arch `multica-backend` and `multica-web` images and pushes them to GHCR
+tagged with the branch name. Characters Docker rejects, including `/`, become
+`-`, so `feat/foo` is published as `feat-foo`.
+
+These tags move on the next push to that branch. The workflow refuses `latest`
+and semver tags such as `v1.2.3`, so a branch cannot overwrite a release. It
+does not publish binaries, Homebrew formulae, or the Helm chart.
 
 ## Emergency vulnerability-scan bypass
 

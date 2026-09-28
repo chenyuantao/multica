@@ -1,0 +1,94 @@
+name: Branch images
+
+# Push to a branch publishes moving GHCR tags for the self-hosted images.
+# The tag is the branch name, sanitized to a Docker tag (`/` becomes `-`).
+# `latest` and release versions stay on the Release workflow.
+
+on:
+  push:
+    branches:
+      - "**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+# A newer push to the same branch replaces the in-flight build. The branch
+# tag always tracks the latest commit that finishes publishing.
+concurrency:
+  group: branch-images-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    outputs:
+      value: ${{ steps.check.outputs.tag }}
+    steps:
+      - name: Derive a Docker tag from the branch name
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/multica-backend
+          # `latest=auto` would also tag the default branch as `latest` and
+          # overwrite the stable release tag. Never enable it here.
+          flavor: |
+            latest=false
+          tags: |
+            type=ref,event=branch
+
+      - name: Reject tags reserved for releases
+        id: check
+        env:
+          TAG: ${{ steps.meta.outputs.version }}
+          REF: ${{ github.ref_name }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          if [[ -z "$TAG" ]]; then
+            echo "::error::Could not derive a Docker tag from branch '$REF'."
+            exit 1
+          fi
+          if [[ ! "$TAG" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
+            echo "::error::Branch '$REF' sanitizes to '$TAG', which is not a valid Docker tag."
+            exit 1
+          fi
+          if [[ "$TAG" == "latest" || "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Branch '$REF' maps to '$TAG', which is reserved for the Release workflow."
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Branch images"
+            echo ""
+            echo "Branch \`$REF\` publishes tag \`$TAG\`."
+            echo ""
+            echo "- \`ghcr.io/${OWNER}/multica-backend:${TAG}\`"
+            echo "- \`ghcr.io/${OWNER}/multica-web:${TAG}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  backend:
+    needs: tag
+    uses: ./.github/workflows/publish-branch-image.yml
+    with:
+      image: multica-backend
+      dockerfile: Dockerfile
+      title: Multica Backend
+      description: Multica self-hosted backend
+      tag: ${{ needs.tag.outputs.value }}
+      extra_build_args: |
+        VERSION=${{ needs.tag.outputs.value }}
+        COMMIT=${{ github.sha }}
+
+  web:
+    needs: tag
+    uses: ./.github/workflows/publish-branch-image.yml
+    with:
+      image: multica-web
+      dockerfile: Dockerfile.web
+      title: Multica Web
+      description: Multica self-hosted web frontend
+      tag: ${{ needs.tag.outputs.value }}
+      extra_build_args: |
+        REMOTE_API_URL=http://backend:8080
+        NEXT_PUBLIC_APP_VERSION=${{ needs.tag.outputs.value }}
