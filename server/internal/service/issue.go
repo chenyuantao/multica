@@ -96,6 +96,15 @@ type IssueCreateParams struct {
 	// Its immutable snapshot and cloned attachment rows commit in the same
 	// transaction as the new issue.
 	SourceContext *SourceContextCapture
+	// Members turns the new issue into a group chat. They are written in the
+	// create transaction, so the issue is never visible without its members.
+	Members []IssueMemberRef
+}
+
+// IssueMemberRef names one group chat member: a person ("member") or an agent.
+type IssueMemberRef struct {
+	Type string
+	ID   pgtype.UUID
 }
 
 // IssueCreateOpts groups optional knobs for IssueService.Create. Most
@@ -413,6 +422,19 @@ func (s *IssueService) Create(ctx context.Context, p IssueCreateParams, opts Iss
 			return IssueCreateResult{}, ErrIssuePropertiesTooLarge
 		}
 		return IssueCreateResult{}, fmt.Errorf("create issue: %w", err)
+	}
+
+	for _, m := range p.Members {
+		if err := qtx.AddIssueMember(ctx, db.AddIssueMemberParams{
+			IssueID:     issue.ID,
+			WorkspaceID: p.WorkspaceID,
+			MemberType:  m.Type,
+			MemberID:    m.ID,
+			AddedByType: pgtype.Text{String: p.CreatorType, Valid: true},
+			AddedByID:   p.CreatorID,
+		}); err != nil {
+			return IssueCreateResult{}, fmt.Errorf("add issue member: %w", err)
+		}
 	}
 
 	if p.SourceContext != nil {

@@ -90,6 +90,10 @@ const (
 	EventChatSessionDeleted  = "chat:session_deleted"
 	EventChatSessionUpdated  = "chat:session_updated"
 
+	// Group chat (issue with members) membership or list changed. Delivered
+	// only to the chat's people, or to recipient_id when set.
+	EventGroupChatUpdated = "group_chat:updated"
+
 	// Project events
 	EventProjectCreated         = "project:created"
 	EventProjectUpdated         = "project:updated"

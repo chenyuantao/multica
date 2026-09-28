@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -9,6 +10,8 @@ import (
 	"github.com/multica-ai/multica/server/internal/events"
 	"github.com/multica-ai/multica/server/internal/handler"
 	"github.com/multica-ai/multica/server/internal/realtime"
+	"github.com/multica-ai/multica/server/internal/util"
+	db "github.com/multica-ai/multica/server/pkg/db/generated"
 	"github.com/multica-ai/multica/server/pkg/protocol"
 )
 
@@ -77,6 +80,73 @@ func projectOutbound(eventType string, payload any) any {
 // without touching any of the event listeners below. This is Phase 0 of the
 // horizontal-scaling plan tracked in MUL-1138.
 func registerListeners(bus *events.Bus, b realtime.Broadcaster) {
+	registerScopedListeners(bus, b, nil)
+}
+
+// groupChatAudience returns the people who may receive events about an issue.
+// private is false for ordinary issues, which keep workspace fanout.
+type groupChatAudience func(ctx context.Context, issueID string) (userIDs []string, private bool)
+
+// eventIssueRef pulls the issue an event is about out of the common payload
+// shapes: {"issue_id"}, {"comment": {"issue_id"}}, {"issue": {"id"}}.
+type eventIssueRef struct {
+	IssueID string `json:"issue_id"`
+	Comment struct {
+		IssueID string `json:"issue_id"`
+	} `json:"comment"`
+	Issue struct {
+		ID string `json:"id"`
+	} `json:"issue"`
+}
+
+func newGroupChatAudience(q *db.Queries) groupChatAudience {
+	return func(ctx context.Context, issueID string) ([]string, bool) {
+		id, err := util.ParseUUID(issueID)
+		if err != nil {
+			return nil, false
+		}
+		hasMembers, err := q.IssueHasMembers(ctx, id)
+		if err != nil {
+			// Fail closed: an unknown audience must not fall back to the room.
+			slog.Warn("group chat audience lookup failed", "issue_id", issueID, "error", err)
+			return nil, true
+		}
+		if !hasMembers {
+			return nil, false
+		}
+		ids, err := q.ListIssueHumanMemberUserIDs(ctx, id)
+		if err != nil {
+			slog.Warn("group chat recipients lookup failed", "issue_id", issueID, "error", err)
+			return nil, true
+		}
+		out := make([]string, 0, len(ids))
+		for _, u := range ids {
+			out = append(out, util.UUIDToString(u))
+		}
+		return out, true
+	}
+}
+
+func eventIssueID(payload any) string {
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return ""
+	}
+	var ref eventIssueRef
+	if json.Unmarshal(raw, &ref) != nil {
+		return ""
+	}
+	switch {
+	case ref.IssueID != "":
+		return ref.IssueID
+	case ref.Comment.IssueID != "":
+		return ref.Comment.IssueID
+	default:
+		return ref.Issue.ID
+	}
+}
+
+func registerScopedListeners(bus *events.Bus, b realtime.Broadcaster, audience groupChatAudience) {
 	// Personal events should NOT be broadcast to the whole workspace.
 	personalEvents := map[string]bool{
 		protocol.EventInboxNew:           true,
@@ -89,6 +159,7 @@ func registerListeners(bus *events.Bus, b realtime.Broadcaster) {
 		protocol.EventInvitationRevoked:  true,
 		protocol.EventChatSessionCreated: true,
 		protocol.EventChatSessionUpdated: true,
+		protocol.EventGroupChatUpdated:   true,
 	}
 
 	// Helper: marshal event and send to a specific user.
@@ -239,11 +310,40 @@ func registerListeners(bus *events.Bus, b realtime.Broadcaster) {
 		b.SendToUser(userID, data, e.WorkspaceID)
 	})
 
+	// group_chat:updated goes to recipient_id when set (a person just removed
+	// from the chat), otherwise to the chat's current people.
+	bus.Subscribe(protocol.EventGroupChatUpdated, func(e events.Event) {
+		payload, _ := e.Payload.(map[string]any)
+		if recipientID, _ := payload["recipient_id"].(string); recipientID != "" {
+			sendToRecipient(b, e, recipientID)
+			return
+		}
+		if audience == nil {
+			return
+		}
+		userIDs, _ := audience(context.Background(), eventIssueID(e.Payload))
+		for _, userID := range userIDs {
+			sendToRecipient(b, e, userID)
+		}
+	})
+
 	// SubscribeAll handles workspace-broadcast for non-personal events.
 	bus.SubscribeAll(func(e events.Event) {
 		// Skip personal events — they are handled by type-specific listeners above.
 		if personalEvents[e.Type] {
 			return
+		}
+
+		// Events about a group chat reach only its people.
+		if audience != nil && e.WorkspaceID != "" {
+			if issueID := eventIssueID(e.Payload); issueID != "" {
+				if userIDs, private := audience(context.Background(), issueID); private {
+					for _, userID := range userIDs {
+						sendToRecipient(b, e, userID)
+					}
+					return
+				}
+			}
 		}
 
 		msg := map[string]any{

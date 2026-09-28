@@ -602,7 +602,7 @@ func main() {
 			channelLeaseRedis = newNamedRedisClient(opts, "channel-lease")
 		}
 	}
-	registerListeners(bus, broadcaster)
+	registerScopedListeners(bus, broadcaster, newGroupChatAudience(db.New(pool)))
 
 	analyticsClient := analytics.NewFromEnv()
 	defer analyticsClient.Close()

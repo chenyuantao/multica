@@ -1998,6 +1998,19 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 				r.Post("/changes", h.ListSearchIndexChanges)
 			})
 
+			// Group chats (issues with members). Messages use the issue
+			// comment routes, which enforce chat membership.
+			r.Route("/api/group-chats", func(r chi.Router) {
+				r.Use(handler.RequireHumanActor)
+				r.Get("/", h.ListGroupChats)
+				r.Post("/", h.CreateGroupChat)
+				r.Route("/{id}", func(r chi.Router) {
+					r.Get("/", h.GetGroupChat)
+					r.Post("/members", h.AddGroupChatMember)
+					r.Delete("/members/{memberType}/{memberId}", h.RemoveGroupChatMember)
+				})
+			})
+
 			// Issues
 			r.Route("/api/issues", func(r chi.Router) {
 				r.Get("/limit-usage", h.GetIssueLimitUsage)

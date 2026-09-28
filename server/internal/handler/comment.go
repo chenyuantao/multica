@@ -1744,6 +1744,9 @@ func (h *Handler) CreateComment(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid comment type")
 		return
 	}
+	if h.rejectNonMemberAgentMentions(w, r, issue, req.Content) {
+		return
+	}
 
 	var parentID pgtype.UUID
 	var parentComment *db.Comment

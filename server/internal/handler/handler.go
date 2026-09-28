@@ -1058,7 +1058,7 @@ func (h *Handler) loadIssueForUser(w http.ResponseWriter, r *http.Request, issue
 	// silently returns false for non-identifier strings, falling through to
 	// the UUID path below.
 	if issue, ok := h.resolveIssueByIdentifier(r.Context(), issueID, workspaceID); ok {
-		return issue, true
+		return h.gateGroupChatIssue(w, r, issue)
 	}
 
 	issueUUID, err := util.ParseUUID(issueID)
@@ -1078,6 +1078,21 @@ func (h *Handler) loadIssueForUser(w http.ResponseWriter, r *http.Request, issue
 		WorkspaceID: wsUUID,
 	})
 	if err != nil {
+		writeError(w, http.StatusNotFound, "issue not found")
+		return db.Issue{}, false
+	}
+	return h.gateGroupChatIssue(w, r, issue)
+}
+
+// gateGroupChatIssue hides a group chat from everyone outside it, answering
+// exactly like a missing issue so its existence is not revealed.
+func (h *Handler) gateGroupChatIssue(w http.ResponseWriter, r *http.Request, issue db.Issue) (db.Issue, bool) {
+	allowed, err := h.canAccessGroupChat(r.Context(), r, issue)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to check chat membership")
+		return db.Issue{}, false
+	}
+	if !allowed {
 		writeError(w, http.StatusNotFound, "issue not found")
 		return db.Issue{}, false
 	}
