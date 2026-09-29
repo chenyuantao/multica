@@ -9,7 +9,28 @@
     "preview": "{{name}}: {{text}}",
     "chats": "Group chats",
     "settings": "Settings",
-    "workspace": "Back to workspace"
+    "clear_search": "Clear search"
+  },
+  "rail": {
+    "sections": "Sections",
+    "profile": "Your profile",
+    "chats": "Chats",
+    "contacts": "Contacts"
+  },
+  "contacts": {
+    "search": "Search contacts",
+    "no_results": "No matching contacts",
+    "chats": "Group chats",
+    "people": "People",
+    "agents": "Agents",
+    "members_one": "{{count}} member",
+    "members_other": "{{count}} members",
+    "you": "You",
+    "person": "Person",
+    "agent": "Agent",
+    "view_profile": "View profile",
+    "shared_chats": "Group chats in common",
+    "select": "Select a contact"
   },
   "thread": {
     "subtitle": "Group · {{people}} · {{agents}}",

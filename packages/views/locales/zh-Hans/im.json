@@ -9,7 +9,27 @@
     "preview": "{{name}}：{{text}}",
     "chats": "群聊",
     "settings": "设置",
-    "workspace": "返回工作区"
+    "clear_search": "清除搜索"
+  },
+  "rail": {
+    "sections": "分区",
+    "profile": "个人资料",
+    "chats": "会话",
+    "contacts": "通讯录"
+  },
+  "contacts": {
+    "search": "搜索联系人",
+    "no_results": "没有匹配的联系人",
+    "chats": "群聊",
+    "people": "成员",
+    "agents": "智能体",
+    "members_other": "{{count}} 位成员",
+    "you": "你",
+    "person": "成员",
+    "agent": "智能体",
+    "view_profile": "查看资料",
+    "shared_chats": "共同群聊",
+    "select": "选择一个联系人"
   },
   "thread": {
     "subtitle": "群聊 · {{people}} · {{agents}}",

@@ -1,18 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Search, Settings, SquarePen, LayoutGrid } from "lucide-react";
+import { CirclePlus } from "lucide-react";
 import type { GroupChat } from "@multica/core/types";
-import { useWorkspacePaths } from "@multica/core/paths";
 import { useActorName } from "@multica/core/workspace/hooks";
 import { cn } from "@multica/ui/lib/utils";
-import { Button } from "@multica/ui/components/ui/button";
-import { Input } from "@multica/ui/components/ui/input";
 import { ActorAvatar } from "../common/actor-avatar";
-import { AppLink } from "../navigation";
 import { useLocale, useT } from "../i18n";
-import { DragStrip } from "../platform";
 import { chatActivityAt, formatListStamp, plainTextPreview } from "./im-utils";
+import { ImSidebarHeader, ImSidebarShell } from "./im-sidebar-shell";
 
 interface ChatSidebarProps {
   chats: GroupChat[];
@@ -27,7 +23,6 @@ interface ChatSidebarProps {
 
 export function ChatSidebar({ chats, isLoading, isError, selectedId, userId, onSelect, onNewChat, className }: ChatSidebarProps) {
   const { t } = useT("im");
-  const paths = useWorkspacePaths();
   const [query, setQuery] = useState("");
   const q = query.trim().toLowerCase();
   const visible = useMemo(
@@ -36,32 +31,20 @@ export function ChatSidebar({ chats, isLoading, isError, selectedId, userId, onS
   );
 
   return (
-    <aside className={cn("flex h-full w-72 shrink-0 flex-col border-r bg-muted/40", className)}>
-      <div className="relative flex h-12 shrink-0 items-center px-3">
-        <div className="absolute inset-0 -z-0">
-          <DragStrip />
-        </div>
-        <div
-          className="relative flex min-w-0 flex-1 items-center gap-1"
-          style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+    <ImSidebarShell className={className}>
+      <ImSidebarHeader query={query} onQueryChange={setQuery} searchLabel={t(($) => $.sidebar.search)}>
+        <button
+          type="button"
+          onClick={onNewChat}
+          aria-label={t(($) => $.sidebar.new_chat)}
+          title={t(($) => $.sidebar.new_chat)}
+          className="flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
         >
-          <div className="relative min-w-0 flex-1">
-            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={t(($) => $.sidebar.search)}
-              aria-label={t(($) => $.sidebar.search)}
-              className="h-8 rounded-full bg-background pl-8"
-            />
-          </div>
-          <Button variant="ghost" size="icon-sm" onClick={onNewChat} aria-label={t(($) => $.sidebar.new_chat)}>
-            <SquarePen />
-          </Button>
-        </div>
-      </div>
+          <CirclePlus className="size-[21px]" strokeWidth={1.7} />
+        </button>
+      </ImSidebarHeader>
 
-      <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-2" aria-label={t(($) => $.sidebar.chats)}>
+      <nav className="min-h-0 flex-1 overflow-y-auto pt-1 pb-3" aria-label={t(($) => $.sidebar.chats)}>
         {isError ? (
           <p className="px-3 py-8 text-center text-body text-muted-foreground">{t(($) => $.sidebar.load_failed)}</p>
         ) : !isLoading && visible.length === 0 ? (
@@ -69,9 +52,9 @@ export function ChatSidebar({ chats, isLoading, isError, selectedId, userId, onS
             {q ? t(($) => $.sidebar.no_results) : t(($) => $.sidebar.empty)}
           </p>
         ) : (
-          <ul className="flex flex-col gap-0.5">
+          <ul className="flex flex-col">
             {visible.map((chat) => (
-              <li key={chat.id}>
+              <li key={chat.id} className="border-b border-foreground/5 last:border-b-0">
                 <ChatListItem
                   chat={chat}
                   userId={userId}
@@ -83,45 +66,40 @@ export function ChatSidebar({ chats, isLoading, isError, selectedId, userId, onS
           </ul>
         )}
       </nav>
-
-      <div className="flex h-11 shrink-0 items-center gap-1 border-t px-3">
-        <Button variant="ghost" size="icon-sm" nativeButton={false} render={<AppLink href={paths.settings()} />} aria-label={t(($) => $.sidebar.settings)}>
-          <Settings />
-        </Button>
-        <Button variant="ghost" size="icon-sm" nativeButton={false} render={<AppLink href={paths.issues()} />} aria-label={t(($) => $.sidebar.workspace)}>
-          <LayoutGrid />
-        </Button>
-      </div>
-    </aside>
+    </ImSidebarShell>
   );
 }
 
-function ChatAvatarStack({ chat, userId }: { chat: GroupChat; userId: string }) {
+/** Group avatar: the other members as a tiled mosaic, or a single avatar for 1:1-sized rooms. */
+export function ChatAvatar({ chat, userId }: { chat: GroupChat; userId: string }) {
   const others = chat.members.filter((m) => !(m.member_type === "member" && m.member_id === userId));
-  const shown = (others.length > 0 ? others : chat.members).slice(0, 3);
+  const shown = (others.length > 0 ? others : chat.members).slice(0, 4);
   if (shown.length <= 1) {
     const only = shown[0];
     return only ? (
-      <ActorAvatar actorType={only.member_type} actorId={only.member_id} size="xl" profileLink={false} />
+      <ActorAvatar actorType={only.member_type} actorId={only.member_id} size="xl" shape="rounded" profileLink={false} />
     ) : (
-      <span className="size-10 rounded-full bg-muted" />
+      <span className="size-10 shrink-0 rounded-[7px] bg-muted" />
     );
   }
+  // Tiles fill the squircle; the 2px seams show the row surface underneath.
   return (
-    <span className="relative block size-10 shrink-0">
-      {shown.map((m, i) => (
-        <span
+    <span
+      className={cn(
+        "grid size-10 shrink-0 grid-cols-2 grid-rows-2 gap-0.5 overflow-hidden rounded-[7px] [&>*]:size-full!",
+        shown.length === 2 && "[&>*]:row-span-2",
+        shown.length === 3 && "[&>*:first-child]:col-span-2",
+      )}
+    >
+      {shown.map((m) => (
+        <ActorAvatar
           key={`${m.member_type}:${m.member_id}`}
-          className={cn(
-            "absolute flex rounded-full bg-background ring-2 ring-background",
-            shown.length === 2 && (i === 0 ? "top-0 left-0" : "right-0 bottom-0"),
-            shown.length === 3 && i === 0 && "top-0 left-2",
-            shown.length === 3 && i === 1 && "bottom-0 left-0",
-            shown.length === 3 && i === 2 && "right-0 bottom-0",
-          )}
-        >
-          <ActorAvatar actorType={m.member_type} actorId={m.member_id} size="md" profileLink={false} />
-        </span>
+          actorType={m.member_type}
+          actorId={m.member_id}
+          size="sm"
+          shape="square"
+          profileLink={false}
+        />
       ))}
     </span>
   );
@@ -145,20 +123,22 @@ function ChatListItem({ chat, userId, selected, onSelect }: { chat: GroupChat; u
       onClick={onSelect}
       aria-current={selected ? "true" : undefined}
       className={cn(
-        "flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors",
-        selected ? "bg-accent hover:bg-accent" : "hover:bg-accent/60",
-        "focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+        "flex h-[66px] w-full items-center gap-[11px] px-4.5 text-left transition-colors",
+        selected ? "bg-brand/12 hover:bg-brand/12" : "hover:bg-foreground/5",
+        "focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset",
       )}
     >
-      <ChatAvatarStack chat={chat} userId={userId} />
+      <ChatAvatar chat={chat} userId={userId} />
       <span className="min-w-0 flex-1">
         <span className="flex items-baseline gap-2">
-          <span className="min-w-0 flex-1 truncate text-body font-semibold">{chat.title}</span>
-          <span className="shrink-0 text-caption text-muted-foreground">
+          <span className={cn("min-w-0 flex-1 truncate text-body", selected ? "font-semibold" : "font-medium")}>
+            {chat.title}
+          </span>
+          <span className="shrink-0 text-micro text-muted-foreground tabular-nums">
             {formatListStamp(chatActivityAt(chat), locale, new Date())}
           </span>
         </span>
-        <span className="mt-0.5 line-clamp-2 text-label text-muted-foreground">{preview}</span>
+        <span className="mt-[3px] block truncate text-caption text-muted-foreground">{preview}</span>
       </span>
     </button>
   );

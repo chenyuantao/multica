@@ -60,7 +60,7 @@ export function MemberPicker({ people, agents, query, onQueryChange, selected, o
                       isSelected && "bg-accent/60",
                     )}
                   >
-                    <ActorAvatar actorType={entry.type} actorId={entry.id} size="md" profileLink={false} showStatusDot />
+                    <ActorAvatar actorType={entry.type} actorId={entry.id} size="md" shape="rounded" profileLink={false} showStatusDot />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-body">{entry.name}</span>
                       {entry.detail && (

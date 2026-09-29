@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronLeft, MessagesSquare } from "lucide-react";
+import { ChevronLeft, MessagesSquare, UsersRound } from "lucide-react";
 import { useAuthStore } from "@multica/core/auth";
 import { useWorkspaceId } from "@multica/core/hooks";
 import { useWorkspacePaths } from "@multica/core/paths";
@@ -16,8 +16,12 @@ import { DragStrip } from "../platform";
 import { ChatDetailsPanel } from "./chat-details-panel";
 import { ChatSidebar } from "./chat-sidebar";
 import { ChatThread } from "./chat-thread";
+import { ContactCard } from "./contact-card";
+import { ContactList } from "./contact-list";
+import { ImRail, type ImView } from "./im-rail";
 import { sortChatsByActivity } from "./im-utils";
 import { NewChatDialog } from "./new-chat-dialog";
+import { entryKey, useChatDirectory, type DirectoryEntry } from "./use-chat-directory";
 
 const EMPTY_CHATS: GroupChat[] = [];
 
@@ -37,6 +41,9 @@ export function ImPage() {
   const { data = EMPTY_CHATS, isLoading, isError } = useQuery(groupChatListOptions(wsId));
   const [panelOpen, setPanelOpen] = useState(true);
   const [newChatOpen, setNewChatOpen] = useState(false);
+  const [view, setView] = useState<ImView>("chats");
+  const [contactKey, setContactKey] = useState<string | null>(null);
+  const directory = useChatDirectory(wsId);
 
   useGroupChatRealtime(wsId);
 
@@ -47,6 +54,31 @@ export function ImPage() {
 
   const select = (chatId: string) =>
     isMobile ? navigation.push(paths.imChat(chatId)) : navigation.replace(paths.imChat(chatId));
+
+  const openChat = (chatId: string) => {
+    setView("chats");
+    select(chatId);
+  };
+
+  const contact = contactKey ? directory.byKey.get(contactKey) ?? null : null;
+  const selectContact = (entry: DirectoryEntry) =>
+    isMobile
+      ? navigation.push(entry.type === "agent" ? paths.agentDetail(entry.id) : paths.memberDetail(entry.id))
+      : setContactKey(entryKey(entry.type, entry.id));
+
+  const rail = <ImRail view={view} userId={userId} onSelect={setView} />;
+  const contactList = (className?: string) => (
+    <ContactList
+      people={directory.people}
+      agents={directory.agents}
+      chats={chats}
+      userId={userId}
+      selectedKey={contact ? contactKey : null}
+      onSelect={selectContact}
+      onOpenChat={openChat}
+      className={className}
+    />
+  );
 
   const newChatDialog = (
     <NewChatDialog
@@ -62,16 +94,23 @@ export function ImPage() {
     return (
       <div className="flex h-svh w-full flex-col overflow-hidden bg-background text-foreground">
         {!requestedId ? (
-          <ChatSidebar
-            chats={chats}
-            isLoading={isLoading}
-            isError={isError}
-            selectedId={null}
-            userId={userId}
-            onSelect={select}
-            onNewChat={() => setNewChatOpen(true)}
-            className="w-full border-r-0"
-          />
+          <div className="flex min-h-0 flex-1">
+            {rail}
+            {view === "contacts" ? (
+              contactList("min-w-0 flex-1 border-r-0")
+            ) : (
+              <ChatSidebar
+                chats={chats}
+                isLoading={isLoading}
+                isError={isError}
+                selectedId={null}
+                userId={userId}
+                onSelect={select}
+                onNewChat={() => setNewChatOpen(true)}
+                className="min-w-0 flex-1 border-r-0"
+              />
+            )}
+          </div>
         ) : !requested ? (
           <MobileLevel title="" backHref={paths.im()} backLabel={t(($) => $.thread.back)}>
             <div className="flex flex-1 flex-col items-center justify-center gap-3 text-muted-foreground">
@@ -105,18 +144,35 @@ export function ImPage() {
 
   return (
     <div className="flex h-svh w-full overflow-hidden bg-background text-foreground">
-      <ChatSidebar
-        chats={chats}
-        isLoading={isLoading}
-        isError={isError}
-        selectedId={selected?.id ?? null}
-        userId={userId}
-        onSelect={select}
-        onNewChat={() => setNewChatOpen(true)}
-      />
+      {rail}
+      {view === "contacts" ? (
+        contactList()
+      ) : (
+        <ChatSidebar
+          chats={chats}
+          isLoading={isLoading}
+          isError={isError}
+          selectedId={selected?.id ?? null}
+          userId={userId}
+          onSelect={select}
+          onNewChat={() => setNewChatOpen(true)}
+        />
+      )}
 
       <div className="relative flex min-w-0 flex-1">
-        {selected ? (
+        {view === "contacts" ? (
+          contact ? (
+            <ContactCard key={contactKey} entry={contact} chats={chats} userId={userId} onOpenChat={openChat} />
+          ) : (
+            <div className="flex flex-1 flex-col">
+              <DragStrip />
+              <div className="flex flex-1 flex-col items-center justify-center gap-3 text-muted-foreground">
+                <UsersRound className="size-8" />
+                <p className="text-body">{t(($) => $.contacts.select)}</p>
+              </div>
+            </div>
+          )
+        ) : selected ? (
           <>
             <ChatThread
               key={selected.id}

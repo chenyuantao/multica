@@ -9,7 +9,28 @@
     "preview": "{{name}} : {{text}}",
     "chats": "Discussions de groupe",
     "settings": "Paramètres",
-    "workspace": "Retour à l'espace de travail"
+    "clear_search": "Effacer la recherche"
+  },
+  "rail": {
+    "sections": "Sections",
+    "profile": "Votre profil",
+    "chats": "Discussions",
+    "contacts": "Contacts"
+  },
+  "contacts": {
+    "search": "Rechercher des contacts",
+    "no_results": "Aucun contact correspondant",
+    "chats": "Discussions de groupe",
+    "people": "Personnes",
+    "agents": "Agents",
+    "members_one": "{{count}} membre",
+    "members_other": "{{count}} membres",
+    "you": "Vous",
+    "person": "Personne",
+    "agent": "Agent",
+    "view_profile": "Voir le profil",
+    "shared_chats": "Discussions de groupe en commun",
+    "select": "Sélectionnez un contact"
   },
   "thread": {
     "subtitle": "Groupe · {{people}} · {{agents}}",

@@ -19,8 +19,15 @@ interface ActorAvatarProps {
   isSystem?: boolean;
   isSquad?: boolean;
   size?: AvatarSize;
+  /**
+   * `circle` everywhere by default. `rounded` is the IM surface's squircle;
+   * `square` is for tiles clipped by a parent mosaic.
+   */
+  shape?: AvatarShape;
   className?: string;
 }
+
+type AvatarShape = "circle" | "rounded" | "square";
 
 function ActorAvatar({
   name,
@@ -30,6 +37,7 @@ function ActorAvatar({
   isSystem,
   isSquad,
   size = DEFAULT_AVATAR_SIZE,
+  shape = "circle",
   className,
 }: ActorAvatarProps) {
   const [imgError, setImgError] = useState(false);
@@ -40,9 +48,8 @@ function ActorAvatar({
     setImgError(false);
   }, [avatarUrl]);
 
-  // Every actor — member, agent, squad, or system — renders as a circle. This
-  // is the single source of truth for avatar shape; the upload editors mirror
-  // it (packages/views/common/avatar-upload-control.tsx).
+  // This is the single source of truth for avatar shape; the upload editors
+  // mirror the default circle (packages/views/common/avatar-upload-control.tsx).
   return (
     <div
       data-slot="avatar"
@@ -50,11 +57,17 @@ function ActorAvatar({
         "inline-flex shrink-0 items-center justify-center font-medium overflow-hidden",
         (!avatarUrl || emoji || imgError) && "bg-muted text-muted-foreground",
         className,
-        // rounded-full stays last so a call-site `className` can never override
-        // the circle — avatar shape is a hard invariant, not a per-site choice.
-        "rounded-full"
+        // The shape class stays last so a call-site `className` can never
+        // override it — shape is chosen through the `shape` prop only.
+        shape === "circle" && "rounded-full",
+        shape === "square" && "rounded-none"
       )}
-      style={{ width: px, height: px, fontSize: px * 0.45 }}
+      style={{
+        width: px,
+        height: px,
+        fontSize: px * 0.45,
+        ...(shape === "rounded" && { borderRadius: Math.round(px * 0.18) }),
+      }}
     >
       {emoji ? (
         <span
@@ -85,4 +98,4 @@ function ActorAvatar({
   );
 }
 
-export { ActorAvatar, type ActorAvatarProps };
+export { ActorAvatar, type ActorAvatarProps, type AvatarShape };

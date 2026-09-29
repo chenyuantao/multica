@@ -9,7 +9,27 @@
     "preview": "{{name}}: {{text}}",
     "chats": "그룹 채팅",
     "settings": "설정",
-    "workspace": "워크스페이스로 돌아가기"
+    "clear_search": "검색 지우기"
+  },
+  "rail": {
+    "sections": "섹션",
+    "profile": "내 프로필",
+    "chats": "채팅",
+    "contacts": "연락처"
+  },
+  "contacts": {
+    "search": "연락처 검색",
+    "no_results": "일치하는 연락처가 없습니다",
+    "chats": "그룹 채팅",
+    "people": "멤버",
+    "agents": "에이전트",
+    "members_other": "멤버 {{count}}명",
+    "you": "나",
+    "person": "멤버",
+    "agent": "에이전트",
+    "view_profile": "프로필 보기",
+    "shared_chats": "함께 있는 그룹 채팅",
+    "select": "연락처를 선택하세요"
   },
   "thread": {
     "subtitle": "그룹 · {{people}} · {{agents}}",

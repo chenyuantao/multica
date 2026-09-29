@@ -252,7 +252,7 @@ function MessageRow({
       <div className="flex items-end gap-2">
         <span className="w-8 shrink-0">
           {showAvatar && (
-            <ActorAvatar actorType={message.author_type} actorId={message.author_id} size="lg" enableHoverCard />
+            <ActorAvatar actorType={message.author_type} actorId={message.author_id} size="lg" shape="rounded" enableHoverCard />
           )}
         </span>
         <Bubble time={time}>

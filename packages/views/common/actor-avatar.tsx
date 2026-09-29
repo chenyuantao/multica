@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ActorAvatar as ActorAvatarBase } from "@multica/ui/components/common/actor-avatar";
+import {
+  ActorAvatar as ActorAvatarBase,
+  type AvatarShape,
+} from "@multica/ui/components/common/actor-avatar";
 import { AVATAR_SIZE_PX, type AvatarSize } from "@multica/ui/lib/avatar-size";
 import {
   HoverCard,
@@ -51,6 +54,7 @@ interface ActorAvatarProps {
    */
   profileRequiresDirectoryEntry?: boolean;
   size?: AvatarSize;
+  shape?: AvatarShape;
   className?: string;
   /**
    * Wrap the avatar in a hover-card preview on dwell. Use for "who is this?"
@@ -91,6 +95,7 @@ export function ActorAvatar({
   avatarUrl,
   profileRequiresDirectoryEntry = false,
   size,
+  shape,
   className,
   enableHoverCard,
   showStatusDot,
@@ -120,6 +125,7 @@ export function ActorAvatar({
       isSystem={actorType === "system"}
       isSquad={actorType === "squad"}
       size={size}
+      shape={shape}
       className={className}
     />
   );
