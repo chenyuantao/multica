@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/multica-ai/multica/server/internal/obsidianvault"
@@ -14,9 +14,9 @@ import (
 
 func TestDocsHTTPUnconfigured(t *testing.T) {
 	t.Setenv(obsidianvault.EnvVaultPath, "")
-	req := httptest.NewRequest(http.MethodGet, "/api/docs/tree", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/docs/tree", nil)
 	w := httptest.NewRecorder()
-	(&Handler{}).GetDocsTree(w, req)
+	(&Handler{}).PostDocsTree(w, req)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
 	}
@@ -44,9 +44,9 @@ func TestDocsHTTPTreeAndSearch(t *testing.T) {
 	t.Setenv(obsidianvault.EnvVaultPath, root)
 	h := &Handler{}
 
-	treeReq := httptest.NewRequest(http.MethodGet, "/api/docs/tree", nil)
+	treeReq := httptest.NewRequest(http.MethodPost, "/api/docs/tree", strings.NewReader(`{}`))
 	treeW := httptest.NewRecorder()
-	h.GetDocsTree(treeW, treeReq)
+	h.PostDocsTree(treeW, treeReq)
 	if treeW.Code != http.StatusOK {
 		t.Fatalf("tree status = %d body = %s", treeW.Code, treeW.Body.String())
 	}
@@ -58,9 +58,9 @@ func TestDocsHTTPTreeAndSearch(t *testing.T) {
 		t.Fatalf("tree = %#v", tree)
 	}
 
-	searchReq := httptest.NewRequest(http.MethodGet, "/api/docs/search?q="+url.QueryEscape("关键词"), nil)
+	searchReq := httptest.NewRequest(http.MethodPost, "/api/docs/search", strings.NewReader(`{"q":"关键词"}`))
 	searchW := httptest.NewRecorder()
-	h.SearchDocs(searchW, searchReq)
+	h.PostDocsSearch(searchW, searchReq)
 	if searchW.Code != http.StatusOK {
 		t.Fatalf("search status = %d body = %s", searchW.Code, searchW.Body.String())
 	}
@@ -70,5 +70,43 @@ func TestDocsHTTPTreeAndSearch(t *testing.T) {
 	}
 	if len(found.Nodes) != 1 || found.Nodes[0].Children[0].Path != "库/笔记.md" {
 		t.Fatalf("search = %#v", found)
+	}
+}
+
+func TestDocsHTTPContentEdit(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "note.md"), []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(obsidianvault.EnvVaultPath, root)
+	h := &Handler{}
+
+	readReq := httptest.NewRequest(http.MethodPost, "/api/docs/files/content", strings.NewReader(`{"path":"note.md"}`))
+	readW := httptest.NewRecorder()
+	h.PostDocsFileContent(readW, readReq)
+	if readW.Code != http.StatusOK {
+		t.Fatalf("read status = %d body = %s", readW.Code, readW.Body.String())
+	}
+	var note obsidianvault.FileContent
+	if err := json.Unmarshal(readW.Body.Bytes(), &note); err != nil {
+		t.Fatal(err)
+	}
+	if note.Content != "hello" || note.Revision == "" {
+		t.Fatalf("note = %#v", note)
+	}
+
+	body := `{"path":"note.md","base_revision":"` + note.Revision + `","changes":[{"from":5,"insert":"!"}]}`
+	editReq := httptest.NewRequest(http.MethodPatch, "/api/docs/files/content", strings.NewReader(body))
+	editW := httptest.NewRecorder()
+	h.PatchDocsFileContent(editW, editReq)
+	if editW.Code != http.StatusOK {
+		t.Fatalf("edit status = %d body = %s", editW.Code, editW.Body.String())
+	}
+	var updated obsidianvault.FileContent
+	if err := json.Unmarshal(editW.Body.Bytes(), &updated); err != nil {
+		t.Fatal(err)
+	}
+	if updated.Content != "hello!" {
+		t.Fatalf("updated = %#v", updated)
 	}
 }

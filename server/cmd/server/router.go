@@ -1671,14 +1671,18 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 		r.Post("/api/feedback", h.CreateFeedback)
 		r.With(handler.RequireHumanActor).Post("/api/client-usage", h.UpsertClientUsage)
 
-		// Obsidian vault browser. OBSIDIAN_VAULT_PATH points at one directory
-		// shared by this deployment; every signed-in user can read it. An
-		// unset path answers 404 and leaves the rest of the API unchanged.
+		// Obsidian vault browser. Paths and queries are JSON bodies so notes
+		// with non-ASCII names are not put in the URL. OBSIDIAN_VAULT_PATH
+		// points at one directory shared by this deployment.
 		r.Route("/api/docs", func(r chi.Router) {
-			r.Get("/tree", h.GetDocsTree)
-			r.Get("/children", h.GetDocsChildren)
-			r.Get("/search", h.SearchDocs)
-			r.Get("/files/hierarchy", h.GetDocsFileHierarchy)
+			r.Post("/tree", h.PostDocsTree)
+			r.Post("/children", h.PostDocsChildren)
+			r.Post("/search", h.PostDocsSearch)
+			r.Post("/files/hierarchy", h.PostDocsFileHierarchy)
+			r.Post("/files/content", h.PostDocsFileContent)
+			r.Post("/files/history", h.PostDocsFileHistory)
+			r.Post("/files/version", h.PostDocsFileVersion)
+			r.Patch("/files/content", h.PatchDocsFileContent)
 		})
 
 		// Note (MUL-4309): the generic OpenAI-compatible passthrough endpoints

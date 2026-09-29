@@ -324,7 +324,7 @@ First-party self-host telemetry sends one deployment-level snapshot per UTC day 
 |---|---|---|
 | `OBSIDIAN_VAULT_PATH` | empty | Absolute path to an Obsidian vault. Signed-in users can list and search its Markdown notes through `/api/docs`. Empty disables those endpoints |
 
-The docs endpoints return `.md` files only. A directory is included when it still contains a Markdown note after that filter, and the response nests those directories so a client can render a folder tree. Any signed-in user of the deployment can read the vault.
+The docs endpoints return `.md` files only. A directory is included when it still contains a Markdown note after that filter, and the response nests those directories so a client can render a folder tree. Reading a note returns its full text. Saving sends range edits against that text; the server writes the whole note back, the same way Obsidian does. Any signed-in user of the deployment can read and edit the vault.
 
 ## Next steps
 

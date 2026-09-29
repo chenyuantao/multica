@@ -1,4 +1,4 @@
-// Package obsidianvault reads an Obsidian vault from disk for the docs APIs.
+// Package obsidianvault reads and updates an Obsidian vault for the docs APIs.
 //
 // The vault root comes from OBSIDIAN_VAULT_PATH. Listings keep markdown files
 // and directories that still contain markdown after that filter. Hidden
