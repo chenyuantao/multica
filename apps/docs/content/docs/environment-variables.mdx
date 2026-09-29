@@ -318,6 +318,14 @@ First-party self-host telemetry sends one deployment-level snapshot per UTC day 
 
 `DO_NOT_TRACK` and `ANALYTICS_DISABLED` are independent. The former controls this first-party anonymous snapshot; the latter controls the optional PostHog integration.
 
+## Obsidian vault
+
+| Variable | Default | Description |
+|---|---|---|
+| `OBSIDIAN_VAULT_PATH` | empty | Absolute path to an Obsidian vault. Signed-in users can list and search its Markdown notes through `/api/docs`. Empty disables those endpoints |
+
+The docs endpoints return `.md` files only. A directory is included when it still contains a Markdown note after that filter, and the response nests those directories so a client can render a folder tree. Any signed-in user of the deployment can read the vault.
+
 ## Next steps
 
 - [Sign-in and signup](/auth-setup) — sign-in methods and signup restrictions.

@@ -315,6 +315,14 @@ La télémétrie propre à Multica pour les instances auto-hébergées envoie un
 
 `DO_NOT_TRACK` et `ANALYTICS_DISABLED` sont indépendantes. La première contrôle cet instantané anonyme propre à Multica ; la seconde contrôle l'intégration facultative avec PostHog.
 
+## Coffre Obsidian
+
+| Variable | Valeur par défaut | Description |
+|---|---|---|
+| `OBSIDIAN_VAULT_PATH` | vide | Chemin absolu d'un coffre Obsidian. Les utilisateurs connectés peuvent lister et chercher ses notes Markdown via `/api/docs`. Vide désactive ces points de terminaison |
+
+Seuls les fichiers `.md` sont renvoyés. Un dossier n'apparaît que s'il contient encore une note Markdown après ce filtre, et la réponse imbrique ces dossiers pour afficher un arbre. Tout utilisateur connecté de ce déploiement peut lire le coffre.
+
 ## Étapes suivantes
 
 - [Connexion et inscription](/auth-setup) — méthodes de connexion et restrictions d'inscription.

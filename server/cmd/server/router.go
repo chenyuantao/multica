@@ -1671,6 +1671,16 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 		r.Post("/api/feedback", h.CreateFeedback)
 		r.With(handler.RequireHumanActor).Post("/api/client-usage", h.UpsertClientUsage)
 
+		// Obsidian vault browser. OBSIDIAN_VAULT_PATH points at one directory
+		// shared by this deployment; every signed-in user can read it. An
+		// unset path answers 404 and leaves the rest of the API unchanged.
+		r.Route("/api/docs", func(r chi.Router) {
+			r.Get("/tree", h.GetDocsTree)
+			r.Get("/children", h.GetDocsChildren)
+			r.Get("/search", h.SearchDocs)
+			r.Get("/files/hierarchy", h.GetDocsFileHierarchy)
+		})
+
 		// Note (MUL-4309): the generic OpenAI-compatible passthrough endpoints
 		// (POST /api/llm/v1/chat/completions[/stream]) were intentionally
 		// removed. Exposing a general LLM proxy backed by the deployment's own
