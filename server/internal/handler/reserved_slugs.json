@@ -71,6 +71,7 @@
       "slugs": [
         "issues",
         "im",
+        "member",
         "projects",
         "autopilots",
         "agents",

@@ -1,6 +1,7 @@
 "use client";
 
 import { MessageCircle, Settings, UsersRound } from "lucide-react";
+import { useAuthStore } from "@multica/core/auth";
 import { useWorkspacePaths } from "@multica/core/paths";
 import { cn } from "@multica/ui/lib/utils";
 import { ActorAvatar } from "../common/actor-avatar";
@@ -9,20 +10,26 @@ import { useT } from "../i18n";
 
 export type ImView = "chats" | "contacts";
 
+/**
+ * `settings` stands for the whole dashboard shell: every non-IM workspace
+ * route shares that one rail entry.
+ */
+export type ImRailSection = ImView | "settings";
+
 interface ImRailProps {
-  view: ImView;
-  userId: string;
-  onSelect: (view: ImView) => void;
+  active: ImRailSection;
   className?: string;
 }
 
 const railButton =
   "relative flex size-10.5 items-center justify-center rounded-[11px] text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none";
+const railButtonActive = "text-brand hover:text-brand";
 
-/** Section switcher for the IM surface: profile, chats, contacts, settings. */
-export function ImRail({ view, userId, onSelect, className }: ImRailProps) {
+/** Primary section switcher shared by the IM surface and the dashboard shell. */
+export function ImRail({ active, className }: ImRailProps) {
   const { t } = useT("im");
   const paths = useWorkspacePaths();
+  const userId = useAuthStore((s) => s.user?.id ?? "");
 
   return (
     <nav
@@ -41,28 +48,28 @@ export function ImRail({ view, userId, onSelect, className }: ImRailProps) {
       </div>
       {(
         [
-          { id: "chats", label: t(($) => $.rail.chats), icon: MessageCircle },
-          { id: "contacts", label: t(($) => $.rail.contacts), icon: UsersRound },
+          { id: "chats", href: paths.im(), label: t(($) => $.rail.chats), icon: MessageCircle },
+          { id: "contacts", href: paths.member(), label: t(($) => $.rail.contacts), icon: UsersRound },
         ] as const
-      ).map(({ id, label, icon: Icon }) => (
-        <button
+      ).map(({ id, href, label, icon: Icon }) => (
+        <AppLink
           key={id}
-          type="button"
-          onClick={() => onSelect(id)}
+          href={href}
           aria-label={label}
-          aria-current={view === id ? "page" : undefined}
+          aria-current={active === id ? "page" : undefined}
           title={label}
-          className={cn(railButton, view === id && "text-brand hover:text-brand")}
+          className={cn(railButton, active === id && railButtonActive)}
         >
           <Icon className="size-[23px]" strokeWidth={1.8} />
-        </button>
+        </AppLink>
       ))}
       <div className="flex-1" />
       <AppLink
         href={paths.settings()}
         aria-label={t(($) => $.sidebar.settings)}
+        aria-current={active === "settings" ? "page" : undefined}
         title={t(($) => $.sidebar.settings)}
-        className={railButton}
+        className={cn(railButton, active === "settings" && railButtonActive)}
       >
         <Settings className="size-[23px]" strokeWidth={1.8} />
       </AppLink>

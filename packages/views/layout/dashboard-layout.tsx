@@ -18,6 +18,8 @@ interface DashboardLayoutProps {
   searchSlot?: ReactNode;
   /** Loading indicator */
   loadingIndicator?: ReactNode;
+  /** Primary section rail rendered before the sidebar */
+  rail?: ReactNode;
 }
 
 export function DashboardLayout({
@@ -25,6 +27,7 @@ export function DashboardLayout({
   extra,
   searchSlot,
   loadingIndicator,
+  rail,
 }: DashboardLayoutProps) {
   return (
     <DashboardGuard
@@ -37,7 +40,7 @@ export function DashboardLayout({
       <SidebarProvider className="h-svh bg-app-shell">
         <GlobalShortcuts />
         <WorkspacePresencePrefetch />
-        <AppSidebar searchSlot={searchSlot} />
+        <AppSidebar searchSlot={searchSlot} rail={rail} />
         <SidebarInset className="relative overflow-hidden">
           <NavigationProgress />
           {children}

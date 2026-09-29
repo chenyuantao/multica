@@ -5,6 +5,7 @@ import { DashboardLayout } from "@multica/views/layout";
 import { MulticaIcon } from "@multica/ui/components/common/multica-icon";
 import { SearchCommand, SearchTrigger } from "@multica/views/search";
 import { FloatingChat } from "@multica/views/chat/floating-chat";
+import { ImRail } from "@multica/views/im";
 import { WebNotificationBridge } from "@/components/web-notification-bridge";
 import { WorkspaceDocumentTitle } from "@/platform/workspace-document-title";
 
@@ -20,6 +21,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <DashboardLayout
         loadingIndicator={<MulticaIcon className="size-6" />}
         searchSlot={<SearchTrigger />}
+        rail={<ImRail active="settings" />}
         extra={
           <>
             <SearchCommand />

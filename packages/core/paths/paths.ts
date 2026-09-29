@@ -25,7 +25,9 @@ export const AGENT_FOCUS_CONVERSATION_STARTERS = "conversation_starters";
 function workspaceScoped(slug: string) {
   const ws = `/${encode(slug)}`;
   return {
-    root: () => `${ws}/issues`,
+    // Workspace home. Each platform resolves the bare slug to its landing
+    // surface: web redirects to /im, desktop's tab store normalizes to /issues.
+    root: () => ws,
     usage: () => `${ws}/usage`,
     issues: () => `${ws}/issues`,
     issueDetail: (id: string) => `${ws}/issues/${encode(id)}`,
@@ -57,6 +59,7 @@ function workspaceScoped(slug: string) {
     im: () => `${ws}/im`,
     imChat: (chatId: string) => `${ws}/im?chat=${encode(chatId)}`,
     imChatSettings: (chatId: string) => `${ws}/im?chat=${encode(chatId)}&view=settings`,
+    member: () => `${ws}/member`,
     chat: () => `${ws}/chat`,
     chatWithAgent: (agentId: string) =>
       `${ws}/chat?agent=${encode(agentId)}`,

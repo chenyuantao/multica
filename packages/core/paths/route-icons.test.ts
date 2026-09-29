@@ -14,10 +14,10 @@ import {
 // route that shows up in the sidebar/tab bar must map to a WORKSPACE_PAGES
 // entry.
 describe("workspace page coverage", () => {
-  // `root` aliases `issues` (same segment) and is never rendered as its own
-  // nav item; the parameterized detail routes are resources, not pages.
-  // `im` is a full-window surface outside the dashboard shell and tab bar.
-  const EXCLUDED_METHODS = new Set(["root", "im"]);
+  // `root` is the bare workspace home and is never rendered as its own nav
+  // item; the parameterized detail routes are resources, not pages.
+  // `im` and `member` are full-window surfaces outside the dashboard shell.
+  const EXCLUDED_METHODS = new Set(["root", "im", "member"]);
   const KNOWN_SEGMENTS = new Set(
     (Object.keys(WORKSPACE_PAGES) as WorkspacePageKey[]).map(
       (k) => WORKSPACE_PAGES[k].segment,

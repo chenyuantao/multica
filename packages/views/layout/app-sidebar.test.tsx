@@ -11,7 +11,7 @@ import { AppSidebar } from "./app-sidebar";
 
 const { appForeground, chatSessions, chatStore, detail, deletePin, invitationApi, navigation, pins, sidebarState, summary, workspaces } = vi.hoisted(() => ({
   appForeground: { current: true },
-  sidebarState: { setOpenMobile: vi.fn() },
+  sidebarState: { setOpenMobile: vi.fn(), isCompact: false },
   chatSessions: { current: [] as { id?: string; unread_count?: number }[] },
   chatStore: { current: { activeSessionId: null as string | null, isOpen: false } },
   detail: { current: { isPending: false, isError: false, data: null as unknown, error: null as unknown } },
@@ -58,7 +58,7 @@ vi.mock("@dnd-kit/sortable", () => ({
 }));
 vi.mock("@dnd-kit/utilities", () => ({ CSS: { Transform: { toString: () => undefined } } }));
 vi.mock("@multica/ui/components/ui/sidebar", () => ({
-  Sidebar: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  Sidebar: ({ children }: { children: React.ReactNode }) => <div data-slot="sidebar">{children}</div>,
   SidebarContent: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   SidebarFooter: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   SidebarGroup: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -82,7 +82,7 @@ vi.mock("@multica/ui/components/ui/sidebar", () => ({
   ),
   SidebarMenuItem: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   SidebarRail: () => null,
-  useSidebar: () => ({ setOpenMobile: sidebarState.setOpenMobile }),
+  useSidebar: () => ({ setOpenMobile: sidebarState.setOpenMobile, isCompact: sidebarState.isCompact }),
 }));
 vi.mock("@multica/ui/components/ui/dropdown-menu", () => ({
   DropdownMenu: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -133,7 +133,7 @@ vi.mock("@multica/core/paths", async (importOriginal) => ({
   // nav to derive each item's icon from its href) stay intact; only the
   // workspace/context hooks below are stubbed to control routes in tests.
   ...(await importOriginal<typeof import("@multica/core/paths")>()),
-  paths: { workspace: (slug: string) => ({ issues: () => `/${slug}/issues` }) },
+  paths: { workspace: (slug: string) => ({ root: () => `/${slug}` }) },
   useCurrentWorkspace: () => ({ id: "ws-1", name: "Acme", slug: "acme" }),
   useWorkspacePaths: () => ({
     inbox: () => "/acme/inbox",
@@ -319,6 +319,29 @@ describe("mobile sheet dismissal", () => {
     rerender(<AppSidebar />);
 
     expect(sidebarState.setOpenMobile).not.toHaveBeenCalled();
+  });
+});
+
+// The primary rail sits beside the in-flow sidebar on wide screens and moves
+// into the sheet on compact ones, so it stays reachable on every viewport.
+describe("primary rail slot", () => {
+  const rail = <nav aria-label="Sections" />;
+
+  beforeEach(() => {
+    sidebarState.isCompact = false;
+  });
+
+  it("renders the rail before the sidebar on wide screens", () => {
+    const { container } = render(<AppSidebar rail={rail} />);
+    const nav = screen.getByRole("navigation", { name: "Sections" });
+    expect(container.querySelector("[data-slot='sidebar']")?.contains(nav)).toBe(false);
+  });
+
+  it("renders the rail inside the sheet on compact screens", () => {
+    sidebarState.isCompact = true;
+    const { container } = render(<AppSidebar rail={rail} />);
+    const nav = screen.getByRole("navigation", { name: "Sections" });
+    expect(container.querySelector("[data-slot='sidebar']")?.contains(nav)).toBe(true);
   });
 });
 

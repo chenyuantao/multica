@@ -27,11 +27,12 @@ const EMPTY_CHATS: GroupChat[] = [];
 
 /**
  * Full-window group chat surface. Deliberately outside the dashboard shell:
- * it owns its own sidebar, thread and details columns. On mobile the columns
- * become route-driven levels: list (`/im`), thread (`?chat=`), settings
- * (`?chat=&view=settings`).
+ * it owns its own sidebar, thread and details columns. The rail section is
+ * route-driven: chats (`/im`) and contacts (`/member`). On mobile the chat
+ * columns become route-driven levels: list (`/im`), thread (`?chat=`),
+ * settings (`?chat=&view=settings`).
  */
-export function ImPage() {
+export function ImPage({ view = "chats" }: { view?: ImView }) {
   const { t } = useT("im");
   const wsId = useWorkspaceId();
   const userId = useAuthStore((s) => s.user?.id ?? "");
@@ -41,24 +42,20 @@ export function ImPage() {
   const { data = EMPTY_CHATS, isLoading, isError } = useQuery(groupChatListOptions(wsId));
   const [panelOpen, setPanelOpen] = useState(true);
   const [newChatOpen, setNewChatOpen] = useState(false);
-  const [view, setView] = useState<ImView>("chats");
   const [contactKey, setContactKey] = useState<string | null>(null);
   const directory = useChatDirectory(wsId);
 
   useGroupChatRealtime(wsId);
 
   const chats = useMemo(() => sortChatsByActivity(data), [data]);
-  const requestedId = navigation.searchParams.get("chat");
+  const requestedId = view === "chats" ? navigation.searchParams.get("chat") : null;
   const requested = chats.find((c) => c.id === requestedId) ?? null;
   const selected = requested ?? (requestedId || isMobile ? null : chats[0] ?? null);
 
   const select = (chatId: string) =>
     isMobile ? navigation.push(paths.imChat(chatId)) : navigation.replace(paths.imChat(chatId));
 
-  const openChat = (chatId: string) => {
-    setView("chats");
-    select(chatId);
-  };
+  const openChat = (chatId: string) => navigation.push(paths.imChat(chatId));
 
   const contact = contactKey ? directory.byKey.get(contactKey) ?? null : null;
   const selectContact = (entry: DirectoryEntry) =>
@@ -66,7 +63,7 @@ export function ImPage() {
       ? navigation.push(entry.type === "agent" ? paths.agentDetail(entry.id) : paths.memberDetail(entry.id))
       : setContactKey(entryKey(entry.type, entry.id));
 
-  const rail = <ImRail view={view} userId={userId} onSelect={setView} />;
+  const rail = <ImRail active={view} />;
   const contactList = (className?: string) => (
     <ContactList
       people={directory.people}
