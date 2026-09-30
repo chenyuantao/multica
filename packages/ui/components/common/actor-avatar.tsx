@@ -18,7 +18,8 @@ interface ActorAvatarProps {
   isAgent?: boolean;
   isSystem?: boolean;
   isSquad?: boolean;
-  size?: AvatarSize;
+  /** A semantic tier; a raw px number is only for derived layouts such as mosaic tiles. */
+  size?: AvatarSize | number;
   /**
    * `rounded` (the `--radius-avatar` squircle) everywhere by default;
    * `square` is for tiles clipped by a parent mosaic.
@@ -41,7 +42,7 @@ function ActorAvatar({
   className,
 }: ActorAvatarProps) {
   const [imgError, setImgError] = useState(false);
-  const px = AVATAR_SIZE_PX[size];
+  const px = typeof size === "number" ? size : AVATAR_SIZE_PX[size];
   const emoji = parseAvatarEmoji(avatarUrl);
 
   useEffect(() => {

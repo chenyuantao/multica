@@ -53,7 +53,7 @@ interface ActorAvatarProps {
    * hydrated identity remains displayable after an actor leaves.
    */
   profileRequiresDirectoryEntry?: boolean;
-  size?: AvatarSize;
+  size?: AvatarSize | number;
   shape?: AvatarShape;
   className?: string;
   /**
@@ -267,14 +267,14 @@ function ActorAvatarProfileLink({
 // smaller avatars use a 6 px dot so the indicator doesn't overwhelm them.
 // Exported for surfaces that render the base avatar directly (e.g. comment
 // trigger chips) but still want the standard presence dot.
-export function AgentStatusDot({ agentId, size }: { agentId: string; size?: AvatarSize }) {
+export function AgentStatusDot({ agentId, size }: { agentId: string; size?: AvatarSize | number }) {
   const ws = useCurrentWorkspace();
   const detail = useAgentPresenceDetail(ws?.id, agentId);
   const { t } = useT("agents");
   if (detail === "loading") return null;
 
   const { dotClass } = availabilityConfig[detail.availability];
-  const px = size ? AVATAR_SIZE_PX[size] : 24;
+  const px = typeof size === "number" ? size : size ? AVATAR_SIZE_PX[size] : 24;
   const dotSize = px >= 24 ? "h-1.5 w-1.5" : "h-1 w-1";
 
   return (

@@ -101,12 +101,8 @@ export function ChatAvatar({ chat, userId }: { chat: GroupChat; userId: string }
       style={{ padding: MOSAIC_PADDING, gap: MOSAIC_GAP }}
     >
       {shown.map((m) => (
-        <span
-          key={`${m.member_type}:${m.member_id}`}
-          className="overflow-hidden rounded-[2px] [&>*]:size-full!"
-          style={{ width: tile, height: tile }}
-        >
-          <ActorAvatar actorType={m.member_type} actorId={m.member_id} size="xs" shape="square" profileLink={false} />
+        <span key={`${m.member_type}:${m.member_id}`} className="flex overflow-hidden rounded-[2px]">
+          <ActorAvatar actorType={m.member_type} actorId={m.member_id} size={tile} shape="square" profileLink={false} />
         </span>
       ))}
     </span>
