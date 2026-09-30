@@ -7,7 +7,7 @@ import { useAuthStore } from "@multica/core/auth";
 import { useWorkspaceId } from "@multica/core/hooks";
 import { useModalStore } from "@multica/core/modals";
 import { useWorkspacePaths } from "@multica/core/paths";
-import { groupChatListOptions, useGroupChatRealtime } from "@multica/core/group-chats";
+import { directChatPeer, groupChatListOptions, useGroupChatRealtime } from "@multica/core/group-chats";
 import type { GroupChat } from "@multica/core/types";
 import { Button } from "@multica/ui/components/ui/button";
 import { useIsMobile } from "@multica/ui/hooks/use-mobile";
@@ -151,6 +151,7 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
         </MobileLevel>
       );
     } else {
+      const peer = directChatPeer(requested, userId);
       level = (
         <div className="flex h-svh w-full flex-col overflow-hidden bg-background text-foreground">
           <ChatThread
@@ -162,7 +163,9 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
             onTogglePanel={() => {}}
             mobileNav={{
               backHref: paths.im(),
-              settingsHref: paths.imChatSettings(requested.id),
+              settingsHref: peer
+                ? paths.imChatContact(requested.id, peer.member_type, peer.member_id)
+                : paths.imChatSettings(requested.id),
               onOpenProfile: (type, id) => navigation.push(paths.imChatContact(requested.id, type, id)),
             }}
           />
@@ -198,7 +201,7 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
       <div className="relative flex min-w-0 flex-1">
         {view === "contacts" ? (
           contact ? (
-            <ContactCard key={contactKey} entry={contact} chats={chats} userId={userId} onOpenChat={openChat} />
+            <ContactCard key={contactKey} wsId={wsId} entry={contact} chats={chats} userId={userId} onOpenChat={openChat} />
           ) : (
             <div className="flex flex-1 flex-col">
               <DragStrip />

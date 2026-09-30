@@ -38,6 +38,8 @@
     "person": "Personne",
     "agent": "Agent",
     "view_profile": "Voir le profil",
+    "send_message": "Message",
+    "send_message_failed": "Impossible d'ouvrir la conversation",
     "shared_chats": "Discussions de groupe en commun",
     "select": "Sélectionnez un contact",
     "back": "Retour aux contacts"
@@ -115,6 +117,7 @@
     "name_label": "Nom",
     "name_placeholder": "Salle de lancement",
     "members_label": "Membres",
+    "direct_hint": "Avec un seul membre choisi, votre conversation privée avec lui s'ouvre.",
     "create": "Créer",
     "cancel": "Annuler",
     "failed": "Impossible de créer la discussion"

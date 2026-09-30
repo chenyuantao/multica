@@ -18,10 +18,16 @@ vi.mock("@tanstack/react-query", async () => {
   return { ...actual, useQuery: vi.fn(() => ({ data: [] })) };
 });
 
-vi.mock("@multica/core/group-chats", () => ({
+vi.mock("@multica/core/group-chats", async () => ({
+  directChatPeer: (await vi.importActual<typeof import("@multica/core/group-chats")>("@multica/core/group-chats")).directChatPeer,
   useRemoveGroupChatMember: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useUpdateGroupChat: () => ({ mutateAsync: updateMutateAsync, isPending: false }),
 }));
+
+vi.mock("@multica/core/paths", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@multica/core/paths")>();
+  return { ...actual, useWorkspacePaths: () => actual.paths.workspace("acme") };
+});
 
 vi.mock("@multica/core/runtimes", () => ({
   runtimeDisplayName: () => "runtime",
@@ -32,7 +38,16 @@ vi.mock("@multica/core/workspace/hooks", () => ({
   useActorName: () => ({ getActorName: (_type: string, id: string) => `name-${id}` }),
 }));
 
-vi.mock("./use-chat-directory", () => ({ useChatDirectory: () => ({ agentList: [] }) }));
+vi.mock("./use-chat-directory", async () => {
+  const actual = await vi.importActual<typeof import("./use-chat-directory")>("./use-chat-directory");
+  return {
+    ...actual,
+    useChatDirectory: () => ({
+      agentList: [],
+      byKey: new Map([["agent:agent-1", { type: "agent", id: "agent-1", name: "Lambda", detail: "Reviews pull requests" }]]),
+    }),
+  };
+});
 vi.mock("./add-member-dialog", () => ({ AddMemberDialog: () => null }));
 vi.mock("../common/actor-avatar", () => ({ ActorAvatar: () => null }));
 vi.mock("../editor", () => ({
@@ -53,6 +68,7 @@ const chat: GroupChat = {
   last_comment_at: null,
   last_message: null,
   pending_speakers: [],
+  is_direct: false,
   members: [
     { member_type: "member", member_id: "user-1", added_by_type: null, added_by_id: null, created_at: "2026-09-28T00:00:00Z" },
   ],
@@ -125,5 +141,54 @@ describe("ChatDetailsPanel agent members", () => {
     fireEvent.click(screen.getByRole("button", { name: "name-agent-1" }));
 
     expect(mockModalOpen).toHaveBeenCalledWith("agent-detail", { agentId: "agent-1", hostPathname: undefined });
+  });
+});
+
+describe("ChatDetailsPanel direct chat", () => {
+  beforeEach(() => mockModalOpen.mockReset());
+
+  it("shows only the other side's profile", () => {
+    renderWithI18n(
+      <ChatDetailsPanel
+        wsId="ws-1"
+        chat={{
+          ...chat,
+          is_direct: true,
+          members: [
+            ...chat.members,
+            { member_type: "agent", member_id: "agent-1", added_by_type: null, added_by_id: null, created_at: "2026-09-28T00:00:00Z" },
+          ],
+        }}
+        userId="user-1"
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "Lambda" })).toBeInTheDocument();
+    expect(screen.getByText("Reviews pull requests")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Rename chat" })).toBeNull();
+    expect(screen.queryByRole("textbox", { name: "announcement" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Add member/ })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "View profile" }));
+    expect(mockModalOpen).toHaveBeenCalledWith("agent-detail", { agentId: "agent-1", hostPathname: undefined });
+  });
+
+  it("keeps the group settings of a two-person chat created as a group", () => {
+    renderWithI18n(
+      <ChatDetailsPanel
+        wsId="ws-1"
+        chat={{
+          ...chat,
+          members: [
+            ...chat.members,
+            { member_type: "agent", member_id: "agent-1", added_by_type: null, added_by_id: null, created_at: "2026-09-28T00:00:00Z" },
+          ],
+        }}
+        userId="user-1"
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Rename chat" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Add member/ })).toBeInTheDocument();
   });
 });

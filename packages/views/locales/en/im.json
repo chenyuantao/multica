@@ -38,6 +38,8 @@
     "person": "Person",
     "agent": "Agent",
     "view_profile": "View profile",
+    "send_message": "Message",
+    "send_message_failed": "Couldn't open the conversation",
     "shared_chats": "Group chats in common",
     "select": "Select a contact",
     "back": "Back to contacts"
@@ -115,6 +117,7 @@
     "name_label": "Name",
     "name_placeholder": "Launch room",
     "members_label": "Members",
+    "direct_hint": "With one member picked, this opens your direct chat with them.",
     "create": "Create",
     "cancel": "Cancel",
     "failed": "Couldn't create the chat"

@@ -5,7 +5,12 @@ import { useQuery } from "@tanstack/react-query";
 import { Brain, Copy, Loader2, MoreHorizontal, PanelRight, Quote, RotateCw, Square, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useTaskMessages } from "@multica/core/chat/queries";
-import { groupChatMessagesOptions, useDeleteGroupChatMessage, useSendGroupChatMessage } from "@multica/core/group-chats";
+import {
+  directChatPeer,
+  groupChatMessagesOptions,
+  useDeleteGroupChatMessage,
+  useSendGroupChatMessage,
+} from "@multica/core/group-chats";
 import { useCancelIssueRun } from "@multica/core/issues/mutations";
 import { useCurrentMember } from "@multica/core/permissions";
 import { useActorName } from "@multica/core/workspace/hooks";
@@ -34,6 +39,7 @@ import { ChatComposer, QuoteText, type ComposerQuote } from "./chat-composer";
 import { MobileLevelHeader } from "./mobile-shell";
 import {
   THINKING_MESSAGE,
+  chatDisplayTitle,
   dayRelation,
   formatClock,
   isSameDay,
@@ -185,10 +191,16 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, mobil
     [send],
   );
 
-  const subtitle = t(($) => $.thread.subtitle, {
-    people: t(($) => $.thread.people, { count: people.length }),
-    agents: t(($) => $.thread.agents, { count: agents.length }),
-  });
+  const peer = directChatPeer(chat, userId);
+  const title = chatDisplayTitle(chat, userId, getActorName);
+  const subtitle = peer
+    ? peer.member_type === "agent"
+      ? t(($) => $.contacts.agent)
+      : t(($) => $.contacts.person)
+    : t(($) => $.thread.subtitle, {
+        people: t(($) => $.thread.people, { count: people.length }),
+        agents: t(($) => $.thread.agents, { count: agents.length }),
+      });
 
   const onSend = (content: string, attachmentIds: string[]) => {
     const localId = `local-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -203,7 +215,7 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, mobil
     <section className="flex h-full min-w-0 flex-1 flex-col bg-background">
       {mobileNav ? (
         <MobileLevelHeader
-          title={chat.title}
+          title={title}
           subtitle={subtitle}
           backHref={mobileNav.backHref}
           backLabel={t(($) => $.thread.back)}
@@ -213,7 +225,7 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, mobil
               size="icon-sm"
               nativeButton={false}
               render={<AppLink href={mobileNav.settingsHref} />}
-              aria-label={t(($) => $.thread.settings)}
+              aria-label={peer ? t(($) => $.contacts.view_profile) : t(($) => $.thread.settings)}
             >
               <MoreHorizontal />
             </Button>
@@ -225,7 +237,7 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, mobil
             <DragStrip />
           </div>
           <div className="relative min-w-0 flex-1">
-            <h1 className="truncate text-body-lg font-semibold">{chat.title}</h1>
+            <h1 className="truncate text-body-lg font-semibold">{title}</h1>
             <p className="truncate text-caption text-muted-foreground">{subtitle}</p>
           </div>
           <Button
@@ -289,7 +301,7 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, mobil
         <ChatComposer
           key={chat.id}
           chatId={chat.id}
-          chatTitle={chat.title}
+          chatTitle={title}
           candidates={candidates}
           onSend={onSend}
           quote={composerQuote}

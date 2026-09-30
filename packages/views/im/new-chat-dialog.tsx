@@ -19,6 +19,7 @@ import {
 } from "@multica/ui/components/ui/dialog";
 import { useT } from "../i18n";
 import { MemberPicker } from "./member-picker";
+import { useStartDirectChat } from "./use-direct-chat";
 import { entryKey, useChatDirectory } from "./use-chat-directory";
 
 interface NewChatDialogProps {
@@ -33,6 +34,7 @@ export function NewChatDialog({ wsId, open, onOpenChange, onCreated }: NewChatDi
   const userId = useAuthStore((s) => s.user?.id ?? "");
   const directory = useChatDirectory(wsId);
   const createChat = useCreateGroupChat(wsId);
+  const directChat = useStartDirectChat(wsId);
   const [title, setTitle] = useState("");
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<Map<string, GroupChatMemberRef>>(() => new Map());
@@ -53,10 +55,22 @@ export function NewChatDialog({ wsId, open, onOpenChange, onCreated }: NewChatDi
     });
   };
 
+  // One pick is a direct chat: named after the peer, and reused if it exists.
+  const directPeer = picked.size === 1 ? [...picked.values()][0]! : null;
+  const pending = createChat.isPending || directChat.isPending;
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (pending) return;
+    if (directPeer) {
+      if (await directChat.start(directPeer)) {
+        reset();
+        onOpenChange(false);
+      }
+      return;
+    }
     const name = title.trim();
-    if (!name || createChat.isPending) return;
+    if (!name) return;
     try {
       const chat = await createChat.mutateAsync({ title: name, members: [...picked.values()] });
       reset();
@@ -89,7 +103,9 @@ export function NewChatDialog({ wsId, open, onOpenChange, onCreated }: NewChatDi
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder={t(($) => $.new_chat.name_placeholder)}
+              disabled={!!directPeer}
             />
+            {directPeer && <p className="text-caption text-muted-foreground">{t(($) => $.new_chat.direct_hint)}</p>}
           </div>
           <div className="flex flex-col gap-1.5">
             <span className="text-label font-medium">{t(($) => $.new_chat.members_label)}</span>
@@ -106,8 +122,8 @@ export function NewChatDialog({ wsId, open, onOpenChange, onCreated }: NewChatDi
             <DialogClose render={<Button type="button" variant="outline" />}>
               {t(($) => $.new_chat.cancel)}
             </DialogClose>
-            <Button type="submit" disabled={!title.trim() || createChat.isPending} aria-busy={createChat.isPending}>
-              {t(($) => $.new_chat.create)}
+            <Button type="submit" disabled={(!directPeer && !title.trim()) || pending} aria-busy={pending}>
+              {directPeer ? t(($) => $.contacts.send_message) : t(($) => $.new_chat.create)}
             </Button>
           </DialogFooter>
         </form>

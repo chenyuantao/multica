@@ -2025,6 +2025,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 				r.Use(handler.RequireHumanActor)
 				r.Get("/", h.ListGroupChats)
 				r.Post("/", h.CreateGroupChat)
+				r.Post("/direct", h.OpenDirectGroupChat)
 				r.Route("/{id}", func(r chi.Router) {
 					r.Get("/", h.GetGroupChat)
 					r.Patch("/", h.UpdateGroupChat)

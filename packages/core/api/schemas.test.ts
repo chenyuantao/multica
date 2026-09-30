@@ -42,6 +42,7 @@ import {
   EMPTY_INBOX_UNREAD_SUMMARY,
   EMPTY_SEARCH_PROJECTS_RESPONSE,
   EMPTY_USER,
+  GroupChatsListSchema,
   InboxItemListSchema,
   InboxUnreadSummarySchema,
   IssueTriggerPreviewSchema,
@@ -75,6 +76,7 @@ import {
   EMPTY_ISSUE_STATUS_ENTRY,
 } from "./schemas";
 import { parseWithFallback } from "./schema";
+import type { GroupChat } from "../types";
 
 const baseIssue = {
   id: "11111111-1111-1111-1111-111111111111",
@@ -2377,5 +2379,20 @@ describe("AgentActivityBucketListSchema duration", () => {
     expect(parsed[0]?.task_count).toBe(201);
     expect(parsed[0]?.duration_ms).toBeUndefined();
     expect(parsed[0]?.duration_count).toBeUndefined();
+  });
+});
+
+describe("GroupChatsListSchema", () => {
+  const ENDPOINT = { endpoint: "GET /api/group-chats" };
+  const chat = (extra: Record<string, unknown>) => ({ id: "chat-1", workspace_id: "ws-1", title: "Room", ...extra });
+
+  it("reads a missing or malformed is_direct as a group", () => {
+    const parsed = parseWithFallback<{ chats: GroupChat[] }>(
+      { chats: [chat({ is_direct: true }), chat({ id: "chat-2" }), chat({ id: "chat-3", is_direct: "yes" })] },
+      GroupChatsListSchema,
+      { chats: [] },
+      ENDPOINT,
+    );
+    expect(parsed.chats.map((c) => c.is_direct)).toEqual([true, false, false]);
   });
 });

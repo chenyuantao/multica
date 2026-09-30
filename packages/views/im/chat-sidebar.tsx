@@ -2,12 +2,13 @@
 
 import { useMemo, useState } from "react";
 import { CirclePlus } from "lucide-react";
+import { directChatPeer } from "@multica/core/group-chats";
 import type { GroupChat } from "@multica/core/types";
 import { useActorName } from "@multica/core/workspace/hooks";
 import { cn } from "@multica/ui/lib/utils";
 import { ActorAvatar } from "../common/actor-avatar";
 import { useLocale, useT } from "../i18n";
-import { chatActivityAt, formatListStamp, plainTextPreview } from "./im-utils";
+import { chatActivityAt, chatDisplayTitle, formatListStamp, plainTextPreview } from "./im-utils";
 import { ImSidebarHeader, ImSidebarShell } from "./im-sidebar-shell";
 
 interface ChatSidebarProps {
@@ -23,11 +24,12 @@ interface ChatSidebarProps {
 
 export function ChatSidebar({ chats, isLoading, isError, selectedId, userId, onSelect, onNewChat, className }: ChatSidebarProps) {
   const { t } = useT("im");
+  const { getActorName } = useActorName();
   const [query, setQuery] = useState("");
   const q = query.trim().toLowerCase();
   const visible = useMemo(
-    () => (q ? chats.filter((c) => c.title.toLowerCase().includes(q)) : chats),
-    [chats, q],
+    () => (q ? chats.filter((c) => chatDisplayTitle(c, userId, getActorName).toLowerCase().includes(q)) : chats),
+    [chats, q, userId, getActorName],
   );
 
   return (
@@ -78,9 +80,13 @@ const MOSAIC_MAX_TILES = 9;
 /**
  * Group avatar: a messenger-style mosaic of up to nine members on a grey
  * plate. You always take the last tile so you stay visible in large rooms;
- * an incomplete last row is centered.
+ * an incomplete last row is centered. A two-person chat shows the other side.
  */
 export function ChatAvatar({ chat, userId }: { chat: GroupChat; userId: string }) {
+  const peer = directChatPeer(chat, userId);
+  if (peer) {
+    return <ActorAvatar actorType={peer.member_type} actorId={peer.member_id} size="xl" profileLink={false} />;
+  }
   const isSelf = (m: GroupChat["members"][number]) => m.member_type === "member" && m.member_id === userId;
   const self = chat.members.find(isSelf);
   const others = chat.members.filter((m) => !isSelf(m));
@@ -117,7 +123,7 @@ function ChatListItem({ chat, userId, selected, onSelect }: { chat: GroupChat; u
   const text = last ? plainTextPreview(last.content) : "";
   const preview = !last
     ? t(($) => $.sidebar.no_messages)
-    : last.author_type === "system"
+    : last.author_type === "system" || directChatPeer(chat, userId)
       ? text
       : t(($) => $.sidebar.preview, { name: getActorName(last.author_type, last.author_id), text });
 
@@ -136,7 +142,7 @@ function ChatListItem({ chat, userId, selected, onSelect }: { chat: GroupChat; u
       <span className="min-w-0 flex-1">
         <span className="flex items-baseline gap-2">
           <span className={cn("min-w-0 flex-1 truncate text-body", selected ? "font-semibold" : "font-medium")}>
-            {chat.title}
+            {chatDisplayTitle(chat, userId, getActorName)}
           </span>
           <span className="shrink-0 text-micro text-muted-foreground tabular-nums">
             {formatListStamp(chatActivityAt(chat), locale, new Date())}

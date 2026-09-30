@@ -99,6 +99,9 @@ type IssueCreateParams struct {
 	// Members turns the new issue into a group chat. They are written in the
 	// create transaction, so the issue is never visible without its members.
 	Members []IssueMemberRef
+	// DirectChat marks the group chat as a two-person direct chat, whose
+	// membership is fixed at creation.
+	DirectChat bool
 }
 
 // IssueMemberRef names one group chat member: a person ("member") or an agent.
@@ -435,6 +438,12 @@ func (s *IssueService) Create(ctx context.Context, p IssueCreateParams, opts Iss
 		}); err != nil {
 			return IssueCreateResult{}, fmt.Errorf("add issue member: %w", err)
 		}
+	}
+	if p.DirectChat {
+		if err := qtx.MarkIssueDirectChat(ctx, issue.ID); err != nil {
+			return IssueCreateResult{}, fmt.Errorf("mark direct chat: %w", err)
+		}
+		issue.IsDirectChat = true
 	}
 
 	if p.SourceContext != nil {

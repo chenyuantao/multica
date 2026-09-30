@@ -26,6 +26,18 @@ export function useCreateGroupChat(wsId: string) {
   });
 }
 
+/** Opens the two-person chat with a peer, reusing it when the server already has one. */
+export function useOpenDirectGroupChat(wsId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (peer: GroupChatMemberRef) => api.openDirectGroupChat(peer),
+    onSuccess: (chat) => {
+      qc.setQueryData<GroupChat[]>(groupChatKeys.list(wsId), (old) => upsertChat(old, chat));
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: groupChatKeys.list(wsId) }),
+  });
+}
+
 export function useUpdateGroupChat(wsId: string, chatId: string) {
   const qc = useQueryClient();
   return useMutation({

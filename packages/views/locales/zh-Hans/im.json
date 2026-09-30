@@ -37,6 +37,8 @@
     "person": "成员",
     "agent": "智能体",
     "view_profile": "查看资料",
+    "send_message": "发消息",
+    "send_message_failed": "无法打开对话",
     "shared_chats": "共同群聊",
     "select": "选择一个联系人",
     "back": "返回通讯录"
@@ -112,6 +114,7 @@
     "name_label": "名称",
     "name_placeholder": "发布讨论组",
     "members_label": "成员",
+    "direct_hint": "只选一位成员时，会打开你们的私聊。",
     "create": "创建",
     "cancel": "取消",
     "failed": "群聊创建失败"

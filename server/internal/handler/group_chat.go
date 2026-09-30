@@ -3,11 +3,13 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/multica-ai/multica/server/internal/logger"
@@ -45,6 +47,8 @@ type GroupChatResponse struct {
 	LastMessage     *CommentResponse          `json:"last_message"`
 	Members         []GroupChatMemberResponse `json:"members"`
 	PendingSpeakers []string                  `json:"pending_speakers"`
+	// A two-person chat created for one peer; its members never change.
+	IsDirect bool `json:"is_direct"`
 }
 
 type groupChatMemberRef struct {
@@ -80,6 +84,7 @@ func groupChatToResponse(issue db.Issue, prefix string, members []db.IssueMember
 		LastCommentAt:   timestampToPtr(issue.LastCommentAt),
 		Members:         make([]GroupChatMemberResponse, 0, len(members)),
 		PendingSpeakers: []string{},
+		IsDirect:        issue.IsDirectChat,
 	}
 	for _, m := range members {
 		resp.Members = append(resp.Members, groupChatMemberToResponse(m))
@@ -229,9 +234,13 @@ func (h *Handler) ListGroupChats(w http.ResponseWriter, r *http.Request) {
 
 	prefix := h.getIssuePrefix(ctx, wsUUID)
 	pending := h.pendingSpeakersByIssue(ctx, ids)
+	kept := keptDirectChats(issues, membersByIssue, userID)
 	out := make([]GroupChatResponse, 0, len(issues))
 	for _, issue := range issues {
 		key := uuidToString(issue.ID)
+		if issue.IsDirectChat && !kept[key] {
+			continue
+		}
 		var last *db.Comment
 		if c, found := lastByIssue[key]; found {
 			last = &c
@@ -245,23 +254,56 @@ func (h *Handler) ListGroupChats(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"chats": out})
 }
 
+// keptDirectChats picks, per peer, the direct chat the requester sees: the
+// oldest one, which is also the one opening a direct chat returns. Newer ones
+// can only come from two concurrent opens and stay out of the list.
+func keptDirectChats(issues []db.Issue, membersByIssue map[string][]db.IssueMember, userID string) map[string]bool {
+	oldest := map[string]db.Issue{}
+	for _, issue := range issues {
+		if !issue.IsDirectChat {
+			continue
+		}
+		peer := ""
+		for _, m := range membersByIssue[uuidToString(issue.ID)] {
+			if m.MemberType != "member" || uuidToString(m.MemberID) != userID {
+				peer = m.MemberType + ":" + uuidToString(m.MemberID)
+			}
+		}
+		cur, seen := oldest[peer]
+		if !seen || issue.CreatedAt.Time.Before(cur.CreatedAt.Time) ||
+			(issue.CreatedAt.Time.Equal(cur.CreatedAt.Time) && uuidToString(issue.ID) < uuidToString(cur.ID)) {
+			oldest[peer] = issue
+		}
+	}
+	kept := make(map[string]bool, len(oldest))
+	for _, issue := range oldest {
+		kept[uuidToString(issue.ID)] = true
+	}
+	return kept
+}
+
 func (h *Handler) GetGroupChat(w http.ResponseWriter, r *http.Request) {
 	issue, members, ok := h.loadGroupChat(w, r)
 	if !ok {
 		return
 	}
+	writeJSON(w, http.StatusOK, h.groupChatDetail(r.Context(), issue, members))
+}
+
+// groupChatDetail is one chat with its latest message and pending speakers.
+func (h *Handler) groupChatDetail(ctx context.Context, issue db.Issue, members []db.IssueMember) GroupChatResponse {
 	var last *db.Comment
-	latest, err := h.Queries.ListLatestCommentsForIssues(r.Context(), db.ListLatestCommentsForIssuesParams{
+	latest, err := h.Queries.ListLatestCommentsForIssues(ctx, db.ListLatestCommentsForIssuesParams{
 		WorkspaceID: issue.WorkspaceID, IssueIds: []pgtype.UUID{issue.ID},
 	})
 	if err == nil && len(latest) > 0 {
 		last = &latest[0]
 	}
-	resp := groupChatToResponse(issue, h.getIssuePrefix(r.Context(), issue.WorkspaceID), members, last)
-	if speakers := h.pendingSpeakersByIssue(r.Context(), []pgtype.UUID{issue.ID})[uuidToString(issue.ID)]; len(speakers) > 0 {
+	resp := groupChatToResponse(issue, h.getIssuePrefix(ctx, issue.WorkspaceID), members, last)
+	if speakers := h.pendingSpeakersByIssue(ctx, []pgtype.UUID{issue.ID})[uuidToString(issue.ID)]; len(speakers) > 0 {
 		resp.PendingSpeakers = speakers
 	}
-	writeJSON(w, http.StatusOK, resp)
+	return resp
 }
 
 func (h *Handler) CreateGroupChat(w http.ResponseWriter, r *http.Request) {
@@ -302,16 +344,23 @@ func (h *Handler) CreateGroupChat(w http.ResponseWriter, r *http.Request) {
 		refs = append(refs, ref)
 	}
 
+	h.createGroupChat(w, r, member, userID, req.Title, refs, false)
+}
+
+// createGroupChat creates the chat with refs as its members (the creator
+// first) and writes it as the 201 response.
+func (h *Handler) createGroupChat(w http.ResponseWriter, r *http.Request, member db.Member, userID, title string, refs []service.IssueMemberRef, direct bool) {
 	prefix := h.getIssuePrefix(r.Context(), member.WorkspaceID)
 	res, err := h.IssueService.Create(r.Context(), service.IssueCreateParams{
 		WorkspaceID:    member.WorkspaceID,
-		Title:          req.Title,
+		Title:          title,
 		Status:         "todo",
 		Priority:       "none",
 		CreatorType:    "member",
-		CreatorID:      creator.ID,
+		CreatorID:      refs[0].ID,
 		AllowDuplicate: true,
 		Members:        refs,
+		DirectChat:     direct,
 	}, service.IssueCreateOpts{
 		ActorID:  userID,
 		Platform: func() string { p, _, _ := middleware.ClientMetadataFromContext(r.Context()); return p }(),
@@ -338,6 +387,79 @@ func (h *Handler) CreateGroupChat(w http.ResponseWriter, r *http.Request) {
 	}
 	h.publishGroupChatUpdated(uuidToString(member.WorkspaceID), userID, res.Issue.ID)
 	writeJSON(w, http.StatusCreated, groupChatToResponse(res.Issue, prefix, members, nil))
+}
+
+// OpenDirectGroupChat returns the requester's two-person chat with a person
+// or agent, creating it only when none exists yet. The new chat is named
+// after the peer; clients show the peer rather than the stored title.
+func (h *Handler) OpenDirectGroupChat(w http.ResponseWriter, r *http.Request) {
+	r = h.withWakeupActor(r)
+	userID, ok := requireUserID(w, r)
+	if !ok {
+		return
+	}
+	member, ok := ctxMember(r.Context())
+	if !ok {
+		writeError(w, http.StatusNotFound, "workspace not found")
+		return
+	}
+	var req groupChatMemberRef
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	peer, ok := h.validateGroupChatMember(w, r, member, member.WorkspaceID, req)
+	if !ok {
+		return
+	}
+	if peer.Type == "member" && uuidToString(peer.ID) == userID {
+		writeError(w, http.StatusBadRequest, "cannot start a direct chat with yourself")
+		return
+	}
+
+	ctx := r.Context()
+	existing, err := h.Queries.FindDirectGroupChat(ctx, db.FindDirectGroupChatParams{
+		WorkspaceID: member.WorkspaceID,
+		UserID:      parseUUID(userID),
+		PeerType:    peer.Type,
+		PeerID:      peer.ID,
+	})
+	if err == nil {
+		members, err := h.Queries.ListIssueMembers(ctx, db.ListIssueMembersParams{IssueID: existing.ID, WorkspaceID: existing.WorkspaceID})
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to load chat members")
+			return
+		}
+		writeJSON(w, http.StatusOK, h.groupChatDetail(ctx, existing, members))
+		return
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		slog.Warn("find direct group chat failed", append(logger.RequestAttrs(r), "error", err)...)
+		writeError(w, http.StatusInternalServerError, "failed to open chat")
+		return
+	}
+
+	var title string
+	if peer.Type == "agent" {
+		agent, err := h.Queries.GetAgentInWorkspace(ctx, db.GetAgentInWorkspaceParams{ID: peer.ID, WorkspaceID: member.WorkspaceID})
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to load agent")
+			return
+		}
+		title = agent.Name
+	} else {
+		user, err := h.Queries.GetUser(ctx, peer.ID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to load member")
+			return
+		}
+		title = user.Name
+	}
+	if strings.TrimSpace(title) == "" {
+		title = "Direct chat"
+	}
+	creator := service.IssueMemberRef{Type: "member", ID: parseUUID(userID)}
+	h.createGroupChat(w, r, member, userID, title, []service.IssueMemberRef{creator, peer}, true)
 }
 
 // UpdateGroupChatRequest patches the chat name and its announcement, which is
@@ -411,6 +533,10 @@ func (h *Handler) AddGroupChatMember(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if issue.IsDirectChat {
+		writeError(w, http.StatusBadRequest, "members of a direct chat cannot change")
+		return
+	}
 	if !isGroupChatCreator(issue, userID) {
 		writeError(w, http.StatusForbidden, "only the chat creator can manage members")
 		return
@@ -454,6 +580,10 @@ func (h *Handler) RemoveGroupChatMember(w http.ResponseWriter, r *http.Request) 
 	}
 	issue, _, ok := h.loadGroupChat(w, r)
 	if !ok {
+		return
+	}
+	if issue.IsDirectChat {
+		writeError(w, http.StatusBadRequest, "members of a direct chat cannot change")
 		return
 	}
 	if !isGroupChatCreator(issue, userID) {

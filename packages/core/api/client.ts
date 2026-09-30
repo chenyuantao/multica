@@ -4555,6 +4555,19 @@ export class ApiClient {
     return chat;
   }
 
+  /** The two-person chat with `peer`; the server creates it only when none exists. */
+  async openDirectGroupChat(peer: GroupChatMemberRef): Promise<GroupChat> {
+    const raw = await this.fetch<unknown>("/api/group-chats/direct", {
+      method: "POST",
+      body: JSON.stringify(peer),
+    });
+    const chat = parseWithFallback<GroupChat | null>(raw, GroupChatSchema, null, {
+      endpoint: "POST /api/group-chats/direct",
+    });
+    if (!chat) throw new Error("Invalid group chat response");
+    return chat;
+  }
+
   async updateGroupChat(chatId: string, data: UpdateGroupChatRequest): Promise<GroupChat | null> {
     const raw = await this.fetch<unknown>(`/api/group-chats/${chatId}`, {
       method: "PATCH",

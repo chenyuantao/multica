@@ -44,6 +44,25 @@ WHERE i.workspace_id = @workspace_id
 ORDER BY COALESCE(i.last_comment_at, i.created_at) DESC, i.id DESC
 LIMIT @row_limit;
 
+-- name: MarkIssueDirectChat :exec
+UPDATE issue SET is_direct_chat = true WHERE id = @id;
+
+-- name: FindDirectGroupChat :one
+-- The oldest direct chat between the given person and peer.
+SELECT i.* FROM issue i
+WHERE i.workspace_id = @workspace_id
+  AND i.is_direct_chat
+  AND EXISTS (
+      SELECT 1 FROM issue_member m
+      WHERE m.issue_id = i.id AND m.member_type = 'member' AND m.member_id = @user_id
+  )
+  AND EXISTS (
+      SELECT 1 FROM issue_member m
+      WHERE m.issue_id = i.id AND m.member_type = @peer_type AND m.member_id = @peer_id
+  )
+ORDER BY i.created_at ASC, i.id ASC
+LIMIT 1;
+
 -- name: ListLatestCommentsForIssues :many
 SELECT DISTINCT ON (c.issue_id) c.*
 FROM comment c

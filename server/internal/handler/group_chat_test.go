@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"net/http"
+	"slices"
 	"testing"
 
 	"github.com/multica-ai/multica/server/internal/groupchat"
@@ -247,4 +248,112 @@ func TestGroupChatAttachmentOnlyMessageStartsNoAgent(t *testing.T) {
 	if n := tasks(); n != 1 {
 		t.Fatalf("tasks after text message = %d, want 1", n)
 	}
+}
+
+// A direct chat is reused from either side and keeps its two members; a
+// two-person chat created as a group is not a direct chat.
+func TestOpenDirectGroupChat(t *testing.T) {
+	ctx := context.Background()
+	peer := groupChatWorkspaceMember(t, "Direct Chat Peer", "direct-chat-peer@multica.test")
+	third := groupChatWorkspaceMember(t, "Direct Chat Third", "direct-chat-third@multica.test")
+	agent := createHandlerTestAgent(t, "direct-chat-agent", nil)
+
+	var chatIDs []string
+	t.Cleanup(func() {
+		for _, id := range chatIDs {
+			for _, sql := range []string{
+				`DELETE FROM issue_member WHERE issue_id = $1`,
+				`DELETE FROM issue_subscriber WHERE issue_id = $1`,
+				`DELETE FROM issue WHERE id = $1`,
+			} {
+				testPool.Exec(ctx, sql, id)
+			}
+		}
+	})
+	open := func(userID, peerType, peerID string, want int) GroupChatResponse {
+		var out GroupChatResponse
+		res := testutil.Call(t, testHandler.OpenDirectGroupChat, groupChatRequestAs(t, userID, "POST", "/api/group-chats/direct", map[string]string{
+			"member_type": peerType, "member_id": peerID,
+		})).Want(want)
+		if want == http.StatusOK || want == http.StatusCreated {
+			res.JSON(&out)
+			chatIDs = append(chatIDs, out.ID)
+		}
+		return out
+	}
+	createGroup := func(members ...string) GroupChatResponse {
+		refs := []map[string]string{}
+		for _, id := range members {
+			refs = append(refs, map[string]string{"member_type": "member", "member_id": id})
+		}
+		var out GroupChatResponse
+		testutil.Call(t, testHandler.CreateGroupChat, groupChatRequestAs(t, testUserID, "POST", "/api/group-chats", map[string]any{
+			"title": "Group", "members": refs,
+		})).Want(http.StatusCreated).JSON(&out)
+		chatIDs = append(chatIDs, out.ID)
+		return out
+	}
+	listChats := func(userID string) []GroupChatResponse {
+		var out struct {
+			Chats []GroupChatResponse `json:"chats"`
+		}
+		testutil.Call(t, testHandler.ListGroupChats, groupChatRequestAs(t, userID, "GET", "/api/group-chats", nil)).Want(http.StatusOK).JSON(&out)
+		return out.Chats
+	}
+
+	trio := createGroup(peer, third)
+	pair := createGroup(peer)
+	if trio.IsDirect || pair.IsDirect {
+		t.Fatal("chats created as groups are direct chats")
+	}
+
+	created := open(testUserID, "member", peer, http.StatusCreated)
+	if created.ID == pair.ID || !created.IsDirect || len(created.Members) != 2 || created.Title != "Direct Chat Peer" {
+		t.Fatalf("direct chat = %+v, want a new direct chat named after the peer", created)
+	}
+	if again := open(testUserID, "member", peer, http.StatusOK); again.ID != created.ID {
+		t.Fatalf("reopened direct chat = %s, want %s", again.ID, created.ID)
+	}
+	if fromPeer := open(peer, "member", testUserID, http.StatusOK); fromPeer.ID != created.ID {
+		t.Fatalf("peer opened %s, want the shared chat %s", fromPeer.ID, created.ID)
+	}
+
+	// Membership is fixed, even for the creator.
+	testutil.Call(t, testHandler.AddGroupChatMember, withURLParam(groupChatRequestAs(t, testUserID, "POST", "/api/group-chats/"+created.ID+"/members", map[string]string{
+		"member_type": "member", "member_id": third,
+	}), "id", created.ID)).Want(http.StatusBadRequest)
+	testutil.Call(t, testHandler.RemoveGroupChatMember, testutil.WithURLParams(groupChatRequestAs(t, testUserID, "DELETE", "/api/group-chats/"+created.ID+"/members/member/"+peer, nil),
+		"id", created.ID, "memberType", "member", "memberId", peer)).Want(http.StatusBadRequest)
+
+	withAgent := open(testUserID, "agent", agent, http.StatusCreated)
+	if withAgent.ID == created.ID || !withAgent.IsDirect || withAgent.Title != "direct-chat-agent" {
+		t.Fatalf("agent direct chat = %+v, want its own direct chat named after the agent", withAgent)
+	}
+	if again := open(testUserID, "agent", agent, http.StatusOK); again.ID != withAgent.ID {
+		t.Fatalf("reopened agent chat = %s, want %s", again.ID, withAgent.ID)
+	}
+
+	// A second direct chat with the same peer, as two concurrent opens could
+	// leave behind, stays out of both sides' lists.
+	duplicate := createGroup(peer)
+	dbfx.Exec(t, `UPDATE issue SET is_direct_chat = true WHERE id = $1`, duplicate.ID)
+	for _, userID := range []string{testUserID, peer} {
+		var direct []string
+		for _, c := range listChats(userID) {
+			if c.ID == duplicate.ID {
+				t.Fatalf("user %s sees the duplicate direct chat", userID)
+			}
+			if c.IsDirect {
+				direct = append(direct, c.ID)
+			}
+		}
+		if !slices.Contains(direct, created.ID) {
+			t.Fatalf("user %s direct chats = %v, want %s", userID, direct, created.ID)
+		}
+	}
+	if again := open(testUserID, "member", peer, http.StatusOK); again.ID != created.ID {
+		t.Fatalf("reopened direct chat after duplicate = %s, want the oldest %s", again.ID, created.ID)
+	}
+
+	open(testUserID, "member", testUserID, http.StatusBadRequest)
 }

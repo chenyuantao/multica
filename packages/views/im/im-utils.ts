@@ -1,3 +1,4 @@
+import { directChatPeer } from "@multica/core/group-chats";
 import type { Comment, GroupChat, GroupChatMemberType, TaskMessagePayload } from "@multica/core/types";
 import { buildSteps, isCallStep } from "../common/task-transcript/build-steps";
 import { buildTimeline } from "../common/task-transcript/build-timeline";
@@ -156,6 +157,16 @@ export function formatListStamp(iso: string, locale: string, now: Date): string 
   const ageMs = now.getTime() - d.getTime();
   if (ageMs < 7 * 24 * 60 * 60 * 1000) return d.toLocaleDateString(locale, { weekday: "short" });
   return d.toLocaleDateString(locale, { month: "short", day: "numeric" });
+}
+
+/** A two-person chat is named after the other side; a group keeps its own name. */
+export function chatDisplayTitle(
+  chat: GroupChat,
+  userId: string,
+  getActorName: (type: string, id: string) => string,
+): string {
+  const peer = directChatPeer(chat, userId);
+  return peer ? getActorName(peer.member_type, peer.member_id) : chat.title;
 }
 
 /** The time a chat was last active: its latest message, or its creation. */

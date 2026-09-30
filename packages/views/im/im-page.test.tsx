@@ -34,10 +34,13 @@ vi.mock("@multica/core/paths", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@multica/core/paths")>();
   return { ...actual, useWorkspacePaths: () => actual.paths.workspace("acme") };
 });
-vi.mock("@multica/core/group-chats", () => ({
+vi.mock("@multica/core/group-chats", async () => ({
+  directChatPeer: (await vi.importActual<typeof import("@multica/core/group-chats")>("@multica/core/group-chats")).directChatPeer,
   groupChatListOptions: () => ({ queryKey: ["group-chats"] }),
   useGroupChatRealtime: () => {},
 }));
+const startDirectChat = vi.hoisted(() => vi.fn());
+vi.mock("./use-direct-chat", () => ({ useStartDirectChat: () => ({ start: startDirectChat, isPending: false }) }));
 vi.mock("@multica/core/modals", () => ({
   useModalStore: Object.assign(vi.fn(), { getState: () => ({ open: mockModalOpen }) }),
 }));
@@ -62,10 +65,13 @@ vi.mock("./use-chat-directory", async () => {
 vi.mock("./im-rail", () => ({ ImRail: () => null }));
 vi.mock("./chat-sidebar", () => ({ ChatSidebar: () => null, ChatAvatar: () => null }));
 vi.mock("./chat-thread", () => ({
-  ChatThread: ({ mobileNav }: { mobileNav?: { onOpenProfile: (type: string, id: string) => void } }) => (
-    <button type="button" onClick={() => mobileNav?.onOpenProfile("member", "user-2")}>
-      thread author
-    </button>
+  ChatThread: ({ mobileNav }: { mobileNav?: { settingsHref: string; onOpenProfile: (type: string, id: string) => void } }) => (
+    <>
+      <button type="button" onClick={() => mobileNav?.onOpenProfile("member", "user-2")}>
+        thread author
+      </button>
+      <a href={mobileNav?.settingsHref}>thread settings</a>
+    </>
   ),
 }));
 vi.mock("./chat-details-panel", () => ({
@@ -113,6 +119,7 @@ function renderPage(view: "chats" | "contacts", search = "", canGoBack?: () => b
 
 beforeEach(() => {
   mockModalOpen.mockReset();
+  startDirectChat.mockReset();
   isMobileRef.current = true;
   chatsRef.current = [chat];
 });
@@ -163,6 +170,17 @@ describe("ImPage contacts on mobile", () => {
     expect(navigation.replace).toHaveBeenCalledWith("/acme/member");
   });
 
+  it("messages a contact from the profile header, but not yourself", () => {
+    renderPage("contacts", "contact=agent:agent-1");
+    fireEvent.click(screen.getByRole("button", { name: "Message" }));
+    expect(startDirectChat).toHaveBeenCalledWith({ member_type: "agent", member_id: "agent-1" });
+  });
+
+  it("offers no message action on your own profile", () => {
+    renderPage("contacts", "contact=member:user-1");
+    expect(screen.queryByRole("button", { name: "Message" })).not.toBeInTheDocument();
+  });
+
   it("opens the create-agent modal from the contacts header without navigating", () => {
     const navigation = renderPage("contacts");
     fireEvent.click(screen.getByRole("button", { name: "New agent" }));
@@ -178,6 +196,24 @@ describe("ImPage chat levels on mobile", () => {
     fireEvent.click(screen.getByRole("button", { name: "thread author" }));
 
     expect(navigation.push).toHaveBeenCalledWith("/acme/im?chat=c1&contact=member%3Auser-2");
+  });
+
+  it("links a group chat's menu to its settings", () => {
+    renderPage("chats", "chat=c1");
+    expect(screen.getByRole("link", { name: "thread settings" })).toHaveAttribute("href", "/acme/im?chat=c1&view=settings");
+  });
+
+  it("links a direct chat's menu to the other side's profile", () => {
+    chatsRef.current = [{
+      ...chat,
+      is_direct: true,
+      members: [
+        { member_type: "member", member_id: "user-1" },
+        { member_type: "agent", member_id: "agent-1" },
+      ],
+    }];
+    renderPage("chats", "chat=c1");
+    expect(screen.getByRole("link", { name: "thread settings" })).toHaveAttribute("href", "/acme/im?chat=c1&contact=agent%3Aagent-1");
   });
 
   it("pushes an agent from chat settings as the fourth level", () => {

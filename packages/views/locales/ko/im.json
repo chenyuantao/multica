@@ -37,6 +37,8 @@
     "person": "멤버",
     "agent": "에이전트",
     "view_profile": "프로필 보기",
+    "send_message": "메시지",
+    "send_message_failed": "대화를 열 수 없습니다",
     "shared_chats": "함께 있는 그룹 채팅",
     "select": "연락처를 선택하세요",
     "back": "연락처로 돌아가기"
@@ -112,6 +114,7 @@
     "name_label": "이름",
     "name_placeholder": "출시 준비방",
     "members_label": "멤버",
+    "direct_hint": "한 명만 선택하면 해당 상대와의 1:1 대화가 열립니다.",
     "create": "만들기",
     "cancel": "취소",
     "failed": "채팅을 만들지 못했습니다"

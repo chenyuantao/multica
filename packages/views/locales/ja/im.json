@@ -37,6 +37,8 @@
     "person": "メンバー",
     "agent": "エージェント",
     "view_profile": "プロフィールを表示",
+    "send_message": "メッセージ",
+    "send_message_failed": "会話を開けませんでした",
     "shared_chats": "共通のグループチャット",
     "select": "連絡先を選択",
     "back": "連絡先に戻る"
@@ -112,6 +114,7 @@
     "name_label": "名前",
     "name_placeholder": "ローンチルーム",
     "members_label": "メンバー",
+    "direct_hint": "メンバーを 1 人だけ選ぶと、その相手との個別チャットが開きます。",
     "create": "作成",
     "cancel": "キャンセル",
     "failed": "チャットを作成できませんでした"

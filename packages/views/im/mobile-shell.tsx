@@ -1,7 +1,10 @@
 "use client";
 
 import { BookOpen, Menu, MessageCircle, UsersRound } from "lucide-react";
+import { useAuthStore } from "@multica/core/auth";
+import { useWorkspaceId } from "@multica/core/hooks";
 import { useWorkspacePaths } from "@multica/core/paths";
+import { Button } from "@multica/ui/components/ui/button";
 import { cn } from "@multica/ui/lib/utils";
 import { AgentDetail } from "../agents/components/agent-detail-page";
 import { MemberDetailPage } from "../members/member-detail-page";
@@ -9,6 +12,7 @@ import { AppLink, useBackOrReplace } from "../navigation";
 import { useT } from "../i18n";
 import type { ImRailSection } from "./im-rail";
 import { MobileBackButton } from "./mobile-back-button";
+import { useStartDirectChat } from "./use-direct-chat";
 
 /** A phone tab root: the section's list above the bottom tab bar. */
 export function MobileTabScreen({ active, children }: { active: ImRailSection; children: React.ReactNode }) {
@@ -120,9 +124,26 @@ export function MobileContactDetail({
   backHref: string;
   backLabel: string;
 }) {
+  const { t } = useT("im");
   const backOrReplace = useBackOrReplace();
+  const wsId = useWorkspaceId();
+  const userId = useAuthStore((s) => s.user?.id ?? "");
+  const directChat = useStartDirectChat(wsId);
+  const isSelf = contact.type === "member" && contact.id === userId;
+  const action = isSelf ? null : (
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      onClick={() => void directChat.start({ member_type: contact.type, member_id: contact.id })}
+      disabled={directChat.isPending}
+      aria-busy={directChat.isPending}
+      aria-label={t(($) => $.contacts.send_message)}
+    >
+      <MessageCircle />
+    </Button>
+  );
   return (
-    <MobileLevel title="" backHref={backHref} backLabel={backLabel}>
+    <MobileLevel title="" backHref={backHref} backLabel={backLabel} action={action}>
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
         {contact.type === "agent" ? (
           <AgentDetail

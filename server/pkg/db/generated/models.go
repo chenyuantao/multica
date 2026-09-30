@@ -829,6 +829,7 @@ type Issue struct {
 	TriageState        pgtype.Text        `json:"triage_state"`
 	DuplicateOfIssueID pgtype.UUID        `json:"duplicate_of_issue_id"`
 	LastCommentAt      pgtype.Timestamptz `json:"last_comment_at"`
+	IsDirectChat       bool               `json:"is_direct_chat"`
 }
 
 type IssueChildEvent struct {

@@ -38,6 +38,75 @@ func (q *Queries) AddIssueMember(ctx context.Context, arg AddIssueMemberParams) 
 	return err
 }
 
+const findDirectGroupChat = `-- name: FindDirectGroupChat :one
+SELECT i.id, i.workspace_id, i.title, i.description, i.status, i.priority, i.assignee_type, i.assignee_id, i.creator_type, i.creator_id, i.parent_issue_id, i.acceptance_criteria, i.context_refs, i.position, i.due_date, i.created_at, i.updated_at, i.number, i.project_id, i.origin_type, i.origin_id, i.first_executed_at, i.start_date, i.metadata, i.stage, i.properties, i.revision, i.last_activity_at, i.triage_state, i.duplicate_of_issue_id, i.last_comment_at, i.is_direct_chat FROM issue i
+WHERE i.workspace_id = $1
+  AND i.is_direct_chat
+  AND EXISTS (
+      SELECT 1 FROM issue_member m
+      WHERE m.issue_id = i.id AND m.member_type = 'member' AND m.member_id = $2
+  )
+  AND EXISTS (
+      SELECT 1 FROM issue_member m
+      WHERE m.issue_id = i.id AND m.member_type = $3 AND m.member_id = $4
+  )
+ORDER BY i.created_at ASC, i.id ASC
+LIMIT 1
+`
+
+type FindDirectGroupChatParams struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	UserID      pgtype.UUID `json:"user_id"`
+	PeerType    string      `json:"peer_type"`
+	PeerID      pgtype.UUID `json:"peer_id"`
+}
+
+// The oldest direct chat between the given person and peer.
+func (q *Queries) FindDirectGroupChat(ctx context.Context, arg FindDirectGroupChatParams) (Issue, error) {
+	row := q.db.QueryRow(ctx, findDirectGroupChat,
+		arg.WorkspaceID,
+		arg.UserID,
+		arg.PeerType,
+		arg.PeerID,
+	)
+	var i Issue
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.Title,
+		&i.Description,
+		&i.Status,
+		&i.Priority,
+		&i.AssigneeType,
+		&i.AssigneeID,
+		&i.CreatorType,
+		&i.CreatorID,
+		&i.ParentIssueID,
+		&i.AcceptanceCriteria,
+		&i.ContextRefs,
+		&i.Position,
+		&i.DueDate,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Number,
+		&i.ProjectID,
+		&i.OriginType,
+		&i.OriginID,
+		&i.FirstExecutedAt,
+		&i.StartDate,
+		&i.Metadata,
+		&i.Stage,
+		&i.Properties,
+		&i.Revision,
+		&i.LastActivityAt,
+		&i.TriageState,
+		&i.DuplicateOfIssueID,
+		&i.LastCommentAt,
+		&i.IsDirectChat,
+	)
+	return i, err
+}
+
 const isIssueMember = `-- name: IsIssueMember :one
 SELECT EXISTS (
     SELECT 1 FROM issue_member
@@ -70,7 +139,7 @@ func (q *Queries) IssueHasMembers(ctx context.Context, issueID pgtype.UUID) (boo
 }
 
 const listGroupChatsForMember = `-- name: ListGroupChatsForMember :many
-SELECT i.id, i.workspace_id, i.title, i.description, i.status, i.priority, i.assignee_type, i.assignee_id, i.creator_type, i.creator_id, i.parent_issue_id, i.acceptance_criteria, i.context_refs, i.position, i.due_date, i.created_at, i.updated_at, i.number, i.project_id, i.origin_type, i.origin_id, i.first_executed_at, i.start_date, i.metadata, i.stage, i.properties, i.revision, i.last_activity_at, i.triage_state, i.duplicate_of_issue_id, i.last_comment_at FROM issue i
+SELECT i.id, i.workspace_id, i.title, i.description, i.status, i.priority, i.assignee_type, i.assignee_id, i.creator_type, i.creator_id, i.parent_issue_id, i.acceptance_criteria, i.context_refs, i.position, i.due_date, i.created_at, i.updated_at, i.number, i.project_id, i.origin_type, i.origin_id, i.first_executed_at, i.start_date, i.metadata, i.stage, i.properties, i.revision, i.last_activity_at, i.triage_state, i.duplicate_of_issue_id, i.last_comment_at, i.is_direct_chat FROM issue i
 WHERE i.workspace_id = $1
   AND EXISTS (
       SELECT 1 FROM issue_member m
@@ -138,6 +207,7 @@ func (q *Queries) ListGroupChatsForMember(ctx context.Context, arg ListGroupChat
 			&i.TriageState,
 			&i.DuplicateOfIssueID,
 			&i.LastCommentAt,
+			&i.IsDirectChat,
 		); err != nil {
 			return nil, err
 		}
@@ -307,6 +377,15 @@ func (q *Queries) ListLatestCommentsForIssues(ctx context.Context, arg ListLates
 		return nil, err
 	}
 	return items, nil
+}
+
+const markIssueDirectChat = `-- name: MarkIssueDirectChat :exec
+UPDATE issue SET is_direct_chat = true WHERE id = $1
+`
+
+func (q *Queries) MarkIssueDirectChat(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, markIssueDirectChat, id)
+	return err
 }
 
 const removeIssueMember = `-- name: RemoveIssueMember :execrows

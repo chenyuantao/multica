@@ -21,7 +21,8 @@ vi.mock("@tanstack/react-query", async () => {
   return { ...actual, useQuery: vi.fn() };
 });
 
-vi.mock("@multica/core/group-chats", () => ({
+vi.mock("@multica/core/group-chats", async () => ({
+  directChatPeer: (await vi.importActual<typeof import("@multica/core/group-chats")>("@multica/core/group-chats")).directChatPeer,
   groupChatMessagesOptions: () => ({ queryKey: ["messages"] }),
   useSendGroupChatMessage: () => ({ mutateAsync: sendMutateAsync }),
   useDeleteGroupChatMessage: () => deleteMessage,
@@ -78,6 +79,7 @@ const chat: GroupChat = {
   last_comment_at: null,
   last_message: null,
   pending_speakers: [],
+  is_direct: false,
   members: [
     { member_type: "member", member_id: "user-1", added_by_type: null, added_by_id: null, created_at: "2026-09-28T00:00:00Z" },
   ],

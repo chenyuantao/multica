@@ -42,6 +42,20 @@ describe("ApiClient group chat update", () => {
     expect(result).toBeNull();
   });
 
+  it("opens a direct chat with the peer and rejects a malformed response", async () => {
+    const fetchMock = respond({ id: "chat-1", workspace_id: "ws-1", title: "Ada" });
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new ApiClient("https://api.example.test");
+    const chat = await client.openDirectGroupChat({ member_type: "agent", member_id: "agent-1" });
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe("https://api.example.test/api/group-chats/direct");
+    expect(fetchMock.mock.calls[0]?.[1]?.method).toBe("POST");
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ member_type: "agent", member_id: "agent-1" });
+    expect(chat.members).toEqual([]);
+
+    vi.stubGlobal("fetch", respond({ id: 42 }));
+    await expect(client.openDirectGroupChat({ member_type: "agent", member_id: "agent-1" })).rejects.toThrow();
+  });
+
   it("defaults a missing or null announcement to empty", async () => {
     const chat = { id: "chat-1", workspace_id: "ws-1", title: "Launch room" };
     vi.stubGlobal("fetch", respond(chat));

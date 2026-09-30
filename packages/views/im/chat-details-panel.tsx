@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { CircleMinus, HardDrive, Pencil, UserPlus } from "lucide-react";
-import { useRemoveGroupChatMember, useUpdateGroupChat } from "@multica/core/group-chats";
+import { directChatPeer, useRemoveGroupChatMember, useUpdateGroupChat } from "@multica/core/group-chats";
 import { runtimeDisplayName, runtimeListOptions } from "@multica/core/runtimes";
 import { useActorName } from "@multica/core/workspace/hooks";
 import type { Agent, AgentRuntime, GroupChat, GroupChatMember } from "@multica/core/types";
@@ -17,7 +17,8 @@ import { useT } from "../i18n";
 import { useOpenAgentDetail } from "../modals/agent-detail";
 import { AddMemberDialog } from "./add-member-dialog";
 import { ColumnResizeHandle, useColumnWidth } from "./resizable-column";
-import { useChatDirectory } from "./use-chat-directory";
+import { ContactProfile } from "./contact-card";
+import { entryKey, useChatDirectory } from "./use-chat-directory";
 
 interface ChatDetailsPanelProps {
   wsId: string;
@@ -36,7 +37,8 @@ const EMPTY_RUNTIMES: AgentRuntime[] = [];
 export function ChatDetailsPanel({ wsId, chat, userId, variant = "aside", onOpenMember }: ChatDetailsPanelProps) {
   const { t } = useT("im");
   const { getActorName } = useActorName();
-  const { agentList } = useChatDirectory(wsId);
+  const directory = useChatDirectory(wsId);
+  const { agentList } = directory;
   const { data: runtimes = EMPTY_RUNTIMES } = useQuery(runtimeListOptions(wsId));
   const removeMember = useRemoveGroupChatMember(wsId, chat.id);
   const openAgentDetail = useOpenAgentDetail();
@@ -77,14 +79,29 @@ export function ChatDetailsPanel({ wsId, chat, userId, variant = "aside", onOpen
   const canRemove = (m: GroupChatMember) =>
     isCreator && !(m.member_type === "member" && m.member_id === chat.creator_id);
 
-  const panel = (
-    <aside
-      className={cn(
-        "flex flex-col gap-5 overflow-y-auto bg-muted/40 px-4 pb-4",
-        "pt-4",
-        variant === "aside" ? "h-full w-full" : "min-h-0 w-full flex-1",
-      )}
-    >
+  const peer = directChatPeer(chat, userId);
+  const asideClass = cn(
+    "flex flex-col gap-5 overflow-y-auto bg-muted/40 px-4 pb-4",
+    "pt-4",
+    variant === "aside" ? "h-full w-full" : "min-h-0 w-full flex-1",
+  );
+
+  const panel = peer ? (
+    <aside className={asideClass}>
+      <ContactProfile
+        entry={
+          directory.byKey.get(entryKey(peer.member_type, peer.member_id)) ?? {
+            type: peer.member_type,
+            id: peer.member_id,
+            name: getActorName(peer.member_type, peer.member_id),
+            detail: "",
+          }
+        }
+        userId={userId}
+      />
+    </aside>
+  ) : (
+    <aside className={asideClass}>
       <PanelSection title={t(($) => $.panel.name)}>
         <ChatNameRow wsId={wsId} chat={chat} />
       </PanelSection>

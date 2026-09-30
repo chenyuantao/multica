@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ChevronRight, CirclePlus } from "lucide-react";
+import { directChatPeer } from "@multica/core/group-chats";
 import type { GroupChat } from "@multica/core/types";
 import { cn } from "@multica/ui/lib/utils";
 import { ActorAvatar } from "../common/actor-avatar";
@@ -37,7 +38,8 @@ export function ContactList({ people, agents, chats, userId, selectedKey, onSele
       return next;
     });
 
-  const visibleChats = q ? chats.filter((c) => c.title.toLowerCase().includes(q)) : chats;
+  const groups = chats.filter((c) => !directChatPeer(c, userId));
+  const visibleChats = q ? groups.filter((c) => c.title.toLowerCase().includes(q)) : groups;
   const visiblePeople = people.filter((e) => matchesQuery(e, query));
   const visibleAgents = agents.filter((e) => matchesQuery(e, query));
   const empty = visibleChats.length + visiblePeople.length + visibleAgents.length === 0;

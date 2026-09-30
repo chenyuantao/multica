@@ -27,6 +27,8 @@ export interface GroupChat {
   members: GroupChatMember[];
   /** Agents who have not finished speaking, in reply order. */
   pending_speakers: string[];
+  /** Created as a two-person chat with one peer; its members never change. */
+  is_direct: boolean;
 }
 
 export interface GroupChatMemberRef {
