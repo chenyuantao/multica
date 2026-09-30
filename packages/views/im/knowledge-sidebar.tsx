@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { TFunction } from "i18next";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronRight, CirclePlus, FileText, Folder, MoreHorizontal } from "lucide-react";
@@ -40,12 +40,37 @@ export function KnowledgeSidebar({ selectedPath, onSelect, onCreate, className }
   const tree = useQuery(docsTreeOptions());
   const search = useQuery(docsSearchOptions(q));
   const [toggled, setToggled] = useState<ReadonlyMap<string, boolean>>(() => new Map());
+  const [revealedPath, setRevealedPath] = useState(selectedPath);
+  const navRef = useRef<HTMLElement>(null);
+  const scrolledTo = useRef<string | null>(null);
+
+  // Opening a note re-expands any folder around it the user had collapsed.
+  if (revealedPath !== selectedPath) {
+    setRevealedPath(selectedPath);
+    if (selectedPath) {
+      setToggled((prev) => {
+        const next = new Map(prev);
+        for (const dir of ancestorDirs(selectedPath)) next.delete(dir);
+        return next;
+      });
+    }
+  }
 
   const nodes = (searching ? search.data?.nodes : tree.data) ?? EMPTY_NODES;
   const active = searching ? search : tree;
   // Top-level folders and the open note's folders start expanded; a click
   // overrides either way. Search results are always fully expanded.
   const selectedDirs = new Set(selectedPath ? ancestorDirs(selectedPath) : []);
+
+  // Runs after every render so the scroll lands once the tree has loaded.
+  const scrollKey = selectedPath && `${searching ? "search" : "tree"}:${selectedPath}`;
+  useEffect(() => {
+    if (!scrollKey || scrolledTo.current === scrollKey) return;
+    const row = navRef.current?.querySelector('[aria-current="page"]');
+    if (!row) return;
+    scrolledTo.current = scrollKey;
+    row.scrollIntoView({ block: "nearest" });
+  });
   const isOpen = (node: DocNode, depth: number) =>
     searching || (toggled.get(node.path) ?? (depth === 0 || selectedDirs.has(node.path)));
   const toggle = (path: string, open: boolean) =>
@@ -67,7 +92,11 @@ export function KnowledgeSidebar({ selectedPath, onSelect, onCreate, className }
         </button>
       </ImSidebarHeader>
 
-      <nav className="min-h-0 flex-1 overflow-y-auto px-2 pt-1 pb-3" aria-label={t(($) => $.rail.knowledge)}>
+      <nav
+        ref={navRef}
+        className="min-h-0 flex-1 overflow-y-auto px-2 pt-1 pb-3"
+        aria-label={t(($) => $.rail.knowledge)}
+      >
         {active.isError ? (
           <SidebarNotice>{loadErrorText(active.error, t)}</SidebarNotice>
         ) : active.isPending && (searching || !tree.data) ? null : nodes.length === 0 ? (
@@ -81,6 +110,7 @@ export function KnowledgeSidebar({ selectedPath, onSelect, onCreate, className }
                   depth={0}
                   isOpen={isOpen}
                   selectedPath={selectedPath}
+                  selectedDirs={selectedDirs}
                   onToggle={toggle}
                   onSelect={onSelect}
                   onCreate={onCreate}
@@ -119,22 +149,31 @@ interface TreeNodeProps {
   depth: number;
   isOpen: (node: DocNode, depth: number) => boolean;
   selectedPath: string | null;
+  /** Folders around the open note: highlighted and pinned while scrolled past. */
+  selectedDirs: ReadonlySet<string>;
   onToggle: (path: string, open: boolean) => void;
   onSelect: (path: string) => void;
   onCreate: (dir: string) => void;
 }
 
+/** Matches `h-8` on rows; pinned folders stack by this step per depth. */
+const ROW_HEIGHT = 32;
+
 const rowClass =
   "group/row flex h-8 w-full min-w-0 items-center gap-1.5 rounded-md pr-1 pl-2 text-left transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset";
 
 function TreeNode(props: TreeNodeProps) {
-  const { node, depth, isOpen, selectedPath, onToggle, onSelect, onCreate } = props;
+  const { node, depth, isOpen, selectedPath, selectedDirs, onToggle, onSelect, onCreate } = props;
   const { t } = useT("im");
 
   if (node.type === "file") {
     const selected = node.path === selectedPath;
     return (
-      <div className={cn(rowClass, "relative", selected ? "bg-brand/12 hover:bg-brand/12" : "hover:bg-foreground/5")}>
+      <div
+        className={cn(rowClass, "relative", selected ? "bg-brand/12 hover:bg-brand/12" : "hover:bg-foreground/5")}
+        // Keeps a revealed note clear of the pinned folders above it.
+        style={{ scrollMarginTop: depth * ROW_HEIGHT }}
+      >
         <button
           type="button"
           onClick={() => onSelect(node.path)}
@@ -162,28 +201,48 @@ function TreeNode(props: TreeNodeProps) {
   }
 
   const open = isOpen(node, depth);
+  const onPath = selectedDirs.has(node.path);
+  const pinned = onPath && open;
   return (
     <>
-      <div className={cn(rowClass, "relative hover:bg-foreground/5")}>
-        <button
-          type="button"
-          onClick={() => onToggle(node.path, open)}
-          aria-expanded={open}
-          title={node.path}
-          className="flex min-w-0 flex-1 items-center gap-1.5 self-stretch text-left outline-none after:absolute after:inset-0 after:rounded-md focus-visible:after:ring-2 focus-visible:after:ring-ring focus-visible:after:ring-inset"
-        >
-          <ChevronRight className={cn("size-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-90")} />
-          <Folder className="size-4 shrink-0 text-muted-foreground" strokeWidth={1.7} />
-          <span className={cn("min-w-0 truncate text-body", depth === 0 && "font-medium")}>{node.name}</span>
-          <span className="shrink-0 text-caption text-muted-foreground tabular-nums">({node.child_count})</span>
-        </button>
-        <RowMenu
-          label={t(($) => $.knowledge.more, { name: node.name })}
-          items={[
-            { label: t(($) => $.knowledge.new_note_here), onSelect: () => onCreate(node.path) },
-            { label: t(($) => $.knowledge.copy_path), onSelect: () => void copyPath(node.path, t) },
-          ]}
-        />
+      {/* The opaque wrapper lets the row keep its translucent hover while
+          pinned; each pinned level sits one row below its parent, and its
+          <li> bounds how long it stays stuck. */}
+      <div
+        className={cn(pinned && "sticky z-10 bg-sidebar")}
+        style={pinned ? { top: depth * ROW_HEIGHT } : undefined}
+      >
+        <div className={cn(rowClass, "relative hover:bg-foreground/5")}>
+          <button
+            type="button"
+            onClick={() => onToggle(node.path, open)}
+            aria-expanded={open}
+            title={node.path}
+            className="flex min-w-0 flex-1 items-center gap-1.5 self-stretch text-left outline-none after:absolute after:inset-0 after:rounded-md focus-visible:after:ring-2 focus-visible:after:ring-ring focus-visible:after:ring-inset"
+          >
+            <ChevronRight
+              className={cn(
+                "size-4 shrink-0 transition-transform",
+                onPath ? "text-brand" : "text-muted-foreground",
+                open && "rotate-90",
+              )}
+            />
+            <Folder className={cn("size-4 shrink-0", onPath ? "text-brand" : "text-muted-foreground")} strokeWidth={1.7} />
+            <span
+              className={cn("min-w-0 truncate text-body", (depth === 0 || onPath) && "font-medium", onPath && "text-brand")}
+            >
+              {node.name}
+            </span>
+            <span className="shrink-0 text-caption text-muted-foreground tabular-nums">({node.child_count})</span>
+          </button>
+          <RowMenu
+            label={t(($) => $.knowledge.more, { name: node.name })}
+            items={[
+              { label: t(($) => $.knowledge.new_note_here), onSelect: () => onCreate(node.path) },
+              { label: t(($) => $.knowledge.copy_path), onSelect: () => void copyPath(node.path, t) },
+            ]}
+          />
+        </div>
       </div>
       {open && node.children.length > 0 && (
         // The dashed guide sits under this row's chevron (8px padding + half of 16px).

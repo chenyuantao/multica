@@ -49,6 +49,8 @@ describe("KnowledgeSidebar", () => {
     onSelect.mockReset();
     onCreate.mockReset();
     searchNodes = [];
+    // jsdom has no layout, so scrollIntoView isn't defined at all.
+    Element.prototype.scrollIntoView = vi.fn();
   });
 
   it("opens top-level folders and toggles nested ones", () => {
@@ -67,6 +69,30 @@ describe("KnowledgeSidebar", () => {
     expect(screen.getByRole("button", { name: /^plan\.md/ })).toHaveAttribute("aria-current", "page");
     fireEvent.click(screen.getByRole("button", { name: "New note" }));
     expect(onCreate).toHaveBeenCalledWith("Strategy/2025");
+  });
+
+  it("re-expands, pins, and scrolls to the folders of a newly opened note", () => {
+    const scrollIntoView = vi.mocked(Element.prototype.scrollIntoView);
+    const { rerender } = renderWithI18n(
+      <KnowledgeSidebar selectedPath="Strategy/budget.md" onSelect={onSelect} onCreate={onCreate} />,
+    );
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: /^Strategy/ }));
+    expect(screen.queryByText("budget.md")).toBeNull();
+
+    rerender(<KnowledgeSidebar selectedPath="Strategy/2025/plan.md" onSelect={onSelect} onCreate={onCreate} />);
+    const leaf = screen.getByRole("button", { name: /^plan\.md/ });
+    expect(leaf).toHaveAttribute("aria-current", "page");
+    expect(scrollIntoView).toHaveBeenCalledTimes(2);
+    expect(scrollIntoView).toHaveBeenLastCalledWith({ block: "nearest" });
+    for (const [name, top] of [
+      [/^Strategy/, "0px"],
+      [/^2025/, "32px"],
+    ] as const) {
+      const pin = screen.getByRole("button", { name }).parentElement?.parentElement;
+      expect(pin).toHaveClass("sticky");
+      expect(pin).toHaveStyle({ top });
+    }
   });
 
   it("shows server search hits fully expanded", async () => {
