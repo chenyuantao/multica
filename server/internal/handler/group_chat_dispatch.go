@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -26,6 +25,7 @@ const (
 	groupChatHistoryLimit     = 200
 	groupChatJudgmentMessages = 30
 	groupChatPromptRunes      = 24000
+	groupChatMessageRunes     = 6000
 )
 
 type groupChatPerson struct {
@@ -106,9 +106,14 @@ func (h *Handler) enqueueGroupChatPlan(ctx context.Context, issue db.Issue, comm
 	}
 }
 
-func (h *Handler) groupChatRosterIfChat(ctx context.Context, issue db.Issue) ([]groupChatPerson, bool) {
+// isGroupChat reports whether the issue is a group chat.
+func (h *Handler) isGroupChat(ctx context.Context, issue db.Issue) bool {
 	has, err := h.Queries.IssueHasMembers(ctx, issue.ID)
-	if err != nil || !has {
+	return err == nil && has
+}
+
+func (h *Handler) groupChatRosterIfChat(ctx context.Context, issue db.Issue) ([]groupChatPerson, bool) {
+	if !h.isGroupChat(ctx, issue) {
 		return nil, false
 	}
 	members, err := h.Queries.ListIssueMembers(ctx, db.ListIssueMembersParams{IssueID: issue.ID, WorkspaceID: issue.WorkspaceID})
@@ -208,7 +213,7 @@ func (h *Handler) groupChatTurns(ctx context.Context, issue db.Issue, roster []g
 		if c.CreatedAt.Valid {
 			when = c.CreatedAt.Time.UTC().Format(time.RFC3339)
 		}
-		turns = append(turns, groupchat.Turn{Author: name, Role: c.AuthorType, Text: c.Content, Time: when})
+		turns = append(turns, groupchat.Turn{ID: uuidToString(c.ID), Author: name, Role: c.AuthorType, Text: c.Content, Time: when})
 	}
 	return turns
 }
@@ -220,24 +225,22 @@ func (h *Handler) attachGroupChatTranscript(ctx context.Context, resp *AgentTask
 	if !ok {
 		return
 	}
-	turns := trimTurns(h.groupChatTurns(ctx, issue, roster), groupChatPromptRunes)
-	if len(turns) == 0 {
+	triggerIDs := uuidsToStrings(task.CoalescedCommentIds)
+	if task.TriggerCommentID.Valid {
+		triggerIDs = append(triggerIDs, uuidToString(task.TriggerCommentID))
+	}
+	transcript := groupchat.SelectTranscript(h.groupChatTurns(ctx, issue, roster), triggerIDs, groupChatPromptRunes, groupChatMessageRunes)
+	if len(transcript.Excerpts) == 0 {
 		return
 	}
-	var b strings.Builder
-	b.WriteString(groupChatRoleLine(task))
-	b.WriteString("\n\n")
-	for _, turn := range turns {
-		fmt.Fprintf(&b, "%s (%s): %s\n\n", turn.Author, turn.Role, strings.TrimSpace(turn.Text))
-	}
-	resp.GroupChatTranscript = strings.TrimSpace(b.String())
+	resp.GroupChatTranscript = groupChatRoleLine(task) + "\n\n" + transcript.Render(uuidToString(issue.ID))
 }
 
 func groupChatRoleLine(task db.AgentTaskQueue) string {
 	if d, ok := groupchat.ParseDispatch(task.Context); ok && d.Mode == groupchat.ModeSequential && len(d.AgentIDs) > 1 {
-		return fmt.Sprintf("You are speaker %d of %d in an ordered group reply. Say your part only. The transcript below is the whole conversation, oldest first, not a set of threads.", d.Cursor+1, len(d.AgentIDs))
+		return fmt.Sprintf("You are speaker %d of %d in an ordered group reply. Say your part only. The transcript below is one group conversation, oldest first, not a set of threads. Answer the messages marked as triggering this reply.", d.Cursor+1, len(d.AgentIDs))
 	}
-	return "The transcript below is the whole group conversation, oldest first, not a set of threads. Reply from that history."
+	return "The transcript below is one group conversation, oldest first, not a set of threads. Answer the messages marked as triggering this reply, using the rest as context."
 }
 
 func (h *Handler) pendingSpeakersByIssue(ctx context.Context, ids []pgtype.UUID) map[string][]string {
@@ -278,23 +281,6 @@ func participantIDs(ps []groupchat.Participant) []string {
 		out[i] = p.ID
 	}
 	return out
-}
-
-func trimTurns(turns []groupchat.Turn, maxRunes int) []groupchat.Turn {
-	used := 0
-	start := len(turns)
-	for i := len(turns) - 1; i >= 0; i-- {
-		n := utf8.RuneCountInString(turns[i].Text) + utf8.RuneCountInString(turns[i].Author) + 8
-		if used+n > maxRunes && start != len(turns) {
-			break
-		}
-		used += n
-		start = i
-		if used >= maxRunes {
-			break
-		}
-	}
-	return turns[start:]
 }
 
 // absorbGroupChatThinking writes the agent's finished reply into the bubble

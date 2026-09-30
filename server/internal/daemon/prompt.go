@@ -510,7 +510,7 @@ func buildCommentPrompt(task Task, provider string) string {
 		b.WriteString("This run is a group-chat reply. The transcript below is the conversation in chronological order. Read it as one history. Do not reconstruct it as separate comment threads.\n\n")
 		b.WriteString(task.GroupChatTranscript)
 		b.WriteString("\n\n")
-		b.WriteString(execenv.BuildCommentReplyInstructions(provider, task.IssueID, task.TriggerCommentID, taskIsSquadLeader(task)))
+		b.WriteString(execenv.BuildGroupChatReplyInstructions(task.IssueID, taskIsSquadLeader(task)))
 		return b.String()
 	}
 	var hint string

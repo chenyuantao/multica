@@ -6359,7 +6359,7 @@ func (s *TaskService) ensureDelegatedFailureRecoveryComment(ctx context.Context,
 			AuthorID:     pgtype.UUID{Valid: true},
 			Content:      delegatedFailureRecoveryContent(target.failed, target.source),
 			Type:         delegatedFailureRecoveryCommentType,
-			ParentID:     target.source.TriggerCommentID,
+			ParentID:     groupChatParent(ctx, qtx, target.issue.ID, target.source.TriggerCommentID),
 			SourceTaskID: failed.ID,
 		})
 		if err != nil {
@@ -6465,7 +6465,7 @@ func (s *TaskService) exhaustDelegatedFailureRecovery(ctx context.Context, targe
 			AuthorID:     pgtype.UUID{Valid: true},
 			Content:      delegatedFailureRecoveryExhaustionContent(target),
 			Type:         "system",
-			ParentID:     target.source.TriggerCommentID,
+			ParentID:     groupChatParent(ctx, qtx, target.issue.ID, target.source.TriggerCommentID),
 			SourceTaskID: target.failed.ID,
 		})
 		if err != nil {
@@ -7520,6 +7520,7 @@ func (s *TaskService) createAgentComment(ctx context.Context, issueID, agentID p
 	if err != nil {
 		return
 	}
+	parentID = groupChatParent(ctx, s.Queries, issue.ID, parentID)
 	// Resolve the thread root for thread-level side effects without overwriting
 	// parentID. The stored parent_id must remain the exact comment being replied
 	// to; recursive thread reads recover the root when needed.

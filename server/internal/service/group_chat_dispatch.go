@@ -67,7 +67,6 @@ func (s *TaskService) OpenGroupChatThinking(ctx context.Context, issue db.Issue,
 		AuthorID:     task.AgentID,
 		Content:      groupchat.ThinkingMessage,
 		Type:         "comment",
-		ParentID:     task.TriggerCommentID,
 		SourceTaskID: task.ID,
 	})
 	if err != nil {
@@ -79,6 +78,18 @@ func (s *TaskService) OpenGroupChatThinking(ctx context.Context, issue db.Issue,
 		Open:      true,
 	})
 	s.publishGroupChatComment(issue, created.Comment(), protocol.EventCommentCreated)
+}
+
+// groupChatParent is the parent a new comment on the issue may carry. Group
+// chat messages are always top-level; they are never threaded.
+func groupChatParent(ctx context.Context, q *db.Queries, issueID, parentID pgtype.UUID) pgtype.UUID {
+	if !parentID.Valid {
+		return parentID
+	}
+	if has, err := q.IssueHasMembers(ctx, issueID); err == nil && has {
+		return pgtype.UUID{}
+	}
+	return parentID
 }
 
 func groupChatPlaceholder(raw []byte) bool {

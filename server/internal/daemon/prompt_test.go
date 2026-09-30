@@ -2271,4 +2271,7 @@ func TestBuildCommentPromptUsesGroupTranscript(t *testing.T) {
 	if strings.Contains(out, "--roots-only") {
 		t.Fatalf("group transcript still tells the agent to scan threads:\n%s", out)
 	}
+	if strings.Contains(out, "--parent c-1") || !strings.Contains(out, "multica issue comment add issue-1 --content-file ./reply.md") {
+		t.Fatalf("group reply must be a top-level post:\n%s", out)
+	}
 }

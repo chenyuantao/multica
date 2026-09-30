@@ -84,6 +84,56 @@ func TestCreateComment_TriggeredTaskAllowsReplyUnderTrigger(t *testing.T) {
 	}
 }
 
+// TestCreateComment_GroupChatMessagesAreTopLevel: a group chat is never
+// threaded. A triggered task may post without --parent, and a parent passed by
+// an agent or a person is dropped.
+func TestCreateComment_GroupChatMessagesAreTopLevel(t *testing.T) {
+	if testHandler == nil || testPool == nil {
+		t.Skip("database not available")
+	}
+	ctx := context.Background()
+	fx := newRunningSquadLeaderTaskFixture(t)
+	if _, err := testPool.Exec(ctx, `
+		INSERT INTO issue_member (issue_id, workspace_id, member_type, member_id)
+		VALUES ($1, $2, 'agent', $3)
+	`, fx.IssueID, testWorkspaceID, fx.LeaderID); err != nil {
+		t.Fatalf("make the issue a group chat: %v", err)
+	}
+	t.Cleanup(func() { testPool.Exec(ctx, `DELETE FROM issue_member WHERE issue_id = $1`, fx.IssueID) })
+
+	post := func(body map[string]any, asAgent bool) string {
+		t.Helper()
+		w := httptest.NewRecorder()
+		r := withURLParam(newRequest("POST", "/api/issues/"+fx.IssueID+"/comments", body), "id", fx.IssueID)
+		if asAgent {
+			r.Header.Set("X-Agent-ID", fx.LeaderID)
+			r.Header.Set("X-Task-ID", fx.TaskID)
+		}
+		testHandler.CreateComment(w, r)
+		if w.Code != http.StatusCreated {
+			t.Fatalf("CreateComment %v: expected 201, got %d: %s", body, w.Code, w.Body.String())
+		}
+		var created CommentResponse
+		if err := json.NewDecoder(w.Body).Decode(&created); err != nil {
+			t.Fatalf("decode comment: %v", err)
+		}
+		return created.ID
+	}
+	for name, id := range map[string]string{
+		"agent without parent": post(map[string]any{"content": "top-level reply"}, true),
+		"agent with parent":    post(map[string]any{"content": "reply with a stale parent", "parent_id": fx.TriggerCommentID}, true),
+		"person with parent":   post(map[string]any{"content": "person replying", "parent_id": fx.TriggerCommentID}, false),
+	} {
+		var parent *string
+		if err := testPool.QueryRow(ctx, `SELECT parent_id::text FROM comment WHERE id = $1`, id).Scan(&parent); err != nil {
+			t.Fatalf("%s: load comment: %v", name, err)
+		}
+		if parent != nil {
+			t.Fatalf("%s: stored under parent %s, want a top-level message", name, *parent)
+		}
+	}
+}
+
 // TestCreateComment_TriggeredTaskRejectsForeignParent covers the resumed-session
 // drift in GH #6264: the task passes a --parent that is a real comment on its
 // own issue but not one this run was given to answer. The refusal must name

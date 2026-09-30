@@ -558,7 +558,8 @@ func (h *Handler) CreatePluginComment(w http.ResponseWriter, r *http.Request) {
 
 	var parentID pgtype.UUID
 	var rootComment *db.Comment
-	if req.ParentID != nil && *req.ParentID != "" {
+	// Group chat messages are always top-level, so a parent is dropped.
+	if req.ParentID != nil && *req.ParentID != "" && !h.isGroupChat(r.Context(), issue) {
 		parsed, err := util.ParseUUID(*req.ParentID)
 		if err != nil {
 			publicapiv1.WriteProblem(w, r, http.StatusBadRequest, "invalid_request", "parent_id must be a valid UUID")

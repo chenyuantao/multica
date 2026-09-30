@@ -274,6 +274,23 @@ func buildCommentReplyInstructionsSlim(provider, issueID, triggerCommentID strin
 	if squadLeader {
 		lead = "Unless your outcome is `no_action`, post your reply as a comment — always use the trigger comment ID below, "
 	}
+	lead += "do NOT reuse --parent values from previous turns in this session.\n\n"
+	return buildReplyPostInstructions(lead, fmt.Sprintf("multica issue comment add %s --parent %s", issueID, triggerCommentID))
+}
+
+// BuildGroupChatReplyInstructions is the reply block for a group-chat run.
+// Group chat messages are always top-level, so the post carries no --parent.
+func BuildGroupChatReplyInstructions(issueID string, squadLeader bool) string {
+	lead := "Post your reply as a new group message. Do NOT pass --parent: group chat messages are never threaded.\n\n"
+	if squadLeader {
+		lead = "Unless your outcome is `no_action`, post your reply as a new group message. Do NOT pass --parent: group chat messages are never threaded.\n\n"
+	}
+	return buildReplyPostInstructions(lead, "multica issue comment add "+issueID)
+}
+
+// buildReplyPostInstructions renders the post cookbook for addCmd, the
+// `multica issue comment add` invocation without its content flags.
+func buildReplyPostInstructions(lead, addCmd string) string {
 	// Cleanup is GATED on the post succeeding, never a separate statement.
 	// Agents hand the whole snippet to one shell call, and an unconditional
 	// cleanup line runs — and SUCCEEDS — after a failed post, so the call's
@@ -296,30 +313,22 @@ func buildCommentReplyInstructionsSlim(provider, issueID, triggerCommentID strin
 		// PowerShell 5.1 has no `&&` (it landed in PowerShell 7), so that
 		// variant checks $LASTEXITCODE — which carries the exit code of the
 		// last NATIVE command — and propagates it instead.
-		return fmt.Sprintf(
-			lead+
-				"do NOT reuse --parent values from previous turns in this session.\n\n"+
-				"Write the body file first — never pipe via `--content-stdin` (PowerShell drops non-ASCII; full rules: ## Comment Formatting above). Use the variant for the shell your command tool runs:\n\n"+
-				"PowerShell:\n\n"+
-				"    multica issue comment add %[1]s --parent %[2]s --content-file ./reply.md --output table\n"+
-				"    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }\n"+
-				"    Remove-Item ./reply.md\n\n"+
-				"Git Bash:\n\n"+
-				"    multica issue comment add %[1]s --parent %[2]s --content-file ./reply.md --output table && rm ./reply.md\n\n"+
-				"Do NOT drop the exit-code check or the `&&`: a bare cleanup after a failed post reports success and deletes the body.\n\n"+
-				"Do NOT write literal `\\n` escapes to simulate line breaks; the file preserves real newlines.\n",
-			issueID, triggerCommentID,
-		)
+		return lead +
+			"Write the body file first — never pipe via `--content-stdin` (PowerShell drops non-ASCII; full rules: ## Comment Formatting above). Use the variant for the shell your command tool runs:\n\n" +
+			"PowerShell:\n\n" +
+			"    " + addCmd + " --content-file ./reply.md --output table\n" +
+			"    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }\n" +
+			"    Remove-Item ./reply.md\n\n" +
+			"Git Bash:\n\n" +
+			"    " + addCmd + " --content-file ./reply.md --output table && rm ./reply.md\n\n" +
+			"Do NOT drop the exit-code check or the `&&`: a bare cleanup after a failed post reports success and deletes the body.\n\n" +
+			"Do NOT write literal `\\n` escapes to simulate line breaks; the file preserves real newlines.\n"
 	}
-	return fmt.Sprintf(
-		lead+
-			"do NOT reuse --parent values from previous turns in this session.\n\n"+
-			"Write the body file first (rules: ## Comment Formatting above — MUL-2904 / #4182):\n\n"+
-			"    multica issue comment add %s --parent %s --content-file ./reply.md --output table && rm ./reply.md\n\n"+
-			"Keep the `&&`: as two separate statements a failed post is masked by the cleanup's success, and the body file is deleted.\n\n"+
-			"Do NOT write literal `\\n` escapes to simulate line breaks; the file preserves real newlines.\n",
-		issueID, triggerCommentID,
-	)
+	return lead +
+		"Write the body file first (rules: ## Comment Formatting above — MUL-2904 / #4182):\n\n" +
+		"    " + addCmd + " --content-file ./reply.md --output table && rm ./reply.md\n\n" +
+		"Keep the `&&`: as two separate statements a failed post is masked by the cleanup's success, and the body file is deleted.\n\n" +
+		"Do NOT write literal `\\n` escapes to simulate line breaks; the file preserves real newlines.\n"
 }
 
 // ThreadReplyTarget is one root-thread group a coalesced run must answer.

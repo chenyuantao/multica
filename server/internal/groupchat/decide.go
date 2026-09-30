@@ -57,6 +57,7 @@ type Message struct {
 
 // Turn is one message while the server is still assembling history.
 type Turn struct {
+	ID     string
 	Author string
 	Role   string
 	Text   string

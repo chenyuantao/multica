@@ -1751,9 +1751,12 @@ func (h *Handler) CreateComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Group chat messages are always top-level, so a parent is dropped. An
+	// agent following older reply instructions still passes --parent.
+	groupChat := h.isGroupChat(r.Context(), issue)
 	var parentID pgtype.UUID
 	var parentComment *db.Comment
-	if req.ParentID != nil {
+	if req.ParentID != nil && !groupChat {
 		var parsed pgtype.UUID
 		parsed, ok = parseUUIDOrBadRequest(w, *req.ParentID, "parent_id")
 		if !ok {
@@ -1838,7 +1841,7 @@ func (h *Handler) CreateComment(w http.ResponseWriter, r *http.Request) {
 			// Assignment-triggered tasks (no TriggerCommentID) are also
 			// unaffected.
 			if task.IssueID.Valid && uuidToString(task.IssueID) == uuidToString(issue.ID) {
-				if task.TriggerCommentID.Valid {
+				if task.TriggerCommentID.Valid && !groupChat {
 					if !taskCoversReplyParent(task, parentID) {
 						// Keep this error actionable for agents (MUL-4417 / GH #5266).
 						// The two rejections need different copy. A resumed

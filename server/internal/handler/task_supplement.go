@@ -228,6 +228,12 @@ func (h *Handler) CreateTaskSupplement(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	// A supplement is stored as a reply under the run's trigger, and group
+	// chat messages are never threaded.
+	if h.isGroupChat(r.Context(), issue) {
+		writeErrorCode(w, http.StatusPreconditionFailed, "task_supplement_unsupported", "group chats do not take additional messages; send a new message instead")
+		return
+	}
 	var req createTaskSupplementRequest
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8*maxCommentContentBytes)).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")

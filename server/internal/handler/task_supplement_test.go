@@ -589,6 +589,20 @@ func TestTaskSupplementTerminalWriteRollsBackWhenSettlementFails(t *testing.T) {
 	}
 }
 
+func TestTaskSupplementRejectedInGroupChat(t *testing.T) {
+	fixture := newSupplementFixture(t, "codex", "running", true)
+	dbfx.Exec(t, `INSERT INTO issue_member (issue_id, workspace_id, member_type, member_id) VALUES ($1, $2, 'agent', $3)`,
+		fixture.issueID, testWorkspaceID, fixture.agentID)
+	dbfx.Cleanup(t, `DELETE FROM issue_member WHERE issue_id = $1`, fixture.issueID)
+
+	supplementRequest(t, fixture, "0199a4e8-22ce-7b01-bba5-777777777777", "one more thing").Want(http.StatusPreconditionFailed)
+	var replies int
+	dbfx.QueryRow(t, `SELECT count(*) FROM comment WHERE issue_id = $1 AND parent_id IS NOT NULL`, fixture.issueID).Scan(&replies)
+	if replies != 0 {
+		t.Fatalf("group chat gained %d threaded comments, want none", replies)
+	}
+}
+
 func TestTaskSupplementPermissionAndTenantIsolation(t *testing.T) {
 	fixture := newSupplementFixture(t, "codex", "running", true)
 	otherUser := dbfx.Insert(t, "user", testutil.Cols{"name": "No Invoke", "email": "no-invoke-supplement@example.test"})
