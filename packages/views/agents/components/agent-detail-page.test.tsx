@@ -10,6 +10,7 @@ import {
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ApiError } from "@multica/core/api";
+import { groupChatKeys } from "@multica/core/group-chats";
 import type { Agent } from "@multica/core/types";
 import { I18nProvider } from "@multica/core/i18n/react";
 import enCommon from "../../locales/en/common.json";
@@ -59,6 +60,7 @@ const mockToastError = vi.hoisted(() => vi.fn());
 const mockModalOpen = vi.hoisted(() => vi.fn());
 const mockGetAgent = vi.hoisted(() => vi.fn());
 const mockUpdateAgent = vi.hoisted(() => vi.fn());
+const mockOpenDirectGroupChat = vi.hoisted(() => vi.fn());
 
 vi.mock("@multica/core/hooks", () => ({
   useWorkspaceId: () => "ws-1",
@@ -138,6 +140,7 @@ vi.mock("@multica/core/paths", () => ({
   useWorkspacePaths: () => ({
     agents: () => "/acme/agents",
     chat: () => "/acme/chat",
+    imChat: (chatId: string) => `/acme/im?chat=${chatId}`,
   }),
 }));
 vi.mock("@multica/core/api", () => {
@@ -149,7 +152,11 @@ vi.mock("@multica/core/api", () => {
     }
   }
   return {
-    api: { getAgent: mockGetAgent, updateAgent: mockUpdateAgent },
+    api: {
+      getAgent: mockGetAgent,
+      updateAgent: mockUpdateAgent,
+      openDirectGroupChat: mockOpenDirectGroupChat,
+    },
     ApiError,
   };
 });
@@ -218,6 +225,12 @@ beforeEach(() => {
   agentsRef.current = [baseAgent];
   mockGetAgent.mockRejectedValue(new ApiError("not found", 404, "Not Found"));
   mockUpdateAgent.mockResolvedValue({ ...baseAgent, model: "new-model" });
+  mockOpenDirectGroupChat.mockResolvedValue({
+    id: "chat-1",
+    is_direct: true,
+    members: [],
+    created_at: "2026-05-28T00:00:00Z",
+  });
 });
 
 describe("AgentDetailPage direct-detail fallback", () => {
@@ -376,14 +389,13 @@ describe("AgentDetailPage direct-detail fallback", () => {
 });
 
 describe("AgentDetail embedded presentation", () => {
-  it("drops the breadcrumb and the DM link, keeping in-place actions", async () => {
+  it("drops the breadcrumb and the DM button, keeping in-place actions", async () => {
     renderPage(<AgentDetail agentId="agent-1" presentation="embedded" />);
 
     expect(await screen.findByRole("button", { name: "Assign work" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Lambda" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Agents" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "DM" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "DM" })).not.toBeInTheDocument();
   });
 
   it("keeps not found free of links to the agents list", async () => {
@@ -397,11 +409,33 @@ describe("AgentDetail embedded presentation", () => {
 });
 
 describe("AgentDetailPage DM button", () => {
-  it("navigates to the chat deep link when the user can chat with the agent", async () => {
+  it("opens the direct IM chat with the agent when the user can chat with it", async () => {
     const { push } = renderPage();
     fireEvent.click(await screen.findByRole("button", { name: "DM" }));
-    expect(push).toHaveBeenCalledWith("/acme/chat?agent=agent-1");
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/acme/im?chat=chat-1"));
+    expect(mockOpenDirectGroupChat).toHaveBeenCalledWith({
+      member_type: "agent",
+      member_id: "agent-1",
+    });
     expect(mockToastError).not.toHaveBeenCalled();
+  });
+
+  it("reuses a direct chat already in the list without calling the server", async () => {
+    const { push, queryClient } = renderPage();
+    queryClient.setQueryData(groupChatKeys.list("ws-1"), [
+      {
+        id: "chat-existing",
+        is_direct: true,
+        created_at: "2026-05-28T00:00:00Z",
+        members: [
+          { member_type: "member", member_id: "user-1" },
+          { member_type: "agent", member_id: "agent-1" },
+        ],
+      },
+    ]);
+    fireEvent.click(await screen.findByRole("button", { name: "DM" }));
+    expect(push).toHaveBeenCalledWith("/acme/im?chat=chat-existing");
+    expect(mockOpenDirectGroupChat).not.toHaveBeenCalled();
   });
 
   it("shows a toast instead of navigating when the user lacks chat access", async () => {
@@ -417,6 +451,7 @@ describe("AgentDetailPage DM button", () => {
     expect(mockToastError).toHaveBeenCalledWith(
       "You don't have access to chat with this agent.",
     );
+    expect(mockOpenDirectGroupChat).not.toHaveBeenCalled();
     expect(push).not.toHaveBeenCalled();
   });
 
@@ -426,13 +461,11 @@ describe("AgentDetailPage DM button", () => {
     // would get a wrong "no access" toast. Undetermined must disable, not deny.
     membersPendingRef.current = true;
     const { push } = renderPage();
-    // The control is an anchor now, so "disabled" is expressed the only way a
-    // link can express it: aria-disabled plus removal from the tab order.
     const dm = await screen.findByRole("button", { name: "DM" });
-    expect(dm).toHaveAttribute("aria-disabled", "true");
-    expect(dm).toHaveAttribute("tabindex", "-1");
+    expect(dm).toBeDisabled();
     fireEvent.click(dm);
     expect(mockToastError).not.toHaveBeenCalled();
+    expect(mockOpenDirectGroupChat).not.toHaveBeenCalled();
     expect(push).not.toHaveBeenCalled();
   });
 
@@ -501,6 +534,7 @@ describe("AgentDetailPage DM button", () => {
     expect(mockToastError).toHaveBeenCalledWith(
       "Bind a runtime before running this agent.",
     );
+    expect(mockOpenDirectGroupChat).not.toHaveBeenCalled();
     expect(mockModalOpen).not.toHaveBeenCalled();
   });
 });

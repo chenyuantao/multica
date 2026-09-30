@@ -61,6 +61,7 @@ import { cn } from "@multica/ui/lib/utils";
 import { AppLink, useNavigation } from "../../navigation";
 import { PAGE_GUTTER, PAGE_RAIL, PageHeader } from "../../layout/page-header";
 import { ActorAvatar } from "../../common/actor-avatar";
+import { useStartDirectChat } from "../../im/use-direct-chat";
 import { AgentPresenceIndicator } from "./agent-presence-indicator";
 import { VisibilityBadge } from "./visibility-badge";
 import { AgentOverviewPane, type DetailTab } from "./agent-overview-pane";
@@ -82,7 +83,7 @@ interface AgentDetailProps {
   /** `modal` renders inside a Dialog over another route: it never reads or
    *  writes the host URL, and leaving the agent closes instead of navigating.
    *  `embedded` is a level of a host page that owns the only way back, so it
-   *  also drops the breadcrumb, the links to the agents list and the DM link. */
+   *  also drops the breadcrumb, the links to the agents list and the DM button. */
   presentation: AgentDetailPresentation;
   onClose?: () => void;
 }
@@ -143,6 +144,7 @@ export function AgentDetail({ agentId, presentation, onClose }: AgentDetailProps
     canEdit,
     isLoading: permissionsLoading,
   } = useAgentPermissions(agent, wsId);
+  const directChat = useStartDirectChat(wsId);
 
   const [confirmArchive, setConfirmArchive] = useState(false);
 
@@ -340,23 +342,17 @@ export function AgentDetail({ agentId, presentation, onClose }: AgentDetailProps
   // click explains itself instead of the affordance silently missing. While
   // membership is still resolving the decision is undetermined, so the button
   // is disabled rather than toasting a false "no access" at a real member.
-  //
-  // The control is a real link, so a failed gate has to cancel the navigation
-  // AppLink would otherwise perform — preventDefault is that cancel.
-  const handleDm = (e: React.MouseEvent<HTMLAnchorElement>) => {
-    if (permissionsLoading) {
-      e.preventDefault();
-      return;
-    }
+  const handleDm = () => {
+    if (permissionsLoading) return;
     if (!canAssign.allowed) {
-      e.preventDefault();
       toast.error(t(($) => $.detail.dm_no_permission_toast));
       return;
     }
     if (!runtimeBound) {
-      e.preventDefault();
       toast.error(t(($) => $.detail.runtime_required_toast));
+      return;
     }
+    void directChat.start({ member_type: "agent", member_id: agent.id });
   };
   const handleAssign = () => {
     if (!runtimeBound) {
@@ -378,8 +374,7 @@ export function AgentDetail({ agentId, presentation, onClose }: AgentDetailProps
         backHref={isModal ? paths.agentDetail(agent.id) : paths.agents()}
         canAssign={canAssign.allowed}
         canArchive={canEdit.allowed}
-        dmPending={permissionsLoading}
-        dmHref={`${paths.chat()}?agent=${agent.id}`}
+        dmPending={permissionsLoading || directChat.isPending}
         onDm={handleDm}
         onAssign={handleAssign}
         onArchive={
@@ -511,7 +506,6 @@ function DetailHeader({
   canAssign,
   canArchive,
   dmPending,
-  dmHref,
   onDm,
   onAssign,
   onArchive,
@@ -525,10 +519,8 @@ function DetailHeader({
   canAssign: boolean;
   canArchive: boolean;
   dmPending: boolean;
-  dmHref: string;
-  /** Runs before the link navigates; calls preventDefault when a gate denies
-   *  the chat, which is what stops AppLink from pushing. */
-  onDm: (e: React.MouseEvent<HTMLAnchorElement>) => void;
+  /** Opens the user's direct chat with the agent in IM. */
+  onDm: () => void;
   onAssign: () => void;
   /** Absent for Multica's built-in agents, which the server refuses to
    *  archive — the menu hides the action rather than offering a failure. */
@@ -624,15 +616,11 @@ function DetailHeader({
           <div className="flex shrink-0 items-center gap-2 self-end lg:self-start">
             {!isArchived && presentation !== "embedded" && (
               <Button
+                type="button"
                 variant="outline"
                 size="sm"
                 disabled={dmPending}
-                // An anchor never matches `:disabled`, so the base variant's
-                // `disabled:` rules never fire here — Base UI's data-disabled
-                // is what carries the dimmed, inert look.
-                className="data-disabled:pointer-events-none data-disabled:opacity-50"
-                render={<AppLink href={dmHref} onClick={onDm} />}
-                nativeButton={false}
+                onClick={onDm}
               >
                 <MessageSquare className="h-4 w-4" aria-hidden="true" />
                 {t(($) => $.detail.dm)}
