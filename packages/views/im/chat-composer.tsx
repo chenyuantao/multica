@@ -1,25 +1,42 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUp, AtSign } from "lucide-react";
+import { ArrowUp, AtSign, FileText, Image as ImageIcon, Loader2, X } from "lucide-react";
+import type { Attachment } from "@multica/core/types";
 import { cn } from "@multica/ui/lib/utils";
 import { Button } from "@multica/ui/components/ui/button";
+import { FileUploadButton } from "@multica/ui/components/common/file-upload-button";
 import { ActorAvatar } from "../common/actor-avatar";
+import { FileDropOverlay, useEditorUpload, useFileDropZone } from "../editor";
+import { attachmentMarkdown } from "../editor/use-coordinated-uploads";
 import { useT } from "../i18n";
 import { activeMentionQuery, resolveComposerMentions, type ComposerMention } from "./im-utils";
 
 interface ChatComposerProps {
+  /** The chat's issue id; uploads are bound to it. */
+  chatId: string;
   chatTitle: string;
   /** Who can be @-mentioned: the chat's own members. */
   candidates: ComposerMention[];
-  onSend: (markdown: string) => void;
+  onSend: (markdown: string, attachmentIds: string[]) => void;
+}
+
+interface ComposerFile {
+  key: string;
+  name: string;
+  isImage: boolean;
+  attachment?: Attachment;
 }
 
 const MAX_HEIGHT_PX = 180;
 
-export function ChatComposer({ chatTitle, candidates, onSend }: ChatComposerProps) {
+export function ChatComposer({ chatId, chatTitle, candidates, onSend }: ChatComposerProps) {
   const { t } = useT("im");
+  const { t: tEditor } = useT("editor");
   const ref = useRef<HTMLTextAreaElement>(null);
+  const { uploadWithToast } = useEditorUpload();
+  const [files, setFiles] = useState<ComposerFile[]>([]);
+  const uploading = files.some((f) => !f.attachment);
   const [text, setText] = useState("");
   const [caret, setCaret] = useState(0);
   const [picked, setPicked] = useState<ComposerMention[]>([]);
@@ -79,19 +96,52 @@ export function ChatComposer({ chatTitle, candidates, onSend }: ChatComposerProp
     });
   };
 
+  const addFiles = (list: File[]) => {
+    for (const file of list) {
+      const key = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      setFiles((prev) => [...prev, { key, name: file.name, isImage: file.type.startsWith("image/") }]);
+      void uploadWithToast(file, { issueId: chatId }).then((attachment) => {
+        setFiles((prev) =>
+          attachment
+            ? prev.map((f) => (f.key === key ? { ...f, attachment } : f))
+            : prev.filter((f) => f.key !== key),
+        );
+      });
+    }
+  };
+  const { isDragOver, dropZoneProps } = useFileDropZone({ onDrop: addFiles });
+
+  const onPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const pasted = Array.from(e.clipboardData.files);
+    if (pasted.length === 0) return;
+    e.preventDefault();
+    addFiles(pasted);
+  };
+
+  const ready = files.flatMap((f) => (f.attachment ? [f.attachment] : []));
+  const canSend = !uploading && (!!text.trim() || ready.length > 0);
+
   const send = () => {
+    if (!canSend) return;
     const body = text.trim();
-    if (!body) return;
-    const resolved = resolveComposerMentions(body, picked.filter((m) => body.includes(`@${m.name}`)), candidates);
-    if (!resolved.ok) {
-      setNameError(resolved.name);
-      return;
+    let markdown = "";
+    if (body) {
+      const resolved = resolveComposerMentions(body, picked.filter((m) => body.includes(`@${m.name}`)), candidates);
+      if (!resolved.ok) {
+        setNameError(resolved.name);
+        return;
+      }
+      markdown = resolved.markdown;
     }
     setNameError(null);
-    onSend(resolved.markdown);
+    onSend(
+      [markdown, ...ready.map(attachmentMarkdown)].filter(Boolean).join("\n\n"),
+      ready.map((a) => a.id),
+    );
     setText("");
     setPicked([]);
     setCaret(0);
+    setFiles([]);
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -155,40 +205,86 @@ export function ChatComposer({ chatTitle, candidates, onSend }: ChatComposerProp
           {t(($) => $.composer.ambiguous, { name: nameError })}
         </p>
       )}
-      <div className="flex items-end gap-2 rounded-3xl border bg-background px-2 py-1.5 shadow-sm focus-within:ring-2 focus-within:ring-ring/40">
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          className="shrink-0 rounded-full"
-          onClick={startMention}
-          disabled={!hasAgents}
-          aria-label={hasAgents ? t(($) => $.composer.mention) : t(($) => $.composer.no_agents)}
-        >
-          <AtSign />
-        </Button>
-        <textarea
-          ref={ref}
-          rows={1}
-          value={text}
-          onChange={(e) => {
-            setText(e.target.value);
-            setCaret(e.target.selectionStart);
-          }}
-          onSelect={syncCaret}
-          onKeyDown={onKeyDown}
-          placeholder={t(($) => $.composer.placeholder, { title: chatTitle })}
-          aria-label={t(($) => $.composer.placeholder, { title: chatTitle })}
-          className="min-h-8 flex-1 resize-none bg-transparent py-1.5 text-body outline-none placeholder:text-muted-foreground"
-        />
-        <Button
-          size="icon-sm"
-          className="shrink-0 rounded-full"
-          onClick={send}
-          disabled={!text.trim()}
-          aria-label={t(($) => $.composer.send)}
-        >
-          <ArrowUp />
-        </Button>
+      <div
+        {...dropZoneProps}
+        className={cn(
+          "relative border bg-background px-2 py-1.5 shadow-sm focus-within:ring-2 focus-within:ring-ring/40",
+          files.length > 0 ? "rounded-2xl" : "rounded-3xl",
+        )}
+      >
+        {files.length > 0 && (
+          <ul className="flex flex-wrap gap-1.5 px-1 pt-1 pb-1.5">
+            {files.map((f) => {
+              const Icon = f.isImage ? ImageIcon : FileText;
+              return (
+                <li
+                  key={f.key}
+                  className="flex h-7 max-w-60 min-w-0 items-center gap-1.5 rounded-lg bg-muted pr-0.5 pl-2 text-caption"
+                  aria-busy={!f.attachment || undefined}
+                >
+                  {f.attachment ? (
+                    <Icon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+                  ) : (
+                    <Loader2
+                      aria-label={tEditor(($) => $.upload.uploading_label, { filename: f.name })}
+                      className="size-3.5 shrink-0 animate-spin text-muted-foreground motion-reduce:animate-none"
+                    />
+                  )}
+                  <span className="truncate" title={f.name}>
+                    {f.name}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    className="shrink-0 rounded-md"
+                    onClick={() => setFiles((prev) => prev.filter((x) => x.key !== f.key))}
+                    aria-label={`${tEditor(($) => $.attachment.remove)}: ${f.name}`}
+                  >
+                    <X />
+                  </Button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        <div className="flex items-end gap-2">
+          <FileUploadButton multiple className="shrink-0 rounded-full" onSelect={(file) => addFiles([file])} />
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="shrink-0 rounded-full"
+            onClick={startMention}
+            disabled={!hasAgents}
+            aria-label={hasAgents ? t(($) => $.composer.mention) : t(($) => $.composer.no_agents)}
+          >
+            <AtSign />
+          </Button>
+          <textarea
+            ref={ref}
+            rows={1}
+            value={text}
+            onChange={(e) => {
+              setText(e.target.value);
+              setCaret(e.target.selectionStart);
+            }}
+            onSelect={syncCaret}
+            onKeyDown={onKeyDown}
+            onPaste={onPaste}
+            placeholder={t(($) => $.composer.placeholder, { title: chatTitle })}
+            aria-label={t(($) => $.composer.placeholder, { title: chatTitle })}
+            className="min-h-8 flex-1 resize-none bg-transparent py-1.5 text-body outline-none placeholder:text-muted-foreground"
+          />
+          <Button
+            size="icon-sm"
+            className="shrink-0 rounded-full"
+            onClick={send}
+            disabled={!canSend}
+            aria-label={uploading ? tEditor(($) => $.upload.in_progress) : t(($) => $.composer.send)}
+          >
+            <ArrowUp />
+          </Button>
+        </div>
+        {isDragOver && <FileDropOverlay />}
       </div>
     </div>
   );

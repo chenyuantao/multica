@@ -59,8 +59,12 @@ func (h *Handler) rejectAmbiguousGroupChatMention(w http.ResponseWriter, r *http
 // are planned only for parallel versus ordered delivery. A message that names
 // nobody is planned against the full history. When Jev gives no usable
 // answer, named agents speak in the order they were named and anything else
-// goes to the group's first agent.
+// goes to the group's first agent. A message that is only attachments starts
+// nobody; it is read as context with the next message.
 func (h *Handler) dispatchGroupChatReply(ctx context.Context, issue db.Issue, comment db.Comment) []CommentTriggerOutcome {
+	if h.isAttachmentOnlyComment(ctx, issue, comment) {
+		return nil
+	}
 	roster, ok := h.groupChatRosterIfChat(ctx, issue)
 	if !ok {
 		return nil
@@ -86,6 +90,20 @@ func (h *Handler) dispatchGroupChatReply(ctx context.Context, issue db.Issue, co
 	}
 	h.enqueueGroupChatPlan(ctx, issue, comment.ID, plan)
 	return nil
+}
+
+func (h *Handler) isAttachmentOnlyComment(ctx context.Context, issue db.Issue, comment db.Comment) bool {
+	attachments, err := h.Queries.ListAttachmentsByComment(ctx, db.ListAttachmentsByCommentParams{CommentID: comment.ID, WorkspaceID: issue.WorkspaceID})
+	if err != nil {
+		slog.Warn("group chat attachments failed", "comment_id", uuidToString(comment.ID), "error", err)
+		return false
+	}
+	urls := make([]string, 0, len(attachments)*3)
+	for _, a := range attachments {
+		id := uuidToString(a.ID)
+		urls = append(urls, a.Url, util.AttachmentDownloadPath(id), h.buildMarkdownURL(a, id))
+	}
+	return groupchat.AttachmentOnly(comment.Content, urls)
 }
 
 func (h *Handler) enqueueGroupChatPlan(ctx context.Context, issue db.Issue, commentID pgtype.UUID, plan groupchat.Plan) {

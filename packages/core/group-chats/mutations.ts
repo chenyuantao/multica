@@ -60,7 +60,8 @@ export function useRemoveGroupChatMember(wsId: string, chatId: string) {
 export function useSendGroupChatMessage(wsId: string, chatId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (content: string) => api.createComment(chatId, content),
+    mutationFn: ({ content, attachmentIds }: { content: string; attachmentIds?: string[] }) =>
+      api.createComment(chatId, content, undefined, undefined, attachmentIds),
     onSuccess: (comment) => {
       qc.setQueryData<Comment[]>(groupChatKeys.messages(wsId, chatId), (old) =>
         old && !old.some((c) => c.id === comment.id) ? [...old, comment] : old,

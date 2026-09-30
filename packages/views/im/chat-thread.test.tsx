@@ -28,8 +28,8 @@ vi.mock("../platform", () => ({ DragStrip: () => null }));
 vi.mock("../common/actor-avatar", () => ({ ActorAvatar: () => null }));
 vi.mock("../rich-content", () => ({ RichContent: ({ content }: { content: string }) => <p>{content}</p> }));
 vi.mock("./chat-composer", () => ({
-  ChatComposer: ({ onSend }: { onSend: (content: string) => void }) => (
-    <button type="button" onClick={() => onSend("hello")}>
+  ChatComposer: ({ onSend }: { onSend: (content: string, attachmentIds: string[]) => void }) => (
+    <button type="button" onClick={() => onSend("hello", [])}>
       send
     </button>
   ),

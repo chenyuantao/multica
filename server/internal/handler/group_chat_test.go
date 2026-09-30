@@ -149,3 +149,45 @@ func TestGroupChatMembershipLifecycle(t *testing.T) {
 	testutil.Call(t, testHandler.RemoveGroupChatMember, testutil.WithURLParams(groupChatRequestAs(t, testUserID, "DELETE", "/api/group-chats/"+chat.ID+"/members/member/"+testUserID, nil),
 		"id", chat.ID, "memberType", "member", "memberId", testUserID)).Want(http.StatusBadRequest)
 }
+
+func TestGroupChatAttachmentOnlyMessageStartsNoAgent(t *testing.T) {
+	ctx := context.Background()
+	agentID := createHandlerTestAgent(t, "group-chat-attachment-agent", nil)
+
+	var chat GroupChatResponse
+	testutil.Call(t, testHandler.CreateGroupChat, groupChatRequestAs(t, testUserID, "POST", "/api/group-chats", map[string]any{
+		"title":   "Attachment room",
+		"members": []map[string]string{{"member_type": "agent", "member_id": agentID}},
+	})).Want(http.StatusCreated).JSON(&chat)
+	t.Cleanup(func() {
+		for _, sql := range []string{
+			`DELETE FROM agent_task_queue WHERE issue_id = $1`,
+			`DELETE FROM attachment WHERE issue_id = $1`,
+			`DELETE FROM issue_member WHERE issue_id = $1`,
+			`DELETE FROM issue_subscriber WHERE issue_id = $1`,
+			`DELETE FROM comment WHERE issue_id = $1`,
+			`DELETE FROM issue WHERE id = $1`,
+		} {
+			testPool.Exec(ctx, sql, chat.ID)
+		}
+	})
+	tasks := func() int {
+		return dbfx.Count(t, `SELECT count(*) FROM agent_task_queue WHERE issue_id = $1 AND agent_id = $2`, chat.ID, agentID)
+	}
+
+	attachmentID := unlinkedIssueAttachment(t, chat.ID)
+	testutil.Call(t, testHandler.CreateComment, withURLParam(groupChatRequestAs(t, testUserID, "POST", "/api/issues/"+chat.ID+"/comments", map[string]any{
+		"content":        "![shot.png](https://example.test/shot.png)",
+		"attachment_ids": []string{attachmentID},
+	}), "id", chat.ID)).Want(http.StatusCreated)
+	if n := tasks(); n != 0 {
+		t.Fatalf("tasks after attachment-only message = %d, want 0", n)
+	}
+
+	testutil.Call(t, testHandler.CreateComment, withURLParam(groupChatRequestAs(t, testUserID, "POST", "/api/issues/"+chat.ID+"/comments", map[string]string{
+		"content": "what is in this screenshot?",
+	}), "id", chat.ID)).Want(http.StatusCreated)
+	if n := tasks(); n != 1 {
+		t.Fatalf("tasks after text message = %d, want 1", n)
+	}
+}

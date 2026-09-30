@@ -31,6 +31,7 @@ import {
 interface PendingMessage {
   localId: string;
   content: string;
+  attachmentIds: string[];
   status: "sending" | "failed";
   /** Message ids already in the thread when this was queued; the echo is a new id. */
   knownIds: Set<string>;
@@ -102,10 +103,10 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, mobil
   );
 
   const deliver = useCallback(
-    async (localId: string, content: string) => {
+    async (localId: string, content: string, attachmentIds: string[]) => {
       setPending((prev) => prev.map((p) => (p.localId === localId ? { ...p, status: "sending" } : p)));
       try {
-        await send.mutateAsync(content);
+        await send.mutateAsync({ content, attachmentIds });
         setPending((prev) => prev.filter((p) => p.localId !== localId));
       } catch {
         setPending((prev) => prev.map((p) => (p.localId === localId ? { ...p, status: "failed" } : p)));
@@ -119,11 +120,11 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, mobil
     agents: t(($) => $.thread.agents, { count: agents.length }),
   });
 
-  const onSend = (content: string) => {
+  const onSend = (content: string, attachmentIds: string[]) => {
     const localId = `local-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const knownIds = new Set(messages.map((m) => m.id));
-    setPending((prev) => [...prev, { localId, content, status: "sending", knownIds }]);
-    void deliver(localId, content);
+    setPending((prev) => [...prev, { localId, content, attachmentIds, status: "sending", knownIds }]);
+    void deliver(localId, content, attachmentIds);
   };
 
   return (
@@ -194,7 +195,7 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, mobil
             })}
             {visiblePending.map((p) => (
               <li key={p.localId} className="flex flex-col">
-                <PendingRow message={p} userId={userId} onRetry={() => void deliver(p.localId, p.content)} />
+                <PendingRow message={p} userId={userId} onRetry={() => void deliver(p.localId, p.content, p.attachmentIds)} />
               </li>
             ))}
           </ol>
@@ -202,7 +203,7 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, mobil
       </div>
 
       <div className="mx-auto w-full max-w-3xl">
-        <ChatComposer chatTitle={chat.title} candidates={candidates} onSend={onSend} />
+        <ChatComposer key={chat.id} chatId={chat.id} chatTitle={chat.title} candidates={candidates} onSend={onSend} />
       </div>
     </section>
   );
