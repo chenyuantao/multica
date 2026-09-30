@@ -171,8 +171,13 @@ func (s *TaskService) settleGroupChatThinking(ctx context.Context, task db.Agent
 	}
 	if existing.Content == groupchat.ThinkingMessage && sameID(existing.AuthorID, fresh.AgentID) {
 		updated, err := s.Queries.UpdateComment(ctx, db.UpdateCommentParams{
-			ID:           existing.ID,
-			Content:      groupchat.UnfinishedMessage,
+			ID: existing.ID,
+			Content: groupchat.OutcomeMessage(groupchat.RunOutcome{
+				Status:          fresh.Status,
+				FailureReason:   fresh.FailureReason.String,
+				CancelledByType: fresh.CancelledByType.String,
+				CancelledByName: fresh.CancelledByName.String,
+			}),
 			SourceTaskID: existing.SourceTaskID,
 		})
 		if err != nil {
