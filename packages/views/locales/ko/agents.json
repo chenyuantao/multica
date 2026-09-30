@@ -652,6 +652,12 @@
       "queued_prefix": "{{when}} 대기 시작"
     }
   },
+  "working_directory": {
+    "label": "작업 디렉터리",
+    "placeholder": "/path/to/project",
+    "hint": "런타임이 실행되는 머신의 절대 경로입니다. 에이전트가 이 위치의 파일을 직접 읽고 씁니다. 비워 두면 실행마다 격리된 디렉터리를 사용합니다.",
+    "invalid": "절대 경로를 입력하세요."
+  },
   "char_counter": {
     "over_limit": " · 제한 초과 {{count}}자"
   },

@@ -761,6 +761,12 @@
       "queued_prefix": "Queued {{when}}"
     }
   },
+  "working_directory": {
+    "label": "Working directory",
+    "placeholder": "/path/to/project",
+    "hint": "Absolute path on the runtime's machine. The agent reads and writes files there directly. Leave empty to give each run its own isolated directory.",
+    "invalid": "Enter an absolute path."
+  },
   "char_counter": {
     "over_limit": " · {{count}} over limit"
   },

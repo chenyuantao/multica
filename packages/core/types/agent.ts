@@ -613,6 +613,11 @@ export interface Agent {
    * account defaults remain authoritative.
    */
   service_tier?: string;
+  /**
+   * Absolute path on the runtime's machine the agent runs in. Empty/undefined
+   * means the daemon-managed task workdir. Older servers omit it.
+   */
+  working_directory?: string;
   owner_id: string | null;
   skills: AgentSkillSummary[];
   /** Runtime-local skills this agent must not inherit. Older servers omit it. */
@@ -690,6 +695,8 @@ export interface CreateAgentRequest {
   thinking_level?: string;
   /** Optional Codex service-tier catalog ID. See `Agent.service_tier`. */
   service_tier?: string;
+  /** Optional absolute path. See `Agent.working_directory`. */
+  working_directory?: string;
   /** Optional creation-source attribution. Surfaced as the `template`
    *  property on the `agent_created` PostHog event. */
   template?: string;
@@ -725,6 +732,7 @@ export interface StoredAgentDraft {
   model: string;
   thinking_level: string;
   service_tier: string;
+  working_directory: string;
   skill_ids: string[];
   permission_scope: AgentPermissionScope;
   member_ids: string[];
@@ -827,6 +835,8 @@ export interface UpdateAgentRequest {
    * clears it, and a non-empty value stores a runtime-catalog ID.
    */
   service_tier?: string;
+  /** Omitted preserves the saved path, `""` clears it, non-empty sets it. */
+  working_directory?: string;
 }
 
 /**

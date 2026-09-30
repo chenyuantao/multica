@@ -34,6 +34,8 @@ export interface AgentDraft {
   thinkingLevel: string;
   /** Runtime-native execution tier (Codex Speed), scoped to `model`. */
   serviceTier: string;
+  /** Absolute path on the runtime's machine; empty = daemon-managed workdir. */
+  workingDirectory: string;
   skillIds: Set<string>;
   permissionScope: AgentPermissionScope;
   memberIds: Set<string>;
@@ -51,6 +53,7 @@ export const EMPTY_AGENT_DRAFT: AgentDraft = {
   model: "",
   thinkingLevel: "",
   serviceTier: "",
+  workingDirectory: "",
   skillIds: new Set(),
   permissionScope: "private",
   memberIds: new Set(),
@@ -96,6 +99,17 @@ export function applyDraftModelChange(
  */
 export function isDraftDescriptionWithinLimit(description: string): boolean {
   return [...description].length <= AGENT_DESCRIPTION_MAX_LENGTH;
+}
+
+/**
+ * Mirrors the server's `normaliseAgentWorkingDirectory`: empty, a POSIX
+ * absolute path, a drive-rooted Windows path, or a UNC path. The runtime's OS
+ * is not known here, so every absolute form is accepted.
+ */
+export function isValidAgentWorkingDirectory(value: string): boolean {
+  const trimmed = value.trim();
+  if (trimmed === "") return true;
+  return /^(\/|[A-Za-z]:[\\/]|\\\\[^\\])/.test(trimmed);
 }
 
 export function buildInvocationTargets(
@@ -197,6 +211,8 @@ export function buildDuplicateDraft(
     model: keepsRuntime ? source.model ?? "" : "",
     thinkingLevel: keepsRuntime ? source.thinking_level ?? "" : "",
     serviceTier: keepsRuntime ? source.service_tier ?? "" : "",
+    // A path only exists on the machine of the runtime it was set for.
+    workingDirectory: keepsRuntime ? source.working_directory ?? "" : "",
     skillIds: new Set(source.skills.map((skill) => skill.id)),
     ...deriveDuplicateAccess(source),
   };
@@ -233,6 +249,7 @@ export function buildCreateAgentRequest(options: {
     model: draft.model.trim() || undefined,
     thinking_level: draft.thinkingLevel.trim() || undefined,
     service_tier: draft.serviceTier.trim() || undefined,
+    working_directory: draft.workingDirectory.trim() || undefined,
     permission_mode:
       draft.permissionScope === "private" ? "private" : "public_to",
     invocation_targets: buildInvocationTargets(draft),

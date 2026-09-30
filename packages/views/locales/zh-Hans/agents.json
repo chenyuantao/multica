@@ -746,6 +746,12 @@
       "queued_prefix": "{{when}}排队"
     }
   },
+  "working_directory": {
+    "label": "工作目录",
+    "placeholder": "/path/to/project",
+    "hint": "运行时所在机器上的绝对路径，智能体会直接读写其中的文件。留空则每次运行使用独立的隔离目录。",
+    "invalid": "请输入绝对路径。"
+  },
   "char_counter": {
     "over_limit": " · 超出 {{count}} 字"
   },

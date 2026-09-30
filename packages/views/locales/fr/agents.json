@@ -761,6 +761,12 @@
       "queued_prefix": "Mise en file d'attente {{when}}"
     }
   },
+  "working_directory": {
+    "label": "Répertoire de travail",
+    "placeholder": "/path/to/project",
+    "hint": "Chemin absolu sur la machine du runtime. L'agent y lit et modifie directement les fichiers. Laissez vide pour que chaque exécution utilise son propre répertoire isolé.",
+    "invalid": "Saisissez un chemin absolu."
+  },
   "char_counter": {
     "over_limit": " · {{count}} au-delà de la limite"
   },

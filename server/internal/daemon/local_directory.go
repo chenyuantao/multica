@@ -118,11 +118,39 @@ func (a *localDirectoryAssignment) ValidateExecutionMode() error {
 // turn queue behind a 20-minute build (issue #7344), and answering "no
 // assignment" there to free the lock would have silently moved chat out of the
 // user's directory as well.
+//
+// A project local_directory pinned to this daemon wins over the agent's own
+// working_directory; the latter always runs in_place.
 func localDirectoryAssignmentForTask(task Task, daemonID string) (*localDirectoryAssignment, error) {
 	if task.IsLeaderTask {
 		return nil, nil
 	}
-	return findLocalDirectoryAssignment(task.ProjectResources, daemonID)
+	assignment, err := findLocalDirectoryAssignment(task.ProjectResources, daemonID)
+	if err != nil || assignment != nil {
+		return assignment, err
+	}
+	// Without a daemon id acquireLocalDirectoryLockIfNeeded never validates
+	// the path, so an unvalidated agent directory must not become the workdir.
+	if daemonID == "" || task.Agent == nil || strings.TrimSpace(task.Agent.WorkingDirectory) == "" {
+		return nil, nil
+	}
+	absPath, err := normalizeLocalPath(task.Agent.WorkingDirectory)
+	if err != nil {
+		return nil, fmt.Errorf("agent working_directory: %w", err)
+	}
+	realPath, err := resolveRealPath(absPath)
+	if err != nil {
+		return nil, err
+	}
+	return &localDirectoryAssignment{
+		Ref: localDirectoryRef{
+			LocalPath:     absPath,
+			DaemonID:      daemonID,
+			ExecutionMode: localDirectoryModeInPlace,
+		},
+		AbsPath:  absPath,
+		RealPath: realPath,
+	}, nil
 }
 
 // localDirectoryLockExempt reports whether a task may run inside an in_place

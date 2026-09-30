@@ -6061,7 +6061,7 @@ func taskRunFailureReason(err error) string {
 //  4. The blocking wait is cancelled (daemon shutdown, server-side cancel)
 //     — fail the task with the ctx error.
 func (d *Daemon) acquireLocalDirectoryLockIfNeeded(ctx context.Context, task Task, taskLog *slog.Logger) (release func(), abort bool) {
-	if len(task.ProjectResources) == 0 || d.cfg.DaemonID == "" {
+	if d.cfg.DaemonID == "" {
 		return nil, false
 	}
 	assignment, err := localDirectoryAssignmentForTask(task, d.cfg.DaemonID)

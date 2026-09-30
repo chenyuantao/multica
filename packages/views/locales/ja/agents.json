@@ -644,6 +644,12 @@
       "queued_prefix": "{{when}} に待機開始"
     }
   },
+  "working_directory": {
+    "label": "作業ディレクトリ",
+    "placeholder": "/path/to/project",
+    "hint": "ランタイムのマシン上の絶対パスです。エージェントはここにあるファイルを直接読み書きします。空欄にすると、実行ごとに分離されたディレクトリを使います。",
+    "invalid": "絶対パスを入力してください。"
+  },
   "char_counter": {
     "over_limit": " · 制限を {{count}} 文字超過"
   },

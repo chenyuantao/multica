@@ -8,6 +8,7 @@ import {
   buildInvocationTargets,
   deriveDuplicateAccess,
   isDraftDescriptionWithinLimit,
+  isValidAgentWorkingDirectory,
   type AgentDraft,
 } from "./draft";
 
@@ -21,6 +22,7 @@ const draft = (): AgentDraft => ({
   model: "model-1",
   thinkingLevel: "",
   serviceTier: "",
+  workingDirectory: "",
   skillIds: new Set(["skill-1"]),
   permissionScope: "private",
   memberIds: new Set(),
@@ -63,6 +65,7 @@ const sourceAgent = (overrides: Partial<Agent> = {}): Agent =>
     model: "gpt-5.6-sol",
     thinking_level: "high",
     service_tier: "priority",
+    working_directory: "/srv/fast-codex",
     owner_id: "user-1",
     skills: [{ id: "skill-1", name: "Review", description: "" }],
     created_at: "2026-07-28T00:00:00Z",
@@ -183,10 +186,34 @@ describe("agent draft execution overrides", () => {
     expect(request.model).toBeUndefined();
     expect(request.thinking_level).toBeUndefined();
     expect(request.service_tier).toBeUndefined();
+    expect(request.working_directory).toBeUndefined();
     expect("thinking_level" in request).toBe(true);
     expect(JSON.parse(JSON.stringify(request))).not.toHaveProperty(
       "thinking_level",
     );
+  });
+
+  it("sends a trimmed working directory", () => {
+    const request = buildCreateAgentRequest({
+      draft: { ...draft(), workingDirectory: "  /srv/proj  " },
+      runtimeId: "runtime-1",
+    });
+
+    expect(request.working_directory).toBe("/srv/proj");
+  });
+
+  it.each([
+    ["", true],
+    ["   ", true],
+    ["/srv/proj", true],
+    ["C:\\code\\proj", true],
+    ["D:/code/proj", true],
+    ["\\\\server\\share", true],
+    ["code/proj", false],
+    ["~/proj", false],
+    ["C:proj", false],
+  ])("validates working directory %j as %s", (value, expected) => {
+    expect(isValidAgentWorkingDirectory(value)).toBe(expected);
   });
 
   it("carries the runtime-independent duplicate config", () => {
@@ -264,6 +291,7 @@ describe("agent draft execution overrides", () => {
       model: "gpt-5.6-sol",
       thinkingLevel: "high",
       serviceTier: "priority",
+      workingDirectory: "/srv/fast-codex",
     });
     expect([...duplicate.skillIds]).toEqual(["skill-1"]);
   });
@@ -284,6 +312,7 @@ describe("agent draft execution overrides", () => {
       model: "",
       thinkingLevel: "",
       serviceTier: "",
+      workingDirectory: "",
     });
   });
 

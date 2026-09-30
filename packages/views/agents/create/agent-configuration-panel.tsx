@@ -24,6 +24,7 @@ import {
 import { CharCounter } from "../components/char-counter";
 import { ServiceTierSettingField } from "../components/inspector/service-tier-setting-field";
 import { ThinkingSettingField } from "../components/inspector/thinking-prop-row";
+import { WorkingDirectoryInput } from "../components/inspector/working-directory-field";
 import { ModelDropdown } from "../components/model-dropdown";
 import { RuntimePicker } from "../components/runtime-picker";
 import { SkillMultiSelect } from "../components/skill-multi-select";
@@ -238,6 +239,18 @@ export function AgentConfigurationPanel({
             disabled={runtimeLocked}
             onChange={onChange}
           />
+          <DraftFieldRow
+            compact={compact}
+            align="start"
+            label={t(($) => $.working_directory.label)}
+            htmlFor="agent-create-working-directory"
+          >
+            <WorkingDirectoryInput
+              id="agent-create-working-directory"
+              value={draft.workingDirectory}
+              onChange={(value) => set("workingDirectory", value)}
+            />
+          </DraftFieldRow>
         </SettingsCard>
       </SettingsSection>
 

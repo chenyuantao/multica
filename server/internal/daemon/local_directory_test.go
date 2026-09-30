@@ -215,6 +215,95 @@ func TestAcquireLocalDirectoryLockSkipsSquadLeaderTasks(t *testing.T) {
 	}
 }
 
+func TestLocalDirectoryAssignmentFallsBackToAgentWorkingDirectory(t *testing.T) {
+	t.Parallel()
+
+	const daemonID = "d-mine"
+	agentDir := t.TempDir()
+
+	t.Run("agent working_directory runs in place", func(t *testing.T) {
+		got, err := localDirectoryAssignmentForTask(Task{
+			ID:    "t1",
+			Agent: &AgentData{WorkingDirectory: "  " + agentDir + "  "},
+		}, daemonID)
+		if err != nil {
+			t.Fatalf("err: %v", err)
+		}
+		if got == nil {
+			t.Fatal("expected assignment, got nil")
+		}
+		if got.AbsPath != filepath.Clean(agentDir) {
+			t.Errorf("AbsPath = %q, want %q", got.AbsPath, filepath.Clean(agentDir))
+		}
+		if got.UsesWorktree() {
+			t.Error("agent working_directory must run in place")
+		}
+	})
+
+	t.Run("project local_directory wins", func(t *testing.T) {
+		projectDir := t.TempDir()
+		raw, err := json.Marshal(localDirectoryRef{LocalPath: projectDir, DaemonID: daemonID})
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		got, err := localDirectoryAssignmentForTask(Task{
+			ID:               "t1",
+			Agent:            &AgentData{WorkingDirectory: agentDir},
+			ProjectResources: []ProjectResourceData{{ID: "r1", ResourceType: localDirectoryResourceType, ResourceRef: raw}},
+		}, daemonID)
+		if err != nil {
+			t.Fatalf("err: %v", err)
+		}
+		if got == nil || got.AbsPath != filepath.Clean(projectDir) {
+			t.Fatalf("assignment = %+v, want project dir %q", got, projectDir)
+		}
+	})
+
+	t.Run("leader tasks ignore it", func(t *testing.T) {
+		got, err := localDirectoryAssignmentForTask(Task{
+			ID:           "t1",
+			IsLeaderTask: true,
+			Agent:        &AgentData{WorkingDirectory: agentDir},
+		}, daemonID)
+		if err != nil || got != nil {
+			t.Fatalf("expected (nil, nil), got (%+v, %v)", got, err)
+		}
+	})
+
+	t.Run("relative path is rejected", func(t *testing.T) {
+		if _, err := localDirectoryAssignmentForTask(Task{
+			ID:    "t1",
+			Agent: &AgentData{WorkingDirectory: "relative/path"},
+		}, daemonID); err == nil {
+			t.Fatal("expected error for relative path")
+		}
+	})
+
+	t.Run("validated and locked without project resources", func(t *testing.T) {
+		d := &Daemon{
+			cfg:            Config{DaemonID: daemonID},
+			localPathLocks: NewLocalPathLocker(),
+			logger:         slog.Default(),
+		}
+		task := Task{ID: "worker-task", Agent: &AgentData{WorkingDirectory: agentDir}}
+		release, abort := d.acquireLocalDirectoryLockIfNeeded(context.Background(), task, slog.Default())
+		if abort {
+			t.Fatal("lock acquisition aborted")
+		}
+		if release == nil {
+			t.Fatal("expected the agent working_directory to take the path mutex")
+		}
+		defer release()
+		realPath, err := resolveRealPath(filepath.Clean(agentDir))
+		if err != nil {
+			t.Fatalf("resolve real path: %v", err)
+		}
+		if got := d.localPathLocks.Holder(realPath); got != task.ID {
+			t.Fatalf("holder = %q, want %q", got, task.ID)
+		}
+	})
+}
+
 func TestValidateLocalPath(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("blacklist constants are POSIX-only in this test")
