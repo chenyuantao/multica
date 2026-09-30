@@ -111,6 +111,7 @@
     "empty": "Aucune note markdown dans la base de connaissances",
     "no_results": "Aucune note correspondante",
     "truncated": "Seule une partie des résultats est affichée. Essayez un mot-clé plus précis.",
+    "recent": "Modifiées récemment",
     "unconfigured": "La base de connaissances n'est pas configurée. Définissez OBSIDIAN_VAULT_PATH sur le serveur.",
     "unavailable": "Impossible d'accéder au dossier de la base de connaissances. Vérifiez OBSIDIAN_VAULT_PATH sur le serveur.",
     "load_failed": "Impossible de charger la base de connaissances",

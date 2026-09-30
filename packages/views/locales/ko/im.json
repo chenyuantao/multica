@@ -108,6 +108,7 @@
     "empty": "지식 베이스에 아직 Markdown 노트가 없습니다",
     "no_results": "일치하는 노트가 없습니다",
     "truncated": "결과 중 일부만 표시합니다. 더 구체적인 키워드를 사용해 보세요.",
+    "recent": "최근 수정",
     "unconfigured": "지식 베이스가 설정되지 않았습니다. 서버에서 OBSIDIAN_VAULT_PATH를 설정하세요.",
     "unavailable": "지식 베이스 폴더에 접근할 수 없습니다. 서버의 OBSIDIAN_VAULT_PATH를 확인하세요.",
     "load_failed": "지식 베이스를 불러오지 못했습니다",

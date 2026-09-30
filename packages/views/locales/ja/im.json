@@ -108,6 +108,7 @@
     "empty": "ナレッジベースにはまだ Markdown ノートがありません",
     "no_results": "一致するノートはありません",
     "truncated": "結果の一部のみ表示しています。より具体的なキーワードをお試しください。",
+    "recent": "最近の更新",
     "unconfigured": "ナレッジベースが設定されていません。サーバーで OBSIDIAN_VAULT_PATH を設定してください。",
     "unavailable": "ナレッジベースのフォルダにアクセスできません。サーバーの OBSIDIAN_VAULT_PATH を確認してください。",
     "load_failed": "ナレッジベースを読み込めませんでした",

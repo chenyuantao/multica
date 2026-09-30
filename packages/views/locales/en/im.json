@@ -111,6 +111,7 @@
     "empty": "No markdown notes in the knowledge base yet",
     "no_results": "No matching notes",
     "truncated": "Showing only some results. Try a more specific keyword.",
+    "recent": "Recently modified",
     "unconfigured": "The knowledge base isn't configured. Set OBSIDIAN_VAULT_PATH on the server.",
     "unavailable": "Can't reach the knowledge base folder. Check OBSIDIAN_VAULT_PATH on the server.",
     "load_failed": "Couldn't load the knowledge base",

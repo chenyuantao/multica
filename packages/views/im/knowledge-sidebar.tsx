@@ -99,7 +99,7 @@ export function KnowledgeSidebar({ selectedPath, onSelect, onCreate, className }
 
 type Translate = TFunction<"im">;
 
-function loadErrorText(error: unknown, t: Translate): string {
+export function loadErrorText(error: unknown, t: Translate): string {
   switch (errorCode(error)) {
     case "obsidian_vault_unconfigured":
       return t(($) => $.knowledge.unconfigured);

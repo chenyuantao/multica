@@ -1,7 +1,16 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { DocNode } from "@multica/core/types";
-import { ancestorDirs, findNode, joinFrontmatter, noteFileName, parentDir, splitFrontmatter } from "./knowledge-utils";
+import {
+  ancestorDirs,
+  findNode,
+  flattenFiles,
+  joinFrontmatter,
+  noteFileName,
+  parentDir,
+  recentFiles,
+  splitFrontmatter,
+} from "./knowledge-utils";
 
 describe("splitFrontmatter / joinFrontmatter", () => {
   it("round-trips a note with frontmatter", () => {
@@ -56,5 +65,38 @@ describe("paths", () => {
     ];
     expect(findNode(tree, "a/b/c.md")).toBe(file);
     expect(findNode(tree, "a/x.md")).toBeNull();
+  });
+});
+
+describe("flattenFiles / recentFiles", () => {
+  const file = (path: string, modified_at: string | null): DocNode => ({
+    name: path.split("/").pop() ?? path,
+    path,
+    type: "file",
+    child_count: 0,
+    modified_at,
+    children: [],
+    match: "",
+    snippet: "",
+  });
+  const dir = (path: string, children: DocNode[]): DocNode => ({
+    ...file(path, null),
+    type: "dir",
+    child_count: children.length,
+    children,
+  });
+  const tree = [
+    dir("a", [dir("a/b", [file("a/b/old.md", "2026-01-01T00:00:00Z")]), file("a/new.md", "2026-03-01T00:00:00Z")]),
+    file("none.md", null),
+    file("mid.md", "2026-02-01T00:00:00+08:00"),
+  ];
+
+  it("drops folders and keeps tree order", () => {
+    expect(flattenFiles(tree).map((n) => n.path)).toEqual(["a/b/old.md", "a/new.md", "none.md", "mid.md"]);
+  });
+
+  it("orders by modification time, undated last, and caps the list", () => {
+    expect(recentFiles(tree, 10).map((n) => n.path)).toEqual(["a/new.md", "mid.md", "a/b/old.md", "none.md"]);
+    expect(recentFiles(tree, 2).map((n) => n.path)).toEqual(["a/new.md", "mid.md"]);
   });
 });

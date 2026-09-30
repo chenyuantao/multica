@@ -10,6 +10,7 @@ import { DragStrip } from "../platform";
 import { MobileLevel } from "./im-page";
 import { ImRail } from "./im-rail";
 import { KnowledgeDocument } from "./knowledge-document";
+import { KnowledgeSearchDialog } from "./knowledge-search-dialog";
 import { KnowledgeSidebar } from "./knowledge-sidebar";
 import { noteTitle } from "./knowledge-utils";
 import { NewNoteDialog } from "./new-note-dialog";
@@ -30,13 +31,20 @@ export function KnowledgePage() {
     isMobile ? navigation.push(paths.knowledgeFile(path)) : navigation.replace(paths.knowledgeFile(path));
 
   const dialog = (
-    <NewNoteDialog
-      dir={createDir}
-      onOpenChange={(open) => {
-        if (!open) setCreateDir(null);
-      }}
-      onCreated={(file) => select(file.path)}
-    />
+    <>
+      <NewNoteDialog
+        dir={createDir}
+        onOpenChange={(open) => {
+          if (!open) setCreateDir(null);
+        }}
+        onCreated={(file) => select(file.path)}
+      />
+      <KnowledgeSearchDialog
+        onSelect={(path) => {
+          if (path !== selectedPath) select(path);
+        }}
+      />
+    </>
   );
 
   if (isMobile) {

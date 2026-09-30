@@ -249,6 +249,10 @@
         "label": "태스크에서 찾기",
         "description": "열린 태스크 상세 내용에서 검색합니다."
       },
+      "openKnowledgeSearch": {
+        "label": "지식 베이스 검색",
+        "description": "지식 베이스 페이지에서만 사용할 수 있습니다."
+      },
       "archiveInboxItem": {
         "label": "알림 보관",
         "description": "열린 인박스 알림을 보관합니다. 보관함을 보는 중에는 보관을 해제합니다."

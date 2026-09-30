@@ -249,6 +249,10 @@
         "label": "タスク内を検索",
         "description": "開いているタスクの詳細を検索します。"
       },
+      "openKnowledgeSearch": {
+        "label": "ナレッジベースを検索",
+        "description": "ナレッジベースのページでのみ使用できます。"
+      },
       "archiveInboxItem": {
         "label": "通知をアーカイブ",
         "description": "開いているインボックス通知をアーカイブします。アーカイブ表示中はアーカイブを解除します。"

@@ -250,6 +250,10 @@
         "label": "Rechercher dans la tâche",
         "description": "Rechercher dans la tâche ouverte."
       },
+      "openKnowledgeSearch": {
+        "label": "Rechercher dans la base de connaissances",
+        "description": "Disponible uniquement sur la page Base de connaissances."
+      },
       "archiveInboxItem": {
         "label": "Archiver la notification",
         "description": "Archiver la notification ouverte, ou la restaurer lors de la consultation des archives."

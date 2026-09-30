@@ -47,6 +47,19 @@ export function noteTitle(name: string): string {
   return name.replace(/\.md$/i, "");
 }
 
+/** File nodes of a tree in depth-first order, dropping the folders around them. */
+export function flattenFiles(nodes: DocNode[]): DocNode[] {
+  return nodes.flatMap((node) => (node.type === "file" ? [node] : flattenFiles(node.children)));
+}
+
+/** Most recently modified files first; files without a timestamp sort last. */
+export function recentFiles(nodes: DocNode[], limit: number): DocNode[] {
+  const time = (node: DocNode) => (node.modified_at ? Date.parse(node.modified_at) || 0 : 0);
+  return flattenFiles(nodes)
+    .sort((a, b) => time(b) - time(a))
+    .slice(0, limit);
+}
+
 export function findNode(nodes: DocNode[], path: string): DocNode | null {
   for (const node of nodes) {
     if (node.path === path) return node;

@@ -12,6 +12,7 @@ export type ShortcutActionId =
   | "toggleRightSidebar"
   | "toggleChat"
   | "findInIssue"
+  | "openKnowledgeSearch"
   | "archiveInboxItem"
   | "send"
   | "goBack"
@@ -94,6 +95,14 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDefinition[] = [
   // to keep working while the caret sits in the chat composer itself.
   { id: "toggleChat", category: "general", defaultShortcut: primary("J"), allowInEditable: true },
   { id: "findInIssue", category: "general", defaultShortcut: primary("F"), allowInEditable: true },
+  // Mod+O mirrors "Open…" / quick switcher (Obsidian's own binding). The
+  // browser's open-file dialog yields to preventDefault, so it is not reserved.
+  {
+    id: "openKnowledgeSearch",
+    category: "general",
+    defaultShortcut: primary("O"),
+    allowInEditable: true,
+  },
   {
     id: "archiveInboxItem",
     category: "general",
