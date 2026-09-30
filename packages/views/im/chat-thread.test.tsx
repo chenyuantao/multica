@@ -41,7 +41,10 @@ vi.mock("@multica/core/workspace/hooks", () => ({
   useActorName: () => ({ getActorName: (_type: string, id: string) => `name-${id}` }),
 }));
 
-vi.mock("../modals/agent-detail", () => ({ useOpenAgentDetail: () => vi.fn() }));
+const openAgentDetail = vi.hoisted(() => vi.fn());
+const startDirectChat = vi.hoisted(() => vi.fn());
+vi.mock("../modals/agent-detail", () => ({ useOpenAgentDetail: () => openAgentDetail }));
+vi.mock("./use-direct-chat", () => ({ useStartDirectChat: () => ({ start: startDirectChat, isPending: false }) }));
 vi.mock("../platform", () => ({ DragStrip: () => null }));
 vi.mock("./mobile-shell", () => ({ MobileLevelHeader: () => null }));
 vi.mock("../common/actor-avatar", () => ({ ActorAvatar: () => null }));
@@ -142,6 +145,29 @@ describe("ChatThread pending messages", () => {
 
     expect(screen.getAllByText("hello")).toHaveLength(2);
     expect(screen.queryByText("Sending…")).toBeNull();
+  });
+});
+
+describe("ChatThread agent author", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    messages = [{ ...message("m-0", "done"), author_type: "agent", author_id: "agent-1" }];
+    vi.mocked(useQuery).mockImplementation(() => ({ data: messages, isError: false }) as never);
+    openAgentDetail.mockReset();
+    startDirectChat.mockReset();
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it("opens the direct chat on a double click without showing the profile first", () => {
+    renderThread();
+    const name = screen.getByText("name-agent-1");
+    fireEvent.click(name);
+    fireEvent.click(name);
+    fireEvent.doubleClick(name);
+    act(() => vi.runAllTimers());
+
+    expect(startDirectChat).toHaveBeenCalledWith({ member_type: "agent", member_id: "agent-1" });
+    expect(openAgentDetail).not.toHaveBeenCalled();
   });
 });
 

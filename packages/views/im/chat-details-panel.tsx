@@ -18,6 +18,7 @@ import { useOpenAgentDetail } from "../modals/agent-detail";
 import { AddMemberDialog } from "./add-member-dialog";
 import { ColumnResizeHandle, useColumnWidth } from "./resizable-column";
 import { ContactProfile } from "./contact-card";
+import { useAgentClickActions } from "./use-agent-click-actions";
 import { entryKey, useChatDirectory } from "./use-chat-directory";
 
 interface ChatDetailsPanelProps {
@@ -48,6 +49,11 @@ export function ChatDetailsPanel({ wsId, chat, userId, variant = "aside", onOpen
   const isCreator = chat.creator_type === "member" && chat.creator_id === userId;
   const people = chat.members.filter((m) => m.member_type === "member");
   const agentMembers = chat.members.filter((m) => m.member_type === "agent");
+  const agentClicks = useAgentClickActions(wsId, (agentId) => {
+    const member = agentMembers.find((m) => m.member_id === agentId);
+    if (onOpenMember && member) onOpenMember(member);
+    else openAgentDetail(agentId);
+  });
   const agentsById = useMemo(() => new Map(agentList.map((a) => [a.id, a])), [agentList]);
   const runtimesById = useMemo(() => new Map(runtimes.map((r) => [r.id, r])), [runtimes]);
 
@@ -120,7 +126,8 @@ export function ChatDetailsPanel({ wsId, chat, userId, variant = "aside", onOpen
               member={m}
               name={getActorName("agent", m.member_id)}
               detail={agentDetail(agentsById.get(m.member_id), runtimesById)}
-              onOpen={() => (onOpenMember ? onOpenMember(m) : openAgentDetail(m.member_id))}
+              onOpen={() => agentClicks.open(m.member_id)}
+              onDoubleOpen={() => agentClicks.chat(m.member_id)}
               removable={canRemove(m)}
               removeLabel={t(($) => $.panel.remove, { name: getActorName("agent", m.member_id) })}
               onRemove={() => void remove(m)}
@@ -303,6 +310,7 @@ function MemberRow({
   name,
   detail,
   onOpen,
+  onDoubleOpen,
   removable,
   removeLabel,
   onRemove,
@@ -312,6 +320,8 @@ function MemberRow({
   name: string;
   detail: string;
   onOpen?: () => void;
+  /** Agents only: goes to the direct chat instead of the profile. */
+  onDoubleOpen?: () => void;
   removable: boolean;
   removeLabel: string;
   onRemove: () => void;
@@ -325,12 +335,18 @@ function MemberRow({
   );
   return (
     <div className="flex items-center gap-3 px-3 py-2">
-      <ActorAvatar actorType={member.member_type} actorId={member.member_id} size="lg" enableHoverCard showStatusDot onOpenProfile={onOpen} />
+      <span className="flex" onDoubleClick={onDoubleOpen}>
+        <ActorAvatar actorType={member.member_type} actorId={member.member_id} size="lg" enableHoverCard showStatusDot onOpenProfile={onOpen} />
+      </span>
       {onOpen ? (
         <button
           type="button"
           onClick={onOpen}
-          className="group min-w-0 flex-1 rounded-sm text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          onDoubleClick={onDoubleOpen}
+          className={cn(
+            "group min-w-0 flex-1 rounded-sm text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+            onDoubleOpen && "select-none",
+          )}
         >
           {label}
         </button>

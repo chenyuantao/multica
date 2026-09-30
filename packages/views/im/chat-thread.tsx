@@ -39,6 +39,7 @@ import { AppLink } from "../navigation";
 import { DragStrip } from "../platform";
 import { ChatComposer, QuoteText, type ComposerQuote } from "./chat-composer";
 import { MobileLevelHeader } from "./mobile-shell";
+import { useAgentClickActions, type AgentClickActions } from "./use-agent-click-actions";
 import {
   THINKING_MESSAGE,
   chatDisplayTitle,
@@ -86,6 +87,11 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, mobil
   const { role } = useCurrentMember(wsId);
   const isAdmin = role === "owner" || role === "admin";
   const scrollRef = useRef<HTMLDivElement>(null);
+  const openAgentDetail = useOpenAgentDetail();
+  const agentClicks = useAgentClickActions(
+    wsId,
+    mobileNav ? (agentId) => mobileNav.onOpenProfile("agent", agentId) : openAgentDetail,
+  );
 
   useEffect(() => {
     setPending([]);
@@ -294,6 +300,7 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, mobil
                     mine={mine}
                     authorName={getActorName(m.author_type, m.author_id)}
                     onOpenProfile={mobileNav?.onOpenProfile}
+                    agentClicks={agentClicks}
                     quote={m.ref_message_id ? quoteOf(m.ref_message_id) : undefined}
                     onJumpToQuote={jumpTo}
                     actions={actionsFor(m)}
@@ -453,6 +460,7 @@ function MessageRow({
   mine,
   authorName,
   onOpenProfile,
+  agentClicks,
   quote,
   onJumpToQuote,
   actions,
@@ -463,6 +471,8 @@ function MessageRow({
   authorName: string;
   /** Replaces the hover card and agent modal with a page level (phones). */
   onOpenProfile?: (actorType: string, actorId: string) => void;
+  /** An agent author's profile on click, its direct chat on double click. */
+  agentClicks: AgentClickActions;
   /** Set when the message quotes another; `null` once that one is deleted. */
   quote?: ComposerQuote | null;
   onJumpToQuote: (id: string) => void;
@@ -471,29 +481,31 @@ function MessageRow({
   iosMenu?: boolean;
 }) {
   const locale = useLocale();
-  const openAgentDetail = useOpenAgentDetail();
   const time = formatClock(message.created_at, locale);
 
   if (message.author_type === "system" || message.type === "status_change" || message.type === "system") {
     return <p className="my-3.5 text-center text-caption text-muted-foreground">{message.content}</p>;
   }
 
+  const isAgent = message.author_type === "agent";
+  const chatWithAgent = isAgent ? () => agentClicks.chat(message.author_id) : undefined;
   const avatar = (
-    <ActorAvatar
-      actorType={message.author_type}
-      actorId={message.author_id}
-      size="xl"
-     
-      className={MESSAGE_AVATAR_CLASS}
-      enableHoverCard={!onOpenProfile}
-      onOpenProfile={
-        onOpenProfile
-          ? () => onOpenProfile(message.author_type, message.author_id)
-          : message.author_type === "agent"
-            ? () => openAgentDetail(message.author_id)
-            : undefined
-      }
-    />
+    <span className="flex" onDoubleClick={chatWithAgent}>
+      <ActorAvatar
+        actorType={message.author_type}
+        actorId={message.author_id}
+        size="xl"
+        className={MESSAGE_AVATAR_CLASS}
+        enableHoverCard={!onOpenProfile}
+        onOpenProfile={
+          isAgent
+            ? () => agentClicks.open(message.author_id)
+            : onOpenProfile
+              ? () => onOpenProfile(message.author_type, message.author_id)
+              : undefined
+        }
+      />
+    </span>
   );
 
   const thinkingTask = thinkingTaskId(message);
@@ -504,7 +516,7 @@ function MessageRow({
   );
 
   return (
-    <MessageLayout mine={mine} avatar={avatar} authorName={mine ? undefined : authorName}>
+    <MessageLayout mine={mine} avatar={avatar} authorName={mine ? undefined : authorName} onAuthorDoubleClick={chatWithAgent}>
       {thinkingTask ? (
         <ThinkingBubble chatId={message.issue_id} taskId={thinkingTask} title={time} />
       ) : (
@@ -572,18 +584,27 @@ function MessageLayout({
   mine,
   avatar,
   authorName,
+  onAuthorDoubleClick,
   children,
 }: {
   mine: boolean;
   avatar: React.ReactNode;
   authorName?: string;
+  onAuthorDoubleClick?: () => void;
   children: React.ReactNode;
 }) {
   return (
     <div className={cn("mb-5 flex items-start gap-2.5", mine && "justify-end")}>
       {!mine && <span className="flex shrink-0">{avatar}</span>}
       <div className={cn("grid min-w-0 max-w-[min(74%,660px)] gap-1", mine ? "justify-items-end" : "justify-items-start")}>
-        {authorName && <span className="mb-0.5 ml-0.5 text-micro text-muted-foreground">{authorName}</span>}
+        {authorName && (
+          <span
+            className={cn("mb-0.5 ml-0.5 text-micro text-muted-foreground", onAuthorDoubleClick && "cursor-default select-none")}
+            onDoubleClick={onAuthorDoubleClick}
+          >
+            {authorName}
+          </span>
+        )}
         {children}
       </div>
       {mine && <span className="flex shrink-0">{avatar}</span>}

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import type { GroupChat } from "@multica/core/types";
 import { renderWithI18n } from "../test/i18n";
 import { ChatDetailsPanel } from "./chat-details-panel";
@@ -48,6 +48,8 @@ vi.mock("./use-chat-directory", async () => {
     }),
   };
 });
+const startDirectChat = vi.hoisted(() => vi.fn());
+vi.mock("./use-direct-chat", () => ({ useStartDirectChat: () => ({ start: startDirectChat, isPending: false }) }));
 vi.mock("./add-member-dialog", () => ({ AddMemberDialog: () => null }));
 vi.mock("../common/actor-avatar", () => ({ ActorAvatar: () => null }));
 vi.mock("../editor", () => ({
@@ -124,9 +126,14 @@ describe("ChatDetailsPanel announcement", () => {
 });
 
 describe("ChatDetailsPanel agent members", () => {
-  beforeEach(() => mockModalOpen.mockReset());
+  beforeEach(() => {
+    vi.useFakeTimers();
+    mockModalOpen.mockReset();
+    startDirectChat.mockReset();
+  });
+  afterEach(() => vi.useRealTimers());
 
-  it("opens an agent member in the detail modal", () => {
+  function renderWithAgent() {
     renderWithI18n(
       <ChatDetailsPanel
         wsId="ws-1"
@@ -140,9 +147,27 @@ describe("ChatDetailsPanel agent members", () => {
         userId="user-2"
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "name-agent-1" }));
+    return screen.getByRole("button", { name: "name-agent-1" });
+  }
 
+  it("opens an agent member in the detail modal once the double-click window passes", () => {
+    fireEvent.click(renderWithAgent());
+    expect(mockModalOpen).not.toHaveBeenCalled();
+
+    act(() => vi.runAllTimers());
     expect(mockModalOpen).toHaveBeenCalledWith("agent-detail", { agentId: "agent-1", hostPathname: undefined });
+    expect(startDirectChat).not.toHaveBeenCalled();
+  });
+
+  it("opens the direct chat with an agent member on a double click instead of the modal", () => {
+    const row = renderWithAgent();
+    fireEvent.click(row);
+    fireEvent.click(row);
+    fireEvent.doubleClick(row);
+    act(() => vi.runAllTimers());
+
+    expect(startDirectChat).toHaveBeenCalledWith({ member_type: "agent", member_id: "agent-1" });
+    expect(mockModalOpen).not.toHaveBeenCalled();
   });
 });
 
