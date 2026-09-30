@@ -36,10 +36,9 @@ interface AvatarCropDialogProps {
 }
 
 /**
- * Avatar cropper. The image pans/zooms/rotates beneath a fixed round crop
+ * Avatar cropper. The image pans/zooms/rotates beneath a fixed square crop
  * window; everything outside the window is dimmed. Output is a square {@link
- * AVATAR_OUTPUT_SIZE}px image — the round mask is display-only, never baked
- * into the pixels.
+ * AVATAR_OUTPUT_SIZE}px image; avatars round its corners only at display time.
  *
  * Interaction (drag / zoom / rotate + the dim overlay) is delegated to
  * react-easy-crop; this component owns the chrome (header, zoom slider, rotate
@@ -133,7 +132,7 @@ export function AvatarCropDialog({
                 aspect={1}
                 minZoom={MIN_ZOOM}
                 maxZoom={MAX_ZOOM}
-                cropShape="round"
+                cropShape="rect"
                 showGrid={false}
                 onCropChange={setCrop}
                 onZoomChange={setZoom}

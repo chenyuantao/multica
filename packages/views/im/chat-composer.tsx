@@ -143,7 +143,7 @@ export function ChatComposer({ chatTitle, candidates, onSend }: ChatComposerProp
                   i === highlight && "bg-accent",
                 )}
               >
-                <ActorAvatar actorType={s.type} actorId={s.id} size="sm" shape="rounded" profileLink={false} showStatusDot />
+                <ActorAvatar actorType={s.type} actorId={s.id} size="sm" profileLink={false} showStatusDot />
                 <span className="truncate">{s.name}</span>
               </button>
             </li>

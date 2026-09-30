@@ -228,7 +228,7 @@ function MembersCell({ squad }: { squad: Squad }) {
         {visible.map((m) => (
           <span
             key={`${m.member_type}-${m.member_id}`}
-            className="inline-flex rounded-full ring-2 ring-background"
+            className="inline-flex rounded-avatar ring-2 ring-background"
           >
             <ActorAvatar
               actorType={m.member_type}
@@ -239,7 +239,7 @@ function MembersCell({ squad }: { squad: Squad }) {
           </span>
         ))}
         {overflow > 0 && (
-          <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-muted text-caption font-medium text-muted-foreground ring-2 ring-background">
+          <span className="inline-flex h-6 w-6 items-center justify-center rounded-avatar bg-muted text-caption font-medium text-muted-foreground ring-2 ring-background">
             +{overflow}
           </span>
         )}

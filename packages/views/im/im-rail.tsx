@@ -43,7 +43,7 @@ export function ImRail({ active, className }: ImRailProps) {
           title={t(($) => $.rail.profile)}
           className="flex rounded-md transition-transform focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none active:scale-95"
         >
-          <ActorAvatar actorType="member" actorId={userId} size="lg" shape="rounded" profileLink={false} />
+          <ActorAvatar actorType="member" actorId={userId} size="lg" profileLink={false} />
         </AppLink>
       </div>
       {(

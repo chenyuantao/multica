@@ -66,7 +66,7 @@ export function AgentAvatarStack({
           // Each subsequent head sits negative-margin over the previous so
           // the stack collapses horizontally instead of growing linearly.
           style={{ marginLeft: i === 0 ? 0 : -overlap }}
-          className="ring-2 ring-background rounded-full inline-flex"
+          className="ring-2 ring-background rounded-avatar inline-flex"
         >
           <ActorAvatarBase
             name={getActorName("agent", id)}
@@ -85,7 +85,7 @@ export function AgentAvatarStack({
             height: px,
             fontSize: Math.max(9, Math.round(px * 0.45)),
           }}
-          className="ring-2 ring-background rounded-full bg-muted text-muted-foreground inline-flex items-center justify-center font-medium tabular-nums"
+          className="ring-2 ring-background rounded-avatar bg-muted text-muted-foreground inline-flex items-center justify-center font-medium tabular-nums"
           aria-label={t(($) => $.avatar_stack.overflow_aria, {
             count: overflow,
           })}

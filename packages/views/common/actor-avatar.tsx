@@ -240,7 +240,7 @@ function ActorAvatarProfileLink({
     <span
       role="link"
       tabIndex={-1}
-      className="inline-flex cursor-pointer rounded-full"
+      className="inline-flex cursor-pointer rounded-avatar"
       onClick={navigate}
       onAuxClick={(event) => {
         if (event.defaultPrevented || event.button !== 1) return;
@@ -383,7 +383,7 @@ function ActorAvatarHoverCardShell({
 
   const tabIndex = standalone ? 0 : -1;
   const className = standalone
-    ? "inline-flex cursor-pointer rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    ? "inline-flex cursor-pointer rounded-avatar focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     : "inline-flex cursor-pointer";
 
   return (

@@ -30,7 +30,7 @@ export function ContactCard({ entry, chats, userId, onOpenChat }: ContactCardPro
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto flex w-full max-w-md flex-col gap-6 px-6 pt-8 pb-10">
           <div className="flex items-center gap-4">
-            <ActorAvatar actorType={entry.type} actorId={entry.id} size="2xl" shape="rounded" profileLink={false} showStatusDot />
+            <ActorAvatar actorType={entry.type} actorId={entry.id} size="2xl" profileLink={false} showStatusDot />
             <div className="min-w-0 flex-1">
               <h1 className="truncate text-title font-semibold">{entry.name}</h1>
               <p className="truncate text-body text-muted-foreground">

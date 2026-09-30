@@ -653,7 +653,7 @@ export function ThreadMinimap({
                         <span
                           key={`${participant.actor_type}:${participant.actor_id}`}
                           title={participantNames[participantIndex]!}
-                          className="inline-flex rounded-full ring-2 ring-popover"
+                          className="inline-flex rounded-avatar ring-2 ring-popover"
                         >
                           {avatarFor(participant, "sm")}
                         </span>
@@ -661,7 +661,7 @@ export function ThreadMinimap({
                       {thread.participants.length > 3 && (
                         <span
                           title={participantNames.slice(3).join(", ")}
-                          className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-muted px-0.5 text-micro font-medium tabular-nums text-muted-foreground ring-2 ring-popover"
+                          className="inline-flex h-5 min-w-5 items-center justify-center rounded-avatar bg-muted px-0.5 text-micro font-medium tabular-nums text-muted-foreground ring-2 ring-popover"
                         >
                           +{thread.participants.length - 3}
                         </span>

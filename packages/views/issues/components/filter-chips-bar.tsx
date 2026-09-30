@@ -141,7 +141,7 @@ function AvatarStack({ actors }: { actors: ActorFilterValue[] }) {
       {actors.slice(0, 3).map((actor) => (
         <span
           key={`${actor.type}:${actor.id}`}
-          className="inline-flex rounded-full ring-2 ring-background"
+          className="inline-flex rounded-avatar ring-2 ring-background"
         >
           <ActorAvatar
             actorType={actor.type}

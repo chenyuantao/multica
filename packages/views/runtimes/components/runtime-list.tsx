@@ -526,7 +526,7 @@ function AgentStack({ agentIds }: { agentIds: string[] }) {
       {visible.map((id) => (
         <span
           key={id}
-          className="inline-flex rounded-full ring-2 ring-background"
+          className="inline-flex rounded-avatar ring-2 ring-background"
         >
           <ActorAvatar
             actorType="agent"
@@ -537,7 +537,7 @@ function AgentStack({ agentIds }: { agentIds: string[] }) {
         </span>
       ))}
       {extra > 0 && (
-        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-muted text-caption font-medium text-muted-foreground ring-2 ring-background">
+        <span className="inline-flex h-6 w-6 items-center justify-center rounded-avatar bg-muted text-caption font-medium text-muted-foreground ring-2 ring-background">
           +{extra}
         </span>
       )}

@@ -356,7 +356,7 @@ function MultiRecipientChip({
           <span
             key={entry.agent.id}
             style={{ marginLeft: i === 0 ? 0 : -overlap }}
-            className="inline-flex rounded-full ring-2 ring-background"
+            className="inline-flex rounded-avatar ring-2 ring-background"
           >
             <TriggerAgentAvatar agent={entry.agent} suppressed={entry.action === "skip"} showDot={false} />
           </span>
@@ -369,7 +369,7 @@ function MultiRecipientChip({
               height: AVATAR_SIZE,
               fontSize: Math.max(9, Math.round(AVATAR_SIZE * 0.45)),
             }}
-            className="inline-flex items-center justify-center rounded-full bg-muted font-medium tabular-nums text-muted-foreground ring-2 ring-background"
+            className="inline-flex items-center justify-center rounded-avatar bg-muted font-medium tabular-nums text-muted-foreground ring-2 ring-background"
           >
             +{overflow}
           </span>

@@ -272,7 +272,7 @@ function MemberRow({
   );
   return (
     <div className="flex items-center gap-3 px-3 py-2">
-      <ActorAvatar actorType={member.member_type} actorId={member.member_id} size="lg" shape="rounded" enableHoverCard showStatusDot onOpenProfile={onOpen} />
+      <ActorAvatar actorType={member.member_type} actorId={member.member_id} size="lg" enableHoverCard showStatusDot onOpenProfile={onOpen} />
       {onOpen ? (
         <button
           type="button"

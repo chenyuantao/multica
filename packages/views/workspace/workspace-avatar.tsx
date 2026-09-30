@@ -2,9 +2,9 @@ import { resolvePublicFileUrl } from "@multica/core/workspace/avatar-url";
 import { cn } from "@multica/ui/lib/utils";
 
 const sizeMap = {
-  sm: "h-5 w-5 text-caption rounded-full",
-  md: "h-7 w-7 text-caption rounded-full",
-  lg: "h-9 w-9 text-body rounded-full",
+  sm: "h-5 w-5 text-caption rounded-avatar",
+  md: "h-7 w-7 text-caption rounded-avatar",
+  lg: "h-9 w-9 text-body rounded-avatar",
 } as const;
 
 interface WorkspaceAvatarProps {
@@ -21,14 +21,14 @@ function WorkspaceAvatar({ name, avatarUrl, size = "sm", className }: WorkspaceA
       <img
         src={resolvedUrl}
         alt={name}
-        className={cn("inline-block shrink-0 border object-cover", sizeMap[size], className)}
+        className={cn("inline-block shrink-0 object-cover", sizeMap[size], className)}
       />
     );
   }
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center justify-center border bg-muted font-semibold text-muted-foreground",
+        "inline-flex shrink-0 items-center justify-center bg-muted font-semibold text-muted-foreground",
         sizeMap[size],
         className
       )}

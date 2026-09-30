@@ -62,6 +62,9 @@
     --radius-2xl: calc(var(--radius) * 2);
     --radius-3xl: calc(var(--radius) * 2.5);
     --radius-4xl: calc(var(--radius) * 3);
+    /* Every avatar — people, agents, squads, workspaces, group mosaics — is a
+       borderless squircle with this fixed corner, whatever its size. */
+    --radius-avatar: 6px;
 }
 
 /* Type scale — the only font sizes product UI may use.

@@ -54,7 +54,7 @@ export function ContactList({ people, agents, chats, userId, selectedKey, onSele
             aria-current={selected ? "true" : undefined}
             className={cn(rowClass, selected ? "bg-brand/12 hover:bg-brand/12" : "hover:bg-foreground/5")}
           >
-            <ActorAvatar actorType={entry.type} actorId={entry.id} size="xl" shape="rounded" profileLink={false} showStatusDot />
+            <ActorAvatar actorType={entry.type} actorId={entry.id} size="xl" profileLink={false} showStatusDot />
             <RowCopy title={entry.name} detail={entry.type === "member" && entry.id === userId ? t(($) => $.contacts.you) : entry.detail} />
           </button>
         </li>

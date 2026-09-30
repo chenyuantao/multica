@@ -20,14 +20,14 @@ interface ActorAvatarProps {
   isSquad?: boolean;
   size?: AvatarSize;
   /**
-   * `circle` everywhere by default. `rounded` is the IM surface's squircle;
+   * `rounded` (the `--radius-avatar` squircle) everywhere by default;
    * `square` is for tiles clipped by a parent mosaic.
    */
   shape?: AvatarShape;
   className?: string;
 }
 
-type AvatarShape = "circle" | "rounded" | "square";
+type AvatarShape = "rounded" | "square";
 
 function ActorAvatar({
   name,
@@ -37,7 +37,7 @@ function ActorAvatar({
   isSystem,
   isSquad,
   size = DEFAULT_AVATAR_SIZE,
-  shape = "circle",
+  shape = "rounded",
   className,
 }: ActorAvatarProps) {
   const [imgError, setImgError] = useState(false);
@@ -49,7 +49,7 @@ function ActorAvatar({
   }, [avatarUrl]);
 
   // This is the single source of truth for avatar shape; the upload editors
-  // mirror the default circle (packages/views/common/avatar-upload-control.tsx).
+  // mirror the default squircle (packages/views/common/avatar-upload-control.tsx).
   return (
     <div
       data-slot="avatar"
@@ -59,14 +59,13 @@ function ActorAvatar({
         className,
         // The shape class stays last so a call-site `className` can never
         // override it — shape is chosen through the `shape` prop only.
-        shape === "circle" && "rounded-full",
+        shape === "rounded" && "rounded-avatar",
         shape === "square" && "rounded-none"
       )}
       style={{
         width: px,
         height: px,
         fontSize: px * 0.45,
-        ...(shape === "rounded" && { borderRadius: Math.round(px * 0.18) }),
       }}
     >
       {emoji ? (
