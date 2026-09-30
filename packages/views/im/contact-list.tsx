@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, CirclePlus } from "lucide-react";
 import type { GroupChat } from "@multica/core/types";
 import { cn } from "@multica/ui/lib/utils";
 import { ActorAvatar } from "../common/actor-avatar";
@@ -18,12 +18,13 @@ interface ContactListProps {
   selectedKey: string | null;
   onSelect: (entry: DirectoryEntry) => void;
   onOpenChat: (chatId: string) => void;
+  onCreateAgent: () => void;
   className?: string;
 }
 
 type Folder = "chats" | "people" | "agents";
 
-export function ContactList({ people, agents, chats, userId, selectedKey, onSelect, onOpenChat, className }: ContactListProps) {
+export function ContactList({ people, agents, chats, userId, selectedKey, onSelect, onOpenChat, onCreateAgent, className }: ContactListProps) {
   const { t } = useT("im");
   const [query, setQuery] = useState("");
   const [closed, setClosed] = useState<ReadonlySet<Folder>>(() => new Set());
@@ -62,7 +63,17 @@ export function ContactList({ people, agents, chats, userId, selectedKey, onSele
 
   return (
     <ImSidebarShell resizeId="contacts" className={className}>
-      <ImSidebarHeader query={query} onQueryChange={setQuery} searchLabel={t(($) => $.contacts.search)} />
+      <ImSidebarHeader query={query} onQueryChange={setQuery} searchLabel={t(($) => $.contacts.search)}>
+        <button
+          type="button"
+          onClick={onCreateAgent}
+          aria-label={t(($) => $.contacts.new_agent)}
+          title={t(($) => $.contacts.new_agent)}
+          className="flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        >
+          <CirclePlus className="size-[21px]" strokeWidth={1.7} />
+        </button>
+      </ImSidebarHeader>
       <nav className="min-h-0 flex-1 overflow-y-auto pb-3" aria-label={t(($) => $.rail.contacts)}>
         {empty && q ? (
           <p className="px-3 py-8 text-center text-body text-muted-foreground">{t(($) => $.contacts.no_results)}</p>

@@ -146,4 +146,37 @@ describe("useCreateAgentSubmit cache handoff", () => {
       queryKey: workspaceKeys.agents("ws-1"),
     });
   });
+
+  it("hands the created agent to onComplete instead of navigating", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    queryClient.setQueryData<Agent[]>(workspaceKeys.agents("ws-1"), []);
+    const onComplete = vi.fn();
+
+    const { result } = renderHook(
+      () =>
+        useCreateAgentSubmit({
+          draft: {
+            ...EMPTY_AGENT_DRAFT,
+            name: CREATED_AGENT.name,
+            runtimeId: CREATED_AGENT.runtime_id,
+          },
+          runtimeId: CREATED_AGENT.runtime_id,
+          squadId: null,
+          onComplete,
+        }),
+      { wrapper: wrapper(queryClient) },
+    );
+
+    await act(async () => {
+      await result.current.create();
+    });
+
+    expect(onComplete).toHaveBeenCalledWith(CREATED_AGENT);
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(
+      queryClient.getQueryData<Agent[]>(workspaceKeys.agents("ws-1")),
+    ).toEqual([CREATED_AGENT]);
+  });
 });

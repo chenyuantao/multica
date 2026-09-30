@@ -21,6 +21,7 @@
   },
   "contacts": {
     "search": "연락처 검색",
+    "new_agent": "새 에이전트",
     "no_results": "일치하는 연락처가 없습니다",
     "chats": "그룹 채팅",
     "people": "멤버",

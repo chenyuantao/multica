@@ -14,6 +14,7 @@ type ModalType =
   | "issue-delete-confirm"
   | "issue-run-confirm"
   | "agent-detail"
+  | "create-agent"
   | null;
 
 export type IssueLimitRecoveryReason = "issue_limit" | "autopilot_quota";

@@ -21,6 +21,7 @@
   },
   "contacts": {
     "search": "搜索联系人",
+    "new_agent": "新建智能体",
     "no_results": "没有匹配的联系人",
     "chats": "群聊",
     "people": "成员",

@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, MessagesSquare, UsersRound } from "lucide-react";
 import { useAuthStore } from "@multica/core/auth";
 import { useWorkspaceId } from "@multica/core/hooks";
+import { useModalStore } from "@multica/core/modals";
 import { useWorkspacePaths } from "@multica/core/paths";
 import { groupChatListOptions, useGroupChatRealtime } from "@multica/core/group-chats";
 import type { GroupChat } from "@multica/core/types";
@@ -76,6 +77,7 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
       selectedKey={contact ? contactKey : null}
       onSelect={selectContact}
       onOpenChat={openChat}
+      onCreateAgent={() => useModalStore.getState().open("create-agent")}
       className={className}
     />
   );

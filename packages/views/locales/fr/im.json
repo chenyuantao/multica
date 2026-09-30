@@ -21,6 +21,7 @@
   },
   "contacts": {
     "search": "Rechercher des contacts",
+    "new_agent": "Nouvel agent",
     "no_results": "Aucun contact correspondant",
     "chats": "Discussions de groupe",
     "people": "Personnes",

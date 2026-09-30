@@ -105,4 +105,12 @@ describe("ImPage contacts on mobile", () => {
     expect(navigation.push).toHaveBeenCalledWith("/acme/members/user-2");
     expect(mockModalOpen).not.toHaveBeenCalled();
   });
+
+  it("opens the create-agent modal from the contacts header without navigating", () => {
+    const navigation = renderContacts();
+    fireEvent.click(screen.getByRole("button", { name: "New agent" }));
+
+    expect(mockModalOpen).toHaveBeenCalledWith("create-agent");
+    expect(navigation.push).not.toHaveBeenCalled();
+  });
 });

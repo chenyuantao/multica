@@ -49,6 +49,8 @@ export function useCreateAgentSubmit(options: {
   duplicateSource?: Agent | null;
   /** Runs after the agent is committed, before navigation. */
   onCreated?: (agent: Agent) => Promise<void> | void;
+  /** Replaces the default exit (navigating to the new agent or its squad). */
+  onComplete?: (agent: Agent) => void;
 }) {
   const { t } = useT("agents");
   const wsId = useWorkspaceId();
@@ -60,8 +62,15 @@ export function useCreateAgentSubmit(options: {
   const [nameError, setNameError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
-  const { draft, runtimeId, squadId, template, duplicateSource, onCreated } =
-    options;
+  const {
+    draft,
+    runtimeId,
+    squadId,
+    template,
+    duplicateSource,
+    onCreated,
+    onComplete,
+  } = options;
 
   const create = async () => {
     if (!runtimeId || creating) return;
@@ -114,9 +123,11 @@ export function useCreateAgentSubmit(options: {
           name: agent.name || draft.name.trim(),
         }),
       );
-      navigation.push(
-        squadId ? paths.squadDetail(squadId) : paths.agentDetail(agent.id),
-      );
+      if (onComplete) onComplete(agent);
+      else
+        navigation.push(
+          squadId ? paths.squadDetail(squadId) : paths.agentDetail(agent.id),
+        );
     } catch (error) {
       const nextErrors = classifyAgentCreateError(
         error,

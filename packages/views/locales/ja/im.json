@@ -21,6 +21,7 @@
   },
   "contacts": {
     "search": "連絡先を検索",
+    "new_agent": "新規エージェント",
     "no_results": "一致する連絡先がありません",
     "chats": "グループチャット",
     "people": "メンバー",
