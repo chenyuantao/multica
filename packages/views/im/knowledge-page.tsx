@@ -7,7 +7,7 @@ import { useIsMobile } from "@multica/ui/hooks/use-mobile";
 import { useNavigation } from "../navigation";
 import { useT } from "../i18n";
 import { DragStrip } from "../platform";
-import { MobileLevel } from "./im-page";
+import { MobileLevel, MobileTabScreen } from "./mobile-shell";
 import { ImRail } from "./im-rail";
 import { KnowledgeDocument } from "./knowledge-document";
 import { KnowledgeSearchDialog } from "./knowledge-search-dialog";
@@ -49,7 +49,7 @@ export function KnowledgePage() {
 
   if (isMobile) {
     return (
-      <div className="flex h-svh w-full flex-col overflow-hidden bg-background text-foreground">
+      <>
         {selectedPath ? (
           <MobileLevel
             title={noteTitle(selectedPath.split("/").pop() ?? "")}
@@ -59,18 +59,17 @@ export function KnowledgePage() {
             <KnowledgeDocument key={selectedPath} path={selectedPath} variant="page" />
           </MobileLevel>
         ) : (
-          <div className="flex min-h-0 flex-1">
-            <ImRail active="knowledge" />
+          <MobileTabScreen active="knowledge">
             <KnowledgeSidebar
               selectedPath={null}
               onSelect={select}
               onCreate={setCreateDir}
               className="w-auto min-w-0 flex-1 border-r-0"
             />
-          </div>
+          </MobileTabScreen>
         )}
         {dialog}
-      </div>
+      </>
     );
   }
 

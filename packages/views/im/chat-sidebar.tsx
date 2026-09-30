@@ -32,7 +32,7 @@ export function ChatSidebar({ chats, isLoading, isError, selectedId, userId, onS
 
   return (
     <ImSidebarShell className={className}>
-      <ImSidebarHeader query={query} onQueryChange={setQuery} searchLabel={t(($) => $.sidebar.search)}>
+      <ImSidebarHeader query={query} onQueryChange={setQuery} searchLabel={t(($) => $.sidebar.search)} title={t(($) => $.tabs.chats)}>
         <button
           type="button"
           onClick={onNewChat}

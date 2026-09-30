@@ -178,7 +178,7 @@ function NoteEditor({ file, variant, onReload }: { file: DocFile; variant: "pane
         </div>
       )}
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-8 pt-6 pb-24">
+        <div className={cn("mx-auto flex min-h-full w-full max-w-3xl flex-col pt-6 pb-24", variant === "page" ? "px-4" : "px-8")}>
           <ContentEditor
             ref={editorRef}
             defaultValue={initial.body}

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronLeft, MessagesSquare, UsersRound } from "lucide-react";
+import { MessagesSquare, UsersRound } from "lucide-react";
 import { useAuthStore } from "@multica/core/auth";
 import { useWorkspaceId } from "@multica/core/hooks";
 import { useModalStore } from "@multica/core/modals";
@@ -11,9 +11,8 @@ import { groupChatListOptions, useGroupChatRealtime } from "@multica/core/group-
 import type { GroupChat } from "@multica/core/types";
 import { Button } from "@multica/ui/components/ui/button";
 import { useIsMobile } from "@multica/ui/hooks/use-mobile";
-import { AppLink, useNavigation } from "../navigation";
+import { useNavigation } from "../navigation";
 import { useT } from "../i18n";
-import { useOpenAgentDetail } from "../modals/agent-detail";
 import { DragStrip } from "../platform";
 import { ChatDetailsPanel } from "./chat-details-panel";
 import { ChatSidebar } from "./chat-sidebar";
@@ -21,6 +20,7 @@ import { ChatThread } from "./chat-thread";
 import { ContactCard } from "./contact-card";
 import { ContactList } from "./contact-list";
 import { ImRail, type ImView } from "./im-rail";
+import { MobileContactDetail, MobileLevel, MobileTabScreen, parseContactParam } from "./mobile-shell";
 import { sortChatsByActivity } from "./im-utils";
 import { NewChatDialog } from "./new-chat-dialog";
 import { entryKey, useChatDirectory, type DirectoryEntry } from "./use-chat-directory";
@@ -30,9 +30,11 @@ const EMPTY_CHATS: GroupChat[] = [];
 /**
  * Full-window group chat surface. Deliberately outside the dashboard shell:
  * it owns its own sidebar, thread and details columns. The rail section is
- * route-driven: chats (`/im`) and contacts (`/member`). On mobile the chat
- * columns become route-driven levels: list (`/im`), thread (`?chat=`),
- * settings (`?chat=&view=settings`).
+ * route-driven: chats (`/im`) and contacts (`/member`). On phones each
+ * section is a bottom tab whose list is the root, and the columns become
+ * route-driven levels: thread (`?chat=`), settings (`&view=settings`), and a
+ * profile (`&contact=type:id`) opened from either; on `/member` a profile is
+ * the only level.
  */
 export function ImPage({ view = "chats" }: { view?: ImView }) {
   const { t } = useT("im");
@@ -46,7 +48,6 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
   const [newChatOpen, setNewChatOpen] = useState(false);
   const [contactKey, setContactKey] = useState<string | null>(null);
   const directory = useChatDirectory(wsId);
-  const openAgentDetail = useOpenAgentDetail();
 
   useGroupChatRealtime(wsId);
 
@@ -62,9 +63,8 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
 
   const contact = contactKey ? directory.byKey.get(contactKey) ?? null : null;
   const selectContact = (entry: DirectoryEntry) => {
-    if (!isMobile) setContactKey(entryKey(entry.type, entry.id));
-    else if (entry.type === "agent") openAgentDetail(entry.id);
-    else navigation.push(paths.memberDetail(entry.id));
+    if (isMobile) navigation.push(paths.memberContact(entry.type, entry.id));
+    else setContactKey(entryKey(entry.type, entry.id));
   };
 
   const rail = <ImRail active={view} />;
@@ -93,42 +93,66 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
 
   if (isMobile) {
     const settingsOpen = navigation.searchParams.get("view") === "settings";
-    return (
-      <div className="flex h-svh w-full flex-col overflow-hidden bg-background text-foreground">
-        {!requestedId ? (
-          <div className="flex min-h-0 flex-1">
-            {rail}
-            {view === "contacts" ? (
-              contactList("min-w-0 flex-1 border-r-0")
-            ) : (
-              <ChatSidebar
-                chats={chats}
-                isLoading={isLoading}
-                isError={isError}
-                selectedId={null}
-                userId={userId}
-                onSelect={select}
-                onNewChat={() => setNewChatOpen(true)}
-                className="min-w-0 flex-1 border-r-0"
-              />
-            )}
+    const contactTarget = parseContactParam(navigation.searchParams.get("contact"));
+
+    if (view === "contacts") {
+      return contactTarget ? (
+        <MobileContactDetail contact={contactTarget} backHref={paths.member()} backLabel={t(($) => $.contacts.back)} />
+      ) : (
+        <MobileTabScreen active="contacts">{contactList("min-w-0 flex-1 border-r-0")}</MobileTabScreen>
+      );
+    }
+
+    let level: React.ReactNode;
+    if (!requestedId) {
+      level = (
+        <MobileTabScreen active="chats">
+          <ChatSidebar
+            chats={chats}
+            isLoading={isLoading}
+            isError={isError}
+            selectedId={null}
+            userId={userId}
+            onSelect={select}
+            onNewChat={() => setNewChatOpen(true)}
+            className="min-w-0 flex-1 border-r-0"
+          />
+        </MobileTabScreen>
+      );
+    } else if (!requested) {
+      level = (
+        <MobileLevel title="" backHref={paths.im()} backLabel={t(($) => $.thread.back)}>
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 text-muted-foreground">
+            <MessagesSquare className="size-8" />
+            {!isLoading && <p className="text-body">{t(($) => $.thread.not_found)}</p>}
           </div>
-        ) : !requested ? (
-          <MobileLevel title="" backHref={paths.im()} backLabel={t(($) => $.thread.back)}>
-            <div className="flex flex-1 flex-col items-center justify-center gap-3 text-muted-foreground">
-              <MessagesSquare className="size-8" />
-              {!isLoading && <p className="text-body">{t(($) => $.thread.not_found)}</p>}
-            </div>
-          </MobileLevel>
-        ) : settingsOpen ? (
-          <MobileLevel
-            title={t(($) => $.thread.settings)}
-            backHref={paths.imChat(requested.id)}
-            backLabel={t(($) => $.panel.back)}
-          >
-            <ChatDetailsPanel wsId={wsId} chat={requested} userId={userId} variant="page" />
-          </MobileLevel>
-        ) : (
+        </MobileLevel>
+      );
+    } else if (contactTarget) {
+      level = settingsOpen ? (
+        <MobileContactDetail
+          contact={contactTarget}
+          backHref={paths.imChatSettings(requested.id)}
+          backLabel={t(($) => $.panel.back_to_settings)}
+        />
+      ) : (
+        <MobileContactDetail contact={contactTarget} backHref={paths.imChat(requested.id)} backLabel={t(($) => $.panel.back)} />
+      );
+    } else if (settingsOpen) {
+      level = (
+        <MobileLevel title={t(($) => $.thread.settings)} backHref={paths.imChat(requested.id)} backLabel={t(($) => $.panel.back)}>
+          <ChatDetailsPanel
+            wsId={wsId}
+            chat={requested}
+            userId={userId}
+            variant="page"
+            onOpenMember={(m) => navigation.push(paths.imChatSettingsContact(requested.id, m.member_type, m.member_id))}
+          />
+        </MobileLevel>
+      );
+    } else {
+      level = (
+        <div className="flex h-svh w-full flex-col overflow-hidden bg-background text-foreground">
           <ChatThread
             key={requested.id}
             wsId={wsId}
@@ -136,11 +160,21 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
             userId={userId}
             panelOpen={false}
             onTogglePanel={() => {}}
-            mobileNav={{ backHref: paths.im(), settingsHref: paths.imChatSettings(requested.id) }}
+            mobileNav={{
+              backHref: paths.im(),
+              settingsHref: paths.imChatSettings(requested.id),
+              onOpenProfile: (type, id) => navigation.push(paths.imChatContact(requested.id, type, id)),
+            }}
           />
-        )}
+        </div>
+      );
+    }
+
+    return (
+      <>
+        {level}
         {newChatDialog}
-      </div>
+      </>
     );
   }
 
@@ -202,29 +236,5 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
 
       {newChatDialog}
     </div>
-  );
-}
-
-export function MobileLevel({
-  title,
-  backHref,
-  backLabel,
-  children,
-}: {
-  title: string;
-  backHref: string;
-  backLabel: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="flex min-h-0 flex-1 flex-col">
-      <header className="flex h-14 shrink-0 items-center gap-2 border-b px-2">
-        <Button variant="ghost" size="icon-sm" nativeButton={false} render={<AppLink href={backHref} />} aria-label={backLabel}>
-          <ChevronLeft />
-        </Button>
-        <h1 className="min-w-0 flex-1 truncate text-body-lg font-semibold">{title}</h1>
-      </header>
-      {children}
-    </section>
   );
 }

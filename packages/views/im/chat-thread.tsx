@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronLeft, MoreHorizontal, PanelRight, RotateCw } from "lucide-react";
+import { MoreHorizontal, PanelRight, RotateCw } from "lucide-react";
 import { useTaskMessages } from "@multica/core/chat/queries";
 import { groupChatMessagesOptions, useSendGroupChatMessage } from "@multica/core/group-chats";
 import { useActorName } from "@multica/core/workspace/hooks";
@@ -16,6 +16,7 @@ import { useOpenAgentDetail } from "../modals/agent-detail";
 import { AppLink } from "../navigation";
 import { DragStrip } from "../platform";
 import { ChatComposer } from "./chat-composer";
+import { MobileLevelHeader } from "./mobile-shell";
 import {
   THINKING_MESSAGE,
   dayRelation,
@@ -41,8 +42,8 @@ interface ChatThreadProps {
   userId: string;
   panelOpen: boolean;
   onTogglePanel: () => void;
-  /** Mobile stacked layout: links back to the chat list and on to chat settings. */
-  mobileNav?: { backHref: string; settingsHref: string };
+  /** Mobile stacked layout: back to the chat list, on to chat settings, and profiles as page levels. */
+  mobileNav?: { backHref: string; settingsHref: string; onOpenProfile: (actorType: string, actorId: string) => void };
 }
 
 const EMPTY_COMMENTS: Comment[] = [];
@@ -113,6 +114,11 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, mobil
     [send],
   );
 
+  const subtitle = t(($) => $.thread.subtitle, {
+    people: t(($) => $.thread.people, { count: people.length }),
+    agents: t(($) => $.thread.agents, { count: agents.length }),
+  });
+
   const onSend = (content: string) => {
     const localId = `local-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const knownIds = new Set(messages.map((m) => m.id));
@@ -122,43 +128,33 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, mobil
 
   return (
     <section className="flex h-full min-w-0 flex-1 flex-col bg-background">
-      <header className={cn("relative flex h-14 shrink-0 items-center gap-3 border-b", mobileNav ? "px-2" : "px-5")}>
-        <div className="absolute inset-0">
-          <DragStrip />
-        </div>
-        {mobileNav && (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className="relative"
-            nativeButton={false}
-            render={<AppLink href={mobileNav.backHref} />}
-            aria-label={t(($) => $.thread.back)}
-          >
-            <ChevronLeft />
-          </Button>
-        )}
-        <div className="relative min-w-0 flex-1">
-          <h1 className="truncate text-body-lg font-semibold">{chat.title}</h1>
-          <p className="truncate text-caption text-muted-foreground">
-            {t(($) => $.thread.subtitle, {
-              people: t(($) => $.thread.people, { count: people.length }),
-              agents: t(($) => $.thread.agents, { count: agents.length }),
-            })}
-          </p>
-        </div>
-        {mobileNav ? (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className="relative"
-            nativeButton={false}
-            render={<AppLink href={mobileNav.settingsHref} />}
-            aria-label={t(($) => $.thread.settings)}
-          >
-            <MoreHorizontal />
-          </Button>
-        ) : (
+      {mobileNav ? (
+        <MobileLevelHeader
+          title={chat.title}
+          subtitle={subtitle}
+          backHref={mobileNav.backHref}
+          backLabel={t(($) => $.thread.back)}
+          action={
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              nativeButton={false}
+              render={<AppLink href={mobileNav.settingsHref} />}
+              aria-label={t(($) => $.thread.settings)}
+            >
+              <MoreHorizontal />
+            </Button>
+          }
+        />
+      ) : (
+        <header className="relative flex h-14 shrink-0 items-center gap-3 border-b px-5">
+          <div className="absolute inset-0">
+            <DragStrip />
+          </div>
+          <div className="relative min-w-0 flex-1">
+            <h1 className="truncate text-body-lg font-semibold">{chat.title}</h1>
+            <p className="truncate text-caption text-muted-foreground">{subtitle}</p>
+          </div>
           <Button
             variant={panelOpen ? "secondary" : "ghost"}
             size="icon-sm"
@@ -170,8 +166,8 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, mobil
           >
             <PanelRight />
           </Button>
-        )}
-      </header>
+        </header>
+      )}
 
       <div ref={scrollRef} className={cn("min-h-0 flex-1 overflow-y-auto pt-3.5 pb-1.5", mobileNav ? "px-3" : "px-6")}>
         {isError ? (
@@ -191,6 +187,7 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, mobil
                     message={m}
                     mine={m.author_type === "member" && m.author_id === userId}
                     authorName={getActorName(m.author_type, m.author_id)}
+                    onOpenProfile={mobileNav?.onOpenProfile}
                   />
                 </li>
               );
@@ -230,7 +227,18 @@ function TimeSeparator({ iso, showDay }: { iso: string; showDay: boolean }) {
 /** 36px squircle, shared by both sides of the conversation. */
 const MESSAGE_AVATAR_CLASS = "size-9!";
 
-function MessageRow({ message, mine, authorName }: { message: Comment; mine: boolean; authorName: string }) {
+function MessageRow({
+  message,
+  mine,
+  authorName,
+  onOpenProfile,
+}: {
+  message: Comment;
+  mine: boolean;
+  authorName: string;
+  /** Replaces the hover card and agent modal with a page level (phones). */
+  onOpenProfile?: (actorType: string, actorId: string) => void;
+}) {
   const locale = useLocale();
   const openAgentDetail = useOpenAgentDetail();
   const time = formatClock(message.created_at, locale);
@@ -246,8 +254,14 @@ function MessageRow({ message, mine, authorName }: { message: Comment; mine: boo
       size="xl"
      
       className={MESSAGE_AVATAR_CLASS}
-      enableHoverCard
-      onOpenProfile={message.author_type === "agent" ? () => openAgentDetail(message.author_id) : undefined}
+      enableHoverCard={!onOpenProfile}
+      onOpenProfile={
+        onOpenProfile
+          ? () => onOpenProfile(message.author_type, message.author_id)
+          : message.author_type === "agent"
+            ? () => openAgentDetail(message.author_id)
+            : undefined
+      }
     />
   );
 

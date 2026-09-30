@@ -25,13 +25,15 @@ interface ChatDetailsPanelProps {
   userId: string;
   /** `page` fills the screen as the mobile settings level instead of a side column. */
   variant?: "aside" | "page";
+  /** Opens a member's profile as a page level; without it agents open the detail modal. */
+  onOpenMember?: (member: GroupChatMember) => void;
 }
 
 type Availability = "online" | "unstable" | "offline";
 
 const EMPTY_RUNTIMES: AgentRuntime[] = [];
 
-export function ChatDetailsPanel({ wsId, chat, userId, variant = "aside" }: ChatDetailsPanelProps) {
+export function ChatDetailsPanel({ wsId, chat, userId, variant = "aside", onOpenMember }: ChatDetailsPanelProps) {
   const { t } = useT("im");
   const { getActorName } = useActorName();
   const { agentList } = useChatDirectory(wsId);
@@ -101,7 +103,7 @@ export function ChatDetailsPanel({ wsId, chat, userId, variant = "aside" }: Chat
               member={m}
               name={getActorName("agent", m.member_id)}
               detail={agentDetail(agentsById.get(m.member_id), runtimesById)}
-              onOpen={() => openAgentDetail(m.member_id)}
+              onOpen={() => (onOpenMember ? onOpenMember(m) : openAgentDetail(m.member_id))}
               removable={canRemove(m)}
               removeLabel={t(($) => $.panel.remove, { name: getActorName("agent", m.member_id) })}
               onRemove={() => void remove(m)}
@@ -121,6 +123,7 @@ export function ChatDetailsPanel({ wsId, chat, userId, variant = "aside" }: Chat
               m.member_id === chat.creator_id ? t(($) => $.panel.creator) : null,
               m.member_id === userId ? t(($) => $.panel.you) : null,
             ].filter(Boolean).join(" · ")}
+            onOpen={onOpenMember && (() => onOpenMember(m))}
             removable={canRemove(m)}
             removeLabel={t(($) => $.panel.remove, { name: getActorName("member", m.member_id) })}
             onRemove={() => void remove(m)}

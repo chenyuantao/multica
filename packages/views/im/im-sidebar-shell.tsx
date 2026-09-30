@@ -48,11 +48,29 @@ interface ImSidebarHeaderProps {
   query: string;
   onQueryChange: (query: string) => void;
   searchLabel: string;
+  /** The tab name phones show centered above the search field. */
+  title: string;
   children?: React.ReactNode;
 }
 
-export function ImSidebarHeader({ query, onQueryChange, searchLabel, children }: ImSidebarHeaderProps) {
-  const { t } = useT("im");
+export function ImSidebarHeader({ query, onQueryChange, searchLabel, title, children }: ImSidebarHeaderProps) {
+  const isMobile = useIsMobile();
+
+  if (isMobile) {
+    return (
+      <div className="shrink-0">
+        <div className="grid h-12 grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center px-1">
+          <span />
+          <h1 className="truncate text-center text-body-lg font-semibold">{title}</h1>
+          <div className="flex justify-center">{children}</div>
+        </div>
+        <div className="px-3 pb-2">
+          <SearchField query={query} onQueryChange={onQueryChange} searchLabel={searchLabel} className="h-8" />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="relative flex h-[58px] shrink-0 items-center px-3">
       <div className="absolute inset-0">
@@ -62,28 +80,45 @@ export function ImSidebarHeader({ query, onQueryChange, searchLabel, children }:
         className="relative flex min-w-0 flex-1 items-center gap-2"
         style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
       >
-        <label className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-[7px] border border-transparent bg-background px-2 text-muted-foreground transition-colors focus-within:border-ring">
-          <Search className="size-[15px] shrink-0" />
-          <input
-            value={query}
-            onChange={(e) => onQueryChange(e.target.value)}
-            placeholder={searchLabel}
-            aria-label={searchLabel}
-            className="min-w-0 flex-1 bg-transparent text-label text-foreground outline-none placeholder:text-muted-foreground"
-          />
-          {query && (
-            <button
-              type="button"
-              onClick={() => onQueryChange("")}
-              aria-label={t(($) => $.sidebar.clear_search)}
-              className="flex shrink-0 rounded-sm hover:text-foreground"
-            >
-              <X className="size-[13px]" />
-            </button>
-          )}
-        </label>
+        <SearchField query={query} onQueryChange={onQueryChange} searchLabel={searchLabel} className="h-7" />
         {children}
       </div>
     </div>
+  );
+}
+
+function SearchField({
+  query,
+  onQueryChange,
+  searchLabel,
+  className,
+}: Pick<ImSidebarHeaderProps, "query" | "onQueryChange" | "searchLabel"> & { className?: string }) {
+  const { t } = useT("im");
+  return (
+    <label
+      className={cn(
+        "flex min-w-0 flex-1 items-center gap-1.5 rounded-[7px] border border-transparent bg-background px-2 text-muted-foreground transition-colors focus-within:border-ring",
+        className,
+      )}
+    >
+      <Search className="size-[15px] shrink-0" />
+      <input
+        value={query}
+        onChange={(e) => onQueryChange(e.target.value)}
+        placeholder={searchLabel}
+        aria-label={searchLabel}
+        className="min-w-0 flex-1 bg-transparent text-label text-foreground outline-none placeholder:text-muted-foreground"
+      />
+      {query && (
+        <button
+          type="button"
+          onClick={() => onQueryChange("")}
+          aria-label={t(($) => $.sidebar.clear_search)}
+          className="flex shrink-0 rounded-sm hover:text-foreground"
+        >
+          <X className="size-[13px]" />
+        </button>
+      )}
+    </label>
   );
 }

@@ -80,7 +80,7 @@ export function KnowledgeSidebar({ selectedPath, onSelect, onCreate, className }
 
   return (
     <ImSidebarShell className={className}>
-      <ImSidebarHeader query={query} onQueryChange={setQuery} searchLabel={t(($) => $.knowledge.search)}>
+      <ImSidebarHeader query={query} onQueryChange={setQuery} searchLabel={t(($) => $.knowledge.search)} title={t(($) => $.tabs.knowledge)}>
         <button
           type="button"
           onClick={() => onCreate(createTarget)}
