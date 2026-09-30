@@ -14,7 +14,8 @@ import { WorkspaceAvatar } from "../workspace/workspace-avatar";
 import { ActorIssuesPanel } from "../common/actor-issues-panel";
 import { useT } from "../i18n";
 
-export function MemberDetailPage({ userId }: { userId: string }) {
+/** `embedded` is a level of a host page that owns the only way back, so the breadcrumb goes. */
+export function MemberDetailPage({ userId, embedded = false }: { userId: string; embedded?: boolean }) {
   const { t } = useT("members");
   const wsId = useWorkspaceId();
   const workspace = useCurrentWorkspace();
@@ -22,13 +23,15 @@ export function MemberDetailPage({ userId }: { userId: string }) {
   const member = members.find((m) => m.user_id === userId) ?? null;
 
   if (isLoading && !member) {
-    return <MemberDetailSkeleton />;
+    return <MemberDetailSkeleton embedded={embedded} />;
   }
 
   if (!member) {
     return (
       <div className="flex flex-1 min-h-0 flex-col">
-        <MemberBreadcrumb workspaceName={workspace?.name} workspaceAvatarUrl={workspace?.avatar_url} title={t(($) => $.detail.breadcrumb_fallback)} />
+        {!embedded && (
+          <MemberBreadcrumb workspaceName={workspace?.name} workspaceAvatarUrl={workspace?.avatar_url} title={t(($) => $.detail.breadcrumb_fallback)} />
+        )}
         <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-16 text-center">
           <UserRound className="h-8 w-8 text-muted-foreground" />
           <div>
@@ -51,7 +54,9 @@ export function MemberDetailPage({ userId }: { userId: string }) {
 
   return (
     <div className="flex flex-1 min-h-0 flex-col">
-      <MemberBreadcrumb workspaceName={workspace?.name} workspaceAvatarUrl={workspace?.avatar_url} title={member.name} />
+      {!embedded && (
+        <MemberBreadcrumb workspaceName={workspace?.name} workspaceAvatarUrl={workspace?.avatar_url} title={member.name} />
+      )}
 
       <div className="flex shrink-0 items-center gap-3 border-b px-6 py-4">
         <ActorAvatarBase
@@ -116,12 +121,14 @@ function RoleBadge({ role }: { role: MemberRole }) {
   );
 }
 
-function MemberDetailSkeleton() {
+function MemberDetailSkeleton({ embedded }: { embedded: boolean }) {
   return (
     <div className="flex flex-1 min-h-0 flex-col">
-      <PageHeader>
-        <Skeleton className="h-5 w-52" />
-      </PageHeader>
+      {!embedded && (
+        <PageHeader>
+          <Skeleton className="h-5 w-52" />
+        </PageHeader>
+      )}
       <div className="flex shrink-0 items-center gap-3 border-b px-6 py-4">
         <Skeleton className="h-11 w-11 rounded-full" />
         <div className="flex-1 space-y-2">

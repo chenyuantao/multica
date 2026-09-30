@@ -157,7 +157,7 @@ vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: mockToastError },
 }));
 
-import { AgentDetailPage } from "./agent-detail-page";
+import { AgentDetail, AgentDetailPage } from "./agent-detail-page";
 
 const baseAgent: Agent = {
   id: "agent-1",
@@ -184,7 +184,7 @@ const baseAgent: Agent = {
   archived_by: null,
 };
 
-function renderPage() {
+function renderPage(ui: React.ReactNode = <AgentDetailPage agentId="agent-1" />) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -202,7 +202,7 @@ function renderPage() {
     <I18nProvider locale="en" resources={TEST_RESOURCES}>
       <NavigationProvider value={navigation}>
         <QueryClientProvider client={queryClient}>
-          <AgentDetailPage agentId="agent-1" />
+          {ui}
         </QueryClientProvider>
       </NavigationProvider>
     </I18nProvider>,
@@ -372,6 +372,27 @@ describe("AgentDetailPage direct-detail fallback", () => {
         "agent-1",
       ]),
     ).toMatchObject({ model: "new-model" });
+  });
+});
+
+describe("AgentDetail embedded presentation", () => {
+  it("drops the breadcrumb and the DM link, keeping in-place actions", async () => {
+    renderPage(<AgentDetail agentId="agent-1" presentation="embedded" />);
+
+    expect(await screen.findByRole("button", { name: "Assign work" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Lambda" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Agents" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "DM" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "DM" })).not.toBeInTheDocument();
+  });
+
+  it("keeps not found free of links to the agents list", async () => {
+    agentsRef.current = [];
+
+    renderPage(<AgentDetail agentId="agent-1" presentation="embedded" />);
+
+    expect(await screen.findByText("Agent not found")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /agents/i })).not.toBeInTheDocument();
   });
 });
 

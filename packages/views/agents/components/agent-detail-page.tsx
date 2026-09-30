@@ -75,18 +75,21 @@ export function AgentDetailPage({ agentId }: AgentDetailPageProps) {
   return <AgentDetail agentId={agentId} presentation="page" />;
 }
 
-type AgentDetailPresentation = "page" | "modal";
+type AgentDetailPresentation = "page" | "modal" | "embedded";
 
 interface AgentDetailProps {
   agentId: string;
   /** `modal` renders inside a Dialog over another route: it never reads or
-   *  writes the host URL, and leaving the agent closes instead of navigating. */
+   *  writes the host URL, and leaving the agent closes instead of navigating.
+   *  `embedded` is a level of a host page that owns the only way back, so it
+   *  also drops the breadcrumb, the links to the agents list and the DM link. */
   presentation: AgentDetailPresentation;
   onClose?: () => void;
 }
 
 export function AgentDetail({ agentId, presentation, onClose }: AgentDetailProps) {
   const isModal = presentation === "modal";
+  const isPage = presentation === "page";
   const { t } = useT("agents");
   const wsId = useWorkspaceId();
   const paths = useWorkspacePaths();
@@ -246,7 +249,7 @@ export function AgentDetail({ agentId, presentation, onClose }: AgentDetailProps
   if (!agent && isForbidden) {
     return (
       <div className="flex flex-1 min-h-0 flex-col">
-        {!isModal && (
+        {isPage && (
           <BackHeader paths={paths.agents()} title={t(($) => $.detail.back_to_agents)} />
         )}
         <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-16 text-center">
@@ -259,7 +262,7 @@ export function AgentDetail({ agentId, presentation, onClose }: AgentDetailProps
               {t(($) => $.detail.no_access_hint)}
             </p>
           </div>
-          {!isModal && (
+          {isPage && (
             <Button
               size="sm"
               render={<AppLink href={paths.agents()} />}
@@ -278,7 +281,7 @@ export function AgentDetail({ agentId, presentation, onClose }: AgentDetailProps
     const loadError = detailError ?? agentsError;
     return (
       <div className="flex flex-1 min-h-0 flex-col">
-        {!isModal && (
+        {isPage && (
           <BackHeader paths={paths.agents()} title={t(($) => $.detail.back_to_agents)} />
         )}
         <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-16 text-center">
@@ -308,7 +311,7 @@ export function AgentDetail({ agentId, presentation, onClose }: AgentDetailProps
             >
               {t(($) => $.detail.try_again)}
             </Button>
-            {!isModal && (
+            {isPage && (
               <Button
                 size="sm"
                 render={<AppLink href={paths.agents()} />}
@@ -448,7 +451,7 @@ export function AgentDetail({ agentId, presentation, onClose }: AgentDetailProps
           canEdit={canEdit.allowed}
           navIntent={tabNavIntent}
           onNavIntentHandled={() => setTabNavIntent(null)}
-          syncViewWithUrl={!isModal}
+          syncViewWithUrl={isPage}
         />
       </div>
 
@@ -485,8 +488,8 @@ export function AgentDetail({ agentId, presentation, onClose }: AgentDetailProps
                 onClick={() => {
                   setConfirmArchive(false);
                   handleArchive(agent.id);
-                  if (isModal) onClose?.();
-                  else navigation.push(paths.agents());
+                  if (isPage) navigation.push(paths.agents());
+                  else onClose?.();
                 }}
               >
                 {t(($) => $.detail.archive_dialog_confirm)}
@@ -552,7 +555,7 @@ function DetailHeader({
               {t(($) => $.detail.open_full_page)}
             </AppLink>
           </div>
-        ) : (
+        ) : presentation === "page" ? (
           <div className="flex min-w-0 items-center gap-1.5 text-caption text-muted-foreground">
             <AppLink
               href={backHref}
@@ -563,9 +566,14 @@ function DetailHeader({
             <span aria-hidden="true">/</span>
             <span className="truncate text-foreground">{agent.name}</span>
           </div>
-        )}
+        ) : null}
 
-        <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div
+          className={cn(
+            "flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between",
+            presentation !== "embedded" && "mt-4",
+          )}
+        >
           <div className="flex min-w-0 items-start gap-4">
             <ActorAvatar
               actorType="agent"
@@ -614,7 +622,7 @@ function DetailHeader({
           </div>
 
           <div className="flex shrink-0 items-center gap-2 self-end lg:self-start">
-            {!isArchived && (
+            {!isArchived && presentation !== "embedded" && (
               <Button
                 variant="outline"
                 size="sm"
