@@ -11,6 +11,10 @@
     "settings": "设置",
     "clear_search": "清除搜索",
     "resize": "调整侧边栏宽度",
+    "pin": "置顶",
+    "unpin": "取消置顶",
+    "pinned": "已置顶",
+    "pin_failed": "置顶操作失败",
     "unread_other": "{{count}} 条未读消息"
   },
   "rail": {

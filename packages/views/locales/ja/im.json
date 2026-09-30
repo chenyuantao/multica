@@ -11,6 +11,10 @@
     "settings": "設定",
     "clear_search": "検索をクリア",
     "resize": "サイドバーの幅を調整",
+    "pin": "トップにピン留め",
+    "unpin": "ピン留めを解除",
+    "pinned": "ピン留め済み",
+    "pin_failed": "ピン留めを変更できませんでした",
     "unread_other": "未読メッセージ {{count}} 件"
   },
   "rail": {

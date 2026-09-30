@@ -51,6 +51,8 @@ type GroupChatResponse struct {
 	IsDirect bool `json:"is_direct"`
 	// Messages the requester has not read yet, derived from their inbox rows.
 	UnreadCount int64 `json:"unread_count"`
+	// The requester pinned this chat to the top of their own list.
+	Pinned bool `json:"pinned"`
 }
 
 type groupChatMemberRef struct {
@@ -73,7 +75,7 @@ func groupChatMemberToResponse(m db.IssueMember) GroupChatMemberResponse {
 	}
 }
 
-func groupChatToResponse(issue db.Issue, prefix string, members []db.IssueMember, last *db.Comment) GroupChatResponse {
+func groupChatToResponse(issue db.Issue, prefix string, members []db.IssueMember, last *db.Comment, userID string) GroupChatResponse {
 	resp := GroupChatResponse{
 		ID:              uuidToString(issue.ID),
 		WorkspaceID:     uuidToString(issue.WorkspaceID),
@@ -90,6 +92,9 @@ func groupChatToResponse(issue db.Issue, prefix string, members []db.IssueMember
 	}
 	for _, m := range members {
 		resp.Members = append(resp.Members, groupChatMemberToResponse(m))
+		if m.MemberType == "member" && uuidToString(m.MemberID) == userID {
+			resp.Pinned = m.PinnedAt.Valid
+		}
 	}
 	if last != nil {
 		msg := commentToResponse(*last, nil, nil)
@@ -248,7 +253,7 @@ func (h *Handler) ListGroupChats(w http.ResponseWriter, r *http.Request) {
 		if c, found := lastByIssue[key]; found {
 			last = &c
 		}
-		resp := groupChatToResponse(issue, prefix, membersByIssue[key], last)
+		resp := groupChatToResponse(issue, prefix, membersByIssue[key], last, userID)
 		if speakers := pending[key]; len(speakers) > 0 {
 			resp.PendingSpeakers = speakers
 		}
@@ -304,7 +309,7 @@ func (h *Handler) groupChatDetail(ctx context.Context, issue db.Issue, members [
 	if err == nil && len(latest) > 0 {
 		last = &latest[0]
 	}
-	resp := groupChatToResponse(issue, h.getIssuePrefix(ctx, issue.WorkspaceID), members, last)
+	resp := groupChatToResponse(issue, h.getIssuePrefix(ctx, issue.WorkspaceID), members, last, userID)
 	if speakers := h.pendingSpeakersByIssue(ctx, []pgtype.UUID{issue.ID})[uuidToString(issue.ID)]; len(speakers) > 0 {
 		resp.PendingSpeakers = speakers
 	}
@@ -366,6 +371,54 @@ func (h *Handler) MarkGroupChatRead(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"count": count})
+}
+
+type SetGroupChatPinnedRequest struct {
+	Pinned *bool `json:"pinned"`
+}
+
+// SetGroupChatPinned pins or unpins a chat in the requester's own list. Other
+// members' lists are unaffected, so only the requester's clients are told.
+func (h *Handler) SetGroupChatPinned(w http.ResponseWriter, r *http.Request) {
+	userID, ok := requireUserID(w, r)
+	if !ok {
+		return
+	}
+	issue, _, ok := h.loadGroupChat(w, r)
+	if !ok {
+		return
+	}
+	var req SetGroupChatPinnedRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Pinned == nil {
+		writeError(w, http.StatusBadRequest, "pinned is required")
+		return
+	}
+	updated, err := h.Queries.SetIssueMemberPinned(r.Context(), db.SetIssueMemberPinnedParams{
+		Pinned:      *req.Pinned,
+		IssueID:     issue.ID,
+		WorkspaceID: issue.WorkspaceID,
+		MemberType:  "member",
+		MemberID:    parseUUID(userID),
+	})
+	if err != nil {
+		slog.Warn("set group chat pinned failed", append(logger.RequestAttrs(r), "error", err)...)
+		writeError(w, http.StatusInternalServerError, "failed to pin chat")
+		return
+	}
+	if updated == 0 {
+		writeError(w, http.StatusNotFound, "chat not found")
+		return
+	}
+	members, err := h.Queries.ListIssueMembers(r.Context(), db.ListIssueMembersParams{IssueID: issue.ID, WorkspaceID: issue.WorkspaceID})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load chat members")
+		return
+	}
+	h.publish(protocol.EventGroupChatUpdated, uuidToString(issue.WorkspaceID), "member", userID, map[string]any{
+		"issue_id":     uuidToString(issue.ID),
+		"recipient_id": userID,
+	})
+	writeJSON(w, http.StatusOK, h.groupChatDetail(r.Context(), issue, members, userID))
 }
 
 func (h *Handler) CreateGroupChat(w http.ResponseWriter, r *http.Request) {
@@ -448,7 +501,7 @@ func (h *Handler) createGroupChat(w http.ResponseWriter, r *http.Request, member
 		return
 	}
 	h.publishGroupChatUpdated(uuidToString(member.WorkspaceID), userID, res.Issue.ID)
-	writeJSON(w, http.StatusCreated, groupChatToResponse(res.Issue, prefix, members, nil))
+	writeJSON(w, http.StatusCreated, groupChatToResponse(res.Issue, prefix, members, nil, userID))
 }
 
 // OpenDirectGroupChat returns the requester's two-person chat with a person
@@ -578,7 +631,7 @@ func (h *Handler) UpdateGroupChat(w http.ResponseWriter, r *http.Request) {
 		issue = updated
 		h.publishGroupChatUpdated(uuidToString(issue.WorkspaceID), userID, issue.ID)
 	}
-	writeJSON(w, http.StatusOK, groupChatToResponse(issue, h.getIssuePrefix(r.Context(), issue.WorkspaceID), members, nil))
+	writeJSON(w, http.StatusOK, groupChatToResponse(issue, h.getIssuePrefix(r.Context(), issue.WorkspaceID), members, nil, userID))
 }
 
 func (h *Handler) AddGroupChatMember(w http.ResponseWriter, r *http.Request) {
@@ -632,7 +685,7 @@ func (h *Handler) AddGroupChatMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.publishGroupChatUpdated(uuidToString(issue.WorkspaceID), userID, issue.ID)
-	writeJSON(w, http.StatusOK, groupChatToResponse(issue, h.getIssuePrefix(r.Context(), issue.WorkspaceID), members, nil))
+	writeJSON(w, http.StatusOK, groupChatToResponse(issue, h.getIssuePrefix(r.Context(), issue.WorkspaceID), members, nil, userID))
 }
 
 func (h *Handler) RemoveGroupChatMember(w http.ResponseWriter, r *http.Request) {

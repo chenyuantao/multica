@@ -1155,6 +1155,7 @@ export const GroupChatSchema = z.object({
   pending_speakers: z.array(z.string()).default([]),
   unread_count: z.number().default(0).catch(0),
   is_direct: z.boolean().default(false).catch(false),
+  pinned: z.boolean().default(false).catch(false),
 }).loose();
 
 export const GroupChatsListSchema = z.object({

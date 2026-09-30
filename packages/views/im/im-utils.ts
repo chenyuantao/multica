@@ -174,6 +174,9 @@ export function chatActivityAt(chat: GroupChat): string {
   return chat.last_comment_at ?? chat.created_at;
 }
 
-export function sortChatsByActivity(chats: GroupChat[]): GroupChat[] {
-  return [...chats].sort((a, b) => chatActivityAt(b).localeCompare(chatActivityAt(a)));
+/** Pinned chats first, then the most recently active. */
+export function sortChats(chats: GroupChat[]): GroupChat[] {
+  return [...chats].sort(
+    (a, b) => Number(b.pinned) - Number(a.pinned) || chatActivityAt(b).localeCompare(chatActivityAt(a)),
+  );
 }

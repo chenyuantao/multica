@@ -10,7 +10,7 @@ import {
   needsTimeSeparator,
   plainTextPreview,
   runProgress,
-  sortChatsByActivity,
+  sortChats,
   thinkingTaskId,
 } from "./im-utils";
 
@@ -81,14 +81,25 @@ describe("time helpers", () => {
   });
 });
 
-describe("sortChatsByActivity", () => {
-  const chat = (id: string, created: string, last: string | null): GroupChat => ({
+describe("sortChats", () => {
+  const chat = (id: string, created: string, last: string | null, pinned = false): GroupChat => ({
     id, workspace_id: "ws", identifier: id, title: id, description: "", creator_type: "member", creator_id: "u",
     created_at: created, last_comment_at: last, last_message: null, members: [], pending_speakers: [], unread_count: 0, is_direct: false,
+    pinned,
+  });
+
+  it("puts pinned chats first, each group by latest activity", () => {
+    const sorted = sortChats([
+      chat("busy", "2026-09-01T00:00:00Z", "2026-09-05T00:00:00Z"),
+      chat("pinned-old", "2026-08-01T00:00:00Z", "2026-08-02T00:00:00Z", true),
+      chat("quiet", "2026-09-01T00:00:00Z", "2026-09-02T00:00:00Z"),
+      chat("pinned-new", "2026-08-01T00:00:00Z", "2026-08-03T00:00:00Z", true),
+    ]);
+    expect(sorted.map((c) => c.id)).toEqual(["pinned-new", "pinned-old", "busy", "quiet"]);
   });
 
   it("orders by latest message, falling back to creation time", () => {
-    const sorted = sortChatsByActivity([
+    const sorted = sortChats([
       chat("old-message", "2026-09-01T00:00:00Z", "2026-09-02T00:00:00Z"),
       chat("new-empty", "2026-09-03T00:00:00Z", null),
       chat("fresh-message", "2026-08-01T00:00:00Z", "2026-09-04T00:00:00Z"),

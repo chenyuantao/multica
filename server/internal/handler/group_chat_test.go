@@ -349,6 +349,76 @@ func TestGroupChatUnreadCountAndMarkRead(t *testing.T) {
 	}
 }
 
+func TestGroupChatPinIsPerPersonAndSortsFirst(t *testing.T) {
+	ctx := context.Background()
+	memberB := groupChatWorkspaceMember(t, "Group Chat Pin B", "group-chat-pin-b@multica.test")
+	outsider := groupChatWorkspaceMember(t, "Group Chat Pin Outsider", "group-chat-pin-outsider@multica.test")
+
+	create := func(title string) GroupChatResponse {
+		var chat GroupChatResponse
+		testutil.Call(t, testHandler.CreateGroupChat, groupChatRequestAs(t, testUserID, "POST", "/api/group-chats", map[string]any{
+			"title":   title,
+			"members": []map[string]string{{"member_type": "member", "member_id": memberB}},
+		})).Want(http.StatusCreated).JSON(&chat)
+		t.Cleanup(func() {
+			for _, sql := range []string{
+				`DELETE FROM issue_member WHERE issue_id = $1`,
+				`DELETE FROM issue_subscriber WHERE issue_id = $1`,
+				`DELETE FROM issue WHERE id = $1`,
+			} {
+				testPool.Exec(ctx, sql, chat.ID)
+			}
+		})
+		return chat
+	}
+	quiet := create("Quiet room")
+	busy := create("Busy room")
+	dbfx.Exec(t, `UPDATE issue SET last_comment_at = now() - interval '1 day' WHERE id = $1`, quiet.ID)
+	dbfx.Exec(t, `UPDATE issue SET last_comment_at = now() WHERE id = $1`, busy.ID)
+
+	listAs := func(userID string) []GroupChatResponse {
+		var out struct {
+			Chats []GroupChatResponse `json:"chats"`
+		}
+		testutil.Call(t, testHandler.ListGroupChats, groupChatRequestAs(t, userID, "GET", "/api/group-chats", nil)).Want(http.StatusOK).JSON(&out)
+		return out.Chats
+	}
+	indexOf := func(chats []GroupChatResponse, id string) int {
+		return slices.IndexFunc(chats, func(c GroupChatResponse) bool { return c.ID == id })
+	}
+	pin := func(userID string, body any) *testutil.Response {
+		return testutil.Call(t, testHandler.SetGroupChatPinned, withURLParam(groupChatRequestAs(t, userID, "PATCH", "/api/group-chats/"+quiet.ID+"/pin", body), "id", quiet.ID))
+	}
+
+	pin(outsider, map[string]bool{"pinned": true}).Want(http.StatusNotFound)
+	pin(testUserID, map[string]any{}).Want(http.StatusBadRequest)
+
+	var pinned GroupChatResponse
+	pin(testUserID, map[string]bool{"pinned": true}).Want(http.StatusOK).JSON(&pinned)
+	if !pinned.Pinned {
+		t.Fatal("pin response pinned = false, want true")
+	}
+
+	mine := listAs(testUserID)
+	if len(mine) == 0 || mine[0].ID != quiet.ID || !mine[0].Pinned {
+		t.Fatalf("pinned chat is not first in the pinner's list: %+v", mine)
+	}
+	theirs := listAs(memberB)
+	qi, bi := indexOf(theirs, quiet.ID), indexOf(theirs, busy.ID)
+	if qi < 0 || bi < 0 || theirs[qi].Pinned || qi < bi {
+		t.Fatalf("another member's list changed: quiet=%d busy=%d", qi, bi)
+	}
+
+	pin(testUserID, map[string]bool{"pinned": false}).Want(http.StatusOK).JSON(&pinned)
+	if pinned.Pinned {
+		t.Fatal("unpin response pinned = true, want false")
+	}
+	mine = listAs(testUserID)
+	if qi, bi := indexOf(mine, quiet.ID), indexOf(mine, busy.ID); mine[qi].Pinned || qi < bi {
+		t.Fatalf("unpinned chat did not return to activity order: quiet=%d busy=%d", qi, bi)
+	}
+}
+
 func TestGroupChatQuotedMessageReachesAgentInFull(t *testing.T) {
 	ctx := context.Background()
 	agentID := createHandlerTestAgent(t, "group-chat-quote-agent", nil)

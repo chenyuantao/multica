@@ -11,6 +11,10 @@
     "settings": "설정",
     "clear_search": "검색 지우기",
     "resize": "사이드바 너비 조정",
+    "pin": "맨 위에 고정",
+    "unpin": "고정 해제",
+    "pinned": "고정됨",
+    "pin_failed": "고정 상태를 변경하지 못했습니다",
     "unread_other": "읽지 않은 메시지 {{count}}개"
   },
   "rail": {

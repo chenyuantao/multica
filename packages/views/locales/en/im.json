@@ -11,6 +11,10 @@
     "settings": "Settings",
     "clear_search": "Clear search",
     "resize": "Resize sidebar",
+    "pin": "Pin to top",
+    "unpin": "Unpin",
+    "pinned": "Pinned",
+    "pin_failed": "Couldn't update the pin",
     "unread_one": "{{count}} unread message",
     "unread_other": "{{count}} unread messages"
   },

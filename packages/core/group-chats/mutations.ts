@@ -113,6 +113,26 @@ export function useMarkGroupChatRead(wsId: string, chatId: string) {
   });
 }
 
+/** Pins or unpins a chat in the current user's list; the row moves at once. */
+export function useSetGroupChatPinned(wsId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ chatId, pinned }: { chatId: string; pinned: boolean }) => api.setGroupChatPinned(chatId, pinned),
+    onMutate: async ({ chatId, pinned }) => {
+      await qc.cancelQueries({ queryKey: groupChatKeys.list(wsId) });
+      const prev = qc.getQueryData<GroupChat[]>(groupChatKeys.list(wsId));
+      qc.setQueryData<GroupChat[]>(groupChatKeys.list(wsId), (old) =>
+        old?.map((c) => (c.id === chatId ? { ...c, pinned } : c)),
+      );
+      return { prev };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prev) qc.setQueryData(groupChatKeys.list(wsId), ctx.prev);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: groupChatKeys.list(wsId) }),
+  });
+}
+
 export function useDeleteGroupChatMessage(wsId: string, chatId: string) {
   const qc = useQueryClient();
   return useMutation({

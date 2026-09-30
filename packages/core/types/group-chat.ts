@@ -31,6 +31,8 @@ export interface GroupChat {
   unread_count: number;
   /** Created as a two-person chat with one peer; its members never change. */
   is_direct: boolean;
+  /** The current user pinned this chat to the top of their own list. */
+  pinned: boolean;
 }
 
 export interface GroupChatMemberRef {

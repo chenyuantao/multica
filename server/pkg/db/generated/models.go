@@ -870,6 +870,7 @@ type IssueMember struct {
 	AddedByType pgtype.Text        `json:"added_by_type"`
 	AddedByID   pgtype.UUID        `json:"added_by_id"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	PinnedAt    pgtype.Timestamptz `json:"pinned_at"`
 }
 
 type IssuePrAutomation struct {

@@ -4592,6 +4592,16 @@ export class ApiClient {
     await this.fetch(`/api/group-chats/${chatId}/read`, { method: "POST" });
   }
 
+  async setGroupChatPinned(chatId: string, pinned: boolean): Promise<GroupChat | null> {
+    const raw = await this.fetch<unknown>(`/api/group-chats/${chatId}/pin`, {
+      method: "PATCH",
+      body: JSON.stringify({ pinned }),
+    });
+    return parseWithFallback<GroupChat | null>(raw, GroupChatSchema, null, {
+      endpoint: "PATCH /api/group-chats/:id/pin",
+    });
+  }
+
   async removeGroupChatMember(
     chatId: string,
     memberType: GroupChatMemberType,

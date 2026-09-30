@@ -3,11 +3,12 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { MessagesSquare, UsersRound } from "lucide-react";
+import { toast } from "sonner";
 import { useAuthStore } from "@multica/core/auth";
 import { useWorkspaceId } from "@multica/core/hooks";
 import { useModalStore } from "@multica/core/modals";
 import { useWorkspacePaths } from "@multica/core/paths";
-import { directChatPeer, groupChatListOptions, useGroupChatRealtime } from "@multica/core/group-chats";
+import { directChatPeer, groupChatListOptions, useGroupChatRealtime, useSetGroupChatPinned } from "@multica/core/group-chats";
 import type { GroupChat } from "@multica/core/types";
 import { Button } from "@multica/ui/components/ui/button";
 import { useIsMobile } from "@multica/ui/hooks/use-mobile";
@@ -21,7 +22,7 @@ import { ContactCard } from "./contact-card";
 import { ContactList } from "./contact-list";
 import { ImRail, type ImView } from "./im-rail";
 import { MobileContactDetail, MobileLevel, MobileTabScreen, parseContactParam } from "./mobile-shell";
-import { sortChatsByActivity } from "./im-utils";
+import { sortChats } from "./im-utils";
 import { NewChatDialog } from "./new-chat-dialog";
 import { entryKey, useChatDirectory, type DirectoryEntry } from "./use-chat-directory";
 
@@ -48,10 +49,16 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
   const [newChatOpen, setNewChatOpen] = useState(false);
   const [contactKey, setContactKey] = useState<string | null>(null);
   const directory = useChatDirectory(wsId);
+  const setPinned = useSetGroupChatPinned(wsId);
+  const setChatPinned = (chatId: string, pinned: boolean) =>
+    setPinned.mutate(
+      { chatId, pinned },
+      { onError: (err) => toast.error(err instanceof Error ? err.message : t(($) => $.sidebar.pin_failed)) },
+    );
 
   useGroupChatRealtime(wsId);
 
-  const chats = useMemo(() => sortChatsByActivity(data), [data]);
+  const chats = useMemo(() => sortChats(data), [data]);
   const requestedId = view === "chats" ? navigation.searchParams.get("chat") : null;
   const requested = chats.find((c) => c.id === requestedId) ?? null;
   const selected = requested ?? (requestedId || isMobile ? null : chats[0] ?? null);
@@ -115,6 +122,8 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
             userId={userId}
             onSelect={select}
             onNewChat={() => setNewChatOpen(true)}
+            onSetPinned={setChatPinned}
+            iosMenu
             className="min-w-0 flex-1 border-r-0"
           />
         </MobileTabScreen>
@@ -195,6 +204,7 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
           userId={userId}
           onSelect={select}
           onNewChat={() => setNewChatOpen(true)}
+          onSetPinned={setChatPinned}
         />
       )}
 

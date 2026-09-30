@@ -11,7 +11,7 @@ import type { ApiClient } from "../api/client";
 import { inboxKeys } from "../inbox/queries";
 import { createQueryClient } from "../query-client";
 import type { GroupChat } from "../types";
-import { useMarkGroupChatRead } from "./mutations";
+import { useMarkGroupChatRead, useSetGroupChatPinned } from "./mutations";
 import { countUnreadGroupChatMessages, groupChatKeys } from "./queries";
 
 const WS = "ws-1";
@@ -32,6 +32,7 @@ function chat(id: string, unread: number): GroupChat {
     pending_speakers: [],
     unread_count: unread,
     is_direct: false,
+    pinned: false,
   };
 }
 
@@ -86,5 +87,41 @@ describe("useMarkGroupChatRead", () => {
     act(() => result.current.mutate());
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(unreadOf("a")).toBe(3);
+  });
+});
+
+describe("useSetGroupChatPinned", () => {
+  function setup(setGroupChatPinned: ReturnType<typeof vi.fn>) {
+    const qc = createQueryClient();
+    qc.setQueryData(groupChatKeys.list(WS), [chat("a", 0), chat("b", 0)]);
+    setApiInstance({
+      setGroupChatPinned,
+      listGroupChats: vi.fn(async () => [{ ...chat("a", 0), pinned: true }, chat("b", 0)]),
+    } as unknown as ApiClient);
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useSetGroupChatPinned(WS), { wrapper });
+    const pinnedOf = (id: string) =>
+      qc.getQueryData<GroupChat[]>(groupChatKeys.list(WS))?.find((c) => c.id === id)?.pinned;
+    return { result, pinnedOf };
+  }
+
+  it("pins the chat at once", async () => {
+    const setGroupChatPinned = vi.fn(() => new Promise(() => {}));
+    const { result, pinnedOf } = setup(setGroupChatPinned);
+
+    act(() => result.current.mutate({ chatId: "a", pinned: true }));
+    await waitFor(() => expect(pinnedOf("a")).toBe(true));
+    expect(pinnedOf("b")).toBe(false);
+    expect(setGroupChatPinned).toHaveBeenCalledWith("a", true);
+  });
+
+  it("restores the pin state when the request fails", async () => {
+    const { result, pinnedOf } = setup(vi.fn(async () => Promise.reject(new Error("offline"))));
+
+    act(() => result.current.mutate({ chatId: "a", pinned: true }));
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(pinnedOf("a")).toBe(false);
   });
 });

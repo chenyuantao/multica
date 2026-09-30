@@ -140,32 +140,31 @@ func (q *Queries) IssueHasMembers(ctx context.Context, issueID pgtype.UUID) (boo
 
 const listGroupChatsForMember = `-- name: ListGroupChatsForMember :many
 SELECT i.id, i.workspace_id, i.title, i.description, i.status, i.priority, i.assignee_type, i.assignee_id, i.creator_type, i.creator_id, i.parent_issue_id, i.acceptance_criteria, i.context_refs, i.position, i.due_date, i.created_at, i.updated_at, i.number, i.project_id, i.origin_type, i.origin_id, i.first_executed_at, i.start_date, i.metadata, i.stage, i.properties, i.revision, i.last_activity_at, i.triage_state, i.duplicate_of_issue_id, i.last_comment_at, i.is_direct_chat FROM issue i
-WHERE i.workspace_id = $1
-  AND EXISTS (
-      SELECT 1 FROM issue_member m
-      WHERE m.issue_id = i.id
-        AND m.workspace_id = i.workspace_id
-        AND m.member_type = $2
-        AND m.member_id = $3
-  )
-ORDER BY COALESCE(i.last_comment_at, i.created_at) DESC, i.id DESC
+JOIN issue_member m
+  ON m.issue_id = i.id
+ AND m.workspace_id = i.workspace_id
+ AND m.member_type = $1
+ AND m.member_id = $2
+WHERE i.workspace_id = $3
+ORDER BY (m.pinned_at IS NOT NULL) DESC, COALESCE(i.last_comment_at, i.created_at) DESC, i.id DESC
 LIMIT $4
 `
 
 type ListGroupChatsForMemberParams struct {
-	WorkspaceID pgtype.UUID `json:"workspace_id"`
 	MemberType  string      `json:"member_type"`
 	MemberID    pgtype.UUID `json:"member_id"`
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
 	RowLimit    int32       `json:"row_limit"`
 }
 
-// Group chats the given person/agent belongs to, newest message first. Chats
-// without messages yet sort by their creation time.
+// Group chats the given person/agent belongs to: the ones they pinned first,
+// then newest message first. Chats without messages yet sort by their
+// creation time.
 func (q *Queries) ListGroupChatsForMember(ctx context.Context, arg ListGroupChatsForMemberParams) ([]Issue, error) {
 	rows, err := q.db.Query(ctx, listGroupChatsForMember,
-		arg.WorkspaceID,
 		arg.MemberType,
 		arg.MemberID,
+		arg.WorkspaceID,
 		arg.RowLimit,
 	)
 	if err != nil {
@@ -246,7 +245,7 @@ func (q *Queries) ListIssueHumanMemberUserIDs(ctx context.Context, issueID pgtyp
 }
 
 const listIssueMembers = `-- name: ListIssueMembers :many
-SELECT issue_id, workspace_id, member_type, member_id, added_by_type, added_by_id, created_at FROM issue_member
+SELECT issue_id, workspace_id, member_type, member_id, added_by_type, added_by_id, created_at, pinned_at FROM issue_member
 WHERE issue_id = $1 AND workspace_id = $2
 ORDER BY created_at ASC, member_type ASC, member_id ASC
 `
@@ -273,6 +272,7 @@ func (q *Queries) ListIssueMembers(ctx context.Context, arg ListIssueMembersPara
 			&i.AddedByType,
 			&i.AddedByID,
 			&i.CreatedAt,
+			&i.PinnedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -285,7 +285,7 @@ func (q *Queries) ListIssueMembers(ctx context.Context, arg ListIssueMembersPara
 }
 
 const listIssueMembersForIssues = `-- name: ListIssueMembersForIssues :many
-SELECT issue_id, workspace_id, member_type, member_id, added_by_type, added_by_id, created_at FROM issue_member
+SELECT issue_id, workspace_id, member_type, member_id, added_by_type, added_by_id, created_at, pinned_at FROM issue_member
 WHERE workspace_id = $1 AND issue_id = ANY($2::uuid[])
 ORDER BY issue_id, created_at ASC, member_type ASC, member_id ASC
 `
@@ -312,6 +312,7 @@ func (q *Queries) ListIssueMembersForIssues(ctx context.Context, arg ListIssueMe
 			&i.AddedByType,
 			&i.AddedByID,
 			&i.CreatedAt,
+			&i.PinnedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -405,6 +406,39 @@ type RemoveIssueMemberParams struct {
 
 func (q *Queries) RemoveIssueMember(ctx context.Context, arg RemoveIssueMemberParams) (int64, error) {
 	result, err := q.db.Exec(ctx, removeIssueMember,
+		arg.IssueID,
+		arg.WorkspaceID,
+		arg.MemberType,
+		arg.MemberID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setIssueMemberPinned = `-- name: SetIssueMemberPinned :execrows
+UPDATE issue_member
+SET pinned_at = CASE WHEN $1::bool THEN COALESCE(pinned_at, now()) ELSE NULL END
+WHERE issue_id = $2
+  AND workspace_id = $3
+  AND member_type = $4
+  AND member_id = $5
+`
+
+type SetIssueMemberPinnedParams struct {
+	Pinned      bool        `json:"pinned"`
+	IssueID     pgtype.UUID `json:"issue_id"`
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	MemberType  string      `json:"member_type"`
+	MemberID    pgtype.UUID `json:"member_id"`
+}
+
+// Pins or unpins a chat for one of its members. Re-pinning keeps the original
+// pin time.
+func (q *Queries) SetIssueMemberPinned(ctx context.Context, arg SetIssueMemberPinnedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setIssueMemberPinned,
+		arg.Pinned,
 		arg.IssueID,
 		arg.WorkspaceID,
 		arg.MemberType,

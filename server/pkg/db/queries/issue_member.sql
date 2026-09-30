@@ -30,19 +30,28 @@ SELECT EXISTS (
 )::bool;
 
 -- name: ListGroupChatsForMember :many
--- Group chats the given person/agent belongs to, newest message first. Chats
--- without messages yet sort by their creation time.
+-- Group chats the given person/agent belongs to: the ones they pinned first,
+-- then newest message first. Chats without messages yet sort by their
+-- creation time.
 SELECT i.* FROM issue i
+JOIN issue_member m
+  ON m.issue_id = i.id
+ AND m.workspace_id = i.workspace_id
+ AND m.member_type = @member_type
+ AND m.member_id = @member_id
 WHERE i.workspace_id = @workspace_id
-  AND EXISTS (
-      SELECT 1 FROM issue_member m
-      WHERE m.issue_id = i.id
-        AND m.workspace_id = i.workspace_id
-        AND m.member_type = @member_type
-        AND m.member_id = @member_id
-  )
-ORDER BY COALESCE(i.last_comment_at, i.created_at) DESC, i.id DESC
+ORDER BY (m.pinned_at IS NOT NULL) DESC, COALESCE(i.last_comment_at, i.created_at) DESC, i.id DESC
 LIMIT @row_limit;
+
+-- name: SetIssueMemberPinned :execrows
+-- Pins or unpins a chat for one of its members. Re-pinning keeps the original
+-- pin time.
+UPDATE issue_member
+SET pinned_at = CASE WHEN @pinned::bool THEN COALESCE(pinned_at, now()) ELSE NULL END
+WHERE issue_id = @issue_id
+  AND workspace_id = @workspace_id
+  AND member_type = @member_type
+  AND member_id = @member_id;
 
 -- name: MarkIssueDirectChat :exec
 UPDATE issue SET is_direct_chat = true WHERE id = @id;

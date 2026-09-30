@@ -11,6 +11,10 @@
     "settings": "Paramètres",
     "clear_search": "Effacer la recherche",
     "resize": "Redimensionner la barre latérale",
+    "pin": "Épingler en haut",
+    "unpin": "Détacher",
+    "pinned": "Épinglé",
+    "pin_failed": "Impossible de modifier l'épinglage",
     "unread_one": "{{count}} message non lu",
     "unread_other": "{{count}} messages non lus"
   },

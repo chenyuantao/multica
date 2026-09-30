@@ -1484,6 +1484,16 @@ describe("GroupChatsListSchema unread_count", () => {
     );
     expect(parsed.chats.map((c) => c.is_direct)).toEqual([true, false, false]);
   });
+
+  it("reads a missing or malformed pinned as not pinned", () => {
+    const parsed = parseWithFallback<{ chats: GroupChat[] }>(
+      { chats: [chat({ pinned: true }), chat({ id: "chat-2" }), chat({ id: "chat-3", pinned: "yes" })] },
+      GroupChatsListSchema,
+      { chats: [] },
+      ENDPOINT,
+    );
+    expect(parsed.chats.map((c) => c.pinned)).toEqual([true, false, false]);
+  });
 });
 
 describe("InboxItemListSchema", () => {

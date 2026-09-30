@@ -1,10 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CirclePlus } from "lucide-react";
+import { CirclePlus, Pin, PinOff } from "lucide-react";
 import { directChatPeer } from "@multica/core/group-chats";
 import type { GroupChat } from "@multica/core/types";
 import { useActorName } from "@multica/core/workspace/hooks";
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@multica/ui/components/ui/context-menu";
 import { cn } from "@multica/ui/lib/utils";
 import { ActorAvatar } from "../common/actor-avatar";
 import { useAppForeground } from "../common/use-app-foreground";
@@ -21,10 +22,24 @@ interface ChatSidebarProps {
   userId: string;
   onSelect: (chatId: string) => void;
   onNewChat: () => void;
+  onSetPinned: (chatId: string, pinned: boolean) => void;
+  /** Phones get the iOS menu look on long press. */
+  iosMenu?: boolean;
   className?: string;
 }
 
-export function ChatSidebar({ chats, isLoading, isError, selectedId, userId, onSelect, onNewChat, className }: ChatSidebarProps) {
+export function ChatSidebar({
+  chats,
+  isLoading,
+  isError,
+  selectedId,
+  userId,
+  onSelect,
+  onNewChat,
+  onSetPinned,
+  iosMenu,
+  className,
+}: ChatSidebarProps) {
   const { t } = useT("im");
   // The open chat is read as soon as it lands while the app is in front, so
   // its badge would only flash; in the background it stays visible.
@@ -63,13 +78,15 @@ export function ChatSidebar({ chats, isLoading, isError, selectedId, userId, onS
           <ul className="flex flex-col">
             {visible.map((chat) => (
               <li key={chat.id} className="border-b border-foreground/5 last:border-b-0">
-                <ChatListItem
-                  chat={chat}
-                  userId={userId}
-                  selected={chat.id === selectedId}
-                  unread={chat.id === readingId ? 0 : chat.unread_count}
-                  onSelect={() => onSelect(chat.id)}
-                />
+                <ChatListMenu pinned={chat.pinned} ios={iosMenu} onSetPinned={(pinned) => onSetPinned(chat.id, pinned)}>
+                  <ChatListItem
+                    chat={chat}
+                    userId={userId}
+                    selected={chat.id === selectedId}
+                    unread={chat.id === readingId ? 0 : chat.unread_count}
+                    onSelect={() => onSelect(chat.id)}
+                  />
+                </ChatListMenu>
               </li>
             ))}
           </ul>
@@ -122,6 +139,50 @@ export function ChatAvatar({ chat, userId }: { chat: GroupChat; userId: string }
   );
 }
 
+/** Right click, or a long press on a touch screen, opens a chat's list actions. */
+function ChatListMenu({
+  pinned,
+  ios,
+  onSetPinned,
+  children,
+}: {
+  pinned: boolean;
+  ios?: boolean;
+  onSetPinned: (pinned: boolean) => void;
+  children: React.ReactNode;
+}) {
+  const { t } = useT("im");
+  const Icon = pinned ? PinOff : Pin;
+  const label = pinned ? t(($) => $.sidebar.unpin) : t(($) => $.sidebar.pin);
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger className="block [-webkit-touch-callout:none] data-[popup-open]:bg-foreground/5">
+        {children}
+      </ContextMenuTrigger>
+      <ContextMenuContent
+        className={cn(ios && "min-w-56 rounded-[14px] bg-surface-raised/85 p-0 backdrop-blur-xl")}
+      >
+        <ContextMenuItem
+          onClick={() => onSetPinned(!pinned)}
+          className={cn(ios && "h-11 justify-between rounded-none px-4 text-body-lg [&_svg:not([class*='size-'])]:size-5")}
+        >
+          {ios ? (
+            <>
+              {label}
+              <Icon />
+            </>
+          ) : (
+            <>
+              <Icon />
+              {label}
+            </>
+          )}
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  );
+}
+
 function ChatListItem({
   chat,
   userId,
@@ -163,6 +224,13 @@ function ChatListItem({
           <span className={cn("min-w-0 flex-1 truncate text-body", selected || unread > 0 ? "font-semibold" : "font-medium")}>
             {chatDisplayTitle(chat, userId, getActorName)}
           </span>
+          {chat.pinned && (
+            <Pin
+              role="img"
+              aria-label={t(($) => $.sidebar.pinned)}
+              className="size-3 shrink-0 self-center text-muted-foreground"
+            />
+          )}
           <span className="shrink-0 text-micro text-muted-foreground tabular-nums">
             {formatListStamp(chatActivityAt(chat), locale, new Date())}
           </span>

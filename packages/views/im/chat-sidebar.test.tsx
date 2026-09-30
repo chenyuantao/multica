@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import type { GroupChat } from "@multica/core/types";
 import { renderWithI18n } from "../test/i18n";
 import { ChatSidebar } from "./chat-sidebar";
@@ -14,7 +14,7 @@ vi.mock("@multica/core/workspace/hooks", () => ({
   useActorName: () => ({ getActorName: (_type: string, id: string) => `name-${id}` }),
 }));
 
-function chat(id: string, unread: number): GroupChat {
+function chat(id: string, unread: number, pinned = false): GroupChat {
   return {
     id,
     workspace_id: "ws-1",
@@ -30,21 +30,25 @@ function chat(id: string, unread: number): GroupChat {
     pending_speakers: [],
     unread_count: unread,
     is_direct: false,
+    pinned,
   };
 }
 
-function renderSidebar(selectedId: string | null) {
+function renderSidebar(selectedId: string | null, chats = [chat("a", 3), chat("b", 2), chat("c", 0)]) {
+  const onSetPinned = vi.fn();
   renderWithI18n(
     <ChatSidebar
-      chats={[chat("a", 3), chat("b", 2), chat("c", 0)]}
+      chats={chats}
       isLoading={false}
       isError={false}
       selectedId={selectedId}
       userId="user-1"
       onSelect={() => {}}
       onNewChat={() => {}}
+      onSetPinned={onSetPinned}
     />,
   );
+  return onSetPinned;
 }
 
 describe("ChatSidebar unread badges", () => {
@@ -62,5 +66,22 @@ describe("ChatSidebar unread badges", () => {
     appForeground.value = false;
     renderSidebar("b");
     expect(screen.getByLabelText("2 unread messages")).toHaveTextContent("2");
+  });
+});
+
+describe("ChatSidebar pinning", () => {
+  it("pins a chat from its right-click menu", async () => {
+    const onSetPinned = renderSidebar(null);
+    fireEvent.contextMenu(screen.getByText("Room b"));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Pin to top" }));
+    expect(onSetPinned).toHaveBeenCalledWith("b", true);
+  });
+
+  it("marks a pinned chat and offers to unpin it", async () => {
+    const onSetPinned = renderSidebar(null, [chat("a", 0, true), chat("b", 0)]);
+    expect(screen.getAllByRole("img", { name: "Pinned" })).toHaveLength(1);
+    fireEvent.contextMenu(screen.getByText("Room a"));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Unpin" }));
+    expect(onSetPinned).toHaveBeenCalledWith("a", false);
   });
 });
