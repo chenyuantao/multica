@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, MoreHorizontal, PanelRight, RotateCw } from "lucide-react";
+import { useTaskMessages } from "@multica/core/chat/queries";
 import { groupChatMessagesOptions, useSendGroupChatMessage } from "@multica/core/group-chats";
 import { useActorName } from "@multica/core/workspace/hooks";
 import type { Comment, GroupChat } from "@multica/core/types";
@@ -15,7 +16,16 @@ import { useOpenAgentDetail } from "../modals/agent-detail";
 import { AppLink } from "../navigation";
 import { DragStrip } from "../platform";
 import { ChatComposer } from "./chat-composer";
-import { dayRelation, formatClock, isSameDay, needsTimeSeparator, type ComposerMention } from "./im-utils";
+import {
+  THINKING_MESSAGE,
+  dayRelation,
+  formatClock,
+  isSameDay,
+  latestProgressText,
+  needsTimeSeparator,
+  thinkingTaskId,
+  type ComposerMention,
+} from "./im-utils";
 
 interface PendingMessage {
   localId: string;
@@ -225,12 +235,29 @@ function MessageRow({ message, mine, authorName }: { message: Comment; mine: boo
     />
   );
 
+  const thinkingTask = thinkingTaskId(message);
+
   return (
     <MessageLayout mine={mine} avatar={avatar} authorName={mine ? undefined : authorName}>
-      <Bubble mine={mine} title={time}>
-        <RichContent content={message.content} attachments={message.attachments} density="compact" />
-      </Bubble>
+      {thinkingTask ? (
+        <ThinkingBubble taskId={thinkingTask} title={time} />
+      ) : (
+        <Bubble mine={mine} title={time}>
+          <RichContent content={message.content} attachments={message.attachments} density="compact" />
+        </Bubble>
+      )}
     </MessageLayout>
+  );
+}
+
+/** Stands in for the reply with the run's latest progress until the reply replaces it. */
+function ThinkingBubble({ taskId, title }: { taskId: string; title: string }) {
+  const { data } = useTaskMessages(taskId, true);
+  const progress = latestProgressText(data);
+  return (
+    <Bubble title={title} className={cn(progress && "opacity-70")}>
+      <RichContent content={progress ?? THINKING_MESSAGE} density="compact" />
+    </Bubble>
   );
 }
 

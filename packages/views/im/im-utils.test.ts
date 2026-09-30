@@ -1,14 +1,17 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import type { GroupChat } from "@multica/core/types";
+import type { Comment, GroupChat, TaskMessagePayload } from "@multica/core/types";
 import {
+  THINKING_MESSAGE,
   activeMentionQuery,
   dayRelation,
   encodeMentions,
+  latestProgressText,
   resolveComposerMentions,
   needsTimeSeparator,
   plainTextPreview,
   sortChatsByActivity,
+  thinkingTaskId,
 } from "./im-utils";
 
 describe("plainTextPreview", () => {
@@ -91,5 +94,43 @@ describe("sortChatsByActivity", () => {
       chat("fresh-message", "2026-08-01T00:00:00Z", "2026-09-04T00:00:00Z"),
     ]);
     expect(sorted.map((c) => c.id)).toEqual(["fresh-message", "new-empty", "old-message"]);
+  });
+});
+
+describe("thinkingTaskId", () => {
+  const comment = (over: Partial<Comment>): Comment =>
+    ({ author_type: "agent", content: THINKING_MESSAGE, source_task_id: "t-1", ...over }) as Comment;
+
+  it("returns the run behind an agent's thinking bubble", () => {
+    expect(thinkingTaskId(comment({}))).toBe("t-1");
+  });
+
+  it("ignores filled replies, people, and bubbles without a run", () => {
+    expect(thinkingTaskId(comment({ content: "done" }))).toBeNull();
+    expect(thinkingTaskId(comment({ author_type: "member" }))).toBeNull();
+    expect(thinkingTaskId(comment({ source_task_id: null }))).toBeNull();
+  });
+});
+
+describe("latestProgressText", () => {
+  const msg = (seq: number, type: TaskMessagePayload["type"], content?: string): TaskMessagePayload => ({
+    task_id: "t-1", issue_id: "i-1", seq, type, content,
+  });
+
+  it("picks the latest non-empty text, skipping tools and reasoning", () => {
+    expect(
+      latestProgressText([
+        msg(1, "text", "reading the issue"),
+        msg(2, "text", "checking the workspace"),
+        msg(3, "tool_use"),
+        msg(4, "thinking", "internal"),
+        msg(5, "text", "  "),
+      ]),
+    ).toBe("checking the workspace");
+  });
+
+  it("is null before the run says anything", () => {
+    expect(latestProgressText(undefined)).toBeNull();
+    expect(latestProgressText([msg(1, "thinking", "internal")])).toBeNull();
   });
 });

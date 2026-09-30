@@ -1,7 +1,27 @@
-import type { GroupChat, GroupChatMemberType } from "@multica/core/types";
+import type { Comment, GroupChat, GroupChatMemberType, TaskMessagePayload } from "@multica/core/types";
 
 /** Messages closer than this read as one exchange and share a time separator. */
 const SEPARATOR_GAP_MS = 5 * 60 * 1000;
+
+/** Must match `groupchat.ThinkingMessage` on the server. */
+export const THINKING_MESSAGE = "思考中...";
+
+/** The run whose progress an agent's still-unfilled thinking bubble stands in for. */
+export function thinkingTaskId(message: Comment): string | null {
+  if (message.author_type !== "agent" || message.content !== THINKING_MESSAGE) return null;
+  return message.source_task_id || null;
+}
+
+/** The latest text the run has said so far; tool calls and reasoning are not progress. */
+export function latestProgressText(messages: readonly TaskMessagePayload[] | undefined): string | null {
+  if (!messages) return null;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    const text = m?.type === "text" ? m.content?.trim() : "";
+    if (text) return text;
+  }
+  return null;
+}
 
 export interface ComposerMention {
   name: string;
