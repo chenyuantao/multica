@@ -61,7 +61,7 @@ export function ContactList({ people, agents, chats, userId, selectedKey, onSele
     });
 
   return (
-    <ImSidebarShell className={className}>
+    <ImSidebarShell resizeId="contacts" className={className}>
       <ImSidebarHeader query={query} onQueryChange={setQuery} searchLabel={t(($) => $.contacts.search)} />
       <nav className="min-h-0 flex-1 overflow-y-auto pb-3" aria-label={t(($) => $.rail.contacts)}>
         {empty && q ? (

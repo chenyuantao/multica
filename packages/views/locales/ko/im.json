@@ -9,7 +9,8 @@
     "preview": "{{name}}: {{text}}",
     "chats": "그룹 채팅",
     "settings": "설정",
-    "clear_search": "검색 지우기"
+    "clear_search": "검색 지우기",
+    "resize": "사이드바 너비 조정"
   },
   "rail": {
     "sections": "섹션",
@@ -58,6 +59,7 @@
     "ambiguous": "{{name}}이라는 구성원이 둘 이상입니다"
   },
   "panel": {
+    "resize": "패널 너비 조정",
     "people": "이 채팅의 멤버",
     "agents": "이 채팅의 에이전트",
     "runs": "실행 위치",

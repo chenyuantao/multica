@@ -9,7 +9,8 @@
     "preview": "{{name}}：{{text}}",
     "chats": "群聊",
     "settings": "设置",
-    "clear_search": "清除搜索"
+    "clear_search": "清除搜索",
+    "resize": "调整侧边栏宽度"
   },
   "rail": {
     "sections": "分区",
@@ -58,6 +59,7 @@
     "ambiguous": "有多名成员都叫 {{name}}"
   },
   "panel": {
+    "resize": "调整面板宽度",
     "people": "群聊成员",
     "agents": "群聊中的智能体",
     "runs": "运行位置",

@@ -9,7 +9,8 @@
     "preview": "{{name}}: {{text}}",
     "chats": "Group chats",
     "settings": "Settings",
-    "clear_search": "Clear search"
+    "clear_search": "Clear search",
+    "resize": "Resize sidebar"
   },
   "rail": {
     "sections": "Sections",
@@ -61,6 +62,7 @@
     "ambiguous": "More than one member is named {{name}}"
   },
   "panel": {
+    "resize": "Resize panel",
     "people": "People in this chat",
     "agents": "Agents in this chat",
     "runs": "Where runs happen",

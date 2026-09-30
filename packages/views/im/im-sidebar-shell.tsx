@@ -1,12 +1,45 @@
 "use client";
 
 import { Search, X } from "lucide-react";
+import { useIsMobile } from "@multica/ui/hooks/use-mobile";
 import { cn } from "@multica/ui/lib/utils";
 import { useT } from "../i18n";
 import { DragStrip } from "../platform";
+import { ColumnResizeHandle, useColumnWidth } from "./resizable-column";
 
-export function ImSidebarShell({ className, children }: { className?: string; children: React.ReactNode }) {
-  return <aside className={cn("flex h-full w-64 shrink-0 flex-col border-r bg-sidebar", className)}>{children}</aside>;
+interface ImSidebarShellProps {
+  /** Persists the dragged width per section; phones keep the full-width list. */
+  resizeId: string;
+  defaultWidth?: number;
+  className?: string;
+  children: React.ReactNode;
+}
+
+export function ImSidebarShell({ resizeId, defaultWidth = 256, className, children }: ImSidebarShellProps) {
+  const { t } = useT("im");
+  const isMobile = useIsMobile();
+  const { width, commit, options } = useColumnWidth(`sidebar:${resizeId}`, {
+    defaultWidth,
+    min: 200,
+    max: 480,
+  });
+  return (
+    <aside
+      className={cn("relative flex h-full shrink-0 flex-col border-r bg-sidebar", className)}
+      style={isMobile ? undefined : { width }}
+    >
+      {children}
+      {!isMobile && (
+        <ColumnResizeHandle
+          edge="right"
+          width={width}
+          options={options}
+          onCommit={commit}
+          label={t(($) => $.sidebar.resize)}
+        />
+      )}
+    </aside>
+  );
 }
 
 interface ImSidebarHeaderProps {

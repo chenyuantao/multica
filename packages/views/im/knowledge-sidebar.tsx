@@ -54,7 +54,7 @@ export function KnowledgeSidebar({ selectedPath, onSelect, onCreate, className }
   const createTarget = selectedPath ? parentDir(selectedPath) : "";
 
   return (
-    <ImSidebarShell className={cn("w-80", className)}>
+    <ImSidebarShell resizeId="knowledge" defaultWidth={320} className={className}>
       <ImSidebarHeader query={query} onQueryChange={setQuery} searchLabel={t(($) => $.knowledge.search)}>
         <button
           type="button"

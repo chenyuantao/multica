@@ -9,7 +9,8 @@
     "preview": "{{name}}: {{text}}",
     "chats": "グループチャット",
     "settings": "設定",
-    "clear_search": "検索をクリア"
+    "clear_search": "検索をクリア",
+    "resize": "サイドバーの幅を調整"
   },
   "rail": {
     "sections": "セクション",
@@ -58,6 +59,7 @@
     "ambiguous": "{{name}} という名前のメンバーが複数います"
   },
   "panel": {
+    "resize": "パネルの幅を調整",
     "people": "このチャットのメンバー",
     "agents": "このチャットのエージェント",
     "runs": "実行場所",

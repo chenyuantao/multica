@@ -14,6 +14,7 @@ import { Input } from "@multica/ui/components/ui/input";
 import { ActorAvatar } from "../common/actor-avatar";
 import { useT } from "../i18n";
 import { AddMemberDialog } from "./add-member-dialog";
+import { ColumnResizeHandle, useColumnWidth } from "./resizable-column";
 import { useChatDirectory } from "./use-chat-directory";
 
 interface ChatDetailsPanelProps {
@@ -35,6 +36,7 @@ export function ChatDetailsPanel({ wsId, chat, userId, variant = "aside" }: Chat
   const { data: runtimes = EMPTY_RUNTIMES } = useQuery(runtimeListOptions(wsId));
   const removeMember = useRemoveGroupChatMember(wsId, chat.id);
   const [addOpen, setAddOpen] = useState(false);
+  const { width, commit, options } = useColumnWidth("details", { defaultWidth: 320, min: 260, max: 480 });
 
   const isCreator = chat.creator_type === "member" && chat.creator_id === userId;
   const people = chat.members.filter((m) => m.member_type === "member");
@@ -70,11 +72,11 @@ export function ChatDetailsPanel({ wsId, chat, userId, variant = "aside" }: Chat
   const canRemove = (m: GroupChatMember) =>
     isCreator && !(m.member_type === "member" && m.member_id === chat.creator_id);
 
-  return (
+  const panel = (
     <aside
       className={cn(
         "flex flex-col gap-5 overflow-y-auto bg-muted/40 px-4 pb-4",
-        variant === "aside" ? "h-full w-80 shrink-0 border-l pt-16" : "min-h-0 w-full flex-1 pt-4",
+        variant === "aside" ? "h-full w-full pt-16" : "min-h-0 w-full flex-1 pt-4",
       )}
     >
       <PanelSection title={t(($) => $.panel.name)}>
@@ -152,6 +154,20 @@ export function ChatDetailsPanel({ wsId, chat, userId, variant = "aside" }: Chat
         </PanelSection>
       )}
     </aside>
+  );
+
+  if (variant === "page") return panel;
+  return (
+    <div className="relative h-full shrink-0 border-l" style={{ width }}>
+      {panel}
+      <ColumnResizeHandle
+        edge="left"
+        width={width}
+        options={options}
+        onCommit={commit}
+        label={t(($) => $.panel.resize)}
+      />
+    </div>
   );
 }
 
