@@ -15,7 +15,8 @@
     "sections": "섹션",
     "profile": "내 프로필",
     "chats": "채팅",
-    "contacts": "연락처"
+    "contacts": "연락처",
+    "knowledge": "지식 베이스"
   },
   "contacts": {
     "search": "연락처 검색",
@@ -93,5 +94,43 @@
     "agents": "에이전트",
     "add": "추가",
     "failed": "멤버를 추가하지 못했습니다"
+  },
+  "knowledge": {
+    "search": "노트 검색",
+    "new_note": "새 노트",
+    "new_note_here": "여기에 새 노트",
+    "copy_path": "경로 복사",
+    "path_copied": "경로를 복사했습니다",
+    "more": "{{name}} 추가 작업",
+    "empty": "지식 베이스에 아직 Markdown 노트가 없습니다",
+    "no_results": "일치하는 노트가 없습니다",
+    "truncated": "결과 중 일부만 표시합니다. 더 구체적인 키워드를 사용해 보세요.",
+    "unconfigured": "지식 베이스가 설정되지 않았습니다. 서버에서 OBSIDIAN_VAULT_PATH를 설정하세요.",
+    "unavailable": "지식 베이스 폴더에 접근할 수 없습니다. 서버의 OBSIDIAN_VAULT_PATH를 확인하세요.",
+    "load_failed": "지식 베이스를 불러오지 못했습니다",
+    "select": "노트를 선택하세요",
+    "not_found": "이 노트가 없거나 삭제되었습니다",
+    "file_load_failed": "노트를 불러오지 못했습니다",
+    "retry": "다시 시도",
+    "saving": "저장 중…",
+    "saved": "저장됨",
+    "save_failed": "저장하지 못했습니다",
+    "conflict": "이 노트가 다른 곳에서 변경되어 내 편집과 충돌합니다.",
+    "reload": "최신 버전 불러오기",
+    "keep_mine": "내 버전 유지",
+    "placeholder": "작성 시작…",
+    "back": "지식 베이스로 돌아가기",
+    "dialog": {
+      "title": "새 노트",
+      "location": "위치: {{dir}}",
+      "root": "루트 폴더",
+      "name_label": "이름",
+      "name_placeholder": "제목 없음",
+      "invalid": "이름은 비워 둘 수 없으며 “.”으로 시작하거나 슬래시를 포함할 수 없습니다",
+      "exists": "같은 이름의 노트가 이미 있습니다",
+      "failed": "노트를 만들지 못했습니다",
+      "create": "만들기",
+      "cancel": "취소"
+    }
   }
 }

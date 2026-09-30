@@ -40,6 +40,45 @@ describe("ApiClient group chat rename", () => {
   });
 });
 
+describe("ApiClient docs", () => {
+  const respond = (body: unknown) =>
+    vi.fn().mockResolvedValue(new Response(JSON.stringify(body), {
+      status: 200, headers: { "Content-Type": "application/json" },
+    }));
+
+  it("defaults tree fields and degrades unknown node kinds to leaves", async () => {
+    const fetchMock = respond({
+      nodes: [
+        { name: "库", path: "库", type: "dir", child_count: 1, children: [{ name: "a.md", path: "库/a.md", type: "file" }] },
+        { name: "odd", path: "odd", type: "canvas", children: "bad" },
+      ],
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const nodes = await new ApiClient("https://api.example.test").getDocsTree();
+    expect(fetchMock.mock.calls[0]?.[1]?.method).toBe("POST");
+    expect(nodes[0]?.children[0]).toMatchObject({ path: "库/a.md", type: "file", modified_at: null, children: [] });
+    expect(nodes[1]).toMatchObject({ type: "file", children: [], child_count: 0 });
+  });
+
+  it("returns an empty tree for a malformed response", async () => {
+    vi.stubGlobal("fetch", respond({ nodes: "invalid" }));
+    expect(await new ApiClient("https://api.example.test").getDocsTree()).toEqual([]);
+  });
+
+  it("saves as a mergeable overwrite and refuses a file without a revision", async () => {
+    const fetchMock = respond({ path: "a.md", content: "x" });
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new ApiClient("https://api.example.test");
+    await expect(
+      client.saveDocFile({ path: "a.md", content: "x", base_revision: "r1", base_content: "" }),
+    ).rejects.toThrow(/invalid document response/i);
+    expect(fetchMock.mock.calls[0]?.[1]?.method).toBe("PATCH");
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      path: "a.md", content: "x", base_revision: "r1", base_content: "", op: "overwrite", resolve: "merge",
+    });
+  });
+});
+
 describe("ApiClient agent conversation-starter compatibility", () => {
   const prompt = {
     label: "Review a PR",

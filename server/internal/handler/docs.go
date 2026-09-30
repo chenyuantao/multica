@@ -18,6 +18,11 @@ type docsSearchRequest struct {
 	Q string `json:"q"`
 }
 
+type docsCreateRequest struct {
+	Path    string `json:"path"`
+	Content string `json:"content"`
+}
+
 type docsVersionRequest struct {
 	Path    string `json:"path"`
 	Source  string `json:"source"`
@@ -154,6 +159,24 @@ func (h *Handler) PatchDocsFileContent(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
+// PostDocsFile creates a markdown note inside an existing vault directory.
+func (h *Handler) PostDocsFile(w http.ResponseWriter, r *http.Request) {
+	var req docsCreateRequest
+	if !decodeDocsBody(w, r, &req) {
+		return
+	}
+	root, ok := requireDocsVault(w)
+	if !ok {
+		return
+	}
+	result, err := obsidianvault.Create(r.Context(), root, req.Path, req.Content)
+	if err != nil {
+		writeDocsVaultError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, result)
+}
+
 // PostDocsSearch finds notes by title or body and returns them inside their directories.
 func (h *Handler) PostDocsSearch(w http.ResponseWriter, r *http.Request) {
 	var req docsSearchRequest
@@ -233,6 +256,8 @@ func writeDocsVaultError(w http.ResponseWriter, r *http.Request, err error) {
 		writeErrorCode(w, http.StatusNotFound, "docs_not_found", "document not found")
 	case errors.Is(err, obsidianvault.ErrNotFile):
 		writeErrorCode(w, http.StatusBadRequest, "docs_not_file", "path is not a markdown file")
+	case errors.Is(err, obsidianvault.ErrExists):
+		writeErrorCode(w, http.StatusConflict, "docs_exists", "document already exists")
 	case errors.Is(err, obsidianvault.ErrNotDir):
 		writeErrorCode(w, http.StatusBadRequest, "docs_not_directory", "path is not a directory")
 	case errors.Is(err, obsidianvault.ErrQueryRequired):

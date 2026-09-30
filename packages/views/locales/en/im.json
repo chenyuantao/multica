@@ -15,7 +15,8 @@
     "sections": "Sections",
     "profile": "Your profile",
     "chats": "Chats",
-    "contacts": "Contacts"
+    "contacts": "Contacts",
+    "knowledge": "Knowledge base"
   },
   "contacts": {
     "search": "Search contacts",
@@ -96,5 +97,43 @@
     "agents": "Agents",
     "add": "Add",
     "failed": "Couldn't add member"
+  },
+  "knowledge": {
+    "search": "Search notes",
+    "new_note": "New note",
+    "new_note_here": "New note here",
+    "copy_path": "Copy path",
+    "path_copied": "Path copied",
+    "more": "More actions for {{name}}",
+    "empty": "No markdown notes in the knowledge base yet",
+    "no_results": "No matching notes",
+    "truncated": "Showing only some results. Try a more specific keyword.",
+    "unconfigured": "The knowledge base isn't configured. Set OBSIDIAN_VAULT_PATH on the server.",
+    "unavailable": "Can't reach the knowledge base folder. Check OBSIDIAN_VAULT_PATH on the server.",
+    "load_failed": "Couldn't load the knowledge base",
+    "select": "Select a note",
+    "not_found": "This note doesn't exist or was removed",
+    "file_load_failed": "Couldn't load the note",
+    "retry": "Retry",
+    "saving": "Saving…",
+    "saved": "Saved",
+    "save_failed": "Couldn't save",
+    "conflict": "This note was changed elsewhere and conflicts with your edits.",
+    "reload": "Load latest version",
+    "keep_mine": "Keep my version",
+    "placeholder": "Start writing…",
+    "back": "Back to knowledge base",
+    "dialog": {
+      "title": "New note",
+      "location": "Location: {{dir}}",
+      "root": "Root folder",
+      "name_label": "Name",
+      "name_placeholder": "Untitled",
+      "invalid": "Name can't be empty, start with “.”, or contain slashes",
+      "exists": "A note with this name already exists",
+      "failed": "Couldn't create the note",
+      "create": "Create",
+      "cancel": "Cancel"
+    }
   }
 }

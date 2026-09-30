@@ -73,6 +73,39 @@ func TestDocsHTTPTreeAndSearch(t *testing.T) {
 	}
 }
 
+func TestDocsHTTPCreate(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(obsidianvault.EnvVaultPath, root)
+	h := &Handler{}
+
+	body := `{"path":"新笔记.md","content":"# 新笔记\n"}`
+	w := httptest.NewRecorder()
+	h.PostDocsFile(w, httptest.NewRequest(http.MethodPost, "/api/docs/files", strings.NewReader(body)))
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create status = %d body = %s", w.Code, w.Body.String())
+	}
+	var note obsidianvault.FileContent
+	if err := json.Unmarshal(w.Body.Bytes(), &note); err != nil {
+		t.Fatal(err)
+	}
+	if note.Path != "新笔记.md" || note.Content != "# 新笔记\n" || note.Revision == "" {
+		t.Fatalf("note = %#v", note)
+	}
+
+	again := httptest.NewRecorder()
+	h.PostDocsFile(again, httptest.NewRequest(http.MethodPost, "/api/docs/files", strings.NewReader(body)))
+	if again.Code != http.StatusConflict {
+		t.Fatalf("duplicate status = %d body = %s", again.Code, again.Body.String())
+	}
+	var conflict map[string]string
+	if err := json.Unmarshal(again.Body.Bytes(), &conflict); err != nil {
+		t.Fatal(err)
+	}
+	if conflict["code"] != "docs_exists" {
+		t.Fatalf("duplicate body = %#v", conflict)
+	}
+}
+
 func TestDocsHTTPContentEdit(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "note.md"), []byte("hello"), 0o644); err != nil {

@@ -349,3 +349,11 @@ export type {
   GroupChatMemberType,
   CreateGroupChatRequest,
 } from "./group-chat";
+export type {
+  DocNode,
+  DocNodeType,
+  DocSearchResult,
+  DocFile,
+  SaveDocFileRequest,
+  CreateDocFileRequest,
+} from "./docs";

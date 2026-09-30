@@ -16,8 +16,9 @@ import {
 describe("workspace page coverage", () => {
   // `root` is the bare workspace home and is never rendered as its own nav
   // item; the parameterized detail routes are resources, not pages.
-  // `im` and `member` are full-window surfaces outside the dashboard shell.
-  const EXCLUDED_METHODS = new Set(["root", "im", "member"]);
+  // `im`, `member` and `knowledge` are full-window surfaces outside the
+  // dashboard shell.
+  const EXCLUDED_METHODS = new Set(["root", "im", "member", "knowledge"]);
   const KNOWN_SEGMENTS = new Set(
     (Object.keys(WORKSPACE_PAGES) as WorkspacePageKey[]).map(
       (k) => WORKSPACE_PAGES[k].segment,

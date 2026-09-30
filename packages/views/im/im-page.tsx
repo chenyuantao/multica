@@ -200,7 +200,7 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
   );
 }
 
-function MobileLevel({
+export function MobileLevel({
   title,
   backHref,
   backLabel,

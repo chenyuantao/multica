@@ -15,7 +15,8 @@
     "sections": "セクション",
     "profile": "プロフィール",
     "chats": "チャット",
-    "contacts": "連絡先"
+    "contacts": "連絡先",
+    "knowledge": "ナレッジベース"
   },
   "contacts": {
     "search": "連絡先を検索",
@@ -93,5 +94,43 @@
     "agents": "エージェント",
     "add": "追加",
     "failed": "メンバーを追加できませんでした"
+  },
+  "knowledge": {
+    "search": "ノートを検索",
+    "new_note": "新しいノート",
+    "new_note_here": "ここに新しいノート",
+    "copy_path": "パスをコピー",
+    "path_copied": "パスをコピーしました",
+    "more": "{{name}} のその他の操作",
+    "empty": "ナレッジベースにはまだ Markdown ノートがありません",
+    "no_results": "一致するノートはありません",
+    "truncated": "結果の一部のみ表示しています。より具体的なキーワードをお試しください。",
+    "unconfigured": "ナレッジベースが設定されていません。サーバーで OBSIDIAN_VAULT_PATH を設定してください。",
+    "unavailable": "ナレッジベースのフォルダにアクセスできません。サーバーの OBSIDIAN_VAULT_PATH を確認してください。",
+    "load_failed": "ナレッジベースを読み込めませんでした",
+    "select": "ノートを選択してください",
+    "not_found": "このノートは存在しないか、削除されました",
+    "file_load_failed": "ノートを読み込めませんでした",
+    "retry": "再試行",
+    "saving": "保存中…",
+    "saved": "保存済み",
+    "save_failed": "保存できませんでした",
+    "conflict": "このノートは別の場所で変更され、あなたの編集と競合しています。",
+    "reload": "最新版を読み込む",
+    "keep_mine": "自分の版を残す",
+    "placeholder": "書き始める…",
+    "back": "ナレッジベースに戻る",
+    "dialog": {
+      "title": "新しいノート",
+      "location": "場所：{{dir}}",
+      "root": "ルートフォルダ",
+      "name_label": "名前",
+      "name_placeholder": "無題",
+      "invalid": "名前は空にできず、「.」で始めたりスラッシュを含めたりできません",
+      "exists": "同じ名前のノートがすでにあります",
+      "failed": "ノートを作成できませんでした",
+      "create": "作成",
+      "cancel": "キャンセル"
+    }
   }
 }

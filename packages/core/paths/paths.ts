@@ -60,6 +60,8 @@ function workspaceScoped(slug: string) {
     imChat: (chatId: string) => `${ws}/im?chat=${encode(chatId)}`,
     imChatSettings: (chatId: string) => `${ws}/im?chat=${encode(chatId)}&view=settings`,
     member: () => `${ws}/member`,
+    knowledge: () => `${ws}/knowledge`,
+    knowledgeFile: (path: string) => `${ws}/knowledge?file=${encode(path)}`,
     chat: () => `${ws}/chat`,
     chatWithAgent: (agentId: string) =>
       `${ws}/chat?agent=${encode(agentId)}`,

@@ -15,7 +15,8 @@
     "sections": "Sections",
     "profile": "Votre profil",
     "chats": "Discussions",
-    "contacts": "Contacts"
+    "contacts": "Contacts",
+    "knowledge": "Base de connaissances"
   },
   "contacts": {
     "search": "Rechercher des contacts",
@@ -96,5 +97,43 @@
     "agents": "Agents",
     "add": "Ajouter",
     "failed": "Impossible d'ajouter le membre"
+  },
+  "knowledge": {
+    "search": "Rechercher des notes",
+    "new_note": "Nouvelle note",
+    "new_note_here": "Nouvelle note ici",
+    "copy_path": "Copier le chemin",
+    "path_copied": "Chemin copié",
+    "more": "Plus d'actions pour {{name}}",
+    "empty": "Aucune note markdown dans la base de connaissances",
+    "no_results": "Aucune note correspondante",
+    "truncated": "Seule une partie des résultats est affichée. Essayez un mot-clé plus précis.",
+    "unconfigured": "La base de connaissances n'est pas configurée. Définissez OBSIDIAN_VAULT_PATH sur le serveur.",
+    "unavailable": "Impossible d'accéder au dossier de la base de connaissances. Vérifiez OBSIDIAN_VAULT_PATH sur le serveur.",
+    "load_failed": "Impossible de charger la base de connaissances",
+    "select": "Sélectionnez une note",
+    "not_found": "Cette note n'existe pas ou a été supprimée",
+    "file_load_failed": "Impossible de charger la note",
+    "retry": "Réessayer",
+    "saving": "Enregistrement…",
+    "saved": "Enregistré",
+    "save_failed": "Échec de l'enregistrement",
+    "conflict": "Cette note a été modifiée ailleurs et entre en conflit avec vos modifications.",
+    "reload": "Charger la dernière version",
+    "keep_mine": "Garder ma version",
+    "placeholder": "Commencez à écrire…",
+    "back": "Retour à la base de connaissances",
+    "dialog": {
+      "title": "Nouvelle note",
+      "location": "Emplacement : {{dir}}",
+      "root": "Dossier racine",
+      "name_label": "Nom",
+      "name_placeholder": "Sans titre",
+      "invalid": "Le nom ne peut pas être vide, commencer par « . » ni contenir de barre oblique",
+      "exists": "Une note portant ce nom existe déjà",
+      "failed": "Impossible de créer la note",
+      "create": "Créer",
+      "cancel": "Annuler"
+    }
   }
 }

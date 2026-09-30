@@ -35,6 +35,7 @@ import type {
   CreateWorkspaceSubscriptionPortalResponse,
   CronPreviewResponse,
   DingTalkInstallation,
+  DocNode,
   ListDingTalkInstallationsResponse,
   ListDingTalkGroupsResponse,
   RedeemDingTalkBindingTokenResponse,
@@ -1154,6 +1155,38 @@ export const GroupChatSchema = z.object({
 
 export const GroupChatsListSchema = z.object({
   chats: z.array(GroupChatSchema).default([]),
+}).loose();
+
+export const DocNodeSchema: z.ZodType<DocNode> = z.lazy(() =>
+  z.object({
+    name: z.string(),
+    path: z.string(),
+    // An unknown kind renders as a leaf so it never pretends to have children.
+    type: z.enum(["dir", "file"]).catch("file"),
+    child_count: z.number().default(0).catch(0),
+    modified_at: z.string().nullable().default(null).catch(null),
+    children: z.array(DocNodeSchema).default([]).catch([]),
+    match: z.string().default("").catch(""),
+    snippet: z.string().default("").catch(""),
+  }).loose(),
+);
+
+export const DocTreeSchema = z.object({
+  nodes: z.array(DocNodeSchema).default([]),
+}).loose();
+
+export const DocSearchResultSchema = z.object({
+  query: z.string().default(""),
+  nodes: z.array(DocNodeSchema).default([]),
+  truncated: z.boolean().default(false).catch(false),
+}).loose();
+
+export const DocFileSchema = z.object({
+  path: z.string(),
+  name: z.string().default(""),
+  content: z.string(),
+  modified_at: z.string().default(""),
+  revision: z.string(),
 }).loose();
 
 const CommentTriggerPreviewAgentSchema = z.object({

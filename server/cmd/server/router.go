@@ -1684,6 +1684,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			r.Post("/tree", h.PostDocsTree)
 			r.Post("/children", h.PostDocsChildren)
 			r.Post("/search", h.PostDocsSearch)
+			r.Post("/files", h.PostDocsFile)
 			r.Post("/files/hierarchy", h.PostDocsFileHierarchy)
 			r.Post("/files/content", h.PostDocsFileContent)
 			r.Post("/files/history", h.PostDocsFileHistory)

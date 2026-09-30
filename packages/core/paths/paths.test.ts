@@ -7,6 +7,8 @@ describe("paths.workspace(slug)", () => {
   it("builds workspace paths with slug prefix", () => {
     expect(ws.root()).toBe("/acme");
     expect(ws.member()).toBe("/acme/member");
+    expect(ws.knowledge()).toBe("/acme/knowledge");
+    expect(ws.knowledgeFile("库/笔记 1.md")).toBe("/acme/knowledge?file=%E5%BA%93%2F%E7%AC%94%E8%AE%B0%201.md");
     expect(ws.usage()).toBe("/acme/usage");
     expect(ws.issues()).toBe("/acme/issues");
     expect(ws.issueDetail("abc-123")).toBe("/acme/issues/abc-123");

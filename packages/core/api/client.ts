@@ -477,6 +477,9 @@ import {
   type CreateIssueViewRequest,
   GroupChatSchema,
   GroupChatsListSchema,
+  DocFileSchema,
+  DocSearchResultSchema,
+  DocTreeSchema,
 } from "./schemas";
 import type {
   CreateGroupChatRequest,
@@ -484,6 +487,13 @@ import type {
   GroupChatMemberRef,
   GroupChatMemberType,
 } from "../types/group-chat";
+import type {
+  CreateDocFileRequest,
+  DocFile,
+  DocNode,
+  DocSearchResult,
+  SaveDocFileRequest,
+} from "../types/docs";
 
 /** Identifies the calling client to the server.
  *  Sent on every HTTP request as X-Client-Platform / X-Client-Version /
@@ -4528,6 +4538,60 @@ export class ApiClient {
     await this.fetch(`/api/group-chats/${chatId}/members/${memberType}/${memberId}`, {
       method: "DELETE",
     });
+  }
+
+  // Docs — markdown notes of the deployment's Obsidian vault. Paths travel in
+  // JSON bodies so non-ASCII names stay out of the URL.
+  async getDocsTree(): Promise<DocNode[]> {
+    const raw = await this.fetch<unknown>("/api/docs/tree", { method: "POST", body: "{}" });
+    return parseWithFallback<{ nodes: DocNode[] }>(raw, DocTreeSchema, { nodes: [] }, {
+      endpoint: "POST /api/docs/tree",
+    }).nodes;
+  }
+
+  async searchDocs(q: string): Promise<DocSearchResult> {
+    const raw = await this.fetch<unknown>("/api/docs/search", {
+      method: "POST",
+      body: JSON.stringify({ q }),
+    });
+    return parseWithFallback<DocSearchResult>(
+      raw,
+      DocSearchResultSchema,
+      { query: q, nodes: [], truncated: false },
+      { endpoint: "POST /api/docs/search" },
+    );
+  }
+
+  async getDocFile(path: string): Promise<DocFile> {
+    const raw = await this.fetch<unknown>("/api/docs/files/content", {
+      method: "POST",
+      body: JSON.stringify({ path }),
+    });
+    return this.requireDocFile(raw, "POST /api/docs/files/content");
+  }
+
+  async createDocFile(data: CreateDocFileRequest): Promise<DocFile> {
+    const raw = await this.fetch<unknown>("/api/docs/files", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+    return this.requireDocFile(raw, "POST /api/docs/files");
+  }
+
+  /** Replaces the note, merging with a concurrent change when they don't overlap. */
+  async saveDocFile(data: SaveDocFileRequest): Promise<DocFile> {
+    const raw = await this.fetch<unknown>("/api/docs/files/content", {
+      method: "PATCH",
+      body: JSON.stringify({ ...data, op: "overwrite", resolve: "merge" }),
+    });
+    return this.requireDocFile(raw, "PATCH /api/docs/files/content");
+  }
+
+  private requireDocFile(raw: unknown, endpoint: string): DocFile {
+    const file = parseWithFallback<DocFile | null>(raw, DocFileSchema, null, { endpoint });
+    // Editing without a revision would overwrite blindly, so refuse instead.
+    if (!file) throw new Error("Invalid document response");
+    return file;
   }
 
   async listPins(): Promise<PinnedItem[]> {

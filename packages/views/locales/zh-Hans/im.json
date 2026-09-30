@@ -15,7 +15,8 @@
     "sections": "分区",
     "profile": "个人资料",
     "chats": "会话",
-    "contacts": "通讯录"
+    "contacts": "通讯录",
+    "knowledge": "知识库"
   },
   "contacts": {
     "search": "搜索联系人",
@@ -93,5 +94,43 @@
     "agents": "智能体",
     "add": "添加",
     "failed": "添加成员失败"
+  },
+  "knowledge": {
+    "search": "搜索笔记",
+    "new_note": "新建笔记",
+    "new_note_here": "在此新建笔记",
+    "copy_path": "复制路径",
+    "path_copied": "已复制路径",
+    "more": "{{name}} 的更多操作",
+    "empty": "知识库里还没有 Markdown 笔记",
+    "no_results": "没有匹配的笔记",
+    "truncated": "结果过多，只显示了一部分。换个更具体的关键词试试。",
+    "unconfigured": "知识库未配置。请在服务端设置 OBSIDIAN_VAULT_PATH。",
+    "unavailable": "无法访问知识库目录，请检查服务端的 OBSIDIAN_VAULT_PATH。",
+    "load_failed": "知识库加载失败",
+    "select": "选择一篇笔记",
+    "not_found": "笔记不存在或已被移除",
+    "file_load_failed": "笔记加载失败",
+    "retry": "重试",
+    "saving": "保存中…",
+    "saved": "已保存",
+    "save_failed": "保存失败",
+    "conflict": "这篇笔记在别处被修改过，与你的改动有冲突。",
+    "reload": "载入最新版本",
+    "keep_mine": "保留我的版本",
+    "placeholder": "开始写作…",
+    "back": "返回知识库",
+    "dialog": {
+      "title": "新建笔记",
+      "location": "位置：{{dir}}",
+      "root": "根目录",
+      "name_label": "名称",
+      "name_placeholder": "未命名",
+      "invalid": "名称不能为空、不能以“.”开头，也不能包含斜杠",
+      "exists": "同名笔记已存在",
+      "failed": "笔记创建失败",
+      "create": "创建",
+      "cancel": "取消"
+    }
   }
 }
