@@ -14,6 +14,7 @@ import (
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
 	"github.com/multica-ai/multica/server/pkg/dbid"
 	"github.com/multica-ai/multica/server/pkg/protocol"
+	"github.com/multica-ai/multica/server/pkg/redact"
 )
 
 // continueGroupChatDispatch starts the next agent in an ordered group reply
@@ -78,6 +79,60 @@ func (s *TaskService) OpenGroupChatThinking(ctx context.Context, issue db.Issue,
 		Open:      true,
 	})
 	s.publishGroupChatComment(issue, created.Comment(), protocol.EventCommentCreated)
+}
+
+func groupChatPlaceholder(raw []byte) bool {
+	return strings.Contains(string(raw), "group_chat_placeholder")
+}
+
+// deliverGroupChatReply writes a run's final output into the thinking bubble
+// when the agent did not already replace it. It never inserts a second comment.
+func (s *TaskService) deliverGroupChatReply(ctx context.Context, task db.AgentTaskQueue, result []byte) {
+	fresh, err := s.Queries.GetAgentTask(ctx, task.ID)
+	if err != nil {
+		return
+	}
+	placeholder, ok := groupchat.OpenPlaceholder(fresh.Context)
+	if !ok {
+		return
+	}
+	body := groupChatReplyBody(task, result)
+	if body == "" {
+		return
+	}
+	commentID, err := util.ParseUUID(placeholder.CommentID)
+	if err != nil {
+		return
+	}
+	existing, err := s.Queries.GetComment(ctx, commentID)
+	if err != nil || existing.Content != groupchat.ThinkingMessage || !sameID(existing.AuthorID, fresh.AgentID) {
+		return
+	}
+	updated, err := s.Queries.UpdateComment(ctx, db.UpdateCommentParams{
+		ID:           existing.ID,
+		Content:      body,
+		SourceTaskID: existing.SourceTaskID,
+	})
+	if err != nil {
+		slog.Warn("group chat reply was not written into the thinking comment", "task_id", util.UUIDToString(task.ID), "error", err)
+		return
+	}
+	s.CloseGroupChatPlaceholder(ctx, task.ID, placeholder.CommentID)
+	if issue, err := s.Queries.GetIssue(ctx, existing.IssueID); err == nil {
+		s.publishGroupChatComment(issue, updated.Comment(), protocol.EventCommentUpdated)
+	}
+}
+
+func groupChatReplyBody(task db.AgentTaskQueue, result []byte) string {
+	var payload protocol.TaskCompletedPayload
+	if err := json.Unmarshal(result, &payload); err != nil || payload.Output == "" {
+		return ""
+	}
+	body := util.UnescapeBackslashEscapes(payload.Output)
+	if task.TriggerCommentID.Valid && isTrivialDoneOutput(body) {
+		return ""
+	}
+	return truncateFallbackCommentBody(redact.Text(body), maxSynthesizedFallbackCommentRunes)
 }
 
 // settleGroupChatThinking replaces a thinking bubble that the run never filled.

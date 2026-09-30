@@ -4532,7 +4532,13 @@ func (s *TaskService) CompleteTaskWithTransition(ctx context.Context, taskID pgt
 		})
 		// A scheduled wakeup check that found nothing new ends with a check-in
 		// instead of a comment (see IssueWakeupService.CheckIn).
-		if !suppressNoActionComment && !agentCommented && !HasWakeupCheckin(task) {
+		//
+		// A group-chat reply already has its bubble: the "thinking" comment
+		// created before the run started. HasAgentCommentedSince does not see
+		// that row, and inserting the fallback here would show the reply twice.
+		if groupChatPlaceholder(task.Context) {
+			s.deliverGroupChatReply(ctx, task, result)
+		} else if !suppressNoActionComment && !agentCommented && !HasWakeupCheckin(task) {
 			var payload protocol.TaskCompletedPayload
 			if err := json.Unmarshal(result, &payload); err == nil {
 				if payload.Output != "" {
