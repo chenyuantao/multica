@@ -3,6 +3,8 @@ package groupchat
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/multica-ai/multica/server/pkg/typesafe"
@@ -32,9 +34,13 @@ type Dispatch struct {
 	Cursor   int      `json:"cursor"`
 }
 
-// Evaluator is the Jev call. A nil or disabled evaluator makes Decide use the
-// no-model fallback: named agents speak in mention order, unaddressed messages
-// get no reply.
+// ErrUndecided means Jev gave no usable answer: it is not configured, the
+// call failed, or its answer does not map to a plan. The caller then uses
+// FallbackPlan.
+var ErrUndecided = errors.New("groupchat: jev gave no usable decision")
+
+// Evaluator is the Jev call. A nil or disabled evaluator makes Decide return
+// ErrUndecided for any address that needs planning.
 type Evaluator interface {
 	Enabled() bool
 	Evaluate(ctx context.Context, state any, questions map[string]any) (map[string]typesafe.Answer, error)
@@ -80,52 +86,59 @@ const (
 // Decide turns an address into a plan. Direct and none addresses do not call
 // the evaluator. Named addresses ask only whether the work is parallel or
 // ordered. An unaddressed message asks whether any agent should reply, and
-// only then which one.
+// only then which one. Any planning failure is ErrUndecided.
 func Decide(ctx context.Context, ev Evaluator, state State, roster []Participant, address Address) (Plan, error) {
 	switch address.Kind {
 	case KindNone, KindAmbiguous:
 		return Plan{Mode: ModeNone}, nil
 	case KindDirect:
 		return Plan{Mode: ModeSingle, AgentIDs: ids(address.Agents)}, nil
-	case KindNamed:
-		return decideNamed(ctx, ev, state, address.Agents)
-	default:
-		return decidePolicy(ctx, ev, state, agentsOf(roster))
 	}
+	if ev == nil || !ev.Enabled() {
+		return Plan{}, fmt.Errorf("%w: not configured", ErrUndecided)
+	}
+	var plan Plan
+	var err error
+	if address.Kind == KindNamed {
+		plan, err = decideNamed(ctx, ev, state, address.Agents)
+	} else {
+		plan, err = decidePolicy(ctx, ev, state, AgentsOf(roster))
+	}
+	if err != nil && !errors.Is(err, ErrUndecided) {
+		err = fmt.Errorf("%w: %v", ErrUndecided, err)
+	}
+	return plan, err
 }
 
 func decideNamed(ctx context.Context, ev Evaluator, state State, agents []Participant) (Plan, error) {
-	ids := ids(agents)
-	mode := ModeSequential
-	if ev != nil && ev.Enabled() {
-		answers, err := ev.Evaluate(ctx, state, map[string]any{
-			"order": map[string]any{
-				"type":         "choice",
-				"instructions": "These agents were named in the latest message. Can they answer independently, or must a later answer wait for an earlier one?",
-				"criteria": map[string]string{
-					"parallel":   "Each named agent can answer without the others' replies.",
-					"sequential": "A later reply depends on an earlier one, so they must go in the order they were named.",
-				},
+	answers, err := ev.Evaluate(ctx, state, map[string]any{
+		"order": map[string]any{
+			"type":         "choice",
+			"instructions": "These agents were named in the latest message. Can they answer independently, or must a later answer wait for an earlier one?",
+			"criteria": map[string]string{
+				"parallel":   "Each named agent can answer without the others' replies.",
+				"sequential": "A later reply depends on an earlier one, so they must go in the order they were named.",
 			},
-		})
-		if err != nil {
-			return Plan{}, err
-		}
-		if a, ok := answers["order"]; ok && a.Choice == "parallel" && a.Confidence >= ModeConfidenceFloor {
-			mode = ModeParallel
-		}
+		},
+	})
+	if err != nil {
+		return Plan{}, err
 	}
-	return Plan{Mode: mode, AgentIDs: ids}, nil
+	a, ok := answers["order"]
+	if !ok || (a.Choice != "parallel" && a.Choice != "sequential") {
+		return Plan{}, fmt.Errorf("%w: order answer %q", ErrUndecided, a.Choice)
+	}
+	mode := ModeSequential
+	if a.Choice == "parallel" && a.Confidence >= ModeConfidenceFloor {
+		mode = ModeParallel
+	}
+	return Plan{Mode: mode, AgentIDs: ids(agents)}, nil
 }
 
 func decidePolicy(ctx context.Context, ev Evaluator, state State, agents []Participant) (Plan, error) {
-	cards := cardsFor(agents, state.Agents)
-	if len(cards) == 0 || ev == nil || !ev.Enabled() {
-		return Plan{Mode: ModeNone}, nil
-	}
-	criteria, optionToID := agentChoices(cards)
+	criteria, optionToID := agentChoices(cardsFor(agents, state.Agents))
 	if len(criteria) == 0 {
-		return Plan{Mode: ModeNone}, nil
+		return Plan{}, fmt.Errorf("%w: no agent can be offered by name", ErrUndecided)
 	}
 	answers, err := ev.Evaluate(ctx, state, map[string]any{
 		"reply": map[string]any{
@@ -145,12 +158,16 @@ func decidePolicy(ctx context.Context, ev Evaluator, state State, agents []Parti
 	if err != nil {
 		return Plan{}, err
 	}
-	if answers["reply"].Choice != "是" {
+	switch answers["reply"].Choice {
+	case "否":
 		return Plan{Mode: ModeNone}, nil
+	case "是":
+	default:
+		return Plan{}, fmt.Errorf("%w: reply answer %q", ErrUndecided, answers["reply"].Choice)
 	}
 	id := optionToID[answers["agent"].Choice]
 	if id == "" {
-		return Plan{Mode: ModeNone}, nil
+		return Plan{}, fmt.Errorf("%w: agent answer %q", ErrUndecided, answers["agent"].Choice)
 	}
 	return Plan{Mode: ModeSingle, AgentIDs: []string{id}}, nil
 }
@@ -307,7 +324,8 @@ func ids(ps []Participant) []string {
 	return out
 }
 
-func agentsOf(ps []Participant) []Participant {
+// AgentsOf keeps the agents of a roster, in roster order.
+func AgentsOf(ps []Participant) []Participant {
 	var out []Participant
 	for _, p := range ps {
 		if p.Type == "agent" {

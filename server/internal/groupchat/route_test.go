@@ -152,23 +152,40 @@ func TestSequentialPlanStartsOneSpeaker(t *testing.T) {
 	}
 }
 
-func TestDecideUnconfiguredPolicyIsSilent(t *testing.T) {
-	plan, err := Decide(context.Background(), nil, State{}, roster(), Address{Kind: KindPolicy})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if plan.Mode != ModeNone {
-		t.Fatalf("plan %+v", plan)
+func TestDecideUnconfiguredIsUndecided(t *testing.T) {
+	for _, address := range []Address{
+		{Kind: KindPolicy},
+		{Kind: KindNamed, Agents: []Participant{{Type: "agent", ID: "a3"}, {Type: "agent", ID: "a1"}}},
+	} {
+		if _, err := Decide(context.Background(), nil, State{}, roster(), address); !errors.Is(err, ErrUndecided) {
+			t.Fatalf("%s: err %v", address.Kind, err)
+		}
+		if _, err := Decide(context.Background(), &scripted{}, State{}, roster(), address); !errors.Is(err, ErrUndecided) {
+			t.Fatalf("%s disabled: err %v", address.Kind, err)
+		}
 	}
 }
 
-func TestDecideNamedFallsBackToSequentialOnError(t *testing.T) {
+func TestDecideEvaluatorErrorIsUndecided(t *testing.T) {
 	_, err := Decide(context.Background(), &scripted{enabled: true, err: errors.New("down")}, State{}, roster(), Address{
 		Kind:   KindNamed,
 		Agents: []Participant{{Type: "agent", ID: "a3"}, {Type: "agent", ID: "a1"}},
 	})
-	if err == nil {
-		t.Fatal("expected evaluator error")
+	if !errors.Is(err, ErrUndecided) {
+		t.Fatalf("err %v", err)
+	}
+}
+
+func TestDecidePolicyUnknownAgentIsUndecided(t *testing.T) {
+	ev := &scripted{enabled: true, answers: map[string]typesafe.Answer{
+		"reply": {Choice: "是"},
+		"agent": {Choice: "Nobody"},
+	}}
+	_, err := Decide(context.Background(), ev, State{
+		Agents: []Card{{ID: "a3", Name: "Ops"}},
+	}, roster(), Address{Kind: KindPolicy})
+	if !errors.Is(err, ErrUndecided) {
+		t.Fatalf("err %v", err)
 	}
 }
 

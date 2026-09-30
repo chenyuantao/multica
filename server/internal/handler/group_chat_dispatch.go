@@ -34,13 +34,18 @@ type groupChatPerson struct {
 }
 
 // rejectAmbiguousGroupChatMention refuses a group message whose bare @Name
-// matches more than one member. The comment is not saved.
+// matches more than one member. The comment is not saved. A chat with one
+// agent routes nothing, so nothing is rejected there.
 func (h *Handler) rejectAmbiguousGroupChatMention(w http.ResponseWriter, r *http.Request, issue db.Issue, content string) bool {
 	roster, ok := h.groupChatRosterIfChat(r.Context(), issue)
 	if !ok {
 		return false
 	}
-	address := groupchat.Route(content, participantsOf(roster))
+	people := participantsOf(roster)
+	if len(groupchat.AgentsOf(people)) == 1 {
+		return false
+	}
+	address := groupchat.Route(content, people)
 	if address.Kind != groupchat.KindAmbiguous {
 		return false
 	}
@@ -49,26 +54,35 @@ func (h *Handler) rejectAmbiguousGroupChatMention(w http.ResponseWriter, r *http
 }
 
 // dispatchGroupChatReply replaces issue-comment routing for a person posting
-// in a group chat. A message that opens with one @ of an agent is enqueued
-// directly. Several named agents are planned only for parallel versus ordered
-// delivery. A message that names nobody is planned against the full history.
+// in a group chat. A chat with one agent always goes to that agent. A message
+// that opens with one @ of an agent is enqueued directly. Several named agents
+// are planned only for parallel versus ordered delivery. A message that names
+// nobody is planned against the full history. When Jev gives no usable
+// answer, named agents speak in the order they were named and anything else
+// goes to the group's first agent.
 func (h *Handler) dispatchGroupChatReply(ctx context.Context, issue db.Issue, comment db.Comment) []CommentTriggerOutcome {
 	roster, ok := h.groupChatRosterIfChat(ctx, issue)
 	if !ok {
 		return nil
 	}
-	address := groupchat.Route(comment.Content, participantsOf(roster))
+	people := participantsOf(roster)
+	agents := groupchat.AgentsOf(people)
+	switch len(agents) {
+	case 0:
+		return nil
+	case 1:
+		h.enqueueGroupChatPlan(ctx, issue, comment.ID, groupchat.Plan{Mode: groupchat.ModeSingle, AgentIDs: []string{agents[0].ID}})
+		return nil
+	}
+	address := groupchat.Route(comment.Content, people)
 	if address.Kind == groupchat.KindAmbiguous || address.Kind == groupchat.KindNone {
 		return nil
 	}
 	state := h.groupChatJudgmentState(ctx, issue, roster)
-	plan, err := groupchat.Decide(ctx, h.GroupChatDecider, state, participantsOf(roster), address)
+	plan, err := groupchat.Decide(ctx, h.GroupChatDecider, state, people, address)
 	if err != nil {
-		slog.Warn("group chat plan failed", "issue_id", uuidToString(issue.ID), "error", err)
-		if address.Kind != groupchat.KindNamed {
-			return nil
-		}
-		plan = groupchat.Plan{Mode: groupchat.ModeSequential, AgentIDs: participantIDs(address.Agents)}
+		slog.Info("group chat plan fell back", "issue_id", uuidToString(issue.ID), "kind", address.Kind, "error", err)
+		plan = groupchat.FallbackPlan(people, address)
 	}
 	h.enqueueGroupChatPlan(ctx, issue, comment.ID, plan)
 	return nil
@@ -271,14 +285,6 @@ func participantsOf(roster []groupChatPerson) []groupchat.Participant {
 	out := make([]groupchat.Participant, len(roster))
 	for i, p := range roster {
 		out[i] = p.Participant
-	}
-	return out
-}
-
-func participantIDs(ps []groupchat.Participant) []string {
-	out := make([]string, len(ps))
-	for i, p := range ps {
-		out[i] = p.ID
 	}
 	return out
 }

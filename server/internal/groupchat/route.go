@@ -6,6 +6,10 @@
 // several independent agents, or several agents in order. @ inside quotes,
 // fenced code, or inline code is not an address. A bare @Name that matches
 // more than one member is rejected instead of picking one.
+//
+// A chat with one agent skips all of this: that agent always replies. When
+// Jev is not configured or gives no usable answer, named agents speak in the
+// order they were named and anything else goes to the group's first agent.
 package groupchat
 
 import (
