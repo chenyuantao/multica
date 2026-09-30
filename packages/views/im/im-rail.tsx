@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, MessageCircle, Settings, UsersRound } from "lucide-react";
+import { BookOpen, Menu, MessageCircle, UsersRound } from "lucide-react";
 import { useAuthStore } from "@multica/core/auth";
 import { useWorkspacePaths } from "@multica/core/paths";
 import { cn } from "@multica/ui/lib/utils";
@@ -72,7 +72,7 @@ export function ImRail({ active, className }: ImRailProps) {
         title={t(($) => $.sidebar.settings)}
         className={cn(railButton, active === "settings" && railButtonActive)}
       >
-        <Settings className="size-[23px]" strokeWidth={1.8} />
+        <Menu className="size-[23px]" strokeWidth={1.8} />
       </AppLink>
     </nav>
   );

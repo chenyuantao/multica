@@ -62,7 +62,7 @@ export function ContactList({ people, agents, chats, userId, selectedKey, onSele
     });
 
   return (
-    <ImSidebarShell resizeId="contacts" className={className}>
+    <ImSidebarShell className={className}>
       <ImSidebarHeader query={query} onQueryChange={setQuery} searchLabel={t(($) => $.contacts.search)}>
         <button
           type="button"

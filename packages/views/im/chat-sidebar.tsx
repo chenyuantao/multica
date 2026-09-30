@@ -31,7 +31,7 @@ export function ChatSidebar({ chats, isLoading, isError, selectedId, userId, onS
   );
 
   return (
-    <ImSidebarShell resizeId="chats" className={className}>
+    <ImSidebarShell className={className}>
       <ImSidebarHeader query={query} onQueryChange={setQuery} searchLabel={t(($) => $.sidebar.search)}>
         <button
           type="button"

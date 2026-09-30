@@ -7,6 +7,7 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { useTranslation } from "react-i18next"
 
 import { useIsCompact } from "@multica/ui/hooks/use-mobile"
+import { clampSidebarWidth, useSidebarWidth } from "@multica/ui/hooks/use-sidebar-width"
 import { cn } from "@multica/ui/lib/utils"
 import { Button } from "@multica/ui/components/ui/button"
 import { Input } from "@multica/ui/components/ui/input"
@@ -26,10 +27,6 @@ import {
 } from "@multica/ui/components/ui/tooltip"
 import { PanelLeftIcon } from "lucide-react"
 
-const SIDEBAR_WIDTH_DEFAULT = 256
-const SIDEBAR_WIDTH_MIN = 200
-const SIDEBAR_WIDTH_MAX = 360
-const SIDEBAR_WIDTH_STORAGE_KEY = "sidebar_width"
 const SIDEBAR_WIDTH_MOBILE = "18rem"
 const SIDEBAR_WIDTH_ICON = "3rem"
 const SIDEBAR_DRAG_THRESHOLD = 2
@@ -53,10 +50,6 @@ const SIDEBAR_AUTO_COLLAPSE_QUERY = "(min-width: 1024px) and (max-width: 1279px)
  * non-inset half, e.g. `bg-app-shell [--sidebar-wrapper-fill:var(--app-shell)]`.
  */
 const SIDEBAR_WRAPPER_FILL_CLASS = "bg-(--sidebar-wrapper-fill)"
-
-function clampSidebarWidth(width: number) {
-  return Math.max(SIDEBAR_WIDTH_MIN, Math.min(SIDEBAR_WIDTH_MAX, width))
-}
 
 type SidebarContextProps = {
   state: "expanded" | "collapsed"
@@ -142,21 +135,7 @@ function SidebarProvider({
   const isCompact = useIsCompact()
   const [openMobile, setOpenMobile] = React.useState(false)
 
-  const [width, _setWidth] = React.useState(SIDEBAR_WIDTH_DEFAULT)
-  React.useEffect(() => {
-    const stored = localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY)
-    if (stored) {
-      const storedWidth = Number(stored)
-      if (Number.isFinite(storedWidth)) {
-        _setWidth(clampSidebarWidth(storedWidth))
-      }
-    }
-  }, [])
-  const commitWidth = React.useCallback((w: number) => {
-    const clamped = clampSidebarWidth(w)
-    _setWidth(clamped)
-    localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(clamped))
-  }, [])
+  const { width, commitWidth } = useSidebarWidth()
 
   // This is the internal state of the sidebar.
   // We use openProp and setOpenProp for control from outside the component.
