@@ -10,6 +10,7 @@ import type { DirectoryEntry } from "./use-chat-directory";
 const mockModalOpen = vi.hoisted(() => vi.fn());
 const isMobileRef = vi.hoisted(() => ({ current: true }));
 const chatsRef = vi.hoisted(() => ({ current: [] as unknown[] }));
+const unreadTotalRef = vi.hoisted(() => ({ current: 0 }));
 
 vi.mock("@tanstack/react-query", async () => {
   const actual = await vi.importActual<typeof import("@tanstack/react-query")>("@tanstack/react-query");
@@ -62,6 +63,7 @@ vi.mock("./use-chat-directory", async () => {
     }),
   };
 });
+vi.mock("./use-group-chat-unread", () => ({ useGroupChatUnreadTotal: () => unreadTotalRef.current }));
 vi.mock("./im-rail", () => ({ ImRail: () => null }));
 vi.mock("./chat-sidebar", () => ({ ChatSidebar: () => null, ChatAvatar: () => null }));
 vi.mock("./chat-thread", () => ({
@@ -122,6 +124,7 @@ beforeEach(() => {
   startDirectChat.mockReset();
   isMobileRef.current = true;
   chatsRef.current = [chat];
+  unreadTotalRef.current = 0;
 });
 
 describe("ImPage tab roots on mobile", () => {
@@ -137,6 +140,12 @@ describe("ImPage tab roots on mobile", () => {
       ["Me", "/acme/settings"],
     ]);
     expect(screen.getByRole("link", { name: "Chats" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("badges the Chats tab with the unread message total", () => {
+    unreadTotalRef.current = 120;
+    renderPage("chats");
+    expect(screen.getByLabelText("120 unread messages")).toHaveTextContent("99+");
   });
 
   it("drops the tab bar once a level is pushed", () => {

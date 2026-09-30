@@ -26,7 +26,7 @@ import {
   type LinkClickIntent,
 } from "@multica/views/navigation";
 import { getCurrentSlug, subscribeToCurrentSlug } from "@multica/core/platform";
-import { useDesktopUnreadBadge } from "@multica/views/platform";
+import { useAppUnreadBadge } from "@multica/views/platform";
 import { useT } from "@multica/views/i18n";
 import {
   DesktopNavigationProvider,
@@ -184,7 +184,7 @@ function useInternalLinkHandler() {
  */
 function DesktopInboxBridge() {
   const workspace = useCurrentWorkspace();
-  useDesktopUnreadBadge(workspace?.id ?? null);
+  useAppUnreadBadge(workspace?.id ?? null);
   const { push } = useNavigation();
   // The adapter identity changes with the active tab's location; the ref
   // keeps the main-process subscription stable across navigations.

@@ -2029,6 +2029,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 				r.Route("/{id}", func(r chi.Router) {
 					r.Get("/", h.GetGroupChat)
 					r.Patch("/", h.UpdateGroupChat)
+					r.Post("/read", h.MarkGroupChatRead)
 					r.Post("/members", h.AddGroupChatMember)
 					r.Delete("/members/{memberType}/{memberId}", h.RemoveGroupChatMember)
 				})

@@ -1153,6 +1153,7 @@ export const GroupChatSchema = z.object({
   last_message: CommentSchema.nullable().default(null).catch(null),
   members: z.array(GroupChatMemberSchema).default([]),
   pending_speakers: z.array(z.string()).default([]),
+  unread_count: z.number().default(0).catch(0),
   is_direct: z.boolean().default(false).catch(false),
 }).loose();
 
@@ -2693,6 +2694,7 @@ export const InboxUnreadSummarySchema = z.array(
     .object({
       workspace_id: z.string(),
       count: z.number(),
+      badge_count: z.number().optional().catch(undefined),
     })
     .loose(),
 );

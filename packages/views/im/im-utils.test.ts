@@ -84,7 +84,7 @@ describe("time helpers", () => {
 describe("sortChatsByActivity", () => {
   const chat = (id: string, created: string, last: string | null): GroupChat => ({
     id, workspace_id: "ws", identifier: id, title: id, description: "", creator_type: "member", creator_id: "u",
-    created_at: created, last_comment_at: last, last_message: null, members: [], pending_speakers: [], is_direct: false,
+    created_at: created, last_comment_at: last, last_message: null, members: [], pending_speakers: [], unread_count: 0, is_direct: false,
   });
 
   it("orders by latest message, falling back to creation time", () => {

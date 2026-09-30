@@ -10,7 +10,8 @@
     "chats": "群聊",
     "settings": "设置",
     "clear_search": "清除搜索",
-    "resize": "调整侧边栏宽度"
+    "resize": "调整侧边栏宽度",
+    "unread_other": "{{count}} 条未读消息"
   },
   "rail": {
     "sections": "分区",

@@ -4588,6 +4588,10 @@ export class ApiClient {
     });
   }
 
+  async markGroupChatRead(chatId: string): Promise<void> {
+    await this.fetch(`/api/group-chats/${chatId}/read`, { method: "POST" });
+  }
+
   async removeGroupChatMember(
     chatId: string,
     memberType: GroupChatMemberType,

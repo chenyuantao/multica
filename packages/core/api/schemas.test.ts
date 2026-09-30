@@ -1442,6 +1442,48 @@ describe("InboxUnreadSummarySchema", () => {
       ),
     ).toBe(EMPTY_INBOX_UNREAD_SUMMARY);
   });
+
+  it("keeps the entry and drops a malformed badge_count", () => {
+    expect(
+      parseWithFallback(
+        [
+          { workspace_id: "ws-1", count: 2, badge_count: 5 },
+          { workspace_id: "ws-2", count: 1, badge_count: "many" },
+        ],
+        InboxUnreadSummarySchema,
+        EMPTY_INBOX_UNREAD_SUMMARY,
+        ENDPOINT,
+      ),
+    ).toEqual([
+      { workspace_id: "ws-1", count: 2, badge_count: 5 },
+      { workspace_id: "ws-2", count: 1 },
+    ]);
+  });
+});
+
+describe("GroupChatsListSchema unread_count", () => {
+  const ENDPOINT = { endpoint: "GET /api/group-chats" };
+  const chat = (extra: Record<string, unknown>) => ({ id: "chat-1", workspace_id: "ws-1", title: "Room", ...extra });
+
+  it("reads a missing or malformed unread_count as zero", () => {
+    const parsed = parseWithFallback<{ chats: GroupChat[] }>(
+      { chats: [chat({ unread_count: 4 }), chat({ id: "chat-2" }), chat({ id: "chat-3", unread_count: "x" })] },
+      GroupChatsListSchema,
+      { chats: [] },
+      ENDPOINT,
+    );
+    expect(parsed.chats.map((c) => c.unread_count)).toEqual([4, 0, 0]);
+  });
+
+  it("reads a missing or malformed is_direct as a group", () => {
+    const parsed = parseWithFallback<{ chats: GroupChat[] }>(
+      { chats: [chat({ is_direct: true }), chat({ id: "chat-2" }), chat({ id: "chat-3", is_direct: "yes" })] },
+      GroupChatsListSchema,
+      { chats: [] },
+      ENDPOINT,
+    );
+    expect(parsed.chats.map((c) => c.is_direct)).toEqual([true, false, false]);
+  });
 });
 
 describe("InboxItemListSchema", () => {
@@ -2379,20 +2421,5 @@ describe("AgentActivityBucketListSchema duration", () => {
     expect(parsed[0]?.task_count).toBe(201);
     expect(parsed[0]?.duration_ms).toBeUndefined();
     expect(parsed[0]?.duration_count).toBeUndefined();
-  });
-});
-
-describe("GroupChatsListSchema", () => {
-  const ENDPOINT = { endpoint: "GET /api/group-chats" };
-  const chat = (extra: Record<string, unknown>) => ({ id: "chat-1", workspace_id: "ws-1", title: "Room", ...extra });
-
-  it("reads a missing or malformed is_direct as a group", () => {
-    const parsed = parseWithFallback<{ chats: GroupChat[] }>(
-      { chats: [chat({ is_direct: true }), chat({ id: "chat-2" }), chat({ id: "chat-3", is_direct: "yes" })] },
-      GroupChatsListSchema,
-      { chats: [] },
-      ENDPOINT,
-    );
-    expect(parsed.chats.map((c) => c.is_direct)).toEqual([true, false, false]);
   });
 });

@@ -73,7 +73,7 @@ vi.mock("@multica/views/navigation", () => ({
 }));
 
 vi.mock("@multica/views/platform", () => ({
-  useDesktopUnreadBadge: () => {},
+  useAppUnreadBadge: () => {},
 }));
 
 // Each workspace-scoped component gets a marker so the assertions can tell

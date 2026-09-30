@@ -8,6 +8,7 @@ import type {
   GroupChatMemberType,
   UpdateGroupChatRequest,
 } from "../types";
+import { onInboxInvalidate, onInboxSummaryInvalidate } from "../inbox/ws-updaters";
 import { groupChatKeys } from "./queries";
 
 function upsertChat(list: GroupChat[] | undefined, chat: GroupChat): GroupChat[] {
@@ -82,6 +83,32 @@ export function useSendGroupChatMessage(wsId: string, chatId: string) {
     onSettled: () => {
       qc.invalidateQueries({ queryKey: groupChatKeys.messages(wsId, chatId) });
       qc.invalidateQueries({ queryKey: groupChatKeys.list(wsId) });
+    },
+  });
+}
+
+/**
+ * Read every unread message of a chat. The chat's own count drops at once; the
+ * inbox and the app badge follow the server's answer.
+ */
+export function useMarkGroupChatRead(wsId: string, chatId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.markGroupChatRead(chatId),
+    onMutate: async () => {
+      await qc.cancelQueries({ queryKey: groupChatKeys.list(wsId) });
+      const prev = qc.getQueryData<GroupChat[]>(groupChatKeys.list(wsId));
+      qc.setQueryData<GroupChat[]>(groupChatKeys.list(wsId), (old) =>
+        old?.map((c) => (c.id === chatId ? { ...c, unread_count: 0 } : c)),
+      );
+      return { prev };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prev) qc.setQueryData(groupChatKeys.list(wsId), ctx.prev);
+    },
+    onSettled: () => {
+      void onInboxInvalidate(qc, wsId);
+      void onInboxSummaryInvalidate(qc);
     },
   });
 }

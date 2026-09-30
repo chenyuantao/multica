@@ -62,7 +62,7 @@ vi.mock("@multica/views/navigation", () => ({
 }));
 
 vi.mock("@multica/views/platform", () => ({
-  useDesktopUnreadBadge: () => {},
+  useAppUnreadBadge: () => {},
 }));
 
 vi.mock("@multica/views/layout", () => ({

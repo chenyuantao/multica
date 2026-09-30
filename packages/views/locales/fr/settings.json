@@ -683,7 +683,7 @@
     },
     "browser": {
       "label": "Notifications du navigateur",
-      "hint": "Autoriser ce navigateur à afficher des bannières de notification pour les nouveaux éléments de la boîte de réception.",
+      "hint": "Autoriser les bannières de notification pour les nouveaux éléments de la boîte de réception et le nombre de non-lus sur l'icône de l'app installée.",
       "enable": "Activer",
       "granted": "Ce navigateur peut afficher des bannières de notification.",
       "denied": "Bloqué par votre navigateur. Activez les notifications pour ce site dans ses réglages.",

@@ -12,7 +12,9 @@ import { AppLink, useBackOrReplace } from "../navigation";
 import { useT } from "../i18n";
 import type { ImRailSection } from "./im-rail";
 import { MobileBackButton } from "./mobile-back-button";
+import { UnreadBadge } from "./unread-badge";
 import { useStartDirectChat } from "./use-direct-chat";
+import { useGroupChatUnreadTotal } from "./use-group-chat-unread";
 
 /** A phone tab root: the section's list above the bottom tab bar. */
 export function MobileTabScreen({ active, children }: { active: ImRailSection; children: React.ReactNode }) {
@@ -27,6 +29,7 @@ export function MobileTabScreen({ active, children }: { active: ImRailSection; c
 export function MobileTabBar({ active }: { active: ImRailSection }) {
   const { t } = useT("im");
   const paths = useWorkspacePaths();
+  const chatsUnread = useGroupChatUnreadTotal();
   const tabs = [
     { id: "chats", href: paths.im(), label: t(($) => $.tabs.chats), icon: MessageCircle },
     { id: "contacts", href: paths.member(), label: t(($) => $.tabs.contacts), icon: UsersRound },
@@ -49,7 +52,16 @@ export function MobileTabBar({ active }: { active: ImRailSection }) {
             active === id && "text-brand",
           )}
         >
-          <Icon className="size-6" strokeWidth={1.8} />
+          <span className="relative flex">
+            <Icon className="size-6" strokeWidth={1.8} />
+            {id === "chats" && (
+              <UnreadBadge
+                count={chatsUnread}
+                label={t(($) => $.sidebar.unread, { count: chatsUnread })}
+                className="absolute -top-1.5 left-4"
+              />
+            )}
+          </span>
           <span className="text-micro">{label}</span>
         </AppLink>
       ))}

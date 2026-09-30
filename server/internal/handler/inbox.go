@@ -231,6 +231,17 @@ func (h *Handler) MarkInboxRead(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to mark read")
 		return
 	}
+	if item.IssueID.Valid {
+		if _, err := h.Queries.MarkInboxReadByIssue(r.Context(), db.MarkInboxReadByIssueParams{
+			WorkspaceID:   item.WorkspaceID,
+			RecipientType: item.RecipientType,
+			RecipientID:   item.RecipientID,
+			IssueID:       item.IssueID,
+		}); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to mark read")
+			return
+		}
+	}
 
 	userID := requestUserID(r)
 	workspaceID := uuidToString(item.WorkspaceID)
@@ -248,7 +259,8 @@ func (h *Handler) MarkInboxRead(w http.ResponseWriter, r *http.Request) {
 // act on: the inbox auto-marks an item read the moment it is selected, which
 // otherwise makes "opened" and "handled" the same signal.
 //
-// Scope is the single item, matching MarkInboxRead — see the query comment.
+// Scope is the single item, while MarkInboxRead reads the whole issue group —
+// see the query comments.
 func (h *Handler) MarkInboxUnread(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	prev, ok := h.loadInboxItemForUser(w, r, id)
@@ -377,6 +389,8 @@ func (h *Handler) CountUnreadInbox(w http.ResponseWriter, r *http.Request) {
 type InboxWorkspaceUnreadResponse struct {
 	WorkspaceID string `json:"workspace_id"`
 	Count       int64  `json:"count"`
+	// App icon number: unread group chats count their unread messages.
+	BadgeCount int64 `json:"badge_count"`
 }
 
 // UnreadInboxSummary returns per-workspace unread inbox counts across every
@@ -402,6 +416,7 @@ func (h *Handler) UnreadInboxSummary(w http.ResponseWriter, r *http.Request) {
 		resp[i] = InboxWorkspaceUnreadResponse{
 			WorkspaceID: uuidToString(row.WorkspaceID),
 			Count:       row.Count,
+			BadgeCount:  row.BadgeCount,
 		}
 	}
 

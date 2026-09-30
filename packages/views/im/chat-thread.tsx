@@ -9,6 +9,7 @@ import {
   directChatPeer,
   groupChatMessagesOptions,
   useDeleteGroupChatMessage,
+  useMarkGroupChatRead,
   useSendGroupChatMessage,
 } from "@multica/core/group-chats";
 import { useCancelIssueRun } from "@multica/core/issues/mutations";
@@ -30,6 +31,7 @@ import {
 } from "@multica/ui/components/ui/alert-dialog";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@multica/ui/components/ui/context-menu";
 import { ActorAvatar } from "../common/actor-avatar";
+import { useAppForeground } from "../common/use-app-foreground";
 import { RichContent } from "../rich-content";
 import { useLocale, useT } from "../i18n";
 import { useOpenAgentDetail } from "../modals/agent-detail";
@@ -89,6 +91,24 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, mobil
     setPending([]);
     setQuoteId(null);
   }, [chat.id]);
+
+  // An open chat reads everything that lands in it while the app is in front.
+  // Messages that arrive while it is backgrounded stay unread until the user
+  // returns. Each unread state is tried once, so a failing request is not
+  // retried in a loop; the next message tries again.
+  const foreground = useAppForeground();
+  const { mutate: markRead } = useMarkGroupChatRead(wsId, chat.id);
+  const unread = chat.unread_count;
+  const readKey = `${chat.last_comment_at ?? ""}:${unread}`;
+  const attemptedReadRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!foreground || unread <= 0 || attemptedReadRef.current === readKey) return;
+    const timer = setTimeout(() => {
+      attemptedReadRef.current = readKey;
+      markRead();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [foreground, unread, readKey, markRead]);
 
   const messages = useMemo(
     () =>

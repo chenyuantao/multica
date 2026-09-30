@@ -10,7 +10,9 @@
     "chats": "Discussions de groupe",
     "settings": "Paramètres",
     "clear_search": "Effacer la recherche",
-    "resize": "Redimensionner la barre latérale"
+    "resize": "Redimensionner la barre latérale",
+    "unread_one": "{{count}} message non lu",
+    "unread_other": "{{count}} messages non lus"
   },
   "rail": {
     "sections": "Sections",

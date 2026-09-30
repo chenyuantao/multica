@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, screen } from "@testing-library/react";
 import { useQuery } from "@tanstack/react-query";
 import type { Comment, GroupChat } from "@multica/core/types";
@@ -12,6 +12,11 @@ const cancelRun = vi.hoisted(() => ({ mutate: vi.fn(), isPending: false, isSucce
 const deleteMessage = vi.hoisted(() => ({ mutate: vi.fn(), isPending: false }));
 const copyText = vi.hoisted(() => vi.fn());
 const currentMember = vi.hoisted(() => ({ role: "member" as string | null }));
+const markRead = vi.hoisted(() => vi.fn());
+const appForeground = vi.hoisted(() => ({ value: true }));
+
+vi.mock("../common/use-app-foreground", () => ({ useAppForeground: () => appForeground.value }));
+
 vi.mock("@multica/core/permissions", () => ({ useCurrentMember: () => currentMember }));
 
 vi.mock("@multica/ui/lib/clipboard", () => ({ copyText }));
@@ -26,6 +31,7 @@ vi.mock("@multica/core/group-chats", async () => ({
   groupChatMessagesOptions: () => ({ queryKey: ["messages"] }),
   useSendGroupChatMessage: () => ({ mutateAsync: sendMutateAsync }),
   useDeleteGroupChatMessage: () => deleteMessage,
+  useMarkGroupChatRead: () => ({ mutate: markRead }),
 }));
 
 vi.mock("@multica/core/issues/mutations", () => ({ useCancelIssueRun: () => cancelRun }));
@@ -79,6 +85,7 @@ const chat: GroupChat = {
   last_comment_at: null,
   last_message: null,
   pending_speakers: [],
+  unread_count: 0,
   is_direct: false,
   members: [
     { member_type: "member", member_id: "user-1", added_by_type: null, added_by_id: null, created_at: "2026-09-28T00:00:00Z" },
@@ -134,6 +141,59 @@ describe("ChatThread pending messages", () => {
 
     expect(screen.getAllByText("hello")).toHaveLength(2);
     expect(screen.queryByText("Sending…")).toBeNull();
+  });
+});
+
+describe("ChatThread read state", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    messages = [message("m-0", "hello")];
+    vi.mocked(useQuery).mockImplementation(() => ({ data: messages, isError: false }) as never);
+    markRead.mockReset();
+    appForeground.value = true;
+  });
+  afterEach(() => vi.useRealTimers());
+
+  function render(unread: number, lastCommentAt: string | null = "2026-09-30T13:00:00Z") {
+    const ui = (count: number, at: string | null) => (
+      <ChatThread
+        wsId="ws-1"
+        chat={{ ...chat, unread_count: count, last_comment_at: at }}
+        userId="user-1"
+        panelOpen={false}
+        onTogglePanel={() => {}}
+      />
+    );
+    const view = renderWithI18n(ui(unread, lastCommentAt));
+    return { rerender: (count: number, at: string | null = lastCommentAt) => view.rerender(ui(count, at)) };
+  }
+
+  it("reads the whole chat once it is open in front of the user", () => {
+    render(3);
+    act(() => vi.runAllTimers());
+    expect(markRead).toHaveBeenCalledTimes(1);
+  });
+
+  it("reads a message that lands while the chat stays open", () => {
+    const view = render(0);
+    act(() => vi.runAllTimers());
+    expect(markRead).not.toHaveBeenCalled();
+
+    view.rerender(1, "2026-09-30T13:05:00Z");
+    act(() => vi.runAllTimers());
+    expect(markRead).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves messages unread while the app is in the background", () => {
+    appForeground.value = false;
+    const view = render(2);
+    act(() => vi.runAllTimers());
+    expect(markRead).not.toHaveBeenCalled();
+
+    appForeground.value = true;
+    view.rerender(2);
+    act(() => vi.runAllTimers());
+    expect(markRead).toHaveBeenCalledTimes(1);
   });
 });
 

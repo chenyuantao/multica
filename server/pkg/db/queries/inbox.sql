@@ -102,13 +102,20 @@ UPDATE inbox_item SET read = true
 WHERE id = $1
 RETURNING *;
 
+-- name: MarkInboxReadByIssue :execrows
+-- Opening an issue (or a group chat) reads every notification it carries, not
+-- just the newest one: an older unread sibling would otherwise keep counting
+-- as an unread chat message after the user has seen the whole thread.
+UPDATE inbox_item SET read = true
+WHERE workspace_id = $1 AND recipient_type = $2 AND recipient_id = $3 AND issue_id = $4
+  AND archived = false AND read = false;
+
 -- name: MarkInboxUnread :one
--- Exact inverse of MarkInboxRead, and item-level for the same reason it is:
--- the inbox renders one row per issue carrying that group's NEWEST item, and
--- the group's read state is that item's read state. Flipping the whole group
--- unread would resurrect older siblings the user already dealt with and
--- inflate CountUnreadInbox (which counts raw rows), while changing nothing the
--- UI shows.
+-- Item-level inverse of MarkInboxRead: the inbox renders one row per issue
+-- carrying that group's NEWEST item, and the group's read state is that item's
+-- read state. Flipping the whole group unread would resurrect older siblings
+-- the user already dealt with and inflate CountUnreadInbox (which counts raw
+-- rows), while changing nothing the UI shows.
 UPDATE inbox_item SET read = false
 WHERE id = $1
 RETURNING *;
@@ -157,19 +164,70 @@ WHERE workspace_id = $1 AND recipient_type = $2 AND recipient_id = $3 AND read =
 -- member join keeps counts scoped to workspaces the user still belongs to,
 -- so a stale item left behind in a workspace the user has since left cannot
 -- light the dot.
-SELECT newest.workspace_id, count(*) AS count
-FROM (
+--
+-- badge_count is the app icon number and counts the way a messenger does: an
+-- unread group chat (an issue with members) contributes its unread messages,
+-- deduplicated by comment so a mention and its new_comment row count once;
+-- every other unread issue contributes one.
+WITH newest AS (
     SELECT DISTINCT ON (i.workspace_id, COALESCE(i.issue_id, i.id))
-        i.workspace_id, i.read
+        i.workspace_id, i.issue_id, i.read
     FROM inbox_item i
     JOIN member m ON m.workspace_id = i.workspace_id AND m.user_id = i.recipient_id
     WHERE i.recipient_type = 'member'
       AND i.recipient_id = $1
       AND i.archived = false
     ORDER BY i.workspace_id, COALESCE(i.issue_id, i.id), i.created_at DESC
-) newest
-WHERE newest.read = false
-GROUP BY newest.workspace_id;
+), unread_groups AS (
+    SELECT newest.workspace_id, newest.issue_id,
+           (newest.issue_id IS NOT NULL AND EXISTS (
+               SELECT 1 FROM issue_member im WHERE im.issue_id = newest.issue_id
+           )) AS is_chat
+    FROM newest
+    WHERE newest.read = false
+), chat_messages AS (
+    SELECT g.workspace_id,
+           count(DISTINCT COALESCE(NULLIF(i.details->>'comment_id', ''), i.id::text)) AS messages
+    FROM unread_groups g
+    JOIN inbox_item i ON i.workspace_id = g.workspace_id AND i.issue_id = g.issue_id
+    WHERE g.is_chat
+      AND i.recipient_type = 'member'
+      AND i.recipient_id = $1
+      AND i.archived = false
+      AND i.read = false
+    GROUP BY g.workspace_id
+)
+SELECT g.workspace_id,
+       count(*) AS count,
+       (count(*) FILTER (WHERE NOT g.is_chat) + COALESCE(max(c.messages), 0))::bigint AS badge_count
+FROM unread_groups g
+LEFT JOIN chat_messages c ON c.workspace_id = g.workspace_id
+GROUP BY g.workspace_id;
+
+-- name: CountUnreadGroupChatMessages :many
+-- Unread message count per group chat for one recipient, with the same rules
+-- as badge_count in CountUnreadInboxByWorkspace: a chat is unread only while
+-- its newest active notification is, and messages are deduplicated by comment.
+WITH newest AS (
+    SELECT DISTINCT ON (i.issue_id) i.issue_id, i.read
+    FROM inbox_item i
+    WHERE i.workspace_id = @workspace_id
+      AND i.recipient_type = 'member'
+      AND i.recipient_id = @recipient_id
+      AND i.issue_id = ANY(@issue_ids::uuid[])
+      AND i.archived = false
+    ORDER BY i.issue_id, i.created_at DESC
+)
+SELECT i.issue_id,
+       count(DISTINCT COALESCE(NULLIF(i.details->>'comment_id', ''), i.id::text))::bigint AS unread_count
+FROM inbox_item i
+JOIN newest n ON n.issue_id = i.issue_id AND n.read = false
+WHERE i.workspace_id = @workspace_id
+  AND i.recipient_type = 'member'
+  AND i.recipient_id = @recipient_id
+  AND i.archived = false
+  AND i.read = false
+GROUP BY i.issue_id;
 
 -- name: MarkAllInboxRead :execrows
 UPDATE inbox_item SET read = true

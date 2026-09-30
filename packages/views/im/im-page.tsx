@@ -67,7 +67,7 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
     else setContactKey(entryKey(entry.type, entry.id));
   };
 
-  const rail = <ImRail active={view} />;
+  const rail = <ImRail active={view} readingChatId={view === "chats" ? selected?.id : null} />;
   const contactList = (className?: string) => (
     <ContactList
       people={directory.people}

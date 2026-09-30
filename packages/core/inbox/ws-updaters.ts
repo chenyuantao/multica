@@ -1,4 +1,5 @@
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
+import { groupChatKeys } from "../group-chats/queries";
 import { inboxKeys, mapArchivedInboxCache, type ArchivedInboxCache } from "./queries";
 import type { InboxItem, IssuePriority, IssueStatus } from "../types";
 
@@ -181,8 +182,14 @@ export function cancelInboxLists(qc: QueryClient, wsId: string): boolean {
 // that the cache outlives the page — tab titles hold disabled observers on it
 // (`useTabPresentation`) — so a return reuses it and refetches only while it
 // is still marked invalidated.
+//
+// Group chat unread counts are derived from the same inbox rows, so the chat
+// list is refreshed alongside.
 export async function onInboxInvalidate(qc: QueryClient, wsId: string) {
-  await refreshInboxQuery(qc, inboxKeys.all(wsId));
+  await Promise.all([
+    refreshInboxQuery(qc, inboxKeys.all(wsId)),
+    refreshInboxQuery(qc, groupChatKeys.list(wsId)),
+  ]);
 }
 
 // THE entry point for refreshing the cross-workspace unread summary — the

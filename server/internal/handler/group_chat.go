@@ -49,6 +49,8 @@ type GroupChatResponse struct {
 	PendingSpeakers []string                  `json:"pending_speakers"`
 	// A two-person chat created for one peer; its members never change.
 	IsDirect bool `json:"is_direct"`
+	// Messages the requester has not read yet, derived from their inbox rows.
+	UnreadCount int64 `json:"unread_count"`
 }
 
 type groupChatMemberRef struct {
@@ -234,6 +236,7 @@ func (h *Handler) ListGroupChats(w http.ResponseWriter, r *http.Request) {
 
 	prefix := h.getIssuePrefix(ctx, wsUUID)
 	pending := h.pendingSpeakersByIssue(ctx, ids)
+	unread := h.groupChatUnreadCounts(ctx, wsUUID, parseUUID(userID), ids)
 	kept := keptDirectChats(issues, membersByIssue, userID)
 	out := make([]GroupChatResponse, 0, len(issues))
 	for _, issue := range issues {
@@ -249,6 +252,7 @@ func (h *Handler) ListGroupChats(w http.ResponseWriter, r *http.Request) {
 		if speakers := pending[key]; len(speakers) > 0 {
 			resp.PendingSpeakers = speakers
 		}
+		resp.UnreadCount = unread[key]
 		out = append(out, resp)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"chats": out})
@@ -287,11 +291,12 @@ func (h *Handler) GetGroupChat(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	writeJSON(w, http.StatusOK, h.groupChatDetail(r.Context(), issue, members))
+	writeJSON(w, http.StatusOK, h.groupChatDetail(r.Context(), issue, members, requestUserID(r)))
 }
 
-// groupChatDetail is one chat with its latest message and pending speakers.
-func (h *Handler) groupChatDetail(ctx context.Context, issue db.Issue, members []db.IssueMember) GroupChatResponse {
+// groupChatDetail is one chat with its latest message, pending speakers and
+// the requester's unread count.
+func (h *Handler) groupChatDetail(ctx context.Context, issue db.Issue, members []db.IssueMember, userID string) GroupChatResponse {
 	var last *db.Comment
 	latest, err := h.Queries.ListLatestCommentsForIssues(ctx, db.ListLatestCommentsForIssuesParams{
 		WorkspaceID: issue.WorkspaceID, IssueIds: []pgtype.UUID{issue.ID},
@@ -303,7 +308,64 @@ func (h *Handler) groupChatDetail(ctx context.Context, issue db.Issue, members [
 	if speakers := h.pendingSpeakersByIssue(ctx, []pgtype.UUID{issue.ID})[uuidToString(issue.ID)]; len(speakers) > 0 {
 		resp.PendingSpeakers = speakers
 	}
+	if userID != "" {
+		resp.UnreadCount = h.groupChatUnreadCounts(ctx, issue.WorkspaceID, parseUUID(userID), []pgtype.UUID{issue.ID})[uuidToString(issue.ID)]
+	}
 	return resp
+}
+
+// groupChatUnreadCounts maps chat id to the requester's unread message count.
+// A failed lookup degrades to no badges rather than failing the chat list.
+func (h *Handler) groupChatUnreadCounts(ctx context.Context, workspaceID, recipientID pgtype.UUID, ids []pgtype.UUID) map[string]int64 {
+	out := map[string]int64{}
+	if len(ids) == 0 {
+		return out
+	}
+	rows, err := h.Queries.CountUnreadGroupChatMessages(ctx, db.CountUnreadGroupChatMessagesParams{
+		WorkspaceID: workspaceID,
+		RecipientID: recipientID,
+		IssueIds:    ids,
+	})
+	if err != nil {
+		slog.Warn("count group chat unread failed", "workspace_id", uuidToString(workspaceID), "error", err)
+		return out
+	}
+	for _, row := range rows {
+		out[uuidToString(row.IssueID)] = row.UnreadCount
+	}
+	return out
+}
+
+// MarkGroupChatRead reads every inbox notification the requester has for the
+// chat, so opening a chat clears all of its unread messages at once.
+func (h *Handler) MarkGroupChatRead(w http.ResponseWriter, r *http.Request) {
+	userID, ok := requireUserID(w, r)
+	if !ok {
+		return
+	}
+	issue, _, ok := h.loadGroupChat(w, r)
+	if !ok {
+		return
+	}
+	count, err := h.Queries.MarkInboxReadByIssue(r.Context(), db.MarkInboxReadByIssueParams{
+		WorkspaceID:   issue.WorkspaceID,
+		RecipientType: "member",
+		RecipientID:   parseUUID(userID),
+		IssueID:       issue.ID,
+	})
+	if err != nil {
+		slog.Warn("mark group chat read failed", append(logger.RequestAttrs(r), "error", err)...)
+		writeError(w, http.StatusInternalServerError, "failed to mark chat read")
+		return
+	}
+	if count > 0 {
+		h.publish(protocol.EventInboxBatchRead, uuidToString(issue.WorkspaceID), "member", userID, map[string]any{
+			"recipient_id": userID,
+			"count":        count,
+			"issue_id":     uuidToString(issue.ID),
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"count": count})
 }
 
 func (h *Handler) CreateGroupChat(w http.ResponseWriter, r *http.Request) {
@@ -430,7 +492,7 @@ func (h *Handler) OpenDirectGroupChat(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "failed to load chat members")
 			return
 		}
-		writeJSON(w, http.StatusOK, h.groupChatDetail(ctx, existing, members))
+		writeJSON(w, http.StatusOK, h.groupChatDetail(ctx, existing, members, userID))
 		return
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {

@@ -7,9 +7,11 @@ import type { GroupChat } from "@multica/core/types";
 import { useActorName } from "@multica/core/workspace/hooks";
 import { cn } from "@multica/ui/lib/utils";
 import { ActorAvatar } from "../common/actor-avatar";
+import { useAppForeground } from "../common/use-app-foreground";
 import { useLocale, useT } from "../i18n";
 import { chatActivityAt, chatDisplayTitle, formatListStamp, plainTextPreview } from "./im-utils";
 import { ImSidebarHeader, ImSidebarShell } from "./im-sidebar-shell";
+import { UnreadBadge } from "./unread-badge";
 
 interface ChatSidebarProps {
   chats: GroupChat[];
@@ -24,6 +26,10 @@ interface ChatSidebarProps {
 
 export function ChatSidebar({ chats, isLoading, isError, selectedId, userId, onSelect, onNewChat, className }: ChatSidebarProps) {
   const { t } = useT("im");
+  // The open chat is read as soon as it lands while the app is in front, so
+  // its badge would only flash; in the background it stays visible.
+  const foreground = useAppForeground();
+  const readingId = foreground ? selectedId : null;
   const { getActorName } = useActorName();
   const [query, setQuery] = useState("");
   const q = query.trim().toLowerCase();
@@ -61,6 +67,7 @@ export function ChatSidebar({ chats, isLoading, isError, selectedId, userId, onS
                   chat={chat}
                   userId={userId}
                   selected={chat.id === selectedId}
+                  unread={chat.id === readingId ? 0 : chat.unread_count}
                   onSelect={() => onSelect(chat.id)}
                 />
               </li>
@@ -115,7 +122,19 @@ export function ChatAvatar({ chat, userId }: { chat: GroupChat; userId: string }
   );
 }
 
-function ChatListItem({ chat, userId, selected, onSelect }: { chat: GroupChat; userId: string; selected: boolean; onSelect: () => void }) {
+function ChatListItem({
+  chat,
+  userId,
+  selected,
+  unread,
+  onSelect,
+}: {
+  chat: GroupChat;
+  userId: string;
+  selected: boolean;
+  unread: number;
+  onSelect: () => void;
+}) {
   const { t } = useT("im");
   const locale = useLocale();
   const { getActorName } = useActorName();
@@ -141,14 +160,19 @@ function ChatListItem({ chat, userId, selected, onSelect }: { chat: GroupChat; u
       <ChatAvatar chat={chat} userId={userId} />
       <span className="min-w-0 flex-1">
         <span className="flex items-baseline gap-2">
-          <span className={cn("min-w-0 flex-1 truncate text-body", selected ? "font-semibold" : "font-medium")}>
+          <span className={cn("min-w-0 flex-1 truncate text-body", selected || unread > 0 ? "font-semibold" : "font-medium")}>
             {chatDisplayTitle(chat, userId, getActorName)}
           </span>
           <span className="shrink-0 text-micro text-muted-foreground tabular-nums">
             {formatListStamp(chatActivityAt(chat), locale, new Date())}
           </span>
         </span>
-        <span className="mt-[3px] block truncate text-caption text-muted-foreground">{preview}</span>
+        <span className="mt-[3px] flex items-center gap-2">
+          <span className={cn("min-w-0 flex-1 truncate text-caption", unread > 0 ? "text-foreground" : "text-muted-foreground")}>
+            {preview}
+          </span>
+          <UnreadBadge count={unread} label={t(($) => $.sidebar.unread, { count: unread })} />
+        </span>
       </span>
     </button>
   );

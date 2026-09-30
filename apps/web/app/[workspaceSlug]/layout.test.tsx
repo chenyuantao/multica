@@ -64,6 +64,10 @@ vi.mock("@multica/views/workspace/welcome-after-onboarding", () => ({
   WelcomeAfterOnboarding: () => null,
 }));
 
+vi.mock("@multica/views/platform", () => ({
+  useAppUnreadBadge: () => {},
+}));
+
 vi.mock("@multica/views/workspace/use-workspace-seen", () => ({
   useWorkspaceSeen: () => state.hasBeenSeen,
 }));

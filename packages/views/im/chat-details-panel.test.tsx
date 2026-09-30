@@ -68,6 +68,7 @@ const chat: GroupChat = {
   last_comment_at: null,
   last_message: null,
   pending_speakers: [],
+  unread_count: 0,
   is_direct: false,
   members: [
     { member_type: "member", member_id: "user-1", added_by_type: null, added_by_id: null, created_at: "2026-09-28T00:00:00Z" },

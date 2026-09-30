@@ -24,6 +24,7 @@ const chat = (id: string, members: GroupChatMember[], opts: { direct?: boolean; 
   last_message: null,
   members,
   pending_speakers: [],
+  unread_count: 0,
   is_direct: opts.direct ?? true,
 });
 

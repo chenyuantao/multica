@@ -10,7 +10,9 @@
     "chats": "Group chats",
     "settings": "Settings",
     "clear_search": "Clear search",
-    "resize": "Resize sidebar"
+    "resize": "Resize sidebar",
+    "unread_one": "{{count}} unread message",
+    "unread_other": "{{count}} unread messages"
   },
   "rail": {
     "sections": "Sections",

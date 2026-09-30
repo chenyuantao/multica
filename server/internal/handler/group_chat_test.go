@@ -152,104 +152,6 @@ func TestGroupChatMembershipLifecycle(t *testing.T) {
 		"id", chat.ID, "memberType", "member", "memberId", testUserID)).Want(http.StatusBadRequest)
 }
 
-func TestGroupChatQuotedMessageReachesAgentInFull(t *testing.T) {
-	ctx := context.Background()
-	agentID := createHandlerTestAgent(t, "group-chat-quote-agent", nil)
-
-	newChat := func(title string) GroupChatResponse {
-		var chat GroupChatResponse
-		testutil.Call(t, testHandler.CreateGroupChat, groupChatRequestAs(t, testUserID, "POST", "/api/group-chats", map[string]any{
-			"title":   title,
-			"members": []map[string]string{{"member_type": "agent", "member_id": agentID}},
-		})).Want(http.StatusCreated).JSON(&chat)
-		t.Cleanup(func() {
-			for _, sql := range []string{
-				`DELETE FROM agent_task_queue WHERE issue_id = $1`,
-				`DELETE FROM issue_member WHERE issue_id = $1`,
-				`DELETE FROM issue_subscriber WHERE issue_id = $1`,
-				`DELETE FROM comment WHERE issue_id = $1`,
-				`DELETE FROM issue WHERE id = $1`,
-			} {
-				testPool.Exec(ctx, sql, chat.ID)
-			}
-		})
-		return chat
-	}
-	post := func(chatID string, body map[string]any) *testutil.Response {
-		return testutil.Call(t, testHandler.CreateComment, withURLParam(groupChatRequestAs(t, testUserID, "POST", "/api/issues/"+chatID+"/comments", body), "id", chatID))
-	}
-
-	chat := newChat("Quote room")
-	other := newChat("Other room")
-	var quoted, foreign, reply CommentResponse
-	post(chat.ID, map[string]any{"content": "Ship the v2 importer on Friday"}).Want(http.StatusCreated).JSON(&quoted)
-	post(other.ID, map[string]any{"content": "elsewhere"}).Want(http.StatusCreated).JSON(&foreign)
-
-	post(chat.ID, map[string]any{"content": "why?", "ref_message_id": foreign.ID}).Want(http.StatusBadRequest)
-	post(chat.ID, map[string]any{"content": "why?", "ref_message_id": "not-a-uuid"}).Want(http.StatusBadRequest)
-	post(chat.ID, map[string]any{"content": "why Friday?", "ref_message_id": quoted.ID}).Want(http.StatusCreated).JSON(&reply)
-	if reply.RefMessageID == nil || *reply.RefMessageID != quoted.ID {
-		t.Fatalf("ref_message_id = %v, want %s", reply.RefMessageID, quoted.ID)
-	}
-
-	issue, err := testHandler.Queries.GetIssue(ctx, parseUUID(chat.ID))
-	if err != nil {
-		t.Fatal(err)
-	}
-	roster, _ := testHandler.groupChatRosterIfChat(ctx, issue)
-	var got *groupchat.Turn
-	for _, turn := range testHandler.groupChatTurns(ctx, issue, roster) {
-		if turn.ID == reply.ID {
-			got = turn.Ref
-		}
-	}
-	if got == nil || got.ID != quoted.ID || got.Text != "Ship the v2 importer on Friday" || got.Role != "member" {
-		t.Fatalf("quoted turn = %+v, want the full quoted message", got)
-	}
-}
-
-func TestGroupChatAttachmentOnlyMessageStartsNoAgent(t *testing.T) {
-	ctx := context.Background()
-	agentID := createHandlerTestAgent(t, "group-chat-attachment-agent", nil)
-
-	var chat GroupChatResponse
-	testutil.Call(t, testHandler.CreateGroupChat, groupChatRequestAs(t, testUserID, "POST", "/api/group-chats", map[string]any{
-		"title":   "Attachment room",
-		"members": []map[string]string{{"member_type": "agent", "member_id": agentID}},
-	})).Want(http.StatusCreated).JSON(&chat)
-	t.Cleanup(func() {
-		for _, sql := range []string{
-			`DELETE FROM agent_task_queue WHERE issue_id = $1`,
-			`DELETE FROM attachment WHERE issue_id = $1`,
-			`DELETE FROM issue_member WHERE issue_id = $1`,
-			`DELETE FROM issue_subscriber WHERE issue_id = $1`,
-			`DELETE FROM comment WHERE issue_id = $1`,
-			`DELETE FROM issue WHERE id = $1`,
-		} {
-			testPool.Exec(ctx, sql, chat.ID)
-		}
-	})
-	tasks := func() int {
-		return dbfx.Count(t, `SELECT count(*) FROM agent_task_queue WHERE issue_id = $1 AND agent_id = $2`, chat.ID, agentID)
-	}
-
-	attachmentID := unlinkedIssueAttachment(t, chat.ID)
-	testutil.Call(t, testHandler.CreateComment, withURLParam(groupChatRequestAs(t, testUserID, "POST", "/api/issues/"+chat.ID+"/comments", map[string]any{
-		"content":        "![shot.png](https://example.test/shot.png)",
-		"attachment_ids": []string{attachmentID},
-	}), "id", chat.ID)).Want(http.StatusCreated)
-	if n := tasks(); n != 0 {
-		t.Fatalf("tasks after attachment-only message = %d, want 0", n)
-	}
-
-	testutil.Call(t, testHandler.CreateComment, withURLParam(groupChatRequestAs(t, testUserID, "POST", "/api/issues/"+chat.ID+"/comments", map[string]string{
-		"content": "what is in this screenshot?",
-	}), "id", chat.ID)).Want(http.StatusCreated)
-	if n := tasks(); n != 1 {
-		t.Fatalf("tasks after text message = %d, want 1", n)
-	}
-}
-
 // A direct chat is reused from either side and keeps its two members; a
 // two-person chat created as a group is not a direct chat.
 func TestOpenDirectGroupChat(t *testing.T) {
@@ -356,4 +258,191 @@ func TestOpenDirectGroupChat(t *testing.T) {
 	}
 
 	open(testUserID, "member", testUserID, http.StatusBadRequest)
+}
+
+// A chat's unread count is its unread messages, and opening the chat reads all
+// of them rather than only the newest notification.
+func TestGroupChatUnreadCountAndMarkRead(t *testing.T) {
+	ctx := context.Background()
+	memberB := groupChatWorkspaceMember(t, "Group Chat Unread B", "group-chat-unread-b@multica.test")
+
+	var chat GroupChatResponse
+	testutil.Call(t, testHandler.CreateGroupChat, groupChatRequestAs(t, testUserID, "POST", "/api/group-chats", map[string]any{
+		"title":   "Unread room",
+		"members": []map[string]string{{"member_type": "member", "member_id": memberB}},
+	})).Want(http.StatusCreated).JSON(&chat)
+	t.Cleanup(func() {
+		for _, sql := range []string{
+			`DELETE FROM inbox_item WHERE issue_id = $1`,
+			`DELETE FROM issue_member WHERE issue_id = $1`,
+			`DELETE FROM issue_subscriber WHERE issue_id = $1`,
+			`DELETE FROM issue WHERE id = $1`,
+		} {
+			testPool.Exec(ctx, sql, chat.ID)
+		}
+	})
+
+	notify := func(notifType, commentID string, read bool, age string) {
+		dbfx.Exec(t, `
+			INSERT INTO inbox_item (workspace_id, recipient_type, recipient_id, type, title, issue_id, read, details, created_at)
+			VALUES ($1, 'member', $2, $3, 'Unread room', $4, $5, jsonb_build_object('comment_id', $6::text), now() - $7::interval)
+		`, testWorkspaceID, testUserID, notifType, chat.ID, read, commentID, age)
+	}
+	notify("new_comment", "00000000-0000-0000-0000-00000000c001", true, "4 minutes")
+	notify("new_comment", "00000000-0000-0000-0000-00000000c002", false, "3 minutes")
+	notify("new_comment", "00000000-0000-0000-0000-00000000c003", false, "2 minutes")
+	// A mention creates a second row for the same message; it counts once.
+	notify("mentioned", "00000000-0000-0000-0000-00000000c003", false, "2 minutes")
+	notify("new_comment", "00000000-0000-0000-0000-00000000c004", false, "1 minute")
+
+	unreadInList := func() int64 {
+		var out struct {
+			Chats []GroupChatResponse `json:"chats"`
+		}
+		testutil.Call(t, testHandler.ListGroupChats, groupChatRequestAs(t, testUserID, "GET", "/api/group-chats", nil)).Want(http.StatusOK).JSON(&out)
+		for _, c := range out.Chats {
+			if c.ID == chat.ID {
+				return c.UnreadCount
+			}
+		}
+		t.Fatal("chat missing from list")
+		return 0
+	}
+	summary := func() InboxWorkspaceUnreadResponse {
+		var rows []InboxWorkspaceUnreadResponse
+		testutil.Call(t, testHandler.UnreadInboxSummary, groupChatRequestAs(t, testUserID, "GET", "/api/inbox/unread-summary", nil)).Want(http.StatusOK).JSON(&rows)
+		for _, row := range rows {
+			if row.WorkspaceID == testWorkspaceID {
+				return row
+			}
+		}
+		return InboxWorkspaceUnreadResponse{WorkspaceID: testWorkspaceID}
+	}
+
+	if got := unreadInList(); got != 3 {
+		t.Fatalf("unread_count = %d, want 3 distinct unread messages", got)
+	}
+	before := summary()
+
+	markRead := func(userID string) *testutil.Response {
+		return testutil.Call(t, testHandler.MarkGroupChatRead, withURLParam(groupChatRequestAs(t, userID, "POST", "/api/group-chats/"+chat.ID+"/read", nil), "id", chat.ID))
+	}
+	outsider := groupChatWorkspaceMember(t, "Group Chat Unread Outsider", "group-chat-unread-outsider@multica.test")
+	markRead(outsider).Want(http.StatusNotFound)
+
+	var marked struct {
+		Count int64 `json:"count"`
+	}
+	markRead(testUserID).Want(http.StatusOK).JSON(&marked)
+	if marked.Count != 4 {
+		t.Fatalf("marked %d rows, want every unread row of the chat", marked.Count)
+	}
+	if got := unreadInList(); got != 0 {
+		t.Fatalf("unread_count after mark read = %d, want 0", got)
+	}
+	after := summary()
+	if before.Count-after.Count != 1 {
+		t.Fatalf("summary count dropped by %d, want the chat to count as one issue", before.Count-after.Count)
+	}
+	if before.BadgeCount-after.BadgeCount != 3 {
+		t.Fatalf("badge_count dropped by %d, want the chat's 3 unread messages", before.BadgeCount-after.BadgeCount)
+	}
+}
+
+func TestGroupChatQuotedMessageReachesAgentInFull(t *testing.T) {
+	ctx := context.Background()
+	agentID := createHandlerTestAgent(t, "group-chat-quote-agent", nil)
+
+	newChat := func(title string) GroupChatResponse {
+		var chat GroupChatResponse
+		testutil.Call(t, testHandler.CreateGroupChat, groupChatRequestAs(t, testUserID, "POST", "/api/group-chats", map[string]any{
+			"title":   title,
+			"members": []map[string]string{{"member_type": "agent", "member_id": agentID}},
+		})).Want(http.StatusCreated).JSON(&chat)
+		t.Cleanup(func() {
+			for _, sql := range []string{
+				`DELETE FROM agent_task_queue WHERE issue_id = $1`,
+				`DELETE FROM issue_member WHERE issue_id = $1`,
+				`DELETE FROM issue_subscriber WHERE issue_id = $1`,
+				`DELETE FROM comment WHERE issue_id = $1`,
+				`DELETE FROM issue WHERE id = $1`,
+			} {
+				testPool.Exec(ctx, sql, chat.ID)
+			}
+		})
+		return chat
+	}
+	post := func(chatID string, body map[string]any) *testutil.Response {
+		return testutil.Call(t, testHandler.CreateComment, withURLParam(groupChatRequestAs(t, testUserID, "POST", "/api/issues/"+chatID+"/comments", body), "id", chatID))
+	}
+
+	chat := newChat("Quote room")
+	other := newChat("Other room")
+	var quoted, foreign, reply CommentResponse
+	post(chat.ID, map[string]any{"content": "Ship the v2 importer on Friday"}).Want(http.StatusCreated).JSON(&quoted)
+	post(other.ID, map[string]any{"content": "elsewhere"}).Want(http.StatusCreated).JSON(&foreign)
+
+	post(chat.ID, map[string]any{"content": "why?", "ref_message_id": foreign.ID}).Want(http.StatusBadRequest)
+	post(chat.ID, map[string]any{"content": "why?", "ref_message_id": "not-a-uuid"}).Want(http.StatusBadRequest)
+	post(chat.ID, map[string]any{"content": "why Friday?", "ref_message_id": quoted.ID}).Want(http.StatusCreated).JSON(&reply)
+	if reply.RefMessageID == nil || *reply.RefMessageID != quoted.ID {
+		t.Fatalf("ref_message_id = %v, want %s", reply.RefMessageID, quoted.ID)
+	}
+
+	issue, err := testHandler.Queries.GetIssue(ctx, parseUUID(chat.ID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	roster, _ := testHandler.groupChatRosterIfChat(ctx, issue)
+	var got *groupchat.Turn
+	for _, turn := range testHandler.groupChatTurns(ctx, issue, roster) {
+		if turn.ID == reply.ID {
+			got = turn.Ref
+		}
+	}
+	if got == nil || got.ID != quoted.ID || got.Text != "Ship the v2 importer on Friday" || got.Role != "member" {
+		t.Fatalf("quoted turn = %+v, want the full quoted message", got)
+	}
+}
+
+func TestGroupChatAttachmentOnlyMessageStartsNoAgent(t *testing.T) {
+	ctx := context.Background()
+	agentID := createHandlerTestAgent(t, "group-chat-attachment-agent", nil)
+
+	var chat GroupChatResponse
+	testutil.Call(t, testHandler.CreateGroupChat, groupChatRequestAs(t, testUserID, "POST", "/api/group-chats", map[string]any{
+		"title":   "Attachment room",
+		"members": []map[string]string{{"member_type": "agent", "member_id": agentID}},
+	})).Want(http.StatusCreated).JSON(&chat)
+	t.Cleanup(func() {
+		for _, sql := range []string{
+			`DELETE FROM agent_task_queue WHERE issue_id = $1`,
+			`DELETE FROM attachment WHERE issue_id = $1`,
+			`DELETE FROM issue_member WHERE issue_id = $1`,
+			`DELETE FROM issue_subscriber WHERE issue_id = $1`,
+			`DELETE FROM comment WHERE issue_id = $1`,
+			`DELETE FROM issue WHERE id = $1`,
+		} {
+			testPool.Exec(ctx, sql, chat.ID)
+		}
+	})
+	tasks := func() int {
+		return dbfx.Count(t, `SELECT count(*) FROM agent_task_queue WHERE issue_id = $1 AND agent_id = $2`, chat.ID, agentID)
+	}
+
+	attachmentID := unlinkedIssueAttachment(t, chat.ID)
+	testutil.Call(t, testHandler.CreateComment, withURLParam(groupChatRequestAs(t, testUserID, "POST", "/api/issues/"+chat.ID+"/comments", map[string]any{
+		"content":        "![shot.png](https://example.test/shot.png)",
+		"attachment_ids": []string{attachmentID},
+	}), "id", chat.ID)).Want(http.StatusCreated)
+	if n := tasks(); n != 0 {
+		t.Fatalf("tasks after attachment-only message = %d, want 0", n)
+	}
+
+	testutil.Call(t, testHandler.CreateComment, withURLParam(groupChatRequestAs(t, testUserID, "POST", "/api/issues/"+chat.ID+"/comments", map[string]string{
+		"content": "what is in this screenshot?",
+	}), "id", chat.ID)).Want(http.StatusCreated)
+	if n := tasks(); n != 1 {
+		t.Fatalf("tasks after text message = %d, want 1", n)
+	}
 }

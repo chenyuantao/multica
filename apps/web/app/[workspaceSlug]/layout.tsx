@@ -11,6 +11,7 @@ import { NoAccessPage } from "@multica/views/workspace/no-access-page";
 import { WelcomeAfterOnboarding } from "@multica/views/workspace/welcome-after-onboarding";
 import { MulticaIcon } from "@multica/ui/components/common/multica-icon";
 import { useWorkspaceSeen } from "@multica/views/workspace/use-workspace-seen";
+import { useAppUnreadBadge } from "@multica/views/platform";
 import { workspaceSlugFromPathname } from "@/lib/workspace-slug-from-pathname";
 
 export default function WorkspaceLayout({
@@ -94,6 +95,9 @@ export default function WorkspaceLayout({
   // or realtime eviction) — in those cases the caller is navigating away
   // and we just need to hold null briefly.
   const hasBeenSeen = useWorkspaceSeen(workspaceSlug, !!workspace);
+
+  // Unread count on the installed web app's icon (home screen on iOS).
+  useAppUnreadBadge(workspace?.id ?? null);
 
   const loadingIndicator = (
     <div className="flex h-svh items-center justify-center">

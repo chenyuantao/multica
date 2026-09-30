@@ -158,6 +158,31 @@ export function useInboxUnreadCount(wsId: string | null | undefined): number {
 }
 
 /**
+ * App icon badge number for one workspace: like the inbox count, except an
+ * unread group chat counts its unread messages. Falls back to the inbox count
+ * on backends that do not report `badge_count`.
+ */
+export function badgeCountForWorkspace(
+  summary: InboxWorkspaceUnread[],
+  wsId: string | null | undefined,
+): number {
+  if (!wsId) return 0;
+  const entry = summary.find((s) => s.workspace_id === wsId);
+  return entry ? (entry.badge_count ?? entry.count) : 0;
+}
+
+/** The number the desktop dock badge and the installed web app icon render. */
+export function useAppBadgeCount(wsId: string | null | undefined): number {
+  const { data } = useQuery({
+    ...inboxUnreadSummaryOptions(),
+    enabled: !!wsId,
+    select: (summary: InboxWorkspaceUnread[]) =>
+      badgeCountForWorkspace(summary, wsId),
+  });
+  return data ?? 0;
+}
+
+/**
  * Deduplicate inbox items by issue_id (one entry per issue, Linear-style).
  * Exported for consumers to use in useMemo — not in queryOptions select
  * (to avoid new array references on every cache update).

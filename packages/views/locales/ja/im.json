@@ -10,7 +10,8 @@
     "chats": "グループチャット",
     "settings": "設定",
     "clear_search": "検索をクリア",
-    "resize": "サイドバーの幅を調整"
+    "resize": "サイドバーの幅を調整",
+    "unread_other": "未読メッセージ {{count}} 件"
   },
   "rail": {
     "sections": "セクション",

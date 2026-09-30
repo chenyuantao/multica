@@ -1313,6 +1313,44 @@ func TestMarkInboxUnreadIsItemScoped(t *testing.T) {
 	}
 }
 
+// Opening a notification reads its whole issue group: an older unread sibling
+// must not survive as a leftover unread message.
+func TestMarkInboxReadIsIssueScoped(t *testing.T) {
+	ctx := context.Background()
+	issueID := seedArchivedFixtureIssue(t, "Mark read fixture")
+
+	var newestID string
+	if err := testPool.QueryRow(ctx, `
+		INSERT INTO inbox_item (workspace_id, recipient_type, recipient_id, type, title, issue_id, read, archived, created_at)
+		VALUES ($1, 'member', $2, 'new_comment', 'newest', $3, false, false, now())
+		RETURNING id
+	`, testWorkspaceID, testUserID, issueID).Scan(&newestID); err != nil {
+		t.Fatalf("failed to seed inbox item: %v", err)
+	}
+	if _, err := testPool.Exec(ctx, `
+		INSERT INTO inbox_item (workspace_id, recipient_type, recipient_id, type, title, issue_id, read, archived, created_at)
+		VALUES ($1, 'member', $2, 'new_comment', 'older sibling', $3, false, false, now() - interval '1 hour')
+	`, testWorkspaceID, testUserID, issueID); err != nil {
+		t.Fatalf("failed to seed sibling inbox item: %v", err)
+	}
+
+	resp := authRequest(t, "POST", "/api/inbox/"+newestID+"/read", nil)
+	if resp.StatusCode != 200 {
+		t.Fatalf("MarkInboxRead: expected 200, got %d", resp.StatusCode)
+	}
+	resp.Body.Close()
+
+	var unread int
+	if err := testPool.QueryRow(ctx, `
+		SELECT count(*) FROM inbox_item WHERE issue_id = $1 AND read = false
+	`, issueID).Scan(&unread); err != nil {
+		t.Fatalf("failed to count unread siblings: %v", err)
+	}
+	if unread != 0 {
+		t.Fatalf("expected every notification on the issue to be read, %d still unread", unread)
+	}
+}
+
 // The read/unread endpoints resolve the item within the caller's workspace and
 // recipient scope, so someone else's notification is not addressable.
 func TestMarkInboxUnreadRejectsForeignItem(t *testing.T) {

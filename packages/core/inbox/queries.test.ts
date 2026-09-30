@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { InboxItem, InboxWorkspaceUnread } from "../types";
 import {
+  badgeCountForWorkspace,
   deduplicateArchivedInboxItems,
   deduplicateInboxItems,
   hasOtherWorkspaceUnread,
@@ -242,5 +243,22 @@ describe("unreadCountForWorkspace", () => {
 
   it("returns zero for an empty summary", () => {
     expect(unreadCountForWorkspace([], "ws-1")).toBe(0);
+  });
+});
+
+describe("badgeCountForWorkspace", () => {
+  it("prefers the message-level badge count", () => {
+    const summary: InboxWorkspaceUnread[] = [{ workspace_id: "ws-1", count: 2, badge_count: 9 }];
+    expect(badgeCountForWorkspace(summary, "ws-1")).toBe(9);
+  });
+
+  it("falls back to the inbox count on a backend without badge_count", () => {
+    expect(badgeCountForWorkspace([{ workspace_id: "ws-1", count: 2 }], "ws-1")).toBe(2);
+  });
+
+  it("returns zero for an absent workspace or none at all", () => {
+    const summary: InboxWorkspaceUnread[] = [{ workspace_id: "ws-1", count: 2, badge_count: 9 }];
+    expect(badgeCountForWorkspace(summary, "ws-2")).toBe(0);
+    expect(badgeCountForWorkspace(summary, null)).toBe(0);
   });
 });

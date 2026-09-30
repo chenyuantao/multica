@@ -1,4 +1,4 @@
-export { groupChatKeys, groupChatListOptions, groupChatMessagesOptions } from "./queries";
+export { countUnreadGroupChatMessages, groupChatKeys, groupChatListOptions, groupChatMessagesOptions } from "./queries";
 export {
   useCreateGroupChat,
   useOpenDirectGroupChat,
@@ -6,6 +6,7 @@ export {
   useAddGroupChatMember,
   useRemoveGroupChatMember,
   useSendGroupChatMessage,
+  useMarkGroupChatRead,
   useDeleteGroupChatMessage,
 } from "./mutations";
 export { useGroupChatRealtime } from "./use-group-chat-realtime";

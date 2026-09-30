@@ -130,18 +130,23 @@ describe("onInboxInvalidate ordering", () => {
     // Same reason as the summary: a change during the list's first load must
     // not be answered by the request already on the wire. See the MUL-6967
     // regression at the bottom of this file for the end-to-end sequence.
+    // The group chat list rides along: its unread counts come from inbox rows.
     const qc = new QueryClient();
     const calls: string[] = [];
-    vi.spyOn(qc, "cancelQueries").mockImplementation(async () => {
-      calls.push("cancel");
+    const label = (filters?: { queryKey?: readonly unknown[] }) => String(filters?.queryKey?.[0]);
+    vi.spyOn(qc, "cancelQueries").mockImplementation(async (filters) => {
+      calls.push(`cancel ${label(filters)}`);
     });
-    vi.spyOn(qc, "invalidateQueries").mockImplementation(async () => {
-      calls.push("invalidate");
+    vi.spyOn(qc, "invalidateQueries").mockImplementation(async (filters) => {
+      calls.push(`invalidate ${label(filters)}`);
     });
 
     await onInboxInvalidate(qc, wsId);
 
-    expect(calls).toEqual(["cancel", "invalidate"]);
+    for (const key of ["inbox", "group-chats"]) {
+      expect(calls.indexOf(`cancel ${key}`)).toBeGreaterThanOrEqual(0);
+      expect(calls.indexOf(`cancel ${key}`)).toBeLessThan(calls.indexOf(`invalidate ${key}`));
+    }
   });
 });
 

@@ -7,6 +7,8 @@ import { cn } from "@multica/ui/lib/utils";
 import { ActorAvatar } from "../common/actor-avatar";
 import { AppLink } from "../navigation";
 import { useT } from "../i18n";
+import { UnreadBadge } from "./unread-badge";
+import { useGroupChatUnreadTotal } from "./use-group-chat-unread";
 
 export type ImView = "chats" | "contacts" | "knowledge";
 
@@ -18,6 +20,8 @@ export type ImRailSection = ImView | "settings";
 
 interface ImRailProps {
   active: ImRailSection;
+  /** The chat currently on screen, left out of the Chats badge. */
+  readingChatId?: string | null;
   className?: string;
 }
 
@@ -26,10 +30,11 @@ const railButton =
 const railButtonActive = "text-brand hover:text-brand";
 
 /** Primary section switcher shared by the IM surface and the dashboard shell. */
-export function ImRail({ active, className }: ImRailProps) {
+export function ImRail({ active, readingChatId, className }: ImRailProps) {
   const { t } = useT("im");
   const paths = useWorkspacePaths();
   const userId = useAuthStore((s) => s.user?.id ?? "");
+  const chatsUnread = useGroupChatUnreadTotal(readingChatId);
 
   return (
     <nav
@@ -62,6 +67,13 @@ export function ImRail({ active, className }: ImRailProps) {
           className={cn(railButton, active === id && railButtonActive)}
         >
           <Icon className="size-[23px]" strokeWidth={1.8} />
+          {id === "chats" && (
+            <UnreadBadge
+              count={chatsUnread}
+              label={t(($) => $.sidebar.unread, { count: chatsUnread })}
+              className="absolute -top-0.5 -right-1"
+            />
+          )}
         </AppLink>
       ))}
       <div className="flex-1" />

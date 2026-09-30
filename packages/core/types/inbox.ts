@@ -42,6 +42,11 @@ export type InboxItemType =
 export interface InboxWorkspaceUnread {
   workspace_id: string;
   count: number;
+  /**
+   * App icon number: an unread group chat counts its unread messages instead
+   * of one. Absent on backends that predate it.
+   */
+  badge_count?: number;
 }
 
 export interface InboxItem {

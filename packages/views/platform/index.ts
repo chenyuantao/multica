@@ -1,5 +1,5 @@
 export { useImmersiveMode } from "./use-immersive-mode";
-export { useDesktopUnreadBadge } from "./use-app-unread-badge";
+export { useAppUnreadBadge } from "./use-app-unread-badge";
 export { DragStrip } from "./drag-strip";
 export { openExternal } from "./open-external";
 export {
