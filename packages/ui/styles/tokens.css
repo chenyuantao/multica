@@ -36,6 +36,10 @@
     --color-info: var(--info);
     --color-brand: var(--brand);
     --color-brand-foreground: var(--brand-foreground);
+    --color-im-bubble-self: var(--im-bubble-self);
+    --color-im-bubble-self-foreground: var(--im-bubble-self-foreground);
+    --color-im-bubble-other: var(--im-bubble-other);
+    --color-im-bubble-other-foreground: var(--im-bubble-other-foreground);
     --color-accent-foreground: var(--accent-foreground);
     --color-accent: var(--accent);
     --color-faint-foreground: var(--faint-foreground);
@@ -247,6 +251,12 @@
     --find-match: oklch(0.92 0.15 100);
     --find-match-active: oklch(0.82 0.17 62);
     --find-match-foreground: oklch(0.22 0.03 92);
+    /* IM message bubbles: a soft brand tint for your own messages and a
+       neutral grey for everyone else, both carrying dark ink. */
+    --im-bubble-self: #c9dcff;
+    --im-bubble-self-foreground: #0e2246;
+    --im-bubble-other: #ebedf0;
+    --im-bubble-other-foreground: #1b1d22;
 }
 
 .dark {
@@ -315,4 +325,8 @@
     --find-match: oklch(0.82 0.16 100);
     --find-match-active: oklch(0.76 0.18 60);
     --find-match-foreground: oklch(0.18 0.02 92);
+    --im-bubble-self: #314e79;
+    --im-bubble-self-foreground: oklch(0.985 0 0);
+    --im-bubble-other: #303136;
+    --im-bubble-other-foreground: oklch(0.985 0 0);
 }

@@ -66,8 +66,8 @@ describe("activeMentionQuery", () => {
 describe("time helpers", () => {
   it("separates messages across days or long gaps", () => {
     expect(needsTimeSeparator(undefined, "2026-09-28T10:00:00Z")).toBe(true);
-    expect(needsTimeSeparator("2026-09-28T10:00:00Z", "2026-09-28T10:10:00Z")).toBe(false);
-    expect(needsTimeSeparator("2026-09-28T10:00:00Z", "2026-09-28T11:00:00Z")).toBe(true);
+    expect(needsTimeSeparator("2026-09-28T10:00:00Z", "2026-09-28T10:04:00Z")).toBe(false);
+    expect(needsTimeSeparator("2026-09-28T10:00:00Z", "2026-09-28T10:06:00Z")).toBe(true);
   });
 
   it("names today and yesterday", () => {

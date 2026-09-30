@@ -1,7 +1,7 @@
 import type { GroupChat, GroupChatMemberType } from "@multica/core/types";
 
 /** Messages closer than this read as one exchange and share a time separator. */
-const SEPARATOR_GAP_MS = 30 * 60 * 1000;
+const SEPARATOR_GAP_MS = 5 * 60 * 1000;
 
 export interface ComposerMention {
   name: string;

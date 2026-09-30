@@ -15,7 +15,7 @@ import { useOpenAgentDetail } from "../modals/agent-detail";
 import { AppLink } from "../navigation";
 import { DragStrip } from "../platform";
 import { ChatComposer } from "./chat-composer";
-import { dayRelation, formatClock, needsTimeSeparator, type ComposerMention } from "./im-utils";
+import { dayRelation, formatClock, isSameDay, needsTimeSeparator, type ComposerMention } from "./im-utils";
 
 interface PendingMessage {
   localId: string;
@@ -34,15 +34,6 @@ interface ChatThreadProps {
 }
 
 const EMPTY_COMMENTS: Comment[] = [];
-
-/** Author-name colors for other participants, keyed by a stable hash. */
-const NAME_TONES = ["text-brand", "text-success", "text-warning", "text-info"];
-
-function toneFor(id: string): string {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
-  return NAME_TONES[Math.abs(h) % NAME_TONES.length] ?? "text-brand";
-}
 
 export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, mobileNav }: ChatThreadProps) {
   const { t } = useT("im");
@@ -156,31 +147,23 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, mobil
         )}
       </header>
 
-      <div ref={scrollRef} className={cn("min-h-0 flex-1 overflow-y-auto py-4", mobileNav ? "px-3" : "px-5")}>
+      <div ref={scrollRef} className={cn("min-h-0 flex-1 overflow-y-auto pt-3.5 pb-1.5", mobileNav ? "px-3" : "px-6")}>
         {isError ? (
           <p className="py-10 text-center text-body text-muted-foreground">{t(($) => $.thread.load_failed)}</p>
         ) : messages.length === 0 && pending.length === 0 ? (
           <p className="py-10 text-center text-body text-muted-foreground">{t(($) => $.thread.no_messages)}</p>
         ) : (
-          <ol className="mx-auto flex max-w-3xl flex-col">
+          <ol className="flex flex-col">
             {messages.map((m, i) => {
               const prev = messages[i - 1];
-              const next = messages[i + 1];
-              const separated = needsTimeSeparator(prev?.created_at, m.created_at);
-              const sameAuthorAsPrev = !separated && prev?.author_type === m.author_type && prev?.author_id === m.author_id;
-              const sameAuthorAsNext =
-                next &&
-                !needsTimeSeparator(m.created_at, next.created_at) &&
-                next.author_type === m.author_type &&
-                next.author_id === m.author_id;
               return (
                 <li key={m.id} className="flex flex-col">
-                  {separated && <TimeSeparator iso={m.created_at} />}
+                  {needsTimeSeparator(prev?.created_at, m.created_at) && (
+                    <TimeSeparator iso={m.created_at} showDay={!prev || !isSameDay(new Date(prev.created_at), new Date(m.created_at))} />
+                  )}
                   <MessageRow
                     message={m}
                     mine={m.author_type === "member" && m.author_id === userId}
-                    showName={!sameAuthorAsPrev}
-                    showAvatar={!sameAuthorAsNext}
                     authorName={getActorName(m.author_type, m.author_id)}
                   />
                 </li>
@@ -188,7 +171,7 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, mobil
             })}
             {pending.map((p) => (
               <li key={p.localId} className="flex flex-col">
-                <PendingRow message={p} onRetry={() => void deliver(p.localId, p.content)} />
+                <PendingRow message={p} userId={userId} onRetry={() => void deliver(p.localId, p.content)} />
               </li>
             ))}
           </ol>
@@ -202,110 +185,112 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, mobil
   );
 }
 
-function TimeSeparator({ iso }: { iso: string }) {
+/** Shows the day only when it changes from the previous message; otherwise just the clock. */
+function TimeSeparator({ iso, showDay }: { iso: string; showDay: boolean }) {
   const { t } = useT("im");
   const locale = useLocale();
   const time = formatClock(iso, locale);
   const relation = dayRelation(iso, new Date());
-  const label =
-    relation === "today"
+  const label = !showDay
+    ? time
+    : relation === "today"
       ? t(($) => $.thread.today, { time })
       : relation === "yesterday"
         ? t(($) => $.thread.yesterday, { time })
         : new Date(iso).toLocaleString(locale, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-  return (
-    <div className="my-3 flex justify-center">
-      <span className="rounded-full bg-muted px-3 py-0.5 text-caption text-muted-foreground">{label}</span>
-    </div>
-  );
+  return <p className="mt-4 mb-[18px] text-center text-caption text-muted-foreground">{label}</p>;
 }
 
-function MessageRow({
-  message,
-  mine,
-  showName,
-  showAvatar,
-  authorName,
-}: {
-  message: Comment;
-  mine: boolean;
-  showName: boolean;
-  showAvatar: boolean;
-  authorName: string;
-}) {
+/** 36px squircle, shared by both sides of the conversation. */
+const MESSAGE_AVATAR_CLASS = "size-9!";
+
+function MessageRow({ message, mine, authorName }: { message: Comment; mine: boolean; authorName: string }) {
   const locale = useLocale();
   const openAgentDetail = useOpenAgentDetail();
   const time = formatClock(message.created_at, locale);
 
   if (message.author_type === "system" || message.type === "status_change" || message.type === "system") {
-    return (
-      <p className="my-2 text-center text-caption text-muted-foreground">{message.content}</p>
-    );
+    return <p className="my-3.5 text-center text-caption text-muted-foreground">{message.content}</p>;
   }
 
-  if (mine) {
-    return (
-      <div className={cn("flex justify-end", showName ? "mt-3" : "mt-1")}>
-        <Bubble mine time={time}>
-          <RichContent content={message.content} attachments={message.attachments} density="compact" />
-        </Bubble>
-      </div>
-    );
-  }
+  const avatar = (
+    <ActorAvatar
+      actorType={message.author_type}
+      actorId={message.author_id}
+      size="xl"
+     
+      className={MESSAGE_AVATAR_CLASS}
+      enableHoverCard
+      onOpenProfile={message.author_type === "agent" ? () => openAgentDetail(message.author_id) : undefined}
+    />
+  );
 
   return (
-    <div className={cn("flex flex-col", showName ? "mt-3" : "mt-1")}>
-      {showName && (
-        <span className={cn("mb-1 ml-10 text-caption font-semibold", toneFor(message.author_id))}>{authorName}</span>
-      )}
-      <div className="flex items-end gap-2">
-        <span className="w-8 shrink-0">
-          {showAvatar && (
-            <ActorAvatar
-              actorType={message.author_type}
-              actorId={message.author_id}
-              size="lg"
-              shape="rounded"
-              enableHoverCard
-              onOpenProfile={message.author_type === "agent" ? () => openAgentDetail(message.author_id) : undefined}
-            />
-          )}
-        </span>
-        <Bubble time={time}>
-          <RichContent content={message.content} attachments={message.attachments} density="compact" />
-        </Bubble>
+    <MessageLayout mine={mine} avatar={avatar} authorName={mine ? undefined : authorName}>
+      <Bubble mine={mine} title={time}>
+        <RichContent content={message.content} attachments={message.attachments} density="compact" />
+      </Bubble>
+    </MessageLayout>
+  );
+}
+
+function MessageLayout({
+  mine,
+  avatar,
+  authorName,
+  children,
+}: {
+  mine: boolean;
+  avatar: React.ReactNode;
+  authorName?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={cn("mb-5 flex items-start gap-2.5", mine ? "justify-end pl-15" : "pr-15")}>
+      {!mine && <span className="flex shrink-0">{avatar}</span>}
+      <div className={cn("grid min-w-0 max-w-[min(74%,660px)] gap-1", mine ? "justify-items-end" : "justify-items-start")}>
+        {authorName && <span className="mb-0.5 ml-0.5 text-micro text-muted-foreground">{authorName}</span>}
+        {children}
       </div>
+      {mine && <span className="flex shrink-0">{avatar}</span>}
     </div>
   );
 }
 
 // `.rich-text-editor a` is unlayered CSS painting links in --brand, so the
-// override on brand bubbles needs `!` to win over it.
-const MINE_LINK_CLASS = "[&_a]:text-amber-200! [&_a]:decoration-amber-200/60! [&_a:hover]:decoration-amber-200!";
+// in-bubble override needs `!` to win over it.
+const BUBBLE_LINK_CLASS = "[&_a]:text-inherit! [&_a]:underline [&_a]:underline-offset-2";
 
-function Bubble({ mine, time, children }: { mine?: boolean; time: string; children: React.ReactNode }) {
+/** Flat bubble with a small tail pointing at the author's avatar. */
+function Bubble({ mine, title, className, children }: { mine?: boolean; title?: string; className?: string; children: React.ReactNode }) {
   return (
     <div
+      title={title}
       className={cn(
-        "relative max-w-[min(34rem,80%)] rounded-2xl px-3.5 py-2 text-body [&_.mention]:text-inherit!",
-        mine ? cn("bg-brand text-brand-foreground", MINE_LINK_CLASS) : "bg-muted text-foreground",
+        "relative max-w-full min-w-0 rounded-[6px] px-3 py-[7px] text-body break-words [&_.mention]:text-inherit!",
+        "before:absolute before:top-[11px] before:size-2 before:rotate-45 before:bg-inherit before:content-['']",
+        BUBBLE_LINK_CLASS,
+        mine
+          ? "bg-im-bubble-self text-im-bubble-self-foreground before:-right-[3px]"
+          : "bg-im-bubble-other text-im-bubble-other-foreground before:-left-[3px]",
+        className,
       )}
     >
-      <div className="min-w-0 break-words">{children}</div>
-      <span className={cn("mt-0.5 block text-right text-micro", mine ? "text-brand-foreground/75" : "text-muted-foreground")}>
-        {time}
-      </span>
+      {children}
     </div>
   );
 }
 
-function PendingRow({ message, onRetry }: { message: PendingMessage; onRetry: () => void }) {
+function PendingRow({ message, userId, onRetry }: { message: PendingMessage; userId: string; onRetry: () => void }) {
   const { t } = useT("im");
   return (
-    <div className="mt-1 flex flex-col items-end gap-1">
-      <div className={cn("max-w-[min(34rem,80%)] rounded-2xl bg-brand px-3.5 py-2 text-body text-brand-foreground [&_.mention]:text-inherit!", MINE_LINK_CLASS, message.status === "sending" && "opacity-70")}>
+    <MessageLayout
+      mine
+      avatar={<ActorAvatar actorType="member" actorId={userId} size="xl" className={MESSAGE_AVATAR_CLASS} profileLink={false} />}
+    >
+      <Bubble mine className={cn(message.status === "sending" && "opacity-70")}>
         <RichContent content={message.content} density="compact" />
-      </div>
+      </Bubble>
       {message.status === "sending" ? (
         <span className="text-micro text-muted-foreground">{t(($) => $.thread.sending)}</span>
       ) : (
@@ -317,6 +302,6 @@ function PendingRow({ message, onRetry }: { message: PendingMessage; onRetry: ()
           </Button>
         </span>
       )}
-    </div>
+    </MessageLayout>
   );
 }

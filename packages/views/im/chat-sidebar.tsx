@@ -70,36 +70,44 @@ export function ChatSidebar({ chats, isLoading, isError, selectedId, userId, onS
   );
 }
 
-/** Group avatar: the other members as a tiled mosaic, or a single avatar for 1:1-sized rooms. */
+const MOSAIC_SIZE = 40;
+const MOSAIC_PADDING = 2;
+const MOSAIC_GAP = 1.5;
+const MOSAIC_MAX_TILES = 9;
+
+/**
+ * Group avatar: a messenger-style mosaic of up to nine members on a grey
+ * plate. You always take the last tile so you stay visible in large rooms;
+ * an incomplete last row is centered.
+ */
 export function ChatAvatar({ chat, userId }: { chat: GroupChat; userId: string }) {
-  const others = chat.members.filter((m) => !(m.member_type === "member" && m.member_id === userId));
-  const shown = (others.length > 0 ? others : chat.members).slice(0, 4);
+  const isSelf = (m: GroupChat["members"][number]) => m.member_type === "member" && m.member_id === userId;
+  const self = chat.members.find(isSelf);
+  const others = chat.members.filter((m) => !isSelf(m));
+  const shown = [...others.slice(0, MOSAIC_MAX_TILES - (self ? 1 : 0)), ...(self ? [self] : [])];
   if (shown.length <= 1) {
     const only = shown[0];
     return only ? (
-      <ActorAvatar actorType={only.member_type} actorId={only.member_id} size="xl" shape="rounded" profileLink={false} />
+      <ActorAvatar actorType={only.member_type} actorId={only.member_id} size="xl" profileLink={false} />
     ) : (
-      <span className="size-10 shrink-0 rounded-[7px] bg-muted" />
+      <span className="size-10 shrink-0 rounded-avatar bg-muted" />
     );
   }
-  // Tiles fill the squircle; the 2px seams show the row surface underneath.
+  const columns = shown.length <= 4 ? 2 : 3;
+  const tile = (MOSAIC_SIZE - MOSAIC_PADDING * 2 - (columns - 1) * MOSAIC_GAP) / columns;
   return (
     <span
-      className={cn(
-        "grid size-10 shrink-0 grid-cols-2 grid-rows-2 gap-0.5 overflow-hidden rounded-[7px] [&>*]:size-full!",
-        shown.length === 2 && "[&>*]:row-span-2",
-        shown.length === 3 && "[&>*:first-child]:col-span-2",
-      )}
+      className="flex size-10 shrink-0 flex-wrap content-center items-center justify-center overflow-hidden rounded-avatar bg-input"
+      style={{ padding: MOSAIC_PADDING, gap: MOSAIC_GAP }}
     >
       {shown.map((m) => (
-        <ActorAvatar
+        <span
           key={`${m.member_type}:${m.member_id}`}
-          actorType={m.member_type}
-          actorId={m.member_id}
-          size="sm"
-          shape="square"
-          profileLink={false}
-        />
+          className="overflow-hidden rounded-[2px] [&>*]:size-full!"
+          style={{ width: tile, height: tile }}
+        >
+          <ActorAvatar actorType={m.member_type} actorId={m.member_id} size="xs" shape="square" profileLink={false} />
+        </span>
       ))}
     </span>
   );
