@@ -7,6 +7,11 @@ import { renderWithI18n } from "../test/i18n";
 import { ChatDetailsPanel } from "./chat-details-panel";
 
 const renameMutateAsync = vi.fn();
+const mockModalOpen = vi.hoisted(() => vi.fn());
+
+vi.mock("@multica/core/modals", () => ({
+  useModalStore: Object.assign(vi.fn(), { getState: () => ({ open: mockModalOpen }) }),
+}));
 
 vi.mock("@tanstack/react-query", async () => {
   const actual = await vi.importActual<typeof import("@tanstack/react-query")>("@tanstack/react-query");
@@ -80,5 +85,28 @@ describe("ChatDetailsPanel rename", () => {
     fireEvent.keyDown(screen.getByRole("textbox", { name: "Chat name" }), { key: "Enter" });
 
     expect(renameMutateAsync).not.toHaveBeenCalled();
+  });
+});
+
+describe("ChatDetailsPanel agent members", () => {
+  beforeEach(() => mockModalOpen.mockReset());
+
+  it("opens an agent member in the detail modal", () => {
+    renderWithI18n(
+      <ChatDetailsPanel
+        wsId="ws-1"
+        chat={{
+          ...chat,
+          members: [
+            ...chat.members,
+            { member_type: "agent", member_id: "agent-1", added_by_type: null, added_by_id: null, created_at: "2026-09-28T00:00:00Z" },
+          ],
+        }}
+        userId="user-2"
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "name-agent-1" }));
+
+    expect(mockModalOpen).toHaveBeenCalledWith("agent-detail", { agentId: "agent-1", hostPathname: undefined });
   });
 });

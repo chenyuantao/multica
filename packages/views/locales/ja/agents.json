@@ -122,6 +122,7 @@
   "detail": {
     "back_to_agents": "エージェント",
     "back_to_agents_full": "エージェントに戻る",
+    "open_full_page": "フルページで開く",
     "not_found_title": "エージェントが見つかりません",
     "not_found_default": "このエージェントはアーカイブまたは削除された可能性があります。",
     "load_failed_title": "エージェントを読み込めませんでした",

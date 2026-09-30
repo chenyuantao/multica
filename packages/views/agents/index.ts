@@ -1,4 +1,4 @@
-export { AgentsPage, AgentDetailPage } from "./components";
+export { AgentsPage, AgentDetail, AgentDetailPage } from "./components";
 export {
   ChooseCreateMethodPage,
   ManualCreateAgentPage,

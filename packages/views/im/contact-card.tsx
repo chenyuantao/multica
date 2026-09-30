@@ -6,6 +6,7 @@ import { Button } from "@multica/ui/components/ui/button";
 import { ActorAvatar } from "../common/actor-avatar";
 import { AppLink } from "../navigation";
 import { useT } from "../i18n";
+import { useOpenAgentDetail } from "../modals/agent-detail";
 import { DragStrip } from "../platform";
 import { ChatAvatar } from "./chat-sidebar";
 import type { DirectoryEntry } from "./use-chat-directory";
@@ -20,8 +21,8 @@ interface ContactCardProps {
 export function ContactCard({ entry, chats, userId, onOpenChat }: ContactCardProps) {
   const { t } = useT("im");
   const paths = useWorkspacePaths();
+  const openAgentDetail = useOpenAgentDetail();
   const shared = chats.filter((c) => c.members.some((m) => m.member_type === entry.type && m.member_id === entry.id));
-  const profileHref = entry.type === "agent" ? paths.agentDetail(entry.id) : paths.memberDetail(entry.id);
 
   return (
     <div className="flex min-w-0 flex-1 flex-col">
@@ -42,9 +43,15 @@ export function ContactCard({ entry, chats, userId, onOpenChat }: ContactCardPro
           {entry.detail && <p className="text-body break-words whitespace-pre-wrap text-muted-foreground">{entry.detail}</p>}
 
           <div>
-            <Button variant="outline" nativeButton={false} render={<AppLink href={profileHref} />}>
-              {t(($) => $.contacts.view_profile)}
-            </Button>
+            {entry.type === "agent" ? (
+              <Button variant="outline" onClick={() => openAgentDetail(entry.id)}>
+                {t(($) => $.contacts.view_profile)}
+              </Button>
+            ) : (
+              <Button variant="outline" nativeButton={false} render={<AppLink href={paths.memberDetail(entry.id)} />}>
+                {t(($) => $.contacts.view_profile)}
+              </Button>
+            )}
           </div>
 
           {shared.length > 0 && (

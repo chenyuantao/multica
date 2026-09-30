@@ -139,6 +139,7 @@
   "detail": {
     "back_to_agents": "Agents",
     "back_to_agents_full": "Retour aux agents",
+    "open_full_page": "Ouvrir la page complète",
     "not_found_title": "Agent introuvable",
     "not_found_default": "Cet agent a peut-être été archivé ou supprimé.",
     "load_failed_title": "Impossible de charger cet agent",

@@ -12,6 +12,7 @@ import { Button } from "@multica/ui/components/ui/button";
 import { useIsMobile } from "@multica/ui/hooks/use-mobile";
 import { AppLink, useNavigation } from "../navigation";
 import { useT } from "../i18n";
+import { useOpenAgentDetail } from "../modals/agent-detail";
 import { DragStrip } from "../platform";
 import { ChatDetailsPanel } from "./chat-details-panel";
 import { ChatSidebar } from "./chat-sidebar";
@@ -44,6 +45,7 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
   const [newChatOpen, setNewChatOpen] = useState(false);
   const [contactKey, setContactKey] = useState<string | null>(null);
   const directory = useChatDirectory(wsId);
+  const openAgentDetail = useOpenAgentDetail();
 
   useGroupChatRealtime(wsId);
 
@@ -58,10 +60,11 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
   const openChat = (chatId: string) => navigation.push(paths.imChat(chatId));
 
   const contact = contactKey ? directory.byKey.get(contactKey) ?? null : null;
-  const selectContact = (entry: DirectoryEntry) =>
-    isMobile
-      ? navigation.push(entry.type === "agent" ? paths.agentDetail(entry.id) : paths.memberDetail(entry.id))
-      : setContactKey(entryKey(entry.type, entry.id));
+  const selectContact = (entry: DirectoryEntry) => {
+    if (!isMobile) setContactKey(entryKey(entry.type, entry.id));
+    else if (entry.type === "agent") openAgentDetail(entry.id);
+    else navigation.push(paths.memberDetail(entry.id));
+  };
 
   const rail = <ImRail active={view} />;
   const contactList = (className?: string) => (

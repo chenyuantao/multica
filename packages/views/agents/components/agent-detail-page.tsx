@@ -7,6 +7,7 @@ import {
   Bot,
   Clock3,
   Lock,
+  Maximize2,
   MessageSquare,
   MoreHorizontal,
   Plus,
@@ -71,6 +72,21 @@ interface AgentDetailPageProps {
 }
 
 export function AgentDetailPage({ agentId }: AgentDetailPageProps) {
+  return <AgentDetail agentId={agentId} presentation="page" />;
+}
+
+type AgentDetailPresentation = "page" | "modal";
+
+interface AgentDetailProps {
+  agentId: string;
+  /** `modal` renders inside a Dialog over another route: it never reads or
+   *  writes the host URL, and leaving the agent closes instead of navigating. */
+  presentation: AgentDetailPresentation;
+  onClose?: () => void;
+}
+
+export function AgentDetail({ agentId, presentation, onClose }: AgentDetailProps) {
+  const isModal = presentation === "modal";
   const { t } = useT("agents");
   const wsId = useWorkspaceId();
   const paths = useWorkspacePaths();
@@ -230,22 +246,28 @@ export function AgentDetailPage({ agentId }: AgentDetailPageProps) {
   if (!agent && isForbidden) {
     return (
       <div className="flex flex-1 min-h-0 flex-col">
-        <BackHeader paths={paths.agents()} title={t(($) => $.detail.back_to_agents)} />
+        {!isModal && (
+          <BackHeader paths={paths.agents()} title={t(($) => $.detail.back_to_agents)} />
+        )}
         <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-16 text-center">
           <Lock className="h-8 w-8 text-muted-foreground" />
           <div>
-            <p className="text-body font-medium">{t(($) => $.detail.no_access_title)}</p>
+            <StateTitle presentation={presentation}>
+              {t(($) => $.detail.no_access_title)}
+            </StateTitle>
             <p className="mt-1 text-caption text-muted-foreground">
               {t(($) => $.detail.no_access_hint)}
             </p>
           </div>
-          <Button
-            size="sm"
-            render={<AppLink href={paths.agents()} />}
-            nativeButton={false}
-          >
-            {t(($) => $.detail.back_to_agents_full)}
-          </Button>
+          {!isModal && (
+            <Button
+              size="sm"
+              render={<AppLink href={paths.agents()} />}
+              nativeButton={false}
+            >
+              {t(($) => $.detail.back_to_agents_full)}
+            </Button>
+          )}
         </div>
       </div>
     );
@@ -256,15 +278,17 @@ export function AgentDetailPage({ agentId }: AgentDetailPageProps) {
     const loadError = detailError ?? agentsError;
     return (
       <div className="flex flex-1 min-h-0 flex-col">
-        <BackHeader paths={paths.agents()} title={t(($) => $.detail.back_to_agents)} />
+        {!isModal && (
+          <BackHeader paths={paths.agents()} title={t(($) => $.detail.back_to_agents)} />
+        )}
         <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-16 text-center">
           <AlertCircle className="h-8 w-8 text-destructive" />
           <div>
-            <p className="text-body font-medium">
+            <StateTitle presentation={presentation}>
               {isNotFound
                 ? t(($) => $.detail.not_found_title)
                 : t(($) => $.detail.load_failed_title)}
-            </p>
+            </StateTitle>
             <p className="mt-1 text-caption text-muted-foreground">
               {isNotFound
                 ? t(($) => $.detail.not_found_default)
@@ -284,13 +308,15 @@ export function AgentDetailPage({ agentId }: AgentDetailPageProps) {
             >
               {t(($) => $.detail.try_again)}
             </Button>
-            <Button
-              size="sm"
-              render={<AppLink href={paths.agents()} />}
-              nativeButton={false}
-            >
-              {t(($) => $.detail.back_to_agents_full)}
-            </Button>
+            {!isModal && (
+              <Button
+                size="sm"
+                render={<AppLink href={paths.agents()} />}
+                nativeButton={false}
+              >
+                {t(($) => $.detail.back_to_agents_full)}
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -342,10 +368,11 @@ export function AgentDetailPage({ agentId }: AgentDetailPageProps) {
   return (
     <div className="flex flex-1 min-h-0 flex-col">
       <DetailHeader
+        presentation={presentation}
         agent={agent}
         runtime={runtime}
         presence={presence}
-        backHref={paths.agents()}
+        backHref={isModal ? paths.agentDetail(agent.id) : paths.agents()}
         canAssign={canAssign.allowed}
         canArchive={canEdit.allowed}
         dmPending={permissionsLoading}
@@ -421,6 +448,7 @@ export function AgentDetailPage({ agentId }: AgentDetailPageProps) {
           canEdit={canEdit.allowed}
           navIntent={tabNavIntent}
           onNavIntentHandled={() => setTabNavIntent(null)}
+          syncViewWithUrl={!isModal}
         />
       </div>
 
@@ -457,7 +485,8 @@ export function AgentDetailPage({ agentId }: AgentDetailPageProps) {
                 onClick={() => {
                   setConfirmArchive(false);
                   handleArchive(agent.id);
-                  navigation.push(paths.agents());
+                  if (isModal) onClose?.();
+                  else navigation.push(paths.agents());
                 }}
               >
                 {t(($) => $.detail.archive_dialog_confirm)}
@@ -471,6 +500,7 @@ export function AgentDetailPage({ agentId }: AgentDetailPageProps) {
 }
 
 function DetailHeader({
+  presentation,
   agent,
   runtime,
   presence,
@@ -483,9 +513,11 @@ function DetailHeader({
   onAssign,
   onArchive,
 }: {
+  presentation: AgentDetailPresentation;
   agent: Agent;
   runtime: AgentRuntime | null;
   presence: AgentPresenceDetail | null;
+  /** The agents list on the page; the agent's full page from a modal. */
   backHref: string;
   canAssign: boolean;
   canArchive: boolean;
@@ -503,22 +535,35 @@ function DetailHeader({
   const timeAgo = useTimeAgo();
   const isArchived = !!agent.archived_at;
   const hasMoreActions = !!onArchive;
+  const isModal = presentation === "modal";
 
   return (
     <header
       className="shrink-0 border-b bg-background pb-5 pt-3"
     >
       <div className={cn(PAGE_RAIL, PAGE_GUTTER)}>
-        <div className="flex min-w-0 items-center gap-1.5 text-caption text-muted-foreground">
-          <AppLink
-            href={backHref}
-            className="rounded-sm transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            {t(($) => $.page.title)}
-          </AppLink>
-          <span aria-hidden="true">/</span>
-          <span className="truncate text-foreground">{agent.name}</span>
-        </div>
+        {isModal ? (
+          <div className="flex h-6 min-w-0 items-center pr-8 text-caption text-muted-foreground">
+            <AppLink
+              href={backHref}
+              className="inline-flex items-center gap-1.5 rounded-sm transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <Maximize2 className="h-3.5 w-3.5" aria-hidden="true" />
+              {t(($) => $.detail.open_full_page)}
+            </AppLink>
+          </div>
+        ) : (
+          <div className="flex min-w-0 items-center gap-1.5 text-caption text-muted-foreground">
+            <AppLink
+              href={backHref}
+              className="rounded-sm transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {t(($) => $.page.title)}
+            </AppLink>
+            <span aria-hidden="true">/</span>
+            <span className="truncate text-foreground">{agent.name}</span>
+          </div>
+        )}
 
         <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex min-w-0 items-start gap-4">
@@ -531,9 +576,15 @@ function DetailHeader({
             />
             <div className="min-w-0 pt-0.5">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                <h1 className="min-w-0 text-balance text-title-lg font-semibold tracking-tight sm:text-display-sm">
-                  {agent.name}
-                </h1>
+                {isModal ? (
+                  <DialogTitle className="min-w-0 text-balance text-title-lg leading-tight font-semibold tracking-tight">
+                    {agent.name}
+                  </DialogTitle>
+                ) : (
+                  <h1 className="min-w-0 text-balance text-title-lg font-semibold tracking-tight sm:text-display-sm">
+                    {agent.name}
+                  </h1>
+                )}
                 <AgentPresenceIndicator detail={presence} />
               </div>
               <ExpandableDescription>
@@ -611,6 +662,23 @@ function DetailHeader({
       </div>
     </header>
   );
+}
+
+function StateTitle({
+  presentation,
+  children,
+}: {
+  presentation: AgentDetailPresentation;
+  children: React.ReactNode;
+}) {
+  if (presentation === "modal") {
+    return (
+      <DialogTitle className="text-body leading-normal font-medium">
+        {children}
+      </DialogTitle>
+    );
+  }
+  return <p className="text-body font-medium">{children}</p>;
 }
 
 function BackHeader({ paths, title }: { paths: string; title: string }) {

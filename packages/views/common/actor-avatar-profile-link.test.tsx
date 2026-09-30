@@ -187,6 +187,34 @@ describe("ActorAvatar profile link", () => {
     expect(open).not.toHaveBeenCalled();
   });
 
+  it("hands a plain click to onOpenProfile instead of navigating", () => {
+    const push = vi.fn();
+    const onOpenProfile = vi.fn();
+    render(
+      <NavigationProvider value={makeAdapter({ push })}>
+        <ActorAvatar actorType="member" actorId={MEMBER_ID} onOpenProfile={onOpenProfile} />
+      </NavigationProvider>,
+    );
+    fireEvent.click(screen.getByRole("link"));
+
+    expect(onOpenProfile).toHaveBeenCalledTimes(1);
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("keeps modifier clicks opening the profile page when onOpenProfile is set", () => {
+    const onOpenProfile = vi.fn();
+    const openInNewTab = vi.fn();
+    render(
+      <NavigationProvider value={makeAdapter({ openInNewTab })}>
+        <ActorAvatar actorType="member" actorId={MEMBER_ID} onOpenProfile={onOpenProfile} />
+      </NavigationProvider>,
+    );
+    fireEvent.click(screen.getByRole("link"), { metaKey: true });
+
+    expect(openInNewTab).toHaveBeenCalledWith(HREF, undefined);
+    expect(onOpenProfile).not.toHaveBeenCalled();
+  });
+
   it("opens the deferred picker while cancelling the enclosing card link", () => {
     const push = vi.fn();
     renderCardPicker(makeAdapter({ push }));

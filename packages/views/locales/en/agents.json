@@ -139,6 +139,7 @@
   "detail": {
     "back_to_agents": "Agents",
     "back_to_agents_full": "Back to agents",
+    "open_full_page": "Open full page",
     "not_found_title": "Agent not found",
     "not_found_default": "This agent may have been archived or deleted.",
     "load_failed_title": "Couldn't load this agent",

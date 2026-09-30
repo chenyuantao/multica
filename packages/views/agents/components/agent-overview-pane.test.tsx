@@ -141,20 +141,27 @@ function makeRuntime(provider: string): AgentRuntime {
 
 function renderPane(
   runtimes: AgentRuntime[],
-  { canEdit = true }: { canEdit?: boolean } = {},
+  {
+    canEdit = true,
+    syncViewWithUrl,
+    navigation = {
+      push: vi.fn(),
+      replace: vi.fn(),
+      back: vi.fn(),
+      pathname: "/acme/agents/agent-1",
+      searchParams: new URLSearchParams(),
+      hash: "",
+      getShareableUrl: (path) => path,
+    },
+  }: {
+    canEdit?: boolean;
+    syncViewWithUrl?: boolean;
+    navigation?: NavigationAdapter;
+  } = {},
 ) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  const navigation: NavigationAdapter = {
-    push: vi.fn(),
-    replace: vi.fn(),
-    back: vi.fn(),
-    pathname: "/acme/agents/agent-1",
-    searchParams: new URLSearchParams(),
-    hash: "",
-    getShareableUrl: (path) => path,
-  };
   return render(
     <I18nProvider locale="en" resources={TEST_RESOURCES}>
       <NavigationProvider value={navigation}>
@@ -167,6 +174,7 @@ function renderPane(
             members={[]}
             onUpdate={vi.fn().mockResolvedValue(undefined)}
             canEdit={canEdit}
+            syncViewWithUrl={syncViewWithUrl}
           />
         </QueryClientProvider>
       </NavigationProvider>
@@ -263,6 +271,39 @@ describe("AgentOverviewPane Integrations tab visibility", () => {
     expect(
       screen.queryByRole("tab", { name: /^Integrations$/i }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("AgentOverviewPane URL sync", () => {
+  function makeNavigation(search = ""): NavigationAdapter {
+    return {
+      push: vi.fn(),
+      replace: vi.fn(),
+      back: vi.fn(),
+      pathname: "/acme/im",
+      searchParams: new URLSearchParams(search),
+      hash: "",
+      getShareableUrl: (path) => path,
+    };
+  }
+
+  it("mirrors the active tab into ?view= by default", () => {
+    const navigation = makeNavigation("chat=c1");
+    renderPane([makeRuntime("claude")], { navigation });
+    fireEvent.click(screen.getByRole("tab", { name: /^Work$/i }));
+    expect(navigation.replace).toHaveBeenCalledWith("/acme/im?chat=c1&view=work");
+  });
+
+  it("switches tabs without reading or writing the host URL when sync is off", () => {
+    const navigation = makeNavigation("chat=c1&view=work");
+    renderPane([makeRuntime("claude")], { navigation, syncViewWithUrl: false });
+
+    expect(screen.getByRole("tab", { name: /^Overview$/i })).toHaveAttribute("aria-selected", "true");
+    fireEvent.click(screen.getByRole("tab", { name: /^Work$/i }));
+
+    expect(screen.getByRole("tab", { name: /^Work$/i })).toHaveAttribute("aria-selected", "true");
+    expect(navigation.replace).not.toHaveBeenCalled();
+    expect(navigation.push).not.toHaveBeenCalled();
   });
 });
 

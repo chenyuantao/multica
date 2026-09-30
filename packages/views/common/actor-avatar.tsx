@@ -81,6 +81,12 @@ interface ActorAvatarProps {
    * and agents, while picker/menu controls keep their own click behavior.
    */
   profileLink?: boolean;
+  /**
+   * Replaces the in-place navigation of a plain profile click (avatar and the
+   * agent hover card's detail link), e.g. to open the profile as a modal over
+   * the current route. Modifier and middle clicks still open the page in a tab.
+   */
+  onOpenProfile?: () => void;
 }
 
 const FOCUSABLE_ANCESTOR_SELECTOR =
@@ -101,6 +107,7 @@ export function ActorAvatar({
   showStatusDot,
   hoverCardVariant = "profile",
   profileLink,
+  onOpenProfile,
 }: ActorAvatarProps) {
   const {
     getActorName,
@@ -161,7 +168,9 @@ export function ActorAvatar({
           : null
     : null;
   const content = profileHref ? (
-    <ActorAvatarProfileLink href={profileHref}>{dotted}</ActorAvatarProfileLink>
+    <ActorAvatarProfileLink href={profileHref} onOpen={onOpenProfile}>
+      {dotted}
+    </ActorAvatarProfileLink>
   ) : (
     dotted
   );
@@ -171,7 +180,11 @@ export function ActorAvatar({
   }
   if (actorType === "agent") {
     return (
-      <AgentAvatarHoverCard agentId={actorId} variant={hoverCardVariant}>
+      <AgentAvatarHoverCard
+        agentId={actorId}
+        variant={hoverCardVariant}
+        onOpenDetail={onOpenProfile}
+      >
         {content}
       </AgentAvatarHoverCard>
     );
@@ -193,9 +206,11 @@ export function ActorAvatar({
  */
 function ActorAvatarProfileLink({
   href,
+  onOpen,
   children,
 }: {
   href: string;
+  onOpen?: () => void;
   children: React.ReactNode;
 }) {
   // Web note: the trigger is a `<span role="link">`, not an anchor, so there
@@ -207,7 +222,8 @@ function ActorAvatarProfileLink({
   const insideControl = (event: React.SyntheticEvent) =>
     !!event.currentTarget.parentElement?.closest(PROFILE_LINK_CONTROL_SELECTOR);
 
-  const open = (intent: LinkClickIntent) => intentNavigate(href, intent);
+  const open = (intent: LinkClickIntent) =>
+    intent === "push" && onOpen ? onOpen() : intentNavigate(href, intent);
 
   const navigate = (event: React.MouseEvent | React.KeyboardEvent) => {
     if (insideControl(event)) return;
@@ -284,17 +300,19 @@ export function AgentStatusDot({ agentId, size }: { agentId: string; size?: Avat
 function AgentAvatarHoverCard({
   agentId,
   variant,
+  onOpenDetail,
   children,
 }: {
   agentId: string;
   variant: AgentHoverCardVariant;
+  onOpenDetail?: () => void;
   children: React.ReactNode;
 }) {
   const content =
     variant === "live" ? (
       <AgentLivePeekCard agentId={agentId} />
     ) : (
-      <AgentProfileCard agentId={agentId} />
+      <AgentProfileCard agentId={agentId} onOpenDetail={onOpenDetail} />
     );
   return (
     <ActorAvatarHoverCardShell content={content}>

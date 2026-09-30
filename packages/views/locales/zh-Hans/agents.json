@@ -130,6 +130,7 @@
   "detail": {
     "back_to_agents": "智能体",
     "back_to_agents_full": "返回智能体列表",
+    "open_full_page": "打开完整页面",
     "not_found_title": "未找到该智能体",
     "not_found_default": "该智能体可能已被归档或删除。",
     "load_failed_title": "无法加载该智能体",

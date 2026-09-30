@@ -15,7 +15,7 @@ import { runtimeListOptions } from "@multica/core/runtimes/queries";
 import { useWorkspacePaths } from "@multica/core/paths";
 import { ActorAvatar as ActorAvatarBase } from "@multica/ui/components/common/actor-avatar";
 import { Skeleton } from "@multica/ui/components/ui/skeleton";
-import { AppLink } from "../../navigation";
+import { AppLink, resolveClickIntent } from "../../navigation";
 import { HealthIcon } from "../../runtimes/components/shared";
 import { availabilityConfig } from "../presence";
 import { VisibilityBadge } from "./visibility-badge";
@@ -23,9 +23,11 @@ import { useT } from "../../i18n";
 
 interface AgentProfileCardProps {
   agentId: string;
+  /** Replaces the detail link's in-place navigation on a plain click. */
+  onOpenDetail?: () => void;
 }
 
-export function AgentProfileCard({ agentId }: AgentProfileCardProps) {
+export function AgentProfileCard({ agentId, onOpenDetail }: AgentProfileCardProps) {
   const { t } = useT("agents");
   const wsId = useWorkspaceId();
   const p = useWorkspacePaths();
@@ -102,6 +104,15 @@ export function AgentProfileCard({ agentId }: AgentProfileCardProps) {
         {!isArchived && (
           <AppLink
             href={p.agentDetail(agent.id)}
+            onClick={
+              onOpenDetail
+                ? (e) => {
+                    if (resolveClickIntent(e) !== "push") return;
+                    e.preventDefault();
+                    onOpenDetail();
+                  }
+                : undefined
+            }
             className="mr-1 mt-0.5 shrink-0 text-caption font-normal text-brand opacity-0 transition-opacity group-hover:opacity-100"
           >
             {t(($) => $.profile_card.detail_link)}

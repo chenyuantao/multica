@@ -131,6 +131,9 @@ interface AgentOverviewPaneProps {
   canEdit: boolean;
   navIntent?: DetailTab | null;
   onNavIntentHandled?: () => void;
+  /** Mirror the active tab into `?view=`. Off when the pane is hosted by a
+   *  modal over another route, whose URL it must not touch. */
+  syncViewWithUrl?: boolean;
 }
 
 /**
@@ -151,11 +154,12 @@ export function AgentOverviewPane({
   canEdit,
   navIntent,
   onNavIntentHandled,
+  syncViewWithUrl = true,
 }: AgentOverviewPaneProps) {
   const { t } = useT("agents");
   const wsId = useWorkspaceId();
   const navigation = useNavigation();
-  const urlView = navigation.searchParams.get("view");
+  const urlView = syncViewWithUrl ? navigation.searchParams.get("view") : null;
   const composioMCPAppsEnabled = useFeatureEnabled(
     COMPOSIO_MCP_APPS_FLAG,
     false,
@@ -250,13 +254,14 @@ export function AgentOverviewPane({
   const commitView = useCallback(
     (next: DetailTab) => {
       setActiveView(next);
+      if (!syncViewWithUrl) return;
       const params = new URLSearchParams(navigation.searchParams);
       if (next === "overview") params.delete("view");
       else params.set("view", next);
       const query = params.toString();
       navigation.replace(`${navigation.pathname}${query ? `?${query}` : ""}`);
     },
-    [navigation],
+    [navigation, syncViewWithUrl],
   );
 
   const requestView = useCallback(

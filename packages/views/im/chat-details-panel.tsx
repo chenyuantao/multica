@@ -13,6 +13,7 @@ import { Button } from "@multica/ui/components/ui/button";
 import { Input } from "@multica/ui/components/ui/input";
 import { ActorAvatar } from "../common/actor-avatar";
 import { useT } from "../i18n";
+import { useOpenAgentDetail } from "../modals/agent-detail";
 import { AddMemberDialog } from "./add-member-dialog";
 import { ColumnResizeHandle, useColumnWidth } from "./resizable-column";
 import { useChatDirectory } from "./use-chat-directory";
@@ -35,6 +36,7 @@ export function ChatDetailsPanel({ wsId, chat, userId, variant = "aside" }: Chat
   const { agentList } = useChatDirectory(wsId);
   const { data: runtimes = EMPTY_RUNTIMES } = useQuery(runtimeListOptions(wsId));
   const removeMember = useRemoveGroupChatMember(wsId, chat.id);
+  const openAgentDetail = useOpenAgentDetail();
   const [addOpen, setAddOpen] = useState(false);
   const { width, commit, options } = useColumnWidth("details", { defaultWidth: 320, min: 260, max: 480 });
 
@@ -93,6 +95,7 @@ export function ChatDetailsPanel({ wsId, chat, userId, variant = "aside" }: Chat
               member={m}
               name={getActorName("agent", m.member_id)}
               detail={agentDetail(agentsById.get(m.member_id), runtimesById)}
+              onOpen={() => openAgentDetail(m.member_id)}
               removable={canRemove(m)}
               removeLabel={t(($) => $.panel.remove, { name: getActorName("agent", m.member_id) })}
               onRemove={() => void remove(m)}
@@ -246,6 +249,7 @@ function MemberRow({
   member,
   name,
   detail,
+  onOpen,
   removable,
   removeLabel,
   onRemove,
@@ -254,18 +258,32 @@ function MemberRow({
   member: GroupChatMember;
   name: string;
   detail: string;
+  onOpen?: () => void;
   removable: boolean;
   removeLabel: string;
   onRemove: () => void;
   disabled: boolean;
 }) {
+  const label = (
+    <>
+      <span className="block truncate text-body font-medium group-hover:underline">{name}</span>
+      {detail && <span className="block truncate text-caption text-muted-foreground">{detail}</span>}
+    </>
+  );
   return (
     <div className="flex items-center gap-3 px-3 py-2">
-      <ActorAvatar actorType={member.member_type} actorId={member.member_id} size="lg" shape="rounded" enableHoverCard showStatusDot />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-body font-medium">{name}</span>
-        {detail && <span className="block truncate text-caption text-muted-foreground">{detail}</span>}
-      </span>
+      <ActorAvatar actorType={member.member_type} actorId={member.member_id} size="lg" shape="rounded" enableHoverCard showStatusDot onOpenProfile={onOpen} />
+      {onOpen ? (
+        <button
+          type="button"
+          onClick={onOpen}
+          className="group min-w-0 flex-1 rounded-sm text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        >
+          {label}
+        </button>
+      ) : (
+        <span className="min-w-0 flex-1">{label}</span>
+      )}
       {removable && (
         <Button variant="ghost" size="icon-xs" onClick={onRemove} disabled={disabled} aria-label={removeLabel}>
           <CircleMinus className="text-muted-foreground" />

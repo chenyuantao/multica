@@ -12,6 +12,7 @@ import { AddChildIssueModal } from "./add-child-issue";
 import { DeleteIssueConfirmModal } from "./delete-issue-confirm";
 import { RunConfirmModal } from "./run-confirm";
 import { IssueLimitUpgradeDialog } from "./issue-limit-upgrade-dialog";
+import { AgentDetailModal } from "./agent-detail";
 
 export function ModalRegistry() {
   const modal = useModalStore((s) => s.modal);
@@ -63,6 +64,9 @@ export function ModalRegistry() {
       break;
     case "issue-run-confirm":
       activeModal = <RunConfirmModal onClose={close} data={data} />;
+      break;
+    case "agent-detail":
+      activeModal = <AgentDetailModal onClose={close} data={data} />;
       break;
   }
 
