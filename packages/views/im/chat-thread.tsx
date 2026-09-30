@@ -31,6 +31,8 @@ interface PendingMessage {
   localId: string;
   content: string;
   status: "sending" | "failed";
+  /** Message ids already in the thread when this was queued; the echo is a new id. */
+  knownIds: Set<string>;
 }
 
 interface ChatThreadProps {
@@ -63,6 +65,26 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, mobil
     [data],
   );
 
+  // The realtime refetch can deliver the stored message before the send request
+  // resolves; hide each in-flight entry once its echo is in the thread.
+  const visiblePending = useMemo(() => {
+    const claimed = new Set<string>();
+    return pending.filter((p) => {
+      if (p.status !== "sending") return true;
+      const echo = messages.find(
+        (m) =>
+          m.author_type === "member" &&
+          m.author_id === userId &&
+          m.content === p.content &&
+          !p.knownIds.has(m.id) &&
+          !claimed.has(m.id),
+      );
+      if (!echo) return true;
+      claimed.add(echo.id);
+      return false;
+    });
+  }, [pending, messages, userId]);
+
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
@@ -93,7 +115,8 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, mobil
 
   const onSend = (content: string) => {
     const localId = `local-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    setPending((prev) => [...prev, { localId, content, status: "sending" }]);
+    const knownIds = new Set(messages.map((m) => m.id));
+    setPending((prev) => [...prev, { localId, content, status: "sending", knownIds }]);
     void deliver(localId, content);
   };
 
@@ -160,7 +183,7 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, mobil
       <div ref={scrollRef} className={cn("min-h-0 flex-1 overflow-y-auto pt-3.5 pb-1.5", mobileNav ? "px-3" : "px-6")}>
         {isError ? (
           <p className="py-10 text-center text-body text-muted-foreground">{t(($) => $.thread.load_failed)}</p>
-        ) : messages.length === 0 && pending.length === 0 ? (
+        ) : messages.length === 0 && visiblePending.length === 0 ? (
           <p className="py-10 text-center text-body text-muted-foreground">{t(($) => $.thread.no_messages)}</p>
         ) : (
           <ol className="flex flex-col">
@@ -179,7 +202,7 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, mobil
                 </li>
               );
             })}
-            {pending.map((p) => (
+            {visiblePending.map((p) => (
               <li key={p.localId} className="flex flex-col">
                 <PendingRow message={p} userId={userId} onRetry={() => void deliver(p.localId, p.content)} />
               </li>
