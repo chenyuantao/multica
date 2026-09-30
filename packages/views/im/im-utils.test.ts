@@ -44,7 +44,7 @@ describe("resolveComposerMentions", () => {
   });
 
   it("keeps the member the user picked when names collide", () => {
-    expect(resolveComposerMentions("@Dev take this", [devs[1]], devs)).toEqual({
+    expect(resolveComposerMentions("@Dev take this", [devs[1]!], devs)).toEqual({
       ok: true,
       markdown: "[@Dev](mention://agent/a-2) take this",
     });

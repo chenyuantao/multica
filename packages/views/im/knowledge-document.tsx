@@ -51,7 +51,6 @@ export function KnowledgeDocument({ path, variant = "pane" }: KnowledgeDocumentP
 
   return (
     <div className="flex min-w-0 flex-1 flex-col">
-      {variant === "pane" && <DragStrip />}
       {body}
     </div>
   );
@@ -151,12 +150,17 @@ function NoteEditor({ file, variant, onReload }: { file: DocFile; variant: "pane
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {variant === "pane" ? (
-        <header className="flex h-14 shrink-0 items-center gap-3 border-b px-6">
-          <div className="min-w-0 flex-1">
+        <header className="relative flex h-14 shrink-0 items-center gap-3 border-b px-6">
+          <div className="absolute inset-0">
+            <DragStrip />
+          </div>
+          <div className="relative min-w-0 flex-1">
             <h1 className="truncate text-body-lg font-semibold">{noteTitle(file.name)}</h1>
             {dir && <p className="truncate text-caption text-muted-foreground">{dir.replaceAll("/", " / ")}</p>}
           </div>
-          {status}
+          <div className="relative" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
+            {status}
+          </div>
         </header>
       ) : (
         state.kind !== "idle" && <div className="flex shrink-0 justify-end px-4 pt-2">{status}</div>
