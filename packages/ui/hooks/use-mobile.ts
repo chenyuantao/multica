@@ -6,26 +6,36 @@ const MOBILE_BREAKPOINT = 768
 // surfaces fold to the single column phones already get.
 const COMPACT_BREAKPOINT = 1024
 
-function useIsBelow(breakpoint: number) {
-  const [isBelow, setIsBelow] = React.useState<boolean | undefined>(undefined)
+function queryFor(breakpoint: number) {
+  return `(max-width: ${breakpoint - 1}px)`
+}
 
-  React.useEffect(() => {
-    const mql = window.matchMedia(`(max-width: ${breakpoint - 1}px)`)
-    const onChange = () => {
-      setIsBelow(window.innerWidth < breakpoint)
-    }
+function subscribeTo(breakpoint: number) {
+  return (onChange: () => void) => {
+    const mql = window.matchMedia(queryFor(breakpoint))
     mql.addEventListener("change", onChange)
-    setIsBelow(window.innerWidth < breakpoint)
     return () => mql.removeEventListener("change", onChange)
-  }, [breakpoint])
+  }
+}
 
-  return !!isBelow
+const subscribeMobile = subscribeTo(MOBILE_BREAKPOINT)
+const subscribeCompact = subscribeTo(COMPACT_BREAKPOINT)
+const getServerSnapshot = () => false
+
+// Read synchronously on the client so a freshly mounted page lays out for the
+// current width on its first frame instead of flashing the wide layout.
+function useIsBelow(breakpoint: number, subscribe: (onChange: () => void) => () => void) {
+  return React.useSyncExternalStore(
+    subscribe,
+    () => window.innerWidth < breakpoint,
+    getServerSnapshot,
+  )
 }
 
 export function useIsMobile() {
-  return useIsBelow(MOBILE_BREAKPOINT)
+  return useIsBelow(MOBILE_BREAKPOINT, subscribeMobile)
 }
 
 export function useIsCompact() {
-  return useIsBelow(COMPACT_BREAKPOINT)
+  return useIsBelow(COMPACT_BREAKPOINT, subscribeCompact)
 }
