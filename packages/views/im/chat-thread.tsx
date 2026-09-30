@@ -279,12 +279,16 @@ function MessageRow({
   );
 }
 
+// `.rich-text-editor a` is unlayered CSS painting links in --brand, so the
+// override on brand bubbles needs `!` to win over it.
+const MINE_LINK_CLASS = "[&_a]:text-amber-200! [&_a]:decoration-amber-200/60! [&_a:hover]:decoration-amber-200!";
+
 function Bubble({ mine, time, children }: { mine?: boolean; time: string; children: React.ReactNode }) {
   return (
     <div
       className={cn(
         "relative max-w-[min(34rem,80%)] rounded-2xl px-3.5 py-2 text-body [&_.mention]:text-inherit!",
-        mine ? "bg-brand text-brand-foreground [&_a]:text-brand-foreground [&_a]:underline" : "bg-muted text-foreground",
+        mine ? cn("bg-brand text-brand-foreground", MINE_LINK_CLASS) : "bg-muted text-foreground",
       )}
     >
       <div className="min-w-0 break-words">{children}</div>
@@ -299,7 +303,7 @@ function PendingRow({ message, onRetry }: { message: PendingMessage; onRetry: ()
   const { t } = useT("im");
   return (
     <div className="mt-1 flex flex-col items-end gap-1">
-      <div className={cn("max-w-[min(34rem,80%)] rounded-2xl bg-brand px-3.5 py-2 text-body text-brand-foreground [&_.mention]:text-inherit!", message.status === "sending" && "opacity-70")}>
+      <div className={cn("max-w-[min(34rem,80%)] rounded-2xl bg-brand px-3.5 py-2 text-body text-brand-foreground [&_.mention]:text-inherit!", MINE_LINK_CLASS, message.status === "sending" && "opacity-70")}>
         <RichContent content={message.content} density="compact" />
       </div>
       {message.status === "sending" ? (
