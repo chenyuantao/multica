@@ -94,7 +94,7 @@ export function KnowledgeSidebar({ selectedPath, onSelect, onCreate, className }
 
       <nav
         ref={navRef}
-        className="min-h-0 flex-1 overflow-y-auto px-2 pt-1 pb-3"
+        className="min-h-0 flex-1 overflow-y-auto px-2 pb-3"
         aria-label={t(($) => $.rail.knowledge)}
       >
         {active.isError ? (
@@ -102,7 +102,9 @@ export function KnowledgeSidebar({ selectedPath, onSelect, onCreate, className }
         ) : active.isPending && (searching || !tree.data) ? null : nodes.length === 0 ? (
           <SidebarNotice>{searching ? t(($) => $.knowledge.no_results) : t(($) => $.knowledge.empty)}</SidebarNotice>
         ) : (
-          <ul className="flex flex-col">
+          // Top padding lives here, not on the scroller, so pinned folders sit
+          // flush with its edge instead of leaving a see-through gap above.
+          <ul className="flex flex-col pt-1">
             {nodes.map((node) => (
               <li key={node.path} className="border-b border-foreground/5 py-1 last:border-b-0">
                 <TreeNode
@@ -182,9 +184,9 @@ function TreeNode(props: TreeNodeProps) {
           className="flex min-w-0 flex-1 items-center gap-1.5 self-stretch text-left outline-none after:absolute after:inset-0 after:rounded-md focus-visible:after:ring-2 focus-visible:after:ring-ring focus-visible:after:ring-inset"
         >
           <span className="size-4 shrink-0" />
-          <FileText className="size-4 shrink-0 text-muted-foreground" strokeWidth={1.7} />
+          <FileText className={cn("size-4 shrink-0", selected ? "text-brand" : "text-muted-foreground")} strokeWidth={1.7} />
           <span className="min-w-0 flex-1">
-            <span className={cn("block truncate text-body", selected && "font-medium")}>{node.name}</span>
+            <span className={cn("block truncate text-body", selected && "font-medium text-brand")}>{node.name}</span>
             {node.snippet && <span className="block truncate text-caption text-muted-foreground">{node.snippet}</span>}
           </span>
           {node.modified_at && <DocStamp iso={node.modified_at} />}
