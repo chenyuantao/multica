@@ -7,6 +7,11 @@ describe("paths.workspace(slug)", () => {
   it("builds workspace paths with slug prefix", () => {
     expect(ws.root()).toBe("/acme");
     expect(ws.member()).toBe("/acme/member");
+    expect(ws.memberContact("agent", "a1")).toBe("/acme/member?contact=agent%3Aa1");
+    expect(ws.imChatContact("c1", "member", "u1")).toBe("/acme/im?chat=c1&contact=member%3Au1");
+    expect(ws.imChatSettingsContact("c1", "agent", "a1")).toBe(
+      "/acme/im?chat=c1&view=settings&contact=agent%3Aa1",
+    );
     expect(ws.knowledge()).toBe("/acme/knowledge");
     expect(ws.knowledgeFile("库/笔记 1.md")).toBe("/acme/knowledge?file=%E5%BA%93%2F%E7%AC%94%E8%AE%B0%201.md");
     expect(ws.usage()).toBe("/acme/usage");

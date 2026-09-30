@@ -59,7 +59,15 @@ function workspaceScoped(slug: string) {
     im: () => `${ws}/im`,
     imChat: (chatId: string) => `${ws}/im?chat=${encode(chatId)}`,
     imChatSettings: (chatId: string) => `${ws}/im?chat=${encode(chatId)}&view=settings`,
+    // Phone levels stacked on a chat: a profile opened from the thread, and
+    // one opened from the chat settings.
+    imChatContact: (chatId: string, actorType: string, actorId: string) =>
+      `${ws}/im?chat=${encode(chatId)}&contact=${encode(`${actorType}:${actorId}`)}`,
+    imChatSettingsContact: (chatId: string, actorType: string, actorId: string) =>
+      `${ws}/im?chat=${encode(chatId)}&view=settings&contact=${encode(`${actorType}:${actorId}`)}`,
     member: () => `${ws}/member`,
+    memberContact: (actorType: string, actorId: string) =>
+      `${ws}/member?contact=${encode(`${actorType}:${actorId}`)}`,
     knowledge: () => `${ws}/knowledge`,
     knowledgeFile: (path: string) => `${ws}/knowledge?file=${encode(path)}`,
     chat: () => `${ws}/chat`,
