@@ -348,6 +348,7 @@ export type {
   GroupChatMemberRef,
   GroupChatMemberType,
   CreateGroupChatRequest,
+  UpdateGroupChatRequest,
 } from "./group-chat";
 export type {
   DocNode,

@@ -79,6 +79,9 @@
     "name": "Nom de la discussion",
     "rename": "Renommer la discussion",
     "rename_failed": "Impossible de renommer la discussion",
+    "announcement": "Annonce",
+    "announcement_placeholder": "Ajouter une annonce…",
+    "announcement_failed": "Impossible d'enregistrer l'annonce",
     "back": "Retour à la discussion"
   },
   "new_chat": {

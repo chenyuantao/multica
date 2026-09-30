@@ -1144,6 +1144,7 @@ export const GroupChatSchema = z.object({
   workspace_id: z.string(),
   identifier: z.string().default(""),
   title: z.string(),
+  description: z.string().catch(""),
   creator_type: z.string().default("member"),
   creator_id: z.string().default(""),
   created_at: z.string().default(""),

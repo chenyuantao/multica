@@ -76,6 +76,9 @@
     "name": "群聊名称",
     "rename": "修改群聊名称",
     "rename_failed": "群聊名称修改失败",
+    "announcement": "群公告",
+    "announcement_placeholder": "添加群公告…",
+    "announcement_failed": "群公告保存失败",
     "back": "返回群聊"
   },
   "new_chat": {

@@ -109,6 +109,21 @@ func TestGroupChatMembershipLifecycle(t *testing.T) {
 		t.Fatalf("listed chat after rename = %+v, want new title", listed)
 	}
 
+	// The announcement is the issue description; any member may edit it and a
+	// rename leaves it untouched.
+	var announced GroupChatResponse
+	testutil.Call(t, testHandler.UpdateGroupChat, withURLParam(groupChatRequestAs(t, memberB, "PATCH", "/api/group-chats/"+chat.ID, map[string]string{
+		"description": "Ship on **Friday**",
+	}), "id", chat.ID)).Want(http.StatusOK).JSON(&announced)
+	if announced.Description != "Ship on **Friday**" || announced.Title != "Launch war room" {
+		t.Fatalf("announced chat = %+v, want new description and unchanged title", announced)
+	}
+	renameAs(memberB, "Launch room").Want(http.StatusOK)
+	if listed := containsChat(listChatsAs(testUserID)); listed == nil || listed.Description != "Ship on **Friday**" {
+		t.Fatalf("listed chat after rename = %+v, want announcement kept", listed)
+	}
+	testutil.Call(t, testHandler.UpdateGroupChat, withURLParam(groupChatRequestAs(t, memberB, "PATCH", "/api/group-chats/"+chat.ID, map[string]string{}), "id", chat.ID)).Want(http.StatusBadRequest)
+
 	var created CommentResponse
 	testutil.Call(t, testHandler.CreateComment, withURLParam(groupChatRequestAs(t, memberB, "POST", "/api/issues/"+chat.ID+"/comments", map[string]string{
 		"content": "Onboarding looks good",

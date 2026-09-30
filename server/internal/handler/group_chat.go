@@ -37,6 +37,7 @@ type GroupChatResponse struct {
 	WorkspaceID     string                    `json:"workspace_id"`
 	Identifier      string                    `json:"identifier"`
 	Title           string                    `json:"title"`
+	Description     string                    `json:"description"`
 	CreatorType     string                    `json:"creator_type"`
 	CreatorID       string                    `json:"creator_id"`
 	CreatedAt       string                    `json:"created_at"`
@@ -72,6 +73,7 @@ func groupChatToResponse(issue db.Issue, prefix string, members []db.IssueMember
 		WorkspaceID:     uuidToString(issue.WorkspaceID),
 		Identifier:      issueToResponse(issue, prefix).Identifier,
 		Title:           issue.Title,
+		Description:     issue.Description.String,
 		CreatorType:     issue.CreatorType,
 		CreatorID:       uuidToString(issue.CreatorID),
 		CreatedAt:       timestampToString(issue.CreatedAt),
@@ -338,12 +340,15 @@ func (h *Handler) CreateGroupChat(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, groupChatToResponse(res.Issue, prefix, members, nil))
 }
 
+// UpdateGroupChatRequest patches the chat name and its announcement, which is
+// the underlying issue's description. Omitted fields stay unchanged.
 type UpdateGroupChatRequest struct {
-	Title string `json:"title"`
+	Title       *string `json:"title"`
+	Description *string `json:"description"`
 }
 
-// UpdateGroupChat renames a chat. Any chat member may rename it; membership
-// changes stay creator-only.
+// UpdateGroupChat renames a chat or edits its announcement. Any chat member
+// may do either; membership changes stay creator-only.
 func (h *Handler) UpdateGroupChat(w http.ResponseWriter, r *http.Request) {
 	userID, ok := requireUserID(w, r)
 	if !ok {
@@ -358,16 +363,32 @@ func (h *Handler) UpdateGroupChat(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	title := strings.TrimSpace(sanitizeNullBytes(req.Title))
-	if title == "" {
-		writeError(w, http.StatusBadRequest, "title is required")
+	if req.Title == nil && req.Description == nil {
+		writeError(w, http.StatusBadRequest, "title or description is required")
 		return
 	}
-	if title != issue.Title {
-		updated, err := h.IssueService.UpdateContent(r.Context(), issue, service.IssueContentPatch{Title: &title})
+	var patch service.IssueContentPatch
+	if req.Title != nil {
+		title := strings.TrimSpace(sanitizeNullBytes(*req.Title))
+		if title == "" {
+			writeError(w, http.StatusBadRequest, "title is required")
+			return
+		}
+		if title != issue.Title {
+			patch.Title = &title
+		}
+	}
+	if req.Description != nil {
+		description := sanitizeNullBytes(*req.Description)
+		if description != issue.Description.String {
+			patch.Description = &description
+		}
+	}
+	if patch.Title != nil || patch.Description != nil {
+		updated, err := h.IssueService.UpdateContent(r.Context(), issue, patch)
 		if err != nil {
-			slog.Warn("rename group chat failed", append(logger.RequestAttrs(r), "error", err)...)
-			writeError(w, http.StatusInternalServerError, "failed to rename chat")
+			slog.Warn("update group chat failed", append(logger.RequestAttrs(r), "error", err)...)
+			writeError(w, http.StatusInternalServerError, "failed to update chat")
 			return
 		}
 		issue = updated

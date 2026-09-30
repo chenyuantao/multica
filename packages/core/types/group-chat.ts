@@ -16,6 +16,8 @@ export interface GroupChat {
   workspace_id: string;
   identifier: string;
   title: string;
+  /** Chat announcement, stored as the issue description (markdown). */
+  description: string;
   creator_type: string;
   creator_id: string;
   created_at: string;
@@ -30,6 +32,11 @@ export interface GroupChat {
 export interface GroupChatMemberRef {
   member_type: GroupChatMemberType;
   member_id: string;
+}
+
+export interface UpdateGroupChatRequest {
+  title?: string;
+  description?: string;
 }
 
 export interface CreateGroupChatRequest {

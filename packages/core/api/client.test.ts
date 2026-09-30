@@ -25,18 +25,30 @@ describe("ApiClient status reorder", () => {
   });
 });
 
-describe("ApiClient group chat rename", () => {
-  it("patches the title and tolerates a malformed response", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: 42 }), {
+describe("ApiClient group chat update", () => {
+  const respond = (body: unknown) =>
+    vi.fn().mockResolvedValue(new Response(JSON.stringify(body), {
       status: 200, headers: { "Content-Type": "application/json" },
     }));
+
+  it("patches only the given fields and tolerates a malformed response", async () => {
+    const fetchMock = respond({ id: 42 });
     vi.stubGlobal("fetch", fetchMock);
     const client = new ApiClient("https://api.example.test");
-    const result = await client.renameGroupChat("chat-1", "Launch room");
+    const result = await client.updateGroupChat("chat-1", { title: "Launch room" });
     expect(String(fetchMock.mock.calls[0]?.[0])).toBe("https://api.example.test/api/group-chats/chat-1");
     expect(fetchMock.mock.calls[0]?.[1]?.method).toBe("PATCH");
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ title: "Launch room" });
     expect(result).toBeNull();
+  });
+
+  it("defaults a missing or null announcement to empty", async () => {
+    const chat = { id: "chat-1", workspace_id: "ws-1", title: "Launch room" };
+    vi.stubGlobal("fetch", respond(chat));
+    const client = new ApiClient("https://api.example.test");
+    expect((await client.updateGroupChat("chat-1", { description: "" }))?.description).toBe("");
+    vi.stubGlobal("fetch", respond({ ...chat, description: null }));
+    expect((await client.getGroupChat("chat-1"))?.description).toBe("");
   });
 });
 

@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { CircleMinus, HardDrive, Pencil, UserPlus } from "lucide-react";
-import { useRemoveGroupChatMember, useRenameGroupChat } from "@multica/core/group-chats";
+import { useRemoveGroupChatMember, useUpdateGroupChat } from "@multica/core/group-chats";
 import { runtimeDisplayName, runtimeListOptions } from "@multica/core/runtimes";
 import { useActorName } from "@multica/core/workspace/hooks";
 import type { Agent, AgentRuntime, GroupChat, GroupChatMember } from "@multica/core/types";
@@ -12,6 +12,7 @@ import { cn } from "@multica/ui/lib/utils";
 import { Button } from "@multica/ui/components/ui/button";
 import { Input } from "@multica/ui/components/ui/input";
 import { ActorAvatar } from "../common/actor-avatar";
+import { ContentEditor } from "../editor";
 import { useT } from "../i18n";
 import { useOpenAgentDetail } from "../modals/agent-detail";
 import { AddMemberDialog } from "./add-member-dialog";
@@ -78,11 +79,16 @@ export function ChatDetailsPanel({ wsId, chat, userId, variant = "aside" }: Chat
     <aside
       className={cn(
         "flex flex-col gap-5 overflow-y-auto bg-muted/40 px-4 pb-4",
-        variant === "aside" ? "h-full w-full pt-16" : "min-h-0 w-full flex-1 pt-4",
+        "pt-4",
+        variant === "aside" ? "h-full w-full" : "min-h-0 w-full flex-1",
       )}
     >
       <PanelSection title={t(($) => $.panel.name)}>
         <ChatNameRow wsId={wsId} chat={chat} />
+      </PanelSection>
+
+      <PanelSection title={t(($) => $.panel.announcement)}>
+        <ChatAnnouncement wsId={wsId} chat={chat} />
       </PanelSection>
 
       <PanelSection title={t(($) => $.panel.agents)}>
@@ -174,9 +180,36 @@ export function ChatDetailsPanel({ wsId, chat, userId, variant = "aside" }: Chat
   );
 }
 
+function ChatAnnouncement({ wsId, chat }: { wsId: string; chat: GroupChat }) {
+  const { t } = useT("im");
+  const update = useUpdateGroupChat(wsId, chat.id);
+
+  const save = async (description: string) => {
+    try {
+      await update.mutateAsync({ description });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t(($) => $.panel.announcement_failed));
+    }
+  };
+
+  return (
+    <div className="px-3 py-2">
+      <ContentEditor
+        key={chat.id}
+        value={chat.description}
+        placeholder={t(($) => $.panel.announcement_placeholder)}
+        onUpdate={(md) => void save(md)}
+        debounceMs={1500}
+        flushPendingOnUnmount
+        className="min-h-12"
+      />
+    </div>
+  );
+}
+
 function ChatNameRow({ wsId, chat }: { wsId: string; chat: GroupChat }) {
   const { t } = useT("im");
-  const rename = useRenameGroupChat(wsId, chat.id);
+  const rename = useUpdateGroupChat(wsId, chat.id);
   const [draft, setDraft] = useState<string | null>(null);
 
   const save = async () => {
@@ -187,7 +220,7 @@ function ChatNameRow({ wsId, chat }: { wsId: string; chat: GroupChat }) {
       return;
     }
     try {
-      await rename.mutateAsync(title);
+      await rename.mutateAsync({ title });
       setDraft(null);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t(($) => $.panel.rename_failed));

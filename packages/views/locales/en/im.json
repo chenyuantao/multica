@@ -79,6 +79,9 @@
     "name": "Chat name",
     "rename": "Rename chat",
     "rename_failed": "Couldn't rename the chat",
+    "announcement": "Announcement",
+    "announcement_placeholder": "Add an announcement…",
+    "announcement_failed": "Couldn't save the announcement",
     "back": "Back to chat"
   },
   "new_chat": {

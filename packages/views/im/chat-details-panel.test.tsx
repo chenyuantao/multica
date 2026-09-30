@@ -6,7 +6,7 @@ import type { GroupChat } from "@multica/core/types";
 import { renderWithI18n } from "../test/i18n";
 import { ChatDetailsPanel } from "./chat-details-panel";
 
-const renameMutateAsync = vi.fn();
+const updateMutateAsync = vi.fn();
 const mockModalOpen = vi.hoisted(() => vi.fn());
 
 vi.mock("@multica/core/modals", () => ({
@@ -20,7 +20,7 @@ vi.mock("@tanstack/react-query", async () => {
 
 vi.mock("@multica/core/group-chats", () => ({
   useRemoveGroupChatMember: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  useRenameGroupChat: () => ({ mutateAsync: renameMutateAsync, isPending: false }),
+  useUpdateGroupChat: () => ({ mutateAsync: updateMutateAsync, isPending: false }),
 }));
 
 vi.mock("@multica/core/runtimes", () => ({
@@ -35,12 +35,18 @@ vi.mock("@multica/core/workspace/hooks", () => ({
 vi.mock("./use-chat-directory", () => ({ useChatDirectory: () => ({ agentList: [] }) }));
 vi.mock("./add-member-dialog", () => ({ AddMemberDialog: () => null }));
 vi.mock("../common/actor-avatar", () => ({ ActorAvatar: () => null }));
+vi.mock("../editor", () => ({
+  ContentEditor: ({ value, onUpdate }: { value: string; onUpdate: (md: string) => void }) => (
+    <textarea aria-label="announcement" defaultValue={value} onChange={(e) => onUpdate(e.target.value)} />
+  ),
+}));
 
 const chat: GroupChat = {
   id: "chat-1",
   workspace_id: "ws-1",
   identifier: "MUL-1",
   title: "Launch room",
+  description: "",
   creator_type: "member",
   creator_id: "user-1",
   created_at: "2026-09-28T00:00:00Z",
@@ -57,7 +63,7 @@ function renderPanel() {
 }
 
 describe("ChatDetailsPanel rename", () => {
-  beforeEach(() => renameMutateAsync.mockReset().mockResolvedValue(chat));
+  beforeEach(() => updateMutateAsync.mockReset().mockResolvedValue(chat));
 
   it("saves a trimmed title on Enter, even for a member who is not the creator", async () => {
     renderPanel();
@@ -68,7 +74,7 @@ describe("ChatDetailsPanel rename", () => {
     fireEvent.change(input, { target: { value: "  War room  " } });
     fireEvent.keyDown(input, { key: "Enter" });
 
-    await waitFor(() => expect(renameMutateAsync).toHaveBeenCalledWith("War room"));
+    await waitFor(() => expect(updateMutateAsync).toHaveBeenCalledWith({ title: "War room" }));
     await waitFor(() => expect(screen.queryByRole("textbox", { name: "Chat name" })).toBeNull());
   });
 
@@ -84,7 +90,18 @@ describe("ChatDetailsPanel rename", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "Chat name" }), { target: { value: "   " } });
     fireEvent.keyDown(screen.getByRole("textbox", { name: "Chat name" }), { key: "Enter" });
 
-    expect(renameMutateAsync).not.toHaveBeenCalled();
+    expect(updateMutateAsync).not.toHaveBeenCalled();
+  });
+});
+
+describe("ChatDetailsPanel announcement", () => {
+  beforeEach(() => updateMutateAsync.mockReset().mockResolvedValue(chat));
+
+  it("saves the edited announcement as the chat description", async () => {
+    renderPanel();
+    fireEvent.change(screen.getByRole("textbox", { name: "announcement" }), { target: { value: "Ship on **Friday**" } });
+
+    await waitFor(() => expect(updateMutateAsync).toHaveBeenCalledWith({ description: "Ship on **Friday**" }));
   });
 });
 

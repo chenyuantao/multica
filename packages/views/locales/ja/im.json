@@ -76,6 +76,9 @@
     "name": "チャット名",
     "rename": "チャット名を変更",
     "rename_failed": "チャット名を変更できませんでした",
+    "announcement": "お知らせ",
+    "announcement_placeholder": "お知らせを追加…",
+    "announcement_failed": "お知らせを保存できませんでした",
     "back": "チャットに戻る"
   },
   "new_chat": {

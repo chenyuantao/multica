@@ -6,6 +6,7 @@ import type {
   GroupChat,
   GroupChatMemberRef,
   GroupChatMemberType,
+  UpdateGroupChatRequest,
 } from "../types";
 import { groupChatKeys } from "./queries";
 
@@ -25,14 +26,14 @@ export function useCreateGroupChat(wsId: string) {
   });
 }
 
-export function useRenameGroupChat(wsId: string, chatId: string) {
+export function useUpdateGroupChat(wsId: string, chatId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (title: string) => api.renameGroupChat(chatId, title),
+    mutationFn: (data: UpdateGroupChatRequest) => api.updateGroupChat(chatId, data),
     onSuccess: (chat) => {
       if (!chat) return;
       qc.setQueryData<GroupChat[]>(groupChatKeys.list(wsId), (old) =>
-        old?.map((c) => (c.id === chat.id ? { ...c, title: chat.title } : c)),
+        old?.map((c) => (c.id === chat.id ? { ...c, title: chat.title, description: chat.description } : c)),
       );
     },
     onSettled: () => qc.invalidateQueries({ queryKey: groupChatKeys.list(wsId) }),

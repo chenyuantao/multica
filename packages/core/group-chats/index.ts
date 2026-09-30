@@ -1,7 +1,7 @@
 export { groupChatKeys, groupChatListOptions, groupChatMessagesOptions } from "./queries";
 export {
   useCreateGroupChat,
-  useRenameGroupChat,
+  useUpdateGroupChat,
   useAddGroupChatMember,
   useRemoveGroupChatMember,
   useSendGroupChatMessage,

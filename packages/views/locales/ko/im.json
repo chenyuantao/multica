@@ -76,6 +76,9 @@
     "name": "채팅 이름",
     "rename": "채팅 이름 변경",
     "rename_failed": "채팅 이름을 변경하지 못했습니다",
+    "announcement": "공지",
+    "announcement_placeholder": "공지 추가…",
+    "announcement_failed": "공지를 저장하지 못했습니다",
     "back": "채팅으로 돌아가기"
   },
   "new_chat": {
