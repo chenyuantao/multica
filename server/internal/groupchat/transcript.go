@@ -1,6 +1,7 @@
 package groupchat
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"unicode/utf8"
@@ -64,7 +65,8 @@ func SelectTranscript(turns []Turn, triggerIDs []string, maxRunes, perMessage in
 			text = string([]rune(text)[:limit])
 			length = limit
 		}
-		remaining -= overhead + length
+		// A quote is always shown whole, so it spends budget without being cut.
+		remaining -= overhead + length + refRunes(turn.Ref)
 		turn.Text = text
 		chosen[i] = Excerpt{Turn: turn, Trigger: triggers[turn.ID], Truncated: truncated}
 	}
@@ -104,21 +106,25 @@ func SelectTranscript(turns []Turn, triggerIDs []string, maxRunes, perMessage in
 // id, and omitted ranges carry their time span and ids, so the agent can read
 // them in full with the commands listed at the top.
 func (t Transcript) Render(issueID string) string {
-	var truncated, omitted bool
+	var truncated, omitted, quoted bool
 	for _, e := range t.Excerpts {
 		truncated = truncated || e.Truncated
 		omitted = omitted || len(e.OmittedBefore) > 0
+		quoted = quoted || e.Ref != nil
 	}
 	omitted = omitted || len(t.OmittedAfter) > 0
 
 	var b strings.Builder
+	if quoted {
+		b.WriteString("A ref_message line under a message is the earlier message it quotes and replies to, in full.\n")
+	}
 	if truncated {
 		fmt.Fprintf(&b, "Messages marked [truncated id=<id>] are cut short. Read one in full with `multica issue comment list %s --thread <id> --tail 0 --output json`.\n", issueID)
 	}
 	if omitted {
 		fmt.Fprintf(&b, "Omitted ranges list their time span. Read the messages after a time with `multica issue comment list %s --since <time> --output json`.\n", issueID)
 	}
-	if truncated || omitted {
+	if truncated || omitted || quoted {
 		b.WriteString("\n")
 	}
 	for _, e := range t.Excerpts {
@@ -131,10 +137,38 @@ func (t Transcript) Render(issueID string) string {
 		if e.Truncated {
 			text += " …[truncated id=" + e.ID + "]"
 		}
-		fmt.Fprintf(&b, "%s (%s): %s\n\n", e.Author, label, text)
+		fmt.Fprintf(&b, "%s (%s): %s\n", e.Author, label, text)
+		if e.Ref != nil {
+			fmt.Fprintf(&b, "ref_message: %s\n", renderRef(*e.Ref))
+		}
+		b.WriteString("\n")
 	}
 	writeOmitted(&b, t.OmittedAfter)
 	return strings.TrimSpace(b.String())
+}
+
+// refMessage is the quoted message as the agent sees it.
+type refMessage struct {
+	ID      string `json:"id"`
+	Author  string `json:"author"`
+	Role    string `json:"role"`
+	Time    string `json:"time,omitempty"`
+	Content string `json:"content"`
+}
+
+func renderRef(ref Turn) string {
+	var b strings.Builder
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	_ = enc.Encode(refMessage{ID: ref.ID, Author: ref.Author, Role: ref.Role, Time: ref.Time, Content: strings.TrimSpace(ref.Text)})
+	return strings.TrimSpace(b.String())
+}
+
+func refRunes(ref *Turn) int {
+	if ref == nil {
+		return 0
+	}
+	return utf8.RuneCountInString(ref.Text) + utf8.RuneCountInString(ref.Author) + utf8.RuneCountInString(ref.Role) + 40
 }
 
 func writeOmitted(b *strings.Builder, turns []Turn) {

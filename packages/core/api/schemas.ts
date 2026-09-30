@@ -1106,6 +1106,7 @@ export const CommentSchema = z.object({
   // Set only on comments a quick action produced (MUL-5465). Server-only.
   quick_action_id: z.string().nullable().optional(),
   deleted_at: z.string().nullable().optional().catch(undefined),
+  ref_message_id: z.string().nullable().optional().catch(undefined),
 }).loose();
 
 export const CommentsListSchema = z.array(CommentSchema);

@@ -227,6 +227,21 @@ func (h *Handler) groupChatTurns(ctx context.Context, issue db.Issue, roster []g
 	for _, p := range roster {
 		byID[p.Type+":"+p.ID] = p
 	}
+	toTurn := func(c db.Comment) groupchat.Turn {
+		name := c.AuthorType
+		if p, ok := byID[c.AuthorType+":"+uuidToString(c.AuthorID)]; ok {
+			name = p.Name
+		}
+		when := ""
+		if c.CreatedAt.Valid {
+			when = c.CreatedAt.Time.UTC().Format(time.RFC3339)
+		}
+		return groupchat.Turn{ID: uuidToString(c.ID), Author: name, Role: c.AuthorType, Text: c.Content, Time: when}
+	}
+	byCommentID := make(map[string]db.Comment, len(comments))
+	for _, c := range comments {
+		byCommentID[uuidToString(c.ID)] = c
+	}
 	turns := make([]groupchat.Turn, 0, len(comments))
 	for _, c := range comments {
 		if c.DeletedAt.Valid || c.Type == "system" || c.Type == "status_change" {
@@ -237,17 +252,34 @@ func (h *Handler) groupChatTurns(ctx context.Context, issue db.Issue, roster []g
 		if c.AuthorType == "agent" && c.Content == groupchat.ThinkingMessage {
 			continue
 		}
-		name := c.AuthorType
-		if p, ok := byID[c.AuthorType+":"+uuidToString(c.AuthorID)]; ok {
-			name = p.Name
+		turn := toTurn(c)
+		if ref, ok := h.groupChatRefMessage(ctx, issue, c.RefMessageID, byCommentID); ok {
+			quoted := toTurn(ref)
+			turn.Ref = &quoted
 		}
-		when := ""
-		if c.CreatedAt.Valid {
-			when = c.CreatedAt.Time.UTC().Format(time.RFC3339)
-		}
-		turns = append(turns, groupchat.Turn{ID: uuidToString(c.ID), Author: name, Role: c.AuthorType, Text: c.Content, Time: when})
+		turns = append(turns, turn)
 	}
 	return turns
+}
+
+// groupChatRefMessage loads the live message a group message quotes, from the
+// loaded history when it is there and from the database when it is older.
+func (h *Handler) groupChatRefMessage(ctx context.Context, issue db.Issue, refID pgtype.UUID, loaded map[string]db.Comment) (db.Comment, bool) {
+	if !refID.Valid {
+		return db.Comment{}, false
+	}
+	ref, ok := loaded[uuidToString(refID)]
+	if !ok {
+		var err error
+		ref, err = h.Queries.GetCommentInWorkspace(ctx, db.GetCommentInWorkspaceParams{ID: refID, WorkspaceID: issue.WorkspaceID})
+		if err != nil {
+			return db.Comment{}, false
+		}
+	}
+	if ref.DeletedAt.Valid || uuidToString(ref.IssueID) != uuidToString(issue.ID) {
+		return db.Comment{}, false
+	}
+	return ref, true
 }
 
 // attachGroupChatTranscript fills the claim payload with the ordered group

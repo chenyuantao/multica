@@ -67,7 +67,7 @@ import {
   EMPTY_PLUGIN_INSTALLATION_LIST,
   EMPTY_PLUGIN_PREVIEW,
 } from "./schemas";
-import { IssueViewSchema, IssueViewListSchema } from "./schemas";
+import { CommentsListSchema, IssueViewSchema, IssueViewListSchema } from "./schemas";
 import {
   ListIssueStatusesResponseSchema,
   IssueStatusEntrySchema,
@@ -629,6 +629,30 @@ describe("TimelineEntriesSchema", () => {
 
     expect(parsed).toHaveLength(1);
     expect(parsed[0]?.deleted_at).toBeUndefined();
+  });
+});
+
+describe("CommentsListSchema.ref_message_id", () => {
+  const comment = {
+    id: "comment-2",
+    issue_id: "issue-1",
+    author_type: "member",
+    author_id: "user-1",
+    content: "why?",
+    type: "comment",
+    parent_id: null,
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z",
+  };
+
+  it("keeps the quoted message id", () => {
+    expect(CommentsListSchema.parse([{ ...comment, ref_message_id: "comment-1" }])[0]?.ref_message_id).toBe("comment-1");
+  });
+
+  it("reads a malformed quote as no quote instead of dropping the list", () => {
+    const parsed = CommentsListSchema.parse([{ ...comment, ref_message_id: 7 }]);
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0]?.ref_message_id).toBeUndefined();
   });
 });
 

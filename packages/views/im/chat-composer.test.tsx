@@ -86,3 +86,25 @@ describe("ChatComposer attachments", () => {
     expect(onSend).toHaveBeenCalledWith("hi", []);
   });
 });
+
+describe("ChatComposer quote", () => {
+  it("shows the quote on one line and cancels it with the button or Escape", () => {
+    const onCancelQuote = vi.fn();
+    renderWithI18n(
+      <ChatComposer
+        chatId="chat-1"
+        chatTitle="Launch room"
+        candidates={[]}
+        onSend={vi.fn()}
+        quote={{ id: "m-1", name: "Ada", text: "Ship v2\non Friday" }}
+        onCancelQuote={onCancelQuote}
+      />,
+    );
+    expect(screen.getByText("Ada: Ship v2 on Friday")).toHaveClass("truncate");
+    expect(screen.getByRole("textbox")).toHaveFocus();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel quote" }));
+    fireEvent.keyDown(screen.getByRole("textbox"), { key: "Escape" });
+    expect(onCancelQuote).toHaveBeenCalledTimes(2);
+  });
+});

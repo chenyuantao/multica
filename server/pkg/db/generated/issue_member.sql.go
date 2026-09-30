@@ -254,7 +254,7 @@ func (q *Queries) ListIssueMembersForIssues(ctx context.Context, arg ListIssueMe
 }
 
 const listLatestCommentsForIssues = `-- name: ListLatestCommentsForIssues :many
-SELECT DISTINCT ON (c.issue_id) c.id, c.issue_id, c.author_type, c.author_id, c.content, c.type, c.created_at, c.updated_at, c.parent_id, c.workspace_id, c.resolved_at, c.resolved_by_type, c.resolved_by_id, c.source_task_id, c.quick_action_id, c.via_plugin_id, c.revision, c.recovery_settled_at, c.deleted_at, c.suppressed_agent_ids
+SELECT DISTINCT ON (c.issue_id) c.id, c.issue_id, c.author_type, c.author_id, c.content, c.type, c.created_at, c.updated_at, c.parent_id, c.workspace_id, c.resolved_at, c.resolved_by_type, c.resolved_by_id, c.source_task_id, c.quick_action_id, c.via_plugin_id, c.revision, c.recovery_settled_at, c.deleted_at, c.suppressed_agent_ids, c.ref_message_id
 FROM comment c
 WHERE c.workspace_id = $1
   AND c.issue_id = ANY($2::uuid[])
@@ -297,6 +297,7 @@ func (q *Queries) ListLatestCommentsForIssues(ctx context.Context, arg ListLates
 			&i.RecoverySettledAt,
 			&i.DeletedAt,
 			&i.SuppressedAgentIds,
+			&i.RefMessageID,
 		); err != nil {
 			return nil, err
 		}

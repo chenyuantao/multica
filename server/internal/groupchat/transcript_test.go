@@ -95,6 +95,20 @@ func TestTranscriptRender(t *testing.T) {
 	}
 }
 
+func TestTranscriptRenderCarriesQuotedMessageWhole(t *testing.T) {
+	quoted := Turn{ID: "a1", Author: "Ops", Role: "agent", Text: "use <b>v2</b> " + strings.Repeat("q", 300), Time: "2026-09-30T02:16:00Z"}
+	turns := []Turn{
+		{ID: "m1", Author: "Ada", Role: "member", Text: "why?", Time: "2026-09-30T02:17:00Z", Ref: &quoted},
+	}
+	got := SelectTranscript(turns, []string{"m1"}, 24000, 250).Render("issue-1")
+	want := "A ref_message line under a message is the earlier message it quotes and replies to, in full.\n\n" +
+		"Ada (member, triggered this reply): why?\n" +
+		`ref_message: {"id":"a1","author":"Ops","role":"agent","time":"2026-09-30T02:16:00Z","content":"use <b>v2</b> ` + strings.Repeat("q", 300) + `"}`
+	if got != want {
+		t.Fatalf("got %q\nwant %q", got, want)
+	}
+}
+
 func TestTranscriptRenderCapsOmittedIDs(t *testing.T) {
 	var turns []Turn
 	for i := range 8 {

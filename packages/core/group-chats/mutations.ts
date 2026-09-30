@@ -60,12 +60,26 @@ export function useRemoveGroupChatMember(wsId: string, chatId: string) {
 export function useSendGroupChatMessage(wsId: string, chatId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ content, attachmentIds }: { content: string; attachmentIds?: string[] }) =>
-      api.createComment(chatId, content, undefined, undefined, attachmentIds),
+    mutationFn: ({ content, attachmentIds, refMessageId }: { content: string; attachmentIds?: string[]; refMessageId?: string }) =>
+      api.createComment(chatId, content, undefined, undefined, attachmentIds, undefined, undefined, refMessageId),
     onSuccess: (comment) => {
       qc.setQueryData<Comment[]>(groupChatKeys.messages(wsId, chatId), (old) =>
         old && !old.some((c) => c.id === comment.id) ? [...old, comment] : old,
       );
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: groupChatKeys.messages(wsId, chatId) });
+      qc.invalidateQueries({ queryKey: groupChatKeys.list(wsId) });
+    },
+  });
+}
+
+export function useDeleteGroupChatMessage(wsId: string, chatId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (messageId: string) => api.deleteComment(messageId),
+    onSuccess: (_, messageId) => {
+      qc.setQueryData<Comment[]>(groupChatKeys.messages(wsId, chatId), (old) => old?.filter((c) => c.id !== messageId));
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: groupChatKeys.messages(wsId, chatId) });

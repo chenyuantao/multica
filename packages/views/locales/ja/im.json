@@ -61,14 +61,27 @@
     "activity_thinking": "思考中",
     "stop": "停止",
     "stopping": "停止中…",
-    "stop_failed": "返信を停止できませんでした"
+    "stop_failed": "返信を停止できませんでした",
+    "copy": "コピー",
+    "copied": "コピーしました",
+    "copy_failed": "メッセージをコピーできませんでした",
+    "quote": "引用",
+    "quote_attachment": "[添付ファイル]",
+    "quote_deleted": "引用元のメッセージは削除されました",
+    "delete": "削除",
+    "delete_title": "このメッセージを削除しますか？",
+    "delete_description": "チャットの全員から削除され、このメッセージで始まった返信は停止します。",
+    "delete_failed": "メッセージを削除できませんでした",
+    "cancel": "キャンセル",
+    "quote_line": "{{name}}：{{text}}"
   },
   "composer": {
     "placeholder": "{{title}} にメッセージ — @ でエージェントを 1 つ指定",
     "send": "送信",
     "no_agents": "このチャットにエージェントはいません",
     "mention": "エージェントをメンション",
-    "ambiguous": "{{name}} という名前のメンバーが複数います"
+    "ambiguous": "{{name}} という名前のメンバーが複数います",
+    "cancel_quote": "引用を取り消す"
   },
   "panel": {
     "resize": "パネルの幅を調整",

@@ -68,6 +68,8 @@ type Turn struct {
 	Role   string
 	Text   string
 	Time   string
+	// Ref is the message this one quotes, carried in full.
+	Ref *Turn
 }
 
 // Card is an agent the planner may choose. ID is not sent to the model.

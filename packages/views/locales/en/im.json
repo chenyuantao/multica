@@ -64,14 +64,27 @@
     "activity_thinking": "Thinking",
     "stop": "Stop",
     "stopping": "Stopping…",
-    "stop_failed": "Couldn't stop the reply"
+    "stop_failed": "Couldn't stop the reply",
+    "copy": "Copy",
+    "copied": "Copied",
+    "copy_failed": "Couldn't copy the message",
+    "quote": "Quote",
+    "quote_attachment": "[Attachment]",
+    "quote_deleted": "Quoted message was deleted",
+    "delete": "Delete",
+    "delete_title": "Delete this message?",
+    "delete_description": "It's removed for everyone in the chat, and a reply it started is stopped.",
+    "delete_failed": "Couldn't delete the message",
+    "cancel": "Cancel",
+    "quote_line": "{{name}}: {{text}}"
   },
   "composer": {
     "placeholder": "Message {{title}} — @ to address one agent",
     "send": "Send",
     "no_agents": "No agents in this chat",
     "mention": "Mention an agent",
-    "ambiguous": "More than one member is named {{name}}"
+    "ambiguous": "More than one member is named {{name}}",
+    "cancel_quote": "Cancel quote"
   },
   "panel": {
     "resize": "Resize panel",

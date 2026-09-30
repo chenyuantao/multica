@@ -51,8 +51,11 @@ type CommentResponse struct {
 	// raw prompt body. It is NOT settable through this endpoint — there is no
 	// request field for it — which is exactly why the card keys off this id
 	// rather than a `type` value the client controls.
-	QuickActionID *string              `json:"quick_action_id,omitempty"`
-	Reactions     []ReactionResponse   `json:"reactions"`
+	QuickActionID *string `json:"quick_action_id,omitempty"`
+	// RefMessageID is the message this one quotes. The target may have been
+	// deleted since; readers treat a missing target as gone.
+	RefMessageID *string              `json:"ref_message_id,omitempty"`
+	Reactions    []ReactionResponse   `json:"reactions"`
 	Attachments   []AttachmentResponse `json:"attachments"`
 	// Orientation stats — populated only on the roots_only path and omitted in
 	// every other mode, so the default response shape stays byte-identical for
@@ -129,6 +132,7 @@ func commentToResponse(c db.Comment, reactions []ReactionResponse, attachments [
 		SourceTaskID:   uuidToPtr(c.SourceTaskID),
 		DeletedAt:      timestampToPtr(c.DeletedAt),
 		QuickActionID:  uuidToPtr(c.QuickActionID),
+		RefMessageID:   uuidToPtr(c.RefMessageID),
 		Reactions:      reactions,
 		Attachments:    attachments,
 	}
@@ -1495,6 +1499,8 @@ type CreateCommentRequest struct {
 	// has ended, or cannot take additional input, is never swapped for another
 	// one: its agent keeps the normal trigger.
 	SteerTaskIDs []string `json:"steer_task_ids"`
+	// RefMessageID quotes another live message on the same issue.
+	RefMessageID *string `json:"ref_message_id"`
 }
 
 type CommentTriggerPreviewRequest struct {
@@ -1771,6 +1777,19 @@ func (h *Handler) CreateComment(w http.ResponseWriter, r *http.Request) {
 		parentComment = &parent
 	}
 
+	var refMessageID pgtype.UUID
+	if req.RefMessageID != nil {
+		refMessageID, ok = parseUUIDOrBadRequest(w, *req.RefMessageID, "ref_message_id")
+		if !ok {
+			return
+		}
+		ref, err := h.Queries.GetCommentInWorkspace(r.Context(), db.GetCommentInWorkspaceParams{ID: refMessageID, WorkspaceID: issue.WorkspaceID})
+		if err != nil || uuidToString(ref.IssueID) != uuidToString(issue.ID) || ref.DeletedAt.Valid {
+			writeError(w, http.StatusBadRequest, "invalid ref message")
+			return
+		}
+	}
+
 	attachmentIDs, ok := parseUUIDSliceOrBadRequest(w, req.AttachmentIDs, "attachment_ids")
 	if !ok {
 		return
@@ -1912,6 +1931,7 @@ func (h *Handler) CreateComment(w http.ResponseWriter, r *http.Request) {
 		// The author's "don't start" choices outlive this call: completion
 		// replay skips the agents it names.
 		SuppressedAgentIds: suppressAgentIDs,
+		RefMessageID:       refMessageID,
 	}
 	var created db.CreateCommentRow
 	var err error

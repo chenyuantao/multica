@@ -19,6 +19,26 @@ interface ChatComposerProps {
   /** Who can be @-mentioned: the chat's own members. */
   candidates: ComposerMention[];
   onSend: (markdown: string, attachmentIds: string[]) => void;
+  /** The message the next send quotes, as a one-line summary. */
+  quote?: ComposerQuote | null;
+  onCancelQuote?: () => void;
+}
+
+export interface ComposerQuote {
+  id: string;
+  name: string;
+  text: string;
+}
+
+/** `Name: summary` on one line: line breaks read as spaces and overflow ends in an ellipsis. */
+export function QuoteText({ quote }: { quote: ComposerQuote }) {
+  const { t } = useT("im");
+  const label = t(($) => $.thread.quote_line, { name: quote.name, text: quote.text }).replace(/\s+/g, " ").trim();
+  return (
+    <span className="block min-w-0 truncate" title={label}>
+      {label}
+    </span>
+  );
 }
 
 interface ComposerFile {
@@ -30,7 +50,7 @@ interface ComposerFile {
 
 const MAX_HEIGHT_PX = 180;
 
-export function ChatComposer({ chatId, chatTitle, candidates, onSend }: ChatComposerProps) {
+export function ChatComposer({ chatId, chatTitle, candidates, onSend, quote, onCancelQuote }: ChatComposerProps) {
   const { t } = useT("im");
   const { t: tEditor } = useT("editor");
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -56,6 +76,11 @@ export function ChatComposer({ chatId, chatTitle, candidates, onSend }: ChatComp
   const menuOpen = !!mention && dismissedAt !== mention.start && suggestions.length > 0;
 
   useEffect(() => setHighlight(0), [mention?.query]);
+
+  const quoteId = quote?.id;
+  useEffect(() => {
+    if (quoteId) ref.current?.focus();
+  }, [quoteId]);
 
   useEffect(() => {
     const el = ref.current;
@@ -165,6 +190,11 @@ export function ChatComposer({ chatId, chatTitle, candidates, onSend }: ChatComp
         return;
       }
     }
+    if (e.key === "Escape" && quote) {
+      e.preventDefault();
+      onCancelQuote?.();
+      return;
+    }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       send();
@@ -209,9 +239,25 @@ export function ChatComposer({ chatId, chatTitle, candidates, onSend }: ChatComp
         {...dropZoneProps}
         className={cn(
           "relative border bg-background px-2 py-1.5 shadow-sm focus-within:ring-2 focus-within:ring-ring/40",
-          files.length > 0 ? "rounded-2xl" : "rounded-3xl",
+          files.length > 0 || quote ? "rounded-2xl" : "rounded-3xl",
         )}
       >
+        {quote && (
+          <div className="mx-1 mt-1 mb-1.5 flex min-w-0 items-center gap-1 rounded-lg bg-muted py-0.5 pr-0.5 pl-2 text-caption text-muted-foreground">
+            <span className="min-w-0 flex-1">
+              <QuoteText quote={quote} />
+            </span>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              className="shrink-0 rounded-md"
+              onClick={onCancelQuote}
+              aria-label={t(($) => $.composer.cancel_quote)}
+            >
+              <X />
+            </Button>
+          </div>
+        )}
         {files.length > 0 && (
           <ul className="flex flex-wrap gap-1.5 px-1 pt-1 pb-1.5">
             {files.map((f) => {

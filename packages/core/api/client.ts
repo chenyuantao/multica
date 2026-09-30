@@ -1668,6 +1668,7 @@ export class ApiClient {
     attachmentIds?: string[],
     suppressAgentIds?: string[],
     steerTaskIds?: string[],
+    refMessageId?: string,
   ): Promise<Comment> {
     return this.fetch(`/api/issues/${issueId}/comments`, {
       method: "POST",
@@ -1678,6 +1679,7 @@ export class ApiClient {
         ...(attachmentIds?.length ? { attachment_ids: attachmentIds } : {}),
         ...(suppressAgentIds?.length ? { suppress_agent_ids: suppressAgentIds } : {}),
         ...(steerTaskIds?.length ? { steer_task_ids: steerTaskIds } : {}),
+        ...(refMessageId ? { ref_message_id: refMessageId } : {}),
       }),
     });
   }

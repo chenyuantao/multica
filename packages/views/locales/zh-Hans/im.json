@@ -61,14 +61,27 @@
     "activity_thinking": "正在思考",
     "stop": "停止",
     "stopping": "正在停止…",
-    "stop_failed": "无法停止回复"
+    "stop_failed": "无法停止回复",
+    "copy": "复制",
+    "copied": "已复制",
+    "copy_failed": "复制失败",
+    "quote": "引用",
+    "quote_attachment": "[附件]",
+    "quote_deleted": "引用的消息已被删除",
+    "delete": "删除",
+    "delete_title": "删除这条消息？",
+    "delete_description": "群内所有人都将看不到它，由它触发的回复也会停止。",
+    "delete_failed": "删除消息失败",
+    "cancel": "取消",
+    "quote_line": "{{name}}：{{text}}"
   },
   "composer": {
     "placeholder": "发消息到 {{title}} — 输入 @ 指定一个智能体",
     "send": "发送",
     "no_agents": "群聊里还没有智能体",
     "mention": "@ 一个智能体",
-    "ambiguous": "有多名成员都叫 {{name}}"
+    "ambiguous": "有多名成员都叫 {{name}}",
+    "cancel_quote": "取消引用"
   },
   "panel": {
     "resize": "调整面板宽度",

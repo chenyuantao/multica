@@ -64,14 +64,27 @@
     "activity_thinking": "Réflexion",
     "stop": "Arrêter",
     "stopping": "Arrêt…",
-    "stop_failed": "Impossible d'arrêter la réponse"
+    "stop_failed": "Impossible d'arrêter la réponse",
+    "copy": "Copier",
+    "copied": "Copié",
+    "copy_failed": "Impossible de copier le message",
+    "quote": "Citer",
+    "quote_attachment": "[Pièce jointe]",
+    "quote_deleted": "Le message cité a été supprimé",
+    "delete": "Supprimer",
+    "delete_title": "Supprimer ce message ?",
+    "delete_description": "Il est retiré pour tous les membres, et la réponse qu'il a lancée est arrêtée.",
+    "delete_failed": "Impossible de supprimer le message",
+    "cancel": "Annuler",
+    "quote_line": "{{name}} : {{text}}"
   },
   "composer": {
     "placeholder": "Message à {{title}} — @ pour solliciter un agent",
     "send": "Envoyer",
     "no_agents": "Aucun agent dans cette discussion",
     "mention": "Mentionner un agent",
-    "ambiguous": "Plusieurs membres s'appellent {{name}}"
+    "ambiguous": "Plusieurs membres s'appellent {{name}}",
+    "cancel_quote": "Annuler la citation"
   },
   "panel": {
     "resize": "Redimensionner le panneau",

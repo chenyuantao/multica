@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/multica-ai/multica/server/internal/groupchat"
 	"github.com/multica-ai/multica/server/internal/testutil"
 )
 
@@ -148,6 +149,62 @@ func TestGroupChatMembershipLifecycle(t *testing.T) {
 
 	testutil.Call(t, testHandler.RemoveGroupChatMember, testutil.WithURLParams(groupChatRequestAs(t, testUserID, "DELETE", "/api/group-chats/"+chat.ID+"/members/member/"+testUserID, nil),
 		"id", chat.ID, "memberType", "member", "memberId", testUserID)).Want(http.StatusBadRequest)
+}
+
+func TestGroupChatQuotedMessageReachesAgentInFull(t *testing.T) {
+	ctx := context.Background()
+	agentID := createHandlerTestAgent(t, "group-chat-quote-agent", nil)
+
+	newChat := func(title string) GroupChatResponse {
+		var chat GroupChatResponse
+		testutil.Call(t, testHandler.CreateGroupChat, groupChatRequestAs(t, testUserID, "POST", "/api/group-chats", map[string]any{
+			"title":   title,
+			"members": []map[string]string{{"member_type": "agent", "member_id": agentID}},
+		})).Want(http.StatusCreated).JSON(&chat)
+		t.Cleanup(func() {
+			for _, sql := range []string{
+				`DELETE FROM agent_task_queue WHERE issue_id = $1`,
+				`DELETE FROM issue_member WHERE issue_id = $1`,
+				`DELETE FROM issue_subscriber WHERE issue_id = $1`,
+				`DELETE FROM comment WHERE issue_id = $1`,
+				`DELETE FROM issue WHERE id = $1`,
+			} {
+				testPool.Exec(ctx, sql, chat.ID)
+			}
+		})
+		return chat
+	}
+	post := func(chatID string, body map[string]any) *testutil.Response {
+		return testutil.Call(t, testHandler.CreateComment, withURLParam(groupChatRequestAs(t, testUserID, "POST", "/api/issues/"+chatID+"/comments", body), "id", chatID))
+	}
+
+	chat := newChat("Quote room")
+	other := newChat("Other room")
+	var quoted, foreign, reply CommentResponse
+	post(chat.ID, map[string]any{"content": "Ship the v2 importer on Friday"}).Want(http.StatusCreated).JSON(&quoted)
+	post(other.ID, map[string]any{"content": "elsewhere"}).Want(http.StatusCreated).JSON(&foreign)
+
+	post(chat.ID, map[string]any{"content": "why?", "ref_message_id": foreign.ID}).Want(http.StatusBadRequest)
+	post(chat.ID, map[string]any{"content": "why?", "ref_message_id": "not-a-uuid"}).Want(http.StatusBadRequest)
+	post(chat.ID, map[string]any{"content": "why Friday?", "ref_message_id": quoted.ID}).Want(http.StatusCreated).JSON(&reply)
+	if reply.RefMessageID == nil || *reply.RefMessageID != quoted.ID {
+		t.Fatalf("ref_message_id = %v, want %s", reply.RefMessageID, quoted.ID)
+	}
+
+	issue, err := testHandler.Queries.GetIssue(ctx, parseUUID(chat.ID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	roster, _ := testHandler.groupChatRosterIfChat(ctx, issue)
+	var got *groupchat.Turn
+	for _, turn := range testHandler.groupChatTurns(ctx, issue, roster) {
+		if turn.ID == reply.ID {
+			got = turn.Ref
+		}
+	}
+	if got == nil || got.ID != quoted.ID || got.Text != "Ship the v2 importer on Friday" || got.Role != "member" {
+		t.Fatalf("quoted turn = %+v, want the full quoted message", got)
+	}
 }
 
 func TestGroupChatAttachmentOnlyMessageStartsNoAgent(t *testing.T) {

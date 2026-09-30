@@ -24,6 +24,7 @@ func (r CreateCommentRow) Comment() Comment {
 		Revision:           r.Revision,
 		DeletedAt:          r.DeletedAt,
 		SuppressedAgentIds: r.SuppressedAgentIds,
+		RefMessageID:       r.RefMessageID,
 	}
 }
 
@@ -50,5 +51,6 @@ func (r UpdateCommentRow) Comment() Comment {
 		ViaPluginID:    r.ViaPluginID,
 		Revision:       r.Revision,
 		DeletedAt:      r.DeletedAt,
+		RefMessageID:   r.RefMessageID,
 	}
 }

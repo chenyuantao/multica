@@ -5,5 +5,6 @@ export {
   useAddGroupChatMember,
   useRemoveGroupChatMember,
   useSendGroupChatMessage,
+  useDeleteGroupChatMessage,
 } from "./mutations";
 export { useGroupChatRealtime } from "./use-group-chat-realtime";

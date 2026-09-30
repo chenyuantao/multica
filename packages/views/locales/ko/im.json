@@ -61,14 +61,27 @@
     "activity_thinking": "생각 중",
     "stop": "중지",
     "stopping": "중지 중…",
-    "stop_failed": "답장을 중지하지 못했습니다"
+    "stop_failed": "답장을 중지하지 못했습니다",
+    "copy": "복사",
+    "copied": "복사했습니다",
+    "copy_failed": "메시지를 복사하지 못했습니다",
+    "quote": "인용",
+    "quote_attachment": "[첨부 파일]",
+    "quote_deleted": "인용한 메시지가 삭제되었습니다",
+    "delete": "삭제",
+    "delete_title": "이 메시지를 삭제할까요?",
+    "delete_description": "채팅의 모든 사람에게서 삭제되며, 이 메시지로 시작된 답장은 중지됩니다.",
+    "delete_failed": "메시지를 삭제하지 못했습니다",
+    "cancel": "취소",
+    "quote_line": "{{name}}: {{text}}"
   },
   "composer": {
     "placeholder": "{{title}}에 메시지 보내기 — @로 에이전트 하나 지정",
     "send": "보내기",
     "no_agents": "이 채팅에 에이전트가 없습니다",
     "mention": "에이전트 멘션",
-    "ambiguous": "{{name}}이라는 구성원이 둘 이상입니다"
+    "ambiguous": "{{name}}이라는 구성원이 둘 이상입니다",
+    "cancel_quote": "인용 취소"
   },
   "panel": {
     "resize": "패널 너비 조정",

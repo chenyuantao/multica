@@ -44,6 +44,9 @@ export interface Comment {
   // server keeps an empty tombstone so the replies keep their parent. Older
   // servers omit it.
   deleted_at?: string | null;
+  // The message this one quotes. The target may be deleted since. Older
+  // servers omit it.
+  ref_message_id?: string | null;
   // Per-target result of every explicit @agent / @squad mention in this comment
   // (MUL-4525 §2). Present only on create/edit responses; older servers omit it.
   trigger_outcomes?: CommentTriggerOutcome[];
