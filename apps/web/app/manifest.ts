@@ -7,9 +7,9 @@ import type { MetadataRoute } from "next";
  * `start_url` is deliberately NOT "/". The official marketing hosts keep the
  * root path on the public site even for a signed-in session (see
  * `isOfficialMarketingHost` in proxy.ts), so an installed app pointed at "/"
- * would open the landing page. "/inbox" is one of `LEGACY_ROUTE_SEGMENTS`,
+ * would open the landing page. "/im" is one of `LEGACY_ROUTE_SEGMENTS`,
  * which proxy.ts resolves per session: signed in with a known workspace it
- * lands on that workspace's inbox, signed in without one it lands on /login
+ * lands on that workspace's group chats (the same default as "/"), signed in without one it lands on /login
  * (which resolves against the workspace list), and signed out it lands on
  * /login too. All three are pinned in manifest.test.ts, because a launcher
  * icon has no URL bar to recover from a wrong destination.
@@ -28,7 +28,7 @@ import type { MetadataRoute } from "next";
  */
 
 /** Launch path. Exported so manifest.test.ts can run it through the proxy. */
-export const PWA_START_URL = "/inbox";
+export const PWA_START_URL = "/im";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
