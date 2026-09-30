@@ -346,6 +346,9 @@ import {
   SquadMemberStatusListResponseSchema,
   SubscribersListSchema,
   TaskMessageListSchema,
+  DeliveredPromptSchema,
+  type DeliveredPromptResponse,
+  EMPTY_DELIVERED_PROMPT,
   TimelineEntriesSchema,
   UserSchema,
   WebhookDeliveryResponseSchema,
@@ -2848,6 +2851,13 @@ export class ApiClient {
     const raw = await this.fetch<unknown>(`/api/tasks/${taskId}/messages`);
     return parseWithFallback<TaskMessagePayload[]>(raw, TaskMessageListSchema, [], {
       endpoint: "GET /api/tasks/:id/messages",
+    });
+  }
+
+  async getDeliveredPrompt(taskId: string): Promise<DeliveredPromptResponse> {
+    const raw = await this.fetch<unknown>(`/api/tasks/${taskId}/delivered-prompt`);
+    return parseWithFallback(raw, DeliveredPromptSchema, EMPTY_DELIVERED_PROMPT, {
+      endpoint: "GET /api/tasks/:id/delivered-prompt",
     });
   }
 

@@ -2067,6 +2067,23 @@ export const TaskMessagePayloadSchema = z.object({
 
 export const TaskMessageListSchema = z.array(TaskMessagePayloadSchema).default([]);
 
+// The claim payload stored when the server hands a task to a daemon.
+// An unreadable body means "nothing recorded", so the run details stay usable.
+export interface DeliveredPromptResponse {
+  prompt: string;
+  truncated: boolean;
+}
+
+export const DeliveredPromptSchema = z.object({
+  prompt: z.string().catch(""),
+  truncated: z.boolean().catch(false),
+}).loose();
+
+export const EMPTY_DELIVERED_PROMPT: DeliveredPromptResponse = {
+  prompt: "",
+  truncated: false,
+};
+
 // Task cancellation (`POST /api/tasks/:id/cancel`) is consumed directly by
 // chat recovery. Its optional message payload must be well-formed before the
 // UI deletes a message from cache or restores text into the input.

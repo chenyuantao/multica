@@ -23,6 +23,7 @@ vi.mock("@multica/core/api", () => ({
   api: {
     getAgent: vi.fn().mockResolvedValue(null),
     listRuntimes: vi.fn().mockResolvedValue([]),
+    getDeliveredPrompt: vi.fn().mockResolvedValue({ prompt: "", truncated: false }),
   },
 }));
 
@@ -219,6 +220,7 @@ function renderDialog(
     task?: AgentTask;
     isLive?: boolean;
     locale?: SupportedLocale;
+    agentName?: string;
   } = {},
 ) {
   return renderWithI18n(
@@ -227,7 +229,7 @@ function renderDialog(
       onOpenChange={vi.fn()}
       task={options.task ?? baseTask}
       items={dialogItems}
-      agentName="Codex"
+      agentName={options.agentName ?? "Codex"}
       isLive={options.isLive}
     />,
     { locale: options.locale },
@@ -238,6 +240,7 @@ beforeEach(() => {
   cleanup();
   copyTextMock.mockClear();
   vi.mocked(api.listRuntimes).mockResolvedValue([]);
+  vi.mocked(api.getDeliveredPrompt).mockResolvedValue({ prompt: "", truncated: false });
   useTranscriptViewStore.setState({
     sortDirection: "chronological",
     selectedFilterKeys: [],
@@ -370,18 +373,13 @@ describe("AgentTranscriptDialog", () => {
   // element was the one value that never changes. Identity belongs to the run,
   // and the header already carries it.
   it("states the agent once in the header, not on every prose row", () => {
-    renderWithI18n(
-      <AgentTranscriptDialog
-        open
-        onOpenChange={vi.fn()}
-        task={{ ...baseTask, agent_id: "agent-1" }}
-        items={[
-          { seq: 1, type: "text", content: "Cleanup done. Starting tests:" },
-          { seq: 2, type: "text", content: "Now adding the Feishu row:" },
-          { seq: 3, type: "text", content: "Now the version bump:" },
-        ]}
-        agentName="【Chores|Opus5】Multica Helper"
-      />,
+    renderDialog(
+      [
+        { seq: 1, type: "text", content: "Cleanup done. Starting tests:" },
+        { seq: 2, type: "text", content: "Now adding the Feishu row:" },
+        { seq: 3, type: "text", content: "Now the version bump:" },
+      ],
+      { task: { ...baseTask, agent_id: "agent-1" }, agentName: "【Chores|Opus5】Multica Helper" },
     );
 
     expect(screen.getAllByTestId("rich-content")).toHaveLength(3);
@@ -1004,6 +1002,19 @@ describe("AgentTranscriptDialog — reason vs raw diagnostics", () => {
     // The diagnostic itself is not translated — it is the runner's own output.
     // Keeping it readable is the point; presenting it as the reason is not.
     expect(screen.getByText(rawError)).toBeInTheDocument();
+  });
+
+  it("shows the claim payload the server handed to the daemon", async () => {
+    vi.mocked(api.getDeliveredPrompt).mockResolvedValue({
+      prompt: "Answer the group. Start by reading the thread.",
+      truncated: false,
+    });
+    renderDialog(items, { task: { ...baseTask, status: "completed", error: null } });
+
+    await userEvent.click(screen.getByRole("button", { name: "Run details" }));
+
+    expect(await screen.findByText("Dispatch")).toBeInTheDocument();
+    expect(screen.getByText("Answer the group. Start by reading the thread.")).toBeInTheDocument();
   });
 
   it("shows no diagnostics section for a run that persisted no error", async () => {

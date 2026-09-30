@@ -1483,6 +1483,13 @@ type SysCronExecution struct {
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 }
 
+type TaskDeliveredPrompt struct {
+	TaskID    pgtype.UUID        `json:"task_id"`
+	Prompt    string             `json:"prompt"`
+	Truncated bool               `json:"truncated"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
 type TaskMessage struct {
 	ID              pgtype.UUID        `json:"id"`
 	TaskID          pgtype.UUID        `json:"task_id"`

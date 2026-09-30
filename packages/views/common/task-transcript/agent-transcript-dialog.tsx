@@ -332,6 +332,33 @@ export function AgentTranscriptDialog({
   const [copied, showCopied] = useCopyFeedback();
   const [copiedWorkdir, showCopiedWorkdir] = useCopyFeedback();
   const [copiedBranch, showCopiedBranch] = useCopyFeedback();
+  const [copiedPrompt, showCopiedPrompt] = useCopyFeedback();
+  const [promptText, setPromptText] = useState("");
+  const [promptTruncated, setPromptTruncated] = useState(false);
+  useEffect(() => {
+    if (!open || task.id.length === 0) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setInterval> | undefined;
+    const load = () => {
+      void api.getDeliveredPrompt(task.id).then((row) => {
+        if (cancelled || !row.prompt) return;
+        setPromptText(row.prompt);
+        setPromptTruncated(row.truncated);
+        if (timer) {
+          clearInterval(timer);
+          timer = undefined;
+        }
+      }).catch(() => {});
+    };
+    load();
+    // The server stores the claim payload when a daemon takes the task. A
+    // transcript opened before that claim retries until the row exists.
+    if (isLive) timer = setInterval(load, 2000);
+    return () => {
+      cancelled = true;
+      if (timer) clearInterval(timer);
+    };
+  }, [open, task.id, isLive]);
   const [agentInfo, setAgentInfo] = useState<Agent | null>(null);
   const [runtimeInfo, setRuntimeInfo] = useState<AgentRuntime | null>(null);
   const workdirCopyTarget = useMemo(
@@ -670,6 +697,13 @@ export function AgentTranscriptDialog({
     });
   }, [workdirCopyTarget, showCopiedWorkdir]);
 
+  const handleCopyPrompt = useCallback(() => {
+    if (!promptText) return;
+    void copyText(promptText).then((ok) => {
+      if (ok) showCopiedPrompt();
+    });
+  }, [promptText, showCopiedPrompt]);
+
   // Worktree-mode runs deliver a branch instead of edits in the working copy,
   // so copying the name is the fastest path to `git diff <branch>`.
   const handleCopyBranch = useCallback(() => {
@@ -951,7 +985,13 @@ export function AgentTranscriptDialog({
                   >
                     <Info className="h-3.5 w-3.5" />
                   </PopoverTrigger>
-                  <PopoverContent align="end" className="w-80 max-w-[calc(100vw-2rem)] p-3">
+                  <PopoverContent
+                    align="end"
+                    className={cn(
+                      "max-w-[calc(100vw-2rem)] p-3",
+                      promptText ? "w-[min(42rem,calc(100vw-2rem))]" : "w-80",
+                    )}
+                  >
                     <div className="mb-2 text-caption font-medium text-foreground">
                       {t(($) => $.transcript.run_info)}
                     </div>
@@ -1037,6 +1077,33 @@ export function AgentTranscriptDialog({
                             value={task.error}
                             mono
                           />
+                        </>
+                      )}
+                      {promptText && (
+                        <>
+                          <div className="my-2 h-px bg-border" />
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-muted-foreground">{t(($) => $.transcript.details_prompt)}</span>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon-sm"
+                                onClick={handleCopyPrompt}
+                                aria-label={t(($) => $.transcript.copy_prompt)}
+                                title={t(($) => $.transcript.copy_prompt)}
+                                className="text-muted-foreground"
+                              >
+                                {copiedPrompt ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                              </Button>
+                            </div>
+                            <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words font-mono text-micro text-foreground">
+                              {promptText}
+                            </pre>
+                            {promptTruncated && (
+                              <p className="text-micro text-muted-foreground">{t(($) => $.transcript.prompt_truncated)}</p>
+                            )}
+                          </div>
                         </>
                       )}
                       {usage && (
