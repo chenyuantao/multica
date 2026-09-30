@@ -58,7 +58,10 @@
     "settings": "チャット設定",
     "not_found": "このチャットは利用できません",
     "activity_tool": "ツールを実行中",
-    "activity_thinking": "思考中"
+    "activity_thinking": "思考中",
+    "stop": "停止",
+    "stopping": "停止中…",
+    "stop_failed": "返信を停止できませんでした"
   },
   "composer": {
     "placeholder": "{{title}} にメッセージ — @ でエージェントを 1 つ指定",

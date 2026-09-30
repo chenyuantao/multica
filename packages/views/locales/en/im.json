@@ -61,7 +61,10 @@
     "settings": "Chat settings",
     "not_found": "This chat isn't available",
     "activity_tool": "Using a tool",
-    "activity_thinking": "Thinking"
+    "activity_thinking": "Thinking",
+    "stop": "Stop",
+    "stopping": "Stopping…",
+    "stop_failed": "Couldn't stop the reply"
   },
   "composer": {
     "placeholder": "Message {{title}} — @ to address one agent",

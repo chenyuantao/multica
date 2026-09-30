@@ -8,6 +8,7 @@ import { renderWithI18n } from "../test/i18n";
 import { ChatThread } from "./chat-thread";
 
 const sendMutateAsync = vi.fn();
+const cancelRun = vi.hoisted(() => ({ mutate: vi.fn(), isPending: false, isSuccess: false }));
 
 vi.mock("@tanstack/react-query", async () => {
   const actual = await vi.importActual<typeof import("@tanstack/react-query")>("@tanstack/react-query");
@@ -18,6 +19,9 @@ vi.mock("@multica/core/group-chats", () => ({
   groupChatMessagesOptions: () => ({ queryKey: ["messages"] }),
   useSendGroupChatMessage: () => ({ mutateAsync: sendMutateAsync }),
 }));
+
+vi.mock("@multica/core/issues/mutations", () => ({ useCancelIssueRun: () => cancelRun }));
+vi.mock("@multica/core/chat/queries", () => ({ useTaskMessages: () => ({ data: [] }) }));
 
 vi.mock("@multica/core/workspace/hooks", () => ({
   useActorName: () => ({ getActorName: (_type: string, id: string) => `name-${id}` }),
@@ -101,5 +105,43 @@ describe("ChatThread pending messages", () => {
 
     expect(screen.getAllByText("hello")).toHaveLength(2);
     expect(screen.queryByText("Sending…")).toBeNull();
+  });
+});
+
+describe("ChatThread thinking bubble", () => {
+  beforeEach(() => {
+    cancelRun.mutate.mockReset();
+    cancelRun.isPending = false;
+    cancelRun.isSuccess = false;
+  });
+
+  function renderThinking() {
+    messages = [{ ...message("m-1", "思考中..."), author_type: "agent", author_id: "agent-1", source_task_id: "task-1" }];
+    vi.mocked(useQuery).mockImplementation(() => ({ data: messages, isError: false }) as never);
+    renderThread();
+  }
+
+  it("stops the run the bubble stands in for", () => {
+    renderThinking();
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+    expect(cancelRun.mutate).toHaveBeenCalledWith("task-1", expect.anything());
+  });
+
+  it("shows the stop control without hover on touch screens", () => {
+    renderThinking();
+    expect(screen.getByRole("button", { name: "Stop" }).className).toContain("[@media(hover:none)]:opacity-100");
+  });
+
+  it("keeps the control disabled once the stop was accepted", () => {
+    cancelRun.isSuccess = true;
+    renderThinking();
+    expect(screen.getByRole("button", { name: "Stopping…" })).toBeDisabled();
+  });
+
+  it("offers no stop control on a finished reply", () => {
+    messages = [{ ...message("m-1", "done"), author_type: "agent", author_id: "agent-1", source_task_id: "task-1" }];
+    vi.mocked(useQuery).mockImplementation(() => ({ data: messages, isError: false }) as never);
+    renderThread();
+    expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
   });
 });

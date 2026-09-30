@@ -61,7 +61,10 @@
     "settings": "Paramètres de la discussion",
     "not_found": "Cette discussion n'est pas disponible",
     "activity_tool": "Utilise un outil",
-    "activity_thinking": "Réflexion"
+    "activity_thinking": "Réflexion",
+    "stop": "Arrêter",
+    "stopping": "Arrêt…",
+    "stop_failed": "Impossible d'arrêter la réponse"
   },
   "composer": {
     "placeholder": "Message à {{title}} — @ pour solliciter un agent",

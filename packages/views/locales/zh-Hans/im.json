@@ -58,7 +58,10 @@
     "settings": "群聊设置",
     "not_found": "该群聊不存在或你已不在群内",
     "activity_tool": "正在调用工具",
-    "activity_thinking": "正在思考"
+    "activity_thinking": "正在思考",
+    "stop": "停止",
+    "stopping": "正在停止…",
+    "stop_failed": "无法停止回复"
   },
   "composer": {
     "placeholder": "发消息到 {{title}} — 输入 @ 指定一个智能体",

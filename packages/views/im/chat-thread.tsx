@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Brain, Loader2, MoreHorizontal, PanelRight, RotateCw } from "lucide-react";
+import { Brain, Loader2, MoreHorizontal, PanelRight, RotateCw, Square } from "lucide-react";
+import { toast } from "sonner";
 import { useTaskMessages } from "@multica/core/chat/queries";
 import { groupChatMessagesOptions, useSendGroupChatMessage } from "@multica/core/group-chats";
+import { useCancelIssueRun } from "@multica/core/issues/mutations";
 import { useActorName } from "@multica/core/workspace/hooks";
 import type { Comment, GroupChat } from "@multica/core/types";
 import { cn } from "@multica/ui/lib/utils";
@@ -271,7 +273,7 @@ function MessageRow({
   return (
     <MessageLayout mine={mine} avatar={avatar} authorName={mine ? undefined : authorName}>
       {thinkingTask ? (
-        <ThinkingBubble taskId={thinkingTask} title={time} />
+        <ThinkingBubble chatId={message.issue_id} taskId={thinkingTask} title={time} />
       ) : (
         <Bubble mine={mine} title={time}>
           <RichContent content={message.content} attachments={message.attachments} density="compact" />
@@ -282,19 +284,40 @@ function MessageRow({
 }
 
 /** Stands in for the reply with the run's latest progress until the reply replaces it. */
-function ThinkingBubble({ taskId, title }: { taskId: string; title: string }) {
+function ThinkingBubble({ chatId, taskId, title }: { chatId: string; taskId: string; title: string }) {
   const { t } = useT("im");
   const { data } = useTaskMessages(taskId, true);
   const { text, activity } = useMemo(() => runProgress(data), [data]);
+  const cancel = useCancelIssueRun(chatId);
+  // The bubble stays until the server rewrites it, so a settled stop keeps the spinner.
+  const stopping = cancel.isPending || cancel.isSuccess;
+  const stopLabel = stopping ? t(($) => $.thread.stopping) : t(($) => $.thread.stop);
   const activityLabel = !activity
     ? null
     : activity.label ||
       (activity.kind === "tool" ? t(($) => $.thread.activity_tool) : t(($) => $.thread.activity_thinking));
   return (
     <>
-      <Bubble title={title} className={cn(text && "opacity-70")}>
-        <RichContent content={text ?? THINKING_MESSAGE} density="compact" />
-      </Bubble>
+      <div className="group/thinking flex max-w-full min-w-0 items-center gap-1">
+        <Bubble title={title} className={cn(text && "opacity-70")}>
+          <RichContent content={text ?? THINKING_MESSAGE} density="compact" />
+        </Bubble>
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          className={cn(
+            "shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/thinking:opacity-100 group-focus-within/thinking:opacity-100 [@media(hover:none)]:opacity-100",
+            stopping && "opacity-100!",
+          )}
+          aria-label={stopLabel}
+          title={stopLabel}
+          disabled={stopping}
+          aria-busy={cancel.isPending}
+          onClick={() => cancel.mutate(taskId, { onError: () => toast.error(t(($) => $.thread.stop_failed)) })}
+        >
+          {stopping ? <Loader2 className="animate-spin motion-reduce:animate-none" /> : <Square />}
+        </Button>
+      </div>
       {activityLabel && (
         <span className="flex max-w-full min-w-0 items-center gap-1 text-micro text-muted-foreground" aria-live="polite">
           {activity?.kind === "tool" ? (
