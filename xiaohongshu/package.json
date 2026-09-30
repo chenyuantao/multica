@@ -1,0 +1,13 @@
+{
+  "name": "xhs-ai",
+  "version": "0.2.0",
+  "private": true,
+  "description": "CLI that drives the ego lite browser to ask Xiaohongshu AI chat and print the full reply",
+  "type": "module",
+  "bin": {
+    "xhs-ai": "bin/xhs-ai.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
