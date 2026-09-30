@@ -19,6 +19,12 @@
     "contacts": "通讯录",
     "knowledge": "知识库"
   },
+  "tabs": {
+    "chats": "消息",
+    "contacts": "通讯录",
+    "knowledge": "知识库",
+    "me": "我的"
+  },
   "contacts": {
     "search": "搜索联系人",
     "new_agent": "新建智能体",
@@ -32,7 +38,8 @@
     "agent": "智能体",
     "view_profile": "查看资料",
     "shared_chats": "共同群聊",
-    "select": "选择一个联系人"
+    "select": "选择一个联系人",
+    "back": "返回通讯录"
   },
   "thread": {
     "subtitle": "群聊 · {{people}} · {{agents}}",
@@ -49,8 +56,7 @@
     "load_failed": "消息加载失败",
     "back": "返回群聊列表",
     "settings": "群聊设置",
-    "not_found": "该群聊不存在或你已不在群内",
-    "still_replying": "还没说完：{{names}}"
+    "not_found": "该群聊不存在或你已不在群内"
   },
   "composer": {
     "placeholder": "发消息到 {{title}} — 输入 @ 指定一个智能体",
@@ -79,7 +85,8 @@
     "announcement": "群公告",
     "announcement_placeholder": "添加群公告…",
     "announcement_failed": "群公告保存失败",
-    "back": "返回群聊"
+    "back": "返回群聊",
+    "back_to_settings": "返回群聊设置"
   },
   "new_chat": {
     "title": "新建群聊",

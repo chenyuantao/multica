@@ -19,6 +19,12 @@
     "contacts": "연락처",
     "knowledge": "지식 베이스"
   },
+  "tabs": {
+    "chats": "메시지",
+    "contacts": "연락처",
+    "knowledge": "지식",
+    "me": "나"
+  },
   "contacts": {
     "search": "연락처 검색",
     "new_agent": "새 에이전트",
@@ -32,7 +38,8 @@
     "agent": "에이전트",
     "view_profile": "프로필 보기",
     "shared_chats": "함께 있는 그룹 채팅",
-    "select": "연락처를 선택하세요"
+    "select": "연락처를 선택하세요",
+    "back": "연락처로 돌아가기"
   },
   "thread": {
     "subtitle": "그룹 · {{people}} · {{agents}}",
@@ -49,8 +56,7 @@
     "load_failed": "메시지를 불러오지 못했습니다",
     "back": "채팅 목록으로",
     "settings": "채팅 설정",
-    "not_found": "이 채팅을 사용할 수 없습니다",
-    "still_replying": "아직 답하지 않음: {{names}}"
+    "not_found": "이 채팅을 사용할 수 없습니다"
   },
   "composer": {
     "placeholder": "{{title}}에 메시지 보내기 — @로 에이전트 하나 지정",
@@ -79,7 +85,8 @@
     "announcement": "공지",
     "announcement_placeholder": "공지 추가…",
     "announcement_failed": "공지를 저장하지 못했습니다",
-    "back": "채팅으로 돌아가기"
+    "back": "채팅으로 돌아가기",
+    "back_to_settings": "채팅 설정으로 돌아가기"
   },
   "new_chat": {
     "title": "새 그룹 채팅",

@@ -19,6 +19,12 @@
     "contacts": "Contacts",
     "knowledge": "Base de connaissances"
   },
+  "tabs": {
+    "chats": "Discussions",
+    "contacts": "Contacts",
+    "knowledge": "Connaissances",
+    "me": "Moi"
+  },
   "contacts": {
     "search": "Rechercher des contacts",
     "new_agent": "Nouvel agent",
@@ -33,7 +39,8 @@
     "agent": "Agent",
     "view_profile": "Voir le profil",
     "shared_chats": "Discussions de groupe en commun",
-    "select": "Sélectionnez un contact"
+    "select": "Sélectionnez un contact",
+    "back": "Retour aux contacts"
   },
   "thread": {
     "subtitle": "Groupe · {{people}} · {{agents}}",
@@ -52,8 +59,7 @@
     "load_failed": "Impossible de charger les messages",
     "back": "Retour aux discussions",
     "settings": "Paramètres de la discussion",
-    "not_found": "Cette discussion n'est pas disponible",
-    "still_replying": "Encore à répondre : {{names}}"
+    "not_found": "Cette discussion n'est pas disponible"
   },
   "composer": {
     "placeholder": "Message à {{title}} — @ pour solliciter un agent",
@@ -82,7 +88,8 @@
     "announcement": "Annonce",
     "announcement_placeholder": "Ajouter une annonce…",
     "announcement_failed": "Impossible d'enregistrer l'annonce",
-    "back": "Retour à la discussion"
+    "back": "Retour à la discussion",
+    "back_to_settings": "Retour aux paramètres de la discussion"
   },
   "new_chat": {
     "title": "Nouvelle discussion de groupe",

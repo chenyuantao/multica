@@ -19,6 +19,12 @@
     "contacts": "Contacts",
     "knowledge": "Knowledge base"
   },
+  "tabs": {
+    "chats": "Chats",
+    "contacts": "Contacts",
+    "knowledge": "Knowledge",
+    "me": "Me"
+  },
   "contacts": {
     "search": "Search contacts",
     "new_agent": "New agent",
@@ -33,7 +39,8 @@
     "agent": "Agent",
     "view_profile": "View profile",
     "shared_chats": "Group chats in common",
-    "select": "Select a contact"
+    "select": "Select a contact",
+    "back": "Back to contacts"
   },
   "thread": {
     "subtitle": "Group · {{people}} · {{agents}}",
@@ -52,8 +59,7 @@
     "load_failed": "Couldn't load messages",
     "back": "Back to chats",
     "settings": "Chat settings",
-    "not_found": "This chat isn't available",
-    "still_replying": "Still to reply: {{names}}"
+    "not_found": "This chat isn't available"
   },
   "composer": {
     "placeholder": "Message {{title}} — @ to address one agent",
@@ -82,7 +88,8 @@
     "announcement": "Announcement",
     "announcement_placeholder": "Add an announcement…",
     "announcement_failed": "Couldn't save the announcement",
-    "back": "Back to chat"
+    "back": "Back to chat",
+    "back_to_settings": "Back to chat settings"
   },
   "new_chat": {
     "title": "New group chat",

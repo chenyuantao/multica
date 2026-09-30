@@ -227,7 +227,7 @@ This covers the assist layer only. Running an agent is a separate data path: whe
 
 Unaddressed group messages, and messages that name more than one agent, are planned with [Jev](https://docs.typesafe.ai/introduction.md), TypeSafe's System One model. A message that opens with a single `@` of one agent is delivered to that agent without a planning call. An `@` later in the sentence, or inside quotes or code, is not that shortcut. A bare `@Name` that matches more than one member is rejected.
 
-For a message that names nobody, the planner receives the agents in the group, each with a name and description, and the latest 30 messages with time, sender, and content. It answers whether an agent should reply, and only if that answer is yes, which agent. Several agents named in one message are asked only whether they can reply independently or must go in order. Ordered replies start one agent at a time; the thread lists who has not finished.
+For a message that names nobody, the planner receives the agents in the group, each with a name and description, and the latest 30 messages with time, sender, and content. It answers whether an agent should reply, and only if that answer is yes, which agent. Several agents named in one message are asked only whether they can reply independently or must go in order. Ordered replies start one agent at a time.
 
 | Variable | Default | Description |
 |---|---|---|
