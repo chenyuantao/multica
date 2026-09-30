@@ -1,7 +1,6 @@
 package groupchat
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 	"unicode/utf8"
@@ -18,6 +17,8 @@ const (
 // Excerpt is one message chosen for the transcript.
 type Excerpt struct {
 	Turn
+	// Index is the message's position in the full history, so gaps show.
+	Index int
 	// Trigger marks a message this run was started to answer.
 	Trigger bool
 	// Truncated means Text is the head of a longer message.
@@ -54,7 +55,7 @@ func SelectTranscript(turns []Turn, triggerIDs []string, maxRunes, perMessage in
 		}
 		turn := turns[i]
 		text := strings.TrimSpace(turn.Text)
-		overhead := utf8.RuneCountInString(turn.Author) + utf8.RuneCountInString(turn.Role) + 8
+		overhead := tagRunes(turn)
 		length := utf8.RuneCountInString(text)
 		limit := min(perMessage, remaining-overhead)
 		truncated := length > limit
@@ -68,7 +69,7 @@ func SelectTranscript(turns []Turn, triggerIDs []string, maxRunes, perMessage in
 		// A quote is always shown whole, so it spends budget without being cut.
 		remaining -= overhead + length + refRunes(turn.Ref)
 		turn.Text = text
-		chosen[i] = Excerpt{Turn: turn, Trigger: triggers[turn.ID], Truncated: truncated}
+		chosen[i] = Excerpt{Turn: turn, Index: i, Trigger: triggers[turn.ID], Truncated: truncated}
 	}
 	for i := len(turns) - 1; i >= 0; i-- {
 		if turns[i].Role == "member" {
@@ -101,11 +102,13 @@ func SelectTranscript(turns []Turn, triggerIDs []string, maxRunes, perMessage in
 	return out
 }
 
-// Render writes the transcript oldest first, marking triggers, cut-down
-// messages and the gaps left by omitted ones. Cut-down messages carry their
-// id, and omitted ranges carry their time span and ids, so the agent can read
-// them in full with the commands listed at the top.
-func (t Transcript) Render(issueID string) string {
+// Render writes the transcript as a <group_chat> XML block, oldest first.
+// Each <msg> carries its history index, id, time, sender and role; triggers,
+// cut-down messages and quotes are marked on it, and omitted ranges become
+// <omitted> elements. The closing <desc> explains the markup, starting with
+// intro, and lists the commands that read cut-down or omitted messages.
+// Message text is XML-escaped so it can never close or forge a tag.
+func (t Transcript) Render(issueID, intro string) string {
 	var truncated, omitted, quoted bool
 	for _, e := range t.Excerpts {
 		truncated = truncated || e.Truncated
@@ -115,77 +118,92 @@ func (t Transcript) Render(issueID string) string {
 	omitted = omitted || len(t.OmittedAfter) > 0
 
 	var b strings.Builder
-	if quoted {
-		b.WriteString("A ref_message line under a message is the earlier message it quotes and replies to, in full.\n")
-	}
-	if truncated {
-		fmt.Fprintf(&b, "Messages marked [truncated id=<id>] are cut short. Read one in full with `multica issue comment list %s --thread <id> --tail 0 --output json`.\n", issueID)
-	}
-	if omitted {
-		fmt.Fprintf(&b, "Omitted ranges list their time span. Read the messages after a time with `multica issue comment list %s --since <time> --output json`.\n", issueID)
-	}
-	if truncated || omitted || quoted {
-		b.WriteString("\n")
-	}
+	b.WriteString("<group_chat>\n")
 	for _, e := range t.Excerpts {
 		writeOmitted(&b, e.OmittedBefore)
-		label := e.Role
+		fmt.Fprintf(&b, `<msg index="%d"%s`, e.Index, turnAttrs(e.Turn))
 		if e.Trigger {
-			label += ", triggered this reply"
+			b.WriteString(` trigger="true"`)
 		}
-		text := e.Text
 		if e.Truncated {
-			text += " …[truncated id=" + e.ID + "]"
+			b.WriteString(` truncated="true"`)
 		}
-		fmt.Fprintf(&b, "%s (%s): %s\n", e.Author, label, text)
+		b.WriteString(">")
 		if e.Ref != nil {
-			fmt.Fprintf(&b, "ref_message: %s\n", renderRef(*e.Ref))
+			fmt.Fprintf(&b, "\n<ref%s>%s</ref>\n", turnAttrs(*e.Ref), escapeText(strings.TrimSpace(e.Ref.Text)))
 		}
-		b.WriteString("\n")
+		b.WriteString(escapeText(e.Text))
+		if e.Ref != nil {
+			b.WriteString("\n")
+		}
+		b.WriteString("</msg>\n")
 	}
 	writeOmitted(&b, t.OmittedAfter)
-	return strings.TrimSpace(b.String())
+
+	var desc []string
+	if intro = strings.TrimSpace(intro); intro != "" {
+		desc = append(desc, intro)
+	}
+	desc = append(desc, `Each msg element is one message, oldest first. index is its position in the chat history, sender is the display name, and role is member (a person) or agent. trigger="true" marks the messages this reply answers. Message text is XML-escaped.`)
+	if quoted {
+		desc = append(desc, "A ref element inside a msg is the earlier message it quotes and replies to, in full.")
+	}
+	if truncated {
+		desc = append(desc, fmt.Sprintf(`A msg with truncated="true" is cut short. Read it in full with `+"`multica issue comment list %s --thread ID --tail 0 --output json`.", issueID))
+	}
+	if omitted {
+		desc = append(desc, fmt.Sprintf("An omitted element stands for messages left out, with their time span and ids. Read the messages after a time with `multica issue comment list %s --since TIME --output json`.", issueID))
+	}
+	fmt.Fprintf(&b, "<desc>\n%s\n</desc>\n</group_chat>", strings.Join(desc, "\n"))
+	return b.String()
 }
 
-// refMessage is the quoted message as the agent sees it.
-type refMessage struct {
-	ID      string `json:"id"`
-	Author  string `json:"author"`
-	Role    string `json:"role"`
-	Time    string `json:"time,omitempty"`
-	Content string `json:"content"`
-}
-
-func renderRef(ref Turn) string {
+func turnAttrs(turn Turn) string {
 	var b strings.Builder
-	enc := json.NewEncoder(&b)
-	enc.SetEscapeHTML(false)
-	_ = enc.Encode(refMessage{ID: ref.ID, Author: ref.Author, Role: ref.Role, Time: ref.Time, Content: strings.TrimSpace(ref.Text)})
-	return strings.TrimSpace(b.String())
+	fmt.Fprintf(&b, ` id="%s"`, escapeAttr(turn.ID))
+	if turn.Time != "" {
+		fmt.Fprintf(&b, ` time="%s"`, escapeAttr(turn.Time))
+	}
+	fmt.Fprintf(&b, ` sender="%s" role="%s"`, escapeAttr(turn.Author), escapeAttr(turn.Role))
+	return b.String()
+}
+
+// tagRunes estimates the markup around one message's text.
+func tagRunes(turn Turn) int {
+	return utf8.RuneCountInString(turnAttrs(turn)) + 60
 }
 
 func refRunes(ref *Turn) int {
 	if ref == nil {
 		return 0
 	}
-	return utf8.RuneCountInString(ref.Text) + utf8.RuneCountInString(ref.Author) + utf8.RuneCountInString(ref.Role) + 40
+	return utf8.RuneCountInString(ref.Text) + tagRunes(*ref)
 }
+
+var (
+	textEscaper = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;")
+	attrEscaper = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;", "\n", " ", "\r", " ", "\t", " ")
+)
+
+func escapeText(s string) string { return textEscaper.Replace(s) }
+
+func escapeAttr(s string) string { return attrEscaper.Replace(s) }
 
 func writeOmitted(b *strings.Builder, turns []Turn) {
 	if len(turns) == 0 {
 		return
 	}
-	fmt.Fprintf(b, "[%d message(s) omitted", len(turns))
+	fmt.Fprintf(b, `<omitted count="%d"`, len(turns))
 	if first, last := turns[0].Time, turns[len(turns)-1].Time; first != "" && last != "" {
-		fmt.Fprintf(b, ", %s – %s", first, last)
+		fmt.Fprintf(b, ` from="%s" to="%s"`, escapeAttr(first), escapeAttr(last))
 	}
 	ids := make([]string, 0, min(len(turns), maxOmittedIDs))
 	for _, turn := range turns[:min(len(turns), maxOmittedIDs)] {
 		ids = append(ids, turn.ID)
 	}
-	fmt.Fprintf(b, ", ids: %s", strings.Join(ids, ", "))
+	fmt.Fprintf(b, ` ids="%s"`, escapeAttr(strings.Join(ids, ",")))
 	if extra := len(turns) - len(ids); extra > 0 {
-		fmt.Fprintf(b, " +%d more", extra)
+		fmt.Fprintf(b, ` more="%d"`, extra)
 	}
-	b.WriteString("]\n\n")
+	b.WriteString("/>\n")
 }

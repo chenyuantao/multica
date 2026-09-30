@@ -297,14 +297,14 @@ func (h *Handler) attachGroupChatTranscript(ctx context.Context, resp *AgentTask
 	if len(transcript.Excerpts) == 0 {
 		return
 	}
-	resp.GroupChatTranscript = groupChatRoleLine(task) + "\n\n" + transcript.Render(uuidToString(issue.ID))
+	resp.GroupChatTranscript = transcript.Render(uuidToString(issue.ID), groupChatRoleLine(task))
 }
 
 func groupChatRoleLine(task db.AgentTaskQueue) string {
 	if d, ok := groupchat.ParseDispatch(task.Context); ok && d.Mode == groupchat.ModeSequential && len(d.AgentIDs) > 1 {
-		return fmt.Sprintf("You are speaker %d of %d in an ordered group reply. Say your part only. The transcript below is one group conversation, oldest first, not a set of threads. Answer the messages marked as triggering this reply.", d.Cursor+1, len(d.AgentIDs))
+		return fmt.Sprintf("You are speaker %d of %d in an ordered group reply. Say your part only. This is one group conversation, not a set of threads. Answer the messages marked trigger=\"true\".", d.Cursor+1, len(d.AgentIDs))
 	}
-	return "The transcript below is one group conversation, oldest first, not a set of threads. Answer the messages marked as triggering this reply, using the rest as context."
+	return "This is one group conversation, not a set of threads. Answer the messages marked trigger=\"true\", using the rest as context."
 }
 
 func (h *Handler) pendingSpeakersByIssue(ctx context.Context, ids []pgtype.UUID) map[string][]string {
