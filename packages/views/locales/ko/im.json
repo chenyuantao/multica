@@ -46,13 +46,15 @@
     "load_failed": "메시지를 불러오지 못했습니다",
     "back": "채팅 목록으로",
     "settings": "채팅 설정",
-    "not_found": "이 채팅을 사용할 수 없습니다"
+    "not_found": "이 채팅을 사용할 수 없습니다",
+    "still_replying": "아직 답하지 않음: {{names}}"
   },
   "composer": {
     "placeholder": "{{title}}에 메시지 보내기 — @로 에이전트 하나 지정",
     "send": "보내기",
     "no_agents": "이 채팅에 에이전트가 없습니다",
-    "mention": "에이전트 멘션"
+    "mention": "에이전트 멘션",
+    "ambiguous": "{{name}}이라는 구성원이 둘 이상입니다"
   },
   "panel": {
     "people": "이 채팅의 멤버",

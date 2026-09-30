@@ -220,6 +220,20 @@ Lorsque la clé d'API et l'URL de base sont toutes deux vides, cette couche est 
 Ceci ne concerne que la couche d'assistance. L'exécution d'un agent suit un chemin de données distinct : lorsqu'un agent répond dans une discussion, votre daemon exécute l'outil de codage IA de cet agent avec les propres identifiants de l'outil, et ne lui transmet pas les paramètres `MULTICA_LLM_*` ci-dessus. (Les variables de connexion à Multica propres à l'exécution, dont l'agent a besoin, sont injectées séparément par le daemon.) Vider les variables ci-dessus n'a aucun effet sur ce chemin — contrôlez-le via la configuration du runtime de l'agent.
 </Callout>
 
+## Planification des discussions de groupe
+
+Les messages de groupe sans destinataire, et ceux qui nomment plusieurs agents, sont planifiés avec [Jev](https://docs.typesafe.ai/introduction.md), le modèle System One de TypeSafe. Un message qui commence par un seul `@` vers un agent lui est remis sans appel de planification. Un `@` plus loin dans la phrase, dans une citation ou dans du code, n'est pas cette adresse. Un `@Nom` brut qui correspond à plusieurs membres est refusé.
+
+Pour un message sans destinataire, le planificateur reçoit les agents du groupe, chacun avec son nom et sa description, et les 30 derniers messages avec l'heure, l'expéditeur et le contenu. Il répond d'abord si un agent doit répondre, et seulement si la réponse est oui, lequel. Quand un message nomme plusieurs agents, la seule question supplémentaire est de savoir s'ils peuvent répondre en même temps ou doivent se suivre. Les réponses ordonnées ne lancent qu'un agent à la fois ; le fil indique qui n'a pas encore fini.
+
+| Variable | Défaut | Description |
+|---|---|---|
+| `TYPESAFE_API_KEY` | vide | Clé pour `POST /v1/systemone`. Vide : pas de planification. Un message sans destinataire ne réveille personne, et plusieurs agents nommés répondent dans l'ordre des mentions |
+| `TYPESAFE_BASE_URL` | `https://api.typesafe.ai` | Origine System One. Le chemin `/v1/systemone` est ajouté |
+| `TYPESAFE_MODEL` | `jev-latest` | Identifiant de modèle envoyé à chaque requête de planification |
+
+Laissez `TYPESAFE_API_KEY` vide si ce déploiement ne doit pas envoyer l'historique du groupe à TypeSafe. Un `@` direct vers un agent démarre toujours cet agent. La clé est lue uniquement par le processus API et n'est pas transmise aux runtimes des agents.
+
 ## Configuration du daemon
 
 Les variables ci-dessous sont lues sur l'ordinateur qui exécute vos agents, et non dans le conteneur de l'API.

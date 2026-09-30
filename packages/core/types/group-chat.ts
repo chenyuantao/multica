@@ -23,6 +23,8 @@ export interface GroupChat {
   last_comment_at: string | null;
   last_message: Comment | null;
   members: GroupChatMember[];
+  /** Agents who have not finished speaking, in reply order. */
+  pending_speakers: string[];
 }
 
 export interface GroupChatMemberRef {

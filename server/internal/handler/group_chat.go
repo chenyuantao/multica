@@ -33,16 +33,17 @@ type GroupChatMemberResponse struct {
 }
 
 type GroupChatResponse struct {
-	ID            string                    `json:"id"`
-	WorkspaceID   string                    `json:"workspace_id"`
-	Identifier    string                    `json:"identifier"`
-	Title         string                    `json:"title"`
-	CreatorType   string                    `json:"creator_type"`
-	CreatorID     string                    `json:"creator_id"`
-	CreatedAt     string                    `json:"created_at"`
-	LastCommentAt *string                   `json:"last_comment_at"`
-	LastMessage   *CommentResponse          `json:"last_message"`
-	Members       []GroupChatMemberResponse `json:"members"`
+	ID              string                    `json:"id"`
+	WorkspaceID     string                    `json:"workspace_id"`
+	Identifier      string                    `json:"identifier"`
+	Title           string                    `json:"title"`
+	CreatorType     string                    `json:"creator_type"`
+	CreatorID       string                    `json:"creator_id"`
+	CreatedAt       string                    `json:"created_at"`
+	LastCommentAt   *string                   `json:"last_comment_at"`
+	LastMessage     *CommentResponse          `json:"last_message"`
+	Members         []GroupChatMemberResponse `json:"members"`
+	PendingSpeakers []string                  `json:"pending_speakers"`
 }
 
 type groupChatMemberRef struct {
@@ -67,15 +68,16 @@ func groupChatMemberToResponse(m db.IssueMember) GroupChatMemberResponse {
 
 func groupChatToResponse(issue db.Issue, prefix string, members []db.IssueMember, last *db.Comment) GroupChatResponse {
 	resp := GroupChatResponse{
-		ID:            uuidToString(issue.ID),
-		WorkspaceID:   uuidToString(issue.WorkspaceID),
-		Identifier:    issueToResponse(issue, prefix).Identifier,
-		Title:         issue.Title,
-		CreatorType:   issue.CreatorType,
-		CreatorID:     uuidToString(issue.CreatorID),
-		CreatedAt:     timestampToString(issue.CreatedAt),
-		LastCommentAt: timestampToPtr(issue.LastCommentAt),
-		Members:       make([]GroupChatMemberResponse, 0, len(members)),
+		ID:              uuidToString(issue.ID),
+		WorkspaceID:     uuidToString(issue.WorkspaceID),
+		Identifier:      issueToResponse(issue, prefix).Identifier,
+		Title:           issue.Title,
+		CreatorType:     issue.CreatorType,
+		CreatorID:       uuidToString(issue.CreatorID),
+		CreatedAt:       timestampToString(issue.CreatedAt),
+		LastCommentAt:   timestampToPtr(issue.LastCommentAt),
+		Members:         make([]GroupChatMemberResponse, 0, len(members)),
+		PendingSpeakers: []string{},
 	}
 	for _, m := range members {
 		resp.Members = append(resp.Members, groupChatMemberToResponse(m))
@@ -224,6 +226,7 @@ func (h *Handler) ListGroupChats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	prefix := h.getIssuePrefix(ctx, wsUUID)
+	pending := h.pendingSpeakersByIssue(ctx, ids)
 	out := make([]GroupChatResponse, 0, len(issues))
 	for _, issue := range issues {
 		key := uuidToString(issue.ID)
@@ -231,7 +234,11 @@ func (h *Handler) ListGroupChats(w http.ResponseWriter, r *http.Request) {
 		if c, found := lastByIssue[key]; found {
 			last = &c
 		}
-		out = append(out, groupChatToResponse(issue, prefix, membersByIssue[key], last))
+		resp := groupChatToResponse(issue, prefix, membersByIssue[key], last)
+		if speakers := pending[key]; len(speakers) > 0 {
+			resp.PendingSpeakers = speakers
+		}
+		out = append(out, resp)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"chats": out})
 }
@@ -248,7 +255,11 @@ func (h *Handler) GetGroupChat(w http.ResponseWriter, r *http.Request) {
 	if err == nil && len(latest) > 0 {
 		last = &latest[0]
 	}
-	writeJSON(w, http.StatusOK, groupChatToResponse(issue, h.getIssuePrefix(r.Context(), issue.WorkspaceID), members, last))
+	resp := groupChatToResponse(issue, h.getIssuePrefix(r.Context(), issue.WorkspaceID), members, last)
+	if speakers := h.pendingSpeakersByIssue(r.Context(), []pgtype.UUID{issue.ID})[uuidToString(issue.ID)]; len(speakers) > 0 {
+		resp.PendingSpeakers = speakers
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (h *Handler) CreateGroupChat(w http.ResponseWriter, r *http.Request) {

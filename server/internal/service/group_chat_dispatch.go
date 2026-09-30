@@ -1,0 +1,160 @@
+package service
+
+import (
+	"context"
+	"encoding/json"
+	"log/slog"
+	"strings"
+
+	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/multica-ai/multica/server/internal/events"
+	"github.com/multica-ai/multica/server/internal/groupchat"
+	"github.com/multica-ai/multica/server/internal/util"
+	db "github.com/multica-ai/multica/server/pkg/db/generated"
+	"github.com/multica-ai/multica/server/pkg/dbid"
+	"github.com/multica-ai/multica/server/pkg/protocol"
+)
+
+// continueGroupChatDispatch starts the next agent in an ordered group reply
+// after the agent at the plan cursor finishes. Independent replies are all
+// enqueued up front and do not pass through here.
+func (s *TaskService) continueGroupChatDispatch(ctx context.Context, task db.AgentTaskQueue) {
+	current, ok := groupchat.ParseDispatch(task.Context)
+	if !ok || !task.IssueID.Valid {
+		return
+	}
+	next, agentID, ok := current.Next()
+	if !ok {
+		return
+	}
+	issue, err := s.Queries.GetIssue(ctx, task.IssueID)
+	if err != nil {
+		slog.Warn("group chat continuation could not load the issue", "task_id", util.UUIDToString(task.ID), "error", err)
+		return
+	}
+	id, err := util.ParseUUID(agentID)
+	if err != nil {
+		return
+	}
+	created, err := s.EnqueueTaskForMention(ctx, issue, id, task.TriggerCommentID, OriginNamed)
+	if err != nil {
+		slog.Warn("group chat continuation was not enqueued", "task_id", util.UUIDToString(task.ID), "agent_id", agentID, "error", err)
+		return
+	}
+	s.OpenGroupChatThinking(ctx, issue, created)
+	raw, err := json.Marshal(next)
+	if err != nil {
+		return
+	}
+	if err := s.Queries.SetGroupChatDispatch(ctx, db.SetGroupChatDispatchParams{ID: created.ID, Plan: raw}); err != nil {
+		slog.Warn("group chat continuation plan was not stored", "task_id", util.UUIDToString(created.ID), "error", err)
+	}
+}
+
+// OpenGroupChatThinking posts the agent's "thinking" bubble as soon as that
+// agent is chosen, before the run produces any text.
+func (s *TaskService) OpenGroupChatThinking(ctx context.Context, issue db.Issue, task db.AgentTaskQueue) {
+	if !task.ID.Valid || !task.AgentID.Valid {
+		return
+	}
+	created, err := s.Queries.CreateComment(ctx, db.CreateCommentParams{
+		ID:           dbid.NewV7(),
+		IssueID:      issue.ID,
+		WorkspaceID:  issue.WorkspaceID,
+		AuthorType:   "agent",
+		AuthorID:     task.AgentID,
+		Content:      groupchat.ThinkingMessage,
+		Type:         "comment",
+		ParentID:     task.TriggerCommentID,
+		SourceTaskID: task.ID,
+	})
+	if err != nil {
+		slog.Warn("group chat thinking comment was not posted", "task_id", util.UUIDToString(task.ID), "error", err)
+		return
+	}
+	s.storeGroupChatPlaceholder(ctx, task.ID, groupchat.Placeholder{
+		CommentID: util.UUIDToString(created.ID),
+		Open:      true,
+	})
+	s.publishGroupChatComment(issue, created.Comment(), protocol.EventCommentCreated)
+}
+
+// settleGroupChatThinking replaces a thinking bubble that the run never filled.
+func (s *TaskService) settleGroupChatThinking(ctx context.Context, task db.AgentTaskQueue) {
+	if !strings.Contains(string(task.Context), "group_chat_placeholder") {
+		return
+	}
+	fresh, err := s.Queries.GetAgentTask(ctx, task.ID)
+	if err != nil {
+		return
+	}
+	placeholder, ok := groupchat.OpenPlaceholder(fresh.Context)
+	if !ok {
+		return
+	}
+	commentID, err := util.ParseUUID(placeholder.CommentID)
+	if err != nil {
+		s.storeGroupChatPlaceholder(ctx, task.ID, groupchat.Placeholder{CommentID: placeholder.CommentID, Open: false})
+		return
+	}
+	existing, err := s.Queries.GetComment(ctx, commentID)
+	if err != nil {
+		s.storeGroupChatPlaceholder(ctx, task.ID, groupchat.Placeholder{CommentID: placeholder.CommentID, Open: false})
+		return
+	}
+	if existing.Content == groupchat.ThinkingMessage && sameID(existing.AuthorID, fresh.AgentID) {
+		updated, err := s.Queries.UpdateComment(ctx, db.UpdateCommentParams{
+			ID:           existing.ID,
+			Content:      groupchat.UnfinishedMessage,
+			SourceTaskID: existing.SourceTaskID,
+		})
+		if err != nil {
+			slog.Warn("group chat thinking comment was not closed", "task_id", util.UUIDToString(task.ID), "error", err)
+			return
+		}
+		if issue, err := s.Queries.GetIssue(ctx, existing.IssueID); err == nil {
+			s.publishGroupChatComment(issue, updated.Comment(), protocol.EventCommentUpdated)
+		}
+	}
+	s.storeGroupChatPlaceholder(ctx, task.ID, groupchat.Placeholder{CommentID: placeholder.CommentID, Open: false})
+}
+
+func sameID(a, b pgtype.UUID) bool {
+	return a.Valid && b.Valid && util.UUIDToString(a) == util.UUIDToString(b)
+}
+
+// CloseGroupChatPlaceholder marks the thinking bubble as filled so a later
+// comment from the same run is stored on its own.
+func (s *TaskService) CloseGroupChatPlaceholder(ctx context.Context, taskID pgtype.UUID, commentID string) {
+	s.storeGroupChatPlaceholder(ctx, taskID, groupchat.Placeholder{CommentID: commentID, Open: false})
+}
+
+func (s *TaskService) storeGroupChatPlaceholder(ctx context.Context, taskID pgtype.UUID, placeholder groupchat.Placeholder) {
+	raw, err := json.Marshal(placeholder)
+	if err != nil {
+		return
+	}
+	if err := s.Queries.SetGroupChatPlaceholder(ctx, db.SetGroupChatPlaceholderParams{ID: taskID, Placeholder: raw}); err != nil {
+		slog.Warn("group chat placeholder was not stored", "task_id", util.UUIDToString(taskID), "error", err)
+	}
+}
+
+func (s *TaskService) publishGroupChatComment(issue db.Issue, comment db.Comment, eventType string) {
+	if s.Bus == nil {
+		return
+	}
+	fields := commentEventFields(comment)
+	fields["revision"] = comment.Revision
+	s.Bus.Publish(events.Event{
+		Type:        eventType,
+		WorkspaceID: util.UUIDToString(issue.WorkspaceID),
+		ActorType:   "agent",
+		ActorID:     util.UUIDToString(comment.AuthorID),
+		Payload: map[string]any{
+			"comment":      fields,
+			"issue_title":  issue.Title,
+			"issue_status": issue.Status,
+		},
+	})
+}

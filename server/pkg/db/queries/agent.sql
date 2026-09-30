@@ -2520,6 +2520,28 @@ SELECT * FROM agent_task_queue
 WHERE issue_id = $1 AND status IN ('queued', 'dispatched', 'running', 'waiting_local_directory')
 ORDER BY created_at DESC;
 
+-- name: ListActiveTasksForIssues :many
+-- Open runs for a set of group chats, oldest first, so a sequential plan's
+-- cursor and a parallel set can be read in one query.
+SELECT * FROM agent_task_queue
+WHERE issue_id = ANY(@issue_ids::uuid[])
+  AND status IN ('queued', 'dispatched', 'running', 'waiting_local_directory')
+ORDER BY created_at ASC, id ASC;
+
+-- name: SetGroupChatDispatch :exec
+-- Records who else must speak after this run. The key sits beside head_sha
+-- in the existing context object.
+UPDATE agent_task_queue
+SET context = COALESCE(context, '{}'::jsonb) || jsonb_build_object('group_chat_dispatch', @plan::jsonb)
+WHERE id = @id;
+
+-- name: SetGroupChatPlaceholder :exec
+-- The comment that already says the agent is thinking. open is false once the
+-- real reply has replaced that text.
+UPDATE agent_task_queue
+SET context = COALESCE(context, '{}'::jsonb) || jsonb_build_object('group_chat_placeholder', @placeholder::jsonb)
+WHERE id = @id;
+
 -- name: ListActiveTasksByIssueFamily :many
 -- Cross-issue coordination read for parallel sub-issue work (#7768). Given a
 -- family root — the target issue's parent, or the target itself when it has

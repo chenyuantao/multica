@@ -4597,6 +4597,8 @@ func (s *TaskService) CompleteTaskWithTransition(ctx context.Context, taskID pgt
 
 	// Broadcast
 	s.broadcastTaskEvent(ctx, protocol.EventTaskCompleted, task)
+	s.settleGroupChatThinking(ctx, task)
+	s.continueGroupChatDispatch(ctx, task)
 
 	return &task, true, nil
 }
@@ -7283,6 +7285,9 @@ func (s *TaskService) publishTaskEvent(eventType, workspaceID string, task db.Ag
 		return
 	}
 	s.Bus.Publish(taskEvent(eventType, workspaceID, task, extra...))
+	if eventType == protocol.EventTaskCancelled {
+		s.settleGroupChatThinking(context.Background(), task)
+	}
 }
 
 func (s *TaskService) broadcastTaskEvent(ctx context.Context, eventType string, task db.AgentTaskQueue, extra ...map[string]any) {
@@ -7308,6 +7313,9 @@ func taskFailedFields(errMsg, failureReason string, retryPending bool) map[strin
 
 func (s *TaskService) publishTaskFailedEvent(workspaceID string, task db.AgentTaskQueue, errMsg, failureReason string, retryPending bool) {
 	s.publishTaskEvent(protocol.EventTaskFailed, workspaceID, task, taskFailedFields(errMsg, failureReason, retryPending))
+	if !retryPending {
+		s.settleGroupChatThinking(context.Background(), task)
+	}
 }
 
 func (s *TaskService) broadcastTaskFailedEvent(ctx context.Context, task db.AgentTaskQueue, errMsg, failureReason string, retryPending bool) {

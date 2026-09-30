@@ -46,13 +46,15 @@
     "load_failed": "メッセージを読み込めませんでした",
     "back": "チャット一覧に戻る",
     "settings": "チャット設定",
-    "not_found": "このチャットは利用できません"
+    "not_found": "このチャットは利用できません",
+    "still_replying": "まだ返信していません: {{names}}"
   },
   "composer": {
     "placeholder": "{{title}} にメッセージ — @ でエージェントを 1 つ指定",
     "send": "送信",
     "no_agents": "このチャットにエージェントはいません",
-    "mention": "エージェントをメンション"
+    "mention": "エージェントをメンション",
+    "ambiguous": "{{name}} という名前のメンバーが複数います"
   },
   "panel": {
     "people": "このチャットのメンバー",

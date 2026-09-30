@@ -1747,6 +1747,9 @@ func (h *Handler) CreateComment(w http.ResponseWriter, r *http.Request) {
 	if h.rejectNonMemberAgentMentions(w, r, issue, req.Content) {
 		return
 	}
+	if h.rejectAmbiguousGroupChatMention(w, r, issue, req.Content) {
+		return
+	}
 
 	var parentID pgtype.UUID
 	var parentComment *db.Comment
@@ -1819,8 +1822,10 @@ func (h *Handler) CreateComment(w http.ResponseWriter, r *http.Request) {
 	// no_action guards below, and autopilotDelegationAuthority's lineage
 	// verification (MUL-4857).
 	var sourceTaskID pgtype.UUID
+	var authoringTask *db.AgentTaskQueue
 	if authorType == "agent" {
 		if task, ok := h.taskFromRequestHeader(r); ok {
+			authoringTask = &task
 			// Defense against resumed-session drift: when an agent posts from
 			// inside a comment-triggered task AND the comment is being posted on
 			// that same issue, the parent_id must exactly match the task's
@@ -1885,6 +1890,10 @@ func (h *Handler) CreateComment(w http.ResponseWriter, r *http.Request) {
 		}); err == nil {
 			rootComment = &root
 		}
+	}
+
+	if h.absorbGroupChatThinking(w, r, issue, authoringTask, req.Content, attachmentIDs, suppressAgentIDs, steerTaskIDs, authorType, authorID) {
+		return
 	}
 
 	createParams := db.CreateCommentParams{
@@ -2040,6 +2049,13 @@ func isNoteComment(content string) bool {
 func (h *Handler) triggerTasksForComment(ctx context.Context, issue db.Issue, comment db.Comment, parentComment *db.Comment, actorType, actorID, originatorUserID string, suppressAgentIDs, steerTaskIDs []pgtype.UUID) []CommentTriggerOutcome {
 	if isNoteComment(comment.Content) {
 		return nil
+	}
+	if actorType == "member" {
+		if hasMembers, err := h.Queries.IssueHasMembers(ctx, issue.ID); err != nil {
+			slog.Warn("group chat membership check failed", "issue_id", uuidToString(issue.ID), "error", err)
+		} else if hasMembers {
+			return h.dispatchGroupChatReply(ctx, issue, comment)
+		}
 	}
 	triggers, targets := h.computeCommentAgentTriggers(ctx, issue, comment.Content, parentComment, actorType, actorID, commentTriggerComputeOptions{
 		ExcludeTriggerCommentID: comment.ID,

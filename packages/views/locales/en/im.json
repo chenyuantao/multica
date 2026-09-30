@@ -49,13 +49,15 @@
     "load_failed": "Couldn't load messages",
     "back": "Back to chats",
     "settings": "Chat settings",
-    "not_found": "This chat isn't available"
+    "not_found": "This chat isn't available",
+    "still_replying": "Still to reply: {{names}}"
   },
   "composer": {
     "placeholder": "Message {{title}} — @ to address one agent",
     "send": "Send",
     "no_agents": "No agents in this chat",
-    "mention": "Mention an agent"
+    "mention": "Mention an agent",
+    "ambiguous": "More than one member is named {{name}}"
   },
   "panel": {
     "people": "People in this chat",

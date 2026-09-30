@@ -6,7 +6,7 @@ import { cn } from "@multica/ui/lib/utils";
 import { Button } from "@multica/ui/components/ui/button";
 import { ActorAvatar } from "../common/actor-avatar";
 import { useT } from "../i18n";
-import { activeMentionQuery, encodeMentions, type ComposerMention } from "./im-utils";
+import { activeMentionQuery, resolveComposerMentions, type ComposerMention } from "./im-utils";
 
 interface ChatComposerProps {
   chatTitle: string;
@@ -25,6 +25,7 @@ export function ChatComposer({ chatTitle, candidates, onSend }: ChatComposerProp
   const [picked, setPicked] = useState<ComposerMention[]>([]);
   const [highlight, setHighlight] = useState(0);
   const [dismissedAt, setDismissedAt] = useState<number | null>(null);
+  const [nameError, setNameError] = useState<string | null>(null);
 
   const mention = activeMentionQuery(text, caret);
   const suggestions = useMemo(() => {
@@ -81,7 +82,13 @@ export function ChatComposer({ chatTitle, candidates, onSend }: ChatComposerProp
   const send = () => {
     const body = text.trim();
     if (!body) return;
-    onSend(encodeMentions(body, picked.filter((m) => body.includes(`@${m.name}`))));
+    const resolved = resolveComposerMentions(body, picked.filter((m) => body.includes(`@${m.name}`)), candidates);
+    if (!resolved.ok) {
+      setNameError(resolved.name);
+      return;
+    }
+    setNameError(null);
+    onSend(resolved.markdown);
     setText("");
     setPicked([]);
     setCaret(0);
@@ -142,6 +149,11 @@ export function ChatComposer({ chatTitle, candidates, onSend }: ChatComposerProp
             </li>
           ))}
         </ul>
+      )}
+      {nameError && (
+        <p className="mb-1 px-2 text-caption text-destructive" role="alert">
+          {t(($) => $.composer.ambiguous, { name: nameError })}
+        </p>
       )}
       <div className="flex items-end gap-2 rounded-3xl border bg-background px-2 py-1.5 shadow-sm focus-within:ring-2 focus-within:ring-ring/40">
         <Button

@@ -47,6 +47,7 @@ import (
 	"github.com/multica-ai/multica/server/pkg/featureflag"
 	"github.com/multica-ai/multica/server/pkg/llm"
 	publicapiv1 "github.com/multica-ai/multica/server/pkg/publicapi/v1"
+	"github.com/multica-ai/multica/server/pkg/typesafe"
 )
 
 var defaultOrigins = []string{
@@ -446,6 +447,11 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 		ServerVersion:            normalizeServerVersion(version),
 	}
 	h := handler.New(queries, pool, hub, bus, emailSvc, store, cfSigner, analyticsClient, signupConfig, daemonHub)
+	h.GroupChatDecider = typesafe.New(typesafe.Config{
+		APIKey:  strings.TrimSpace(os.Getenv("TYPESAFE_API_KEY")),
+		BaseURL: strings.TrimSpace(os.Getenv("TYPESAFE_BASE_URL")),
+		Model:   strings.TrimSpace(os.Getenv("TYPESAFE_MODEL")),
+	})
 	invitationRateLimits := handler.DefaultInvitationRateLimits()
 	invitationRateLimits.Actor.Limit = envNonNegativeInt("RATE_LIMIT_INVITATION_ACTOR_10M", invitationRateLimits.Actor.Limit)
 	invitationRateLimits.Workspace.Limit = envNonNegativeInt("RATE_LIMIT_INVITATION_WORKSPACE_24H", invitationRateLimits.Workspace.Limit)

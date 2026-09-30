@@ -25,6 +25,31 @@ export function plainTextPreview(markdown: string): string {
  * Rewrites each picked `@Name` in the composer text into the mention link the
  * server parses. Longer names go first so `@Dev Ops` wins over `@Dev`.
  */
+/**
+ * Encodes picked @names into mention links. A bare @Name that matches more
+ * than one candidate, without exactly one picked person of that name, is
+ * refused instead of choosing one.
+ */
+export function resolveComposerMentions(
+  text: string,
+  picked: ComposerMention[],
+  candidates: ComposerMention[],
+): { ok: true; markdown: string } | { ok: false; name: string } {
+  const names = new Set<string>();
+  for (const token of text.matchAll(/(^|\s)@([^\s@]+)/g)) {
+    const name = (token[2] ?? "").replace(/[.,;:!?]+$/, "");
+    if (name) names.add(name);
+  }
+  for (const name of names) {
+    const same = candidates.filter((c) => c.name.toLowerCase() === name.toLowerCase());
+    if (same.length <= 1) continue;
+    const chosen = picked.filter((p) => same.some((c) => c.type === p.type && c.id === p.id));
+    const unique = new Map(chosen.map((p) => [`${p.type}:${p.id}`, p]));
+    if (unique.size !== 1) return { ok: false, name };
+  }
+  return { ok: true, markdown: encodeMentions(text, picked) };
+}
+
 export function encodeMentions(text: string, mentions: ComposerMention[]): string {
   const unique = new Map(mentions.map((m) => [`${m.type}:${m.id}`, m]));
   const ordered = [...unique.values()].sort((a, b) => b.name.length - a.name.length);

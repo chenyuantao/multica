@@ -121,6 +121,13 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, mobil
               agents: t(($) => $.thread.agents, { count: agents.length }),
             })}
           </p>
+          {chat.pending_speakers.length > 0 && (
+            <p className="truncate text-caption text-muted-foreground">
+              {t(($) => $.thread.still_replying, {
+                names: chat.pending_speakers.map((id) => getActorName("agent", id)).join(", "),
+              })}
+            </p>
+          )}
         </div>
         {mobileNav ? (
           <Button

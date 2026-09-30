@@ -506,6 +506,13 @@ func buildCommentPrompt(task Task, provider string) string {
 	// Whether the scan happens is never decided here — workflow step 2 owns
 	// that; these hints carry this turn's facts and exact commands. Final
 	// fallback (no trigger id, shouldn't happen here): plain read.
+	if strings.TrimSpace(task.GroupChatTranscript) != "" {
+		b.WriteString("This run is a group-chat reply. The transcript below is the conversation in chronological order. Read it as one history. Do not reconstruct it as separate comment threads.\n\n")
+		b.WriteString(task.GroupChatTranscript)
+		b.WriteString("\n\n")
+		b.WriteString(execenv.BuildCommentReplyInstructions(provider, task.IssueID, task.TriggerCommentID, taskIsSquadLeader(task)))
+		return b.String()
+	}
 	var hint string
 	if resumed {
 		hint = execenv.BuildNewCommentsHint(task.IssueID, task.TriggerCommentID, task.TriggerThreadID, task.NewCommentsSince, task.NewCommentCount)

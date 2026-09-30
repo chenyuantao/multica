@@ -49,13 +49,15 @@
     "load_failed": "Impossible de charger les messages",
     "back": "Retour aux discussions",
     "settings": "Paramètres de la discussion",
-    "not_found": "Cette discussion n'est pas disponible"
+    "not_found": "Cette discussion n'est pas disponible",
+    "still_replying": "Encore à répondre : {{names}}"
   },
   "composer": {
     "placeholder": "Message à {{title}} — @ pour solliciter un agent",
     "send": "Envoyer",
     "no_agents": "Aucun agent dans cette discussion",
-    "mention": "Mentionner un agent"
+    "mention": "Mentionner un agent",
+    "ambiguous": "Plusieurs membres s'appellent {{name}}"
   },
   "panel": {
     "people": "Membres de la discussion",

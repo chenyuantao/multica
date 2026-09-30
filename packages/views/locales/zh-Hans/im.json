@@ -46,13 +46,15 @@
     "load_failed": "消息加载失败",
     "back": "返回群聊列表",
     "settings": "群聊设置",
-    "not_found": "该群聊不存在或你已不在群内"
+    "not_found": "该群聊不存在或你已不在群内",
+    "still_replying": "还没说完：{{names}}"
   },
   "composer": {
     "placeholder": "发消息到 {{title}} — 输入 @ 指定一个智能体",
     "send": "发送",
     "no_agents": "群聊里还没有智能体",
-    "mention": "@ 一个智能体"
+    "mention": "@ 一个智能体",
+    "ambiguous": "有多名成员都叫 {{name}}"
   },
   "panel": {
     "people": "群聊成员",

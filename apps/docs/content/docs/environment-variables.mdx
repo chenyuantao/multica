@@ -223,6 +223,20 @@ When both the API key and the base URL are empty, this layer is disabled and mak
 This covers the assist layer only. Running an agent is a separate data path: when an agent answers a chat, your daemon executes that agent's AI coding tool using the tool's own credentials, and does not forward the `MULTICA_LLM_*` settings above to it. (The run-scoped Multica connection variables the agent needs are injected by the daemon separately.) Emptying the variables above does not affect that path — govern it through the agent's runtime configuration.
 </Callout>
 
+## Group chat planning
+
+Unaddressed group messages, and messages that name more than one agent, are planned with [Jev](https://docs.typesafe.ai/introduction.md), TypeSafe's System One model. A message that opens with a single `@` of one agent is delivered to that agent without a planning call. An `@` later in the sentence, or inside quotes or code, is not that shortcut. A bare `@Name` that matches more than one member is rejected.
+
+For a message that names nobody, the planner receives the agents in the group, each with a name and description, and the latest 30 messages with time, sender, and content. It answers whether an agent should reply, and only if that answer is yes, which agent. Several agents named in one message are asked only whether they can reply independently or must go in order. Ordered replies start one agent at a time; the thread lists who has not finished.
+
+| Variable | Default | Description |
+|---|---|---|
+| `TYPESAFE_API_KEY` | empty | API key for `POST /v1/systemone`. Empty disables planning: unaddressed messages wake nobody, and several named agents reply in mention order |
+| `TYPESAFE_BASE_URL` | `https://api.typesafe.ai` | System One origin. The path `/v1/systemone` is appended |
+| `TYPESAFE_MODEL` | `jev-latest` | Model id sent on each planning request |
+
+Leave `TYPESAFE_API_KEY` empty when this deployment must not send group history to TypeSafe. Direct `@` of one agent still starts that agent. The key is read by the API process only and is not forwarded to agent runtimes.
+
 ## Daemon configuration
 
 The variables below are read on the computer that runs your agents, not in the API container.

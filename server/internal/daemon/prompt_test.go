@@ -2254,3 +2254,21 @@ func TestPromptCarriesJoinedWakeups(t *testing.T) {
 		t.Errorf("prompt without joined wakeups mentions them:\n%s", out)
 	}
 }
+
+func TestBuildCommentPromptUsesGroupTranscript(t *testing.T) {
+	out := buildCommentPrompt(Task{
+		IssueID:               "issue-1",
+		TriggerCommentID:      "c-1",
+		TriggerCommentContent: "please look",
+		GroupChatTranscript:   "Ada (member): hello\n\nOps (agent): on it",
+	}, "claude")
+	if !strings.Contains(out, "Ada (member): hello") {
+		t.Fatalf("missing transcript:\n%s", out)
+	}
+	if !strings.Contains(out, "one history") {
+		t.Fatalf("missing group history instruction:\n%s", out)
+	}
+	if strings.Contains(out, "--roots-only") {
+		t.Fatalf("group transcript still tells the agent to scan threads:\n%s", out)
+	}
+}

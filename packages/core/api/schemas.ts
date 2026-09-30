@@ -1149,6 +1149,7 @@ export const GroupChatSchema = z.object({
   last_comment_at: z.string().nullable().default(null),
   last_message: CommentSchema.nullable().default(null).catch(null),
   members: z.array(GroupChatMemberSchema).default([]),
+  pending_speakers: z.array(z.string()).default([]),
 }).loose();
 
 export const GroupChatsListSchema = z.object({

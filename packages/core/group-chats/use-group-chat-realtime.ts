@@ -39,9 +39,19 @@ export function useGroupChatRealtime(wsId: string) {
     [qc, wsId],
   );
 
+  const onTaskChanged = useCallback(
+    (payload: unknown) => refreshChat((payload as { issue_id?: string } | undefined)?.issue_id),
+    [refreshChat],
+  );
+
   useWSEvent("comment:created", onCommentChanged);
   useWSEvent("comment:updated", onCommentChanged);
   useWSEvent("comment:deleted", onCommentDeleted);
   useWSEvent("group_chat:updated", onChatUpdated);
+  useWSEvent("task:queued", onTaskChanged);
+  useWSEvent("task:running", onTaskChanged);
+  useWSEvent("task:completed", onTaskChanged);
+  useWSEvent("task:failed", onTaskChanged);
+  useWSEvent("task:cancelled", onTaskChanged);
   useWSReconnect(onReconnect);
 }

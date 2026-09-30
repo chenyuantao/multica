@@ -25,6 +25,7 @@ import (
 	"github.com/multica-ai/multica/server/internal/dbreader"
 	"github.com/multica-ai/multica/server/internal/entitlement"
 	"github.com/multica-ai/multica/server/internal/events"
+	"github.com/multica-ai/multica/server/internal/groupchat"
 	"github.com/multica-ai/multica/server/internal/integrations/channel/engine"
 	composio "github.com/multica-ai/multica/server/internal/integrations/composio"
 	"github.com/multica-ai/multica/server/internal/integrations/dingtalk"
@@ -240,6 +241,9 @@ type Handler struct {
 	Storage            storage.Storage
 	CFSigner           *auth.CloudFrontSigner
 	Analytics          analytics.Client
+	// GroupChatDecider plans who replies in a group chat. Nil or disabled
+	// leaves unaddressed messages unanswered and named agents in mention order.
+	GroupChatDecider groupchat.Evaluator
 	// DaemonPendingWork pushes "heartbeat now" hints for queued
 	// heartbeat-carried requests (MUL-5444). Optional: when nil,
 	// requestDaemonPendingWork falls back to the local DaemonHub, which is the
