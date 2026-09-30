@@ -1,4 +1,15 @@
 {
+  "cleanup": {
+    "action": "清理未使用",
+    "title_other": "删除 {{count}} 个未使用的运行时？",
+    "description": "这些运行时已离线，没有活跃智能体，也没有未完成的任务。守护进程重新连接后会再次注册。",
+    "cancel": "取消",
+    "confirm_other": "删除 {{count}} 个运行时",
+    "submitting": "删除中…",
+    "deleted_toast_other": "已删除 {{count}} 个运行时",
+    "skipped_toast_other": "{{count}} 个运行时已重新被使用，已保留",
+    "failed_toast": "删除未使用的运行时失败"
+  },
   "page": {
     "title": "运行时",
     "tagline": "为智能体跑 CLI 会话的机器和云端 worker。",

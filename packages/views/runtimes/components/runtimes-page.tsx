@@ -8,6 +8,7 @@ import {
   Monitor,
   Plus,
   Server,
+  Trash2,
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -19,7 +20,11 @@ import { useRequiredWorkspaceSlug, useWorkspacePaths } from "@multica/core/paths
 import { agentTaskSnapshotOptions } from "@multica/core/agents";
 import { chatSessionsOptions } from "@multica/core/chat/queries";
 import { runtimeProfileListOptions } from "@multica/core/runtimes";
-import { runtimeListOptions, runtimeKeys } from "@multica/core/runtimes/queries";
+import {
+  runtimeListOptions,
+  runtimeKeys,
+  unusedRuntimeIdsOptions,
+} from "@multica/core/runtimes/queries";
 import { useWSEvent } from "@multica/core/realtime";
 import { agentListOptions } from "@multica/core/workspace/queries";
 import type { AgentRuntime } from "@multica/core/types";
@@ -50,6 +55,7 @@ import {
 } from "../../onboarding/templates";
 import { ConnectRemoteDialog } from "./connect-remote-dialog";
 import { CloudRuntimeDialog } from "./cloud-runtime-dialog";
+import { DeleteUnusedRuntimesDialog } from "./delete-unused-runtimes-dialog";
 import { ProviderLogo } from "./provider-logo";
 import { buildWorkloadIndex, RuntimeList } from "./runtime-list";
 import { pendingRuntimeFromProfile } from "./pending-runtime";
@@ -93,10 +99,18 @@ export function RuntimesPage({
   const qc = useQueryClient();
   const [showConnectDialog, setShowConnectDialog] = useState(false);
   const [showCloudRuntimeDialog, setShowCloudRuntimeDialog] = useState(false);
+  const [showCleanupDialog, setShowCleanupDialog] = useState(false);
 
   const { data: runtimes = [], isLoading: runtimesLoading } = useQuery(
     runtimeListOptions(wsId),
   );
+  const { data: unusedRuntimeIds = [] } = useQuery(
+    unusedRuntimeIdsOptions(wsId),
+  );
+  const unusedRuntimes = useMemo(() => {
+    const ids = new Set(unusedRuntimeIds);
+    return runtimes.filter((runtime) => ids.has(runtime.id));
+  }, [runtimes, unusedRuntimeIds]);
   const { data: runtimeProfiles = [], isLoading: profilesLoading } = useQuery(
     runtimeProfileListOptions(wsId),
   );
@@ -170,6 +184,8 @@ export function RuntimesPage({
         onConnectRemote={() => setShowConnectDialog(true)}
         cloudRuntimeEnabled={cloudRuntimeEnabled}
         onOpenCloudRuntime={() => setShowCloudRuntimeDialog(true)}
+        showCleanup={unusedRuntimes.length > 0}
+        onOpenCleanup={() => setShowCleanupDialog(true)}
       />
 
       {showEmpty ? (
@@ -213,6 +229,12 @@ export function RuntimesPage({
       {cloudRuntimeEnabled && showCloudRuntimeDialog && (
         <CloudRuntimeDialog onClose={() => setShowCloudRuntimeDialog(false)} />
       )}
+      <DeleteUnusedRuntimesDialog
+        open={showCleanupDialog}
+        onOpenChange={setShowCleanupDialog}
+        runtimes={unusedRuntimes}
+        wsId={wsId}
+      />
     </div>
   );
 }
@@ -374,11 +396,15 @@ function PageHeaderBar({
   onConnectRemote,
   cloudRuntimeEnabled,
   onOpenCloudRuntime,
+  showCleanup,
+  onOpenCleanup,
 }: {
   totalCount: number;
   onConnectRemote: () => void;
   cloudRuntimeEnabled: boolean;
   onOpenCloudRuntime: () => void;
+  showCleanup: boolean;
+  onOpenCleanup: () => void;
 }) {
   const { t, i18n } = useT("runtimes");
   return (
@@ -393,6 +419,13 @@ function PageHeaderBar({
       }}
       actions={
         <>
+          {showCleanup && (
+            <CollectionPageHeaderAction
+              icon={Trash2}
+              label={t(($) => $.cleanup.action)}
+              onClick={onOpenCleanup}
+            />
+          )}
           {cloudRuntimeEnabled && (
             <CollectionPageHeaderAction
               icon={Cloud}

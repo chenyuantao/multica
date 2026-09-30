@@ -1,4 +1,19 @@
 {
+  "cleanup": {
+    "action": "Clean up unused",
+    "title_one": "Delete {{count}} unused runtime?",
+    "title_other": "Delete {{count}} unused runtimes?",
+    "description": "Offline, with no active agents or unfinished tasks. A daemon that reconnects registers its runtimes again.",
+    "cancel": "Cancel",
+    "confirm_one": "Delete {{count}} runtime",
+    "confirm_other": "Delete {{count}} runtimes",
+    "submitting": "Deleting…",
+    "deleted_toast_one": "Deleted {{count}} runtime",
+    "deleted_toast_other": "Deleted {{count}} runtimes",
+    "skipped_toast_one": "Kept {{count}} runtime that is in use again",
+    "skipped_toast_other": "Kept {{count}} runtimes that are in use again",
+    "failed_toast": "Failed to delete unused runtimes"
+  },
   "page": {
     "title": "Runtimes",
     "tagline": "Machines and cloud workers running CLI sessions for your agents.",

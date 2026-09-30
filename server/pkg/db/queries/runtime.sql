@@ -551,6 +551,67 @@ SELECT EXISTS (
     )
 ) AS eligible;
 
+-- name: ListUnusedAgentRuntimes :many
+-- Manual cleanup preview: the runtimes retention GC would reclaim without its
+-- offline TTL. Offline, no non-archived user agent bound, no non-terminal task
+-- owned by the runtime or by any user agent bound to it (archived included,
+-- matching TeardownRuntime's drain gate), and not an instance of a live custom
+-- runtime profile (the interactive delete endpoints refuse those). The delete
+-- path re-checks under the runtime row lock, so this is advisory.
+SELECT * FROM agent_runtime
+WHERE agent_runtime.workspace_id = $1
+  AND agent_runtime.status = 'offline'
+  AND NOT EXISTS (
+    SELECT 1
+    FROM agent
+    WHERE agent.runtime_id = agent_runtime.id
+      AND agent.kind = 'user'
+      AND agent.archived_at IS NULL
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM agent_task_queue
+    WHERE agent_task_queue.completed_at IS NULL
+      AND (
+        agent_task_queue.runtime_id = agent_runtime.id
+        OR agent_task_queue.agent_id IN (
+          SELECT agent.id FROM agent
+          WHERE agent.runtime_id = agent_runtime.id
+            AND agent.kind = 'user'
+        )
+      )
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM runtime_profile
+    WHERE runtime_profile.id = agent_runtime.profile_id
+      AND runtime_profile.workspace_id = agent_runtime.workspace_id
+  )
+ORDER BY agent_runtime.last_seen_at ASC NULLS FIRST, agent_runtime.id ASC;
+
+-- name: IsAgentRuntimeUnused :one
+-- Re-checks ListUnusedAgentRuntimes' runtime and agent predicates after the
+-- caller has locked the runtime row and its user agents FOR UPDATE. The task
+-- drain is enforced by TeardownRuntime in the same transaction.
+SELECT EXISTS (
+  SELECT 1 FROM agent_runtime
+  WHERE agent_runtime.id = @id
+    AND agent_runtime.status = 'offline'
+    AND NOT EXISTS (
+      SELECT 1
+      FROM agent
+      WHERE agent.runtime_id = agent_runtime.id
+        AND agent.kind = 'user'
+        AND agent.archived_at IS NULL
+    )
+    AND NOT EXISTS (
+      SELECT 1
+      FROM runtime_profile
+      WHERE runtime_profile.id = agent_runtime.profile_id
+        AND runtime_profile.workspace_id = agent_runtime.workspace_id
+    )
+) AS unused;
+
 -- name: CountTasksByRuntime :one
 -- Final fail-closed assertion after UnbindTasksFromRuntime. A non-zero result
 -- aborts the transaction instead of relying on the legacy ON DELETE CASCADE.

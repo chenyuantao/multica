@@ -1,4 +1,15 @@
 {
+  "cleanup": {
+    "action": "未使用を整理",
+    "title_other": "未使用のランタイム {{count}} 個を削除しますか？",
+    "description": "オフラインで、アクティブなエージェントも未完了のタスクもありません。デーモンが再接続すると再登録されます。",
+    "cancel": "キャンセル",
+    "confirm_other": "ランタイム {{count}} 個を削除",
+    "submitting": "削除中…",
+    "deleted_toast_other": "ランタイム {{count}} 個を削除しました",
+    "skipped_toast_other": "再び使用中になったランタイム {{count}} 個は残しました",
+    "failed_toast": "未使用のランタイムを削除できませんでした"
+  },
   "page": {
     "title": "ランタイム",
     "tagline": "エージェントの CLI セッションを実行するマシンとクラウドワーカーです。",

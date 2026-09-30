@@ -334,6 +334,8 @@ import {
   RuntimeUsageByAgentListSchema,
   RuntimeUsageByHourListSchema,
   RuntimeUsageListSchema,
+  UnusedRuntimeListSchema,
+  DeleteUnusedRuntimesResponseSchema,
   SearchIssuesResponseSchema,
   SearchProjectsResponseSchema,
   SearchIndexManifestSchema,
@@ -2343,6 +2345,36 @@ export class ApiClient {
 
   async deleteRuntime(runtimeId: string): Promise<void> {
     await this.fetch(`/api/runtimes/${runtimeId}`, { method: "DELETE" });
+  }
+
+  // Ids of offline runtimes the caller may delete that have no active agent,
+  // no unfinished task, and no live custom runtime profile behind them.
+  async listUnusedRuntimeIds(): Promise<string[]> {
+    const raw = await this.fetch<unknown>("/api/runtimes/unused");
+    const parsed = parseWithFallback<{ runtimes: { id: string }[] }>(
+      raw,
+      UnusedRuntimeListSchema,
+      { runtimes: [] },
+      { endpoint: "GET /api/runtimes/unused" },
+    );
+    return parsed.runtimes.map((runtime) => runtime.id);
+  }
+
+  // The server re-checks every id and skips the ones that stopped qualifying
+  // since the preview; it never cancels tasks or unbinds active agents.
+  async deleteUnusedRuntimes(
+    runtimeIds: string[],
+  ): Promise<{ deleted_ids: string[]; skipped_ids: string[] }> {
+    const raw = await this.fetch<unknown>("/api/runtimes/unused/delete", {
+      method: "POST",
+      body: JSON.stringify({ runtime_ids: runtimeIds }),
+    });
+    return parseWithFallback(
+      raw,
+      DeleteUnusedRuntimesResponseSchema,
+      { deleted_ids: [], skipped_ids: [] },
+      { endpoint: "POST /api/runtimes/unused/delete" },
+    );
   }
 
   // Confirmed variant of deleteRuntime. The strict DELETE refuses with

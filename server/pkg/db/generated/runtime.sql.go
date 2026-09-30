@@ -616,6 +616,37 @@ func (q *Queries) IsAgentRuntimeEligibleForGC(ctx context.Context, arg IsAgentRu
 	return eligible, err
 }
 
+const isAgentRuntimeUnused = `-- name: IsAgentRuntimeUnused :one
+SELECT EXISTS (
+  SELECT 1 FROM agent_runtime
+  WHERE agent_runtime.id = $1
+    AND agent_runtime.status = 'offline'
+    AND NOT EXISTS (
+      SELECT 1
+      FROM agent
+      WHERE agent.runtime_id = agent_runtime.id
+        AND agent.kind = 'user'
+        AND agent.archived_at IS NULL
+    )
+    AND NOT EXISTS (
+      SELECT 1
+      FROM runtime_profile
+      WHERE runtime_profile.id = agent_runtime.profile_id
+        AND runtime_profile.workspace_id = agent_runtime.workspace_id
+    )
+) AS unused
+`
+
+// Re-checks ListUnusedAgentRuntimes' runtime and agent predicates after the
+// caller has locked the runtime row and its user agents FOR UPDATE. The task
+// drain is enforced by TeardownRuntime in the same transaction.
+func (q *Queries) IsAgentRuntimeUnused(ctx context.Context, id pgtype.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, isAgentRuntimeUnused, id)
+	var unused bool
+	err := row.Scan(&unused)
+	return unused, err
+}
+
 const listAgentRuntimeIDsByWorkspace = `-- name: ListAgentRuntimeIDsByWorkspace :many
 SELECT id FROM agent_runtime
 WHERE workspace_id = $1
@@ -819,6 +850,83 @@ func (q *Queries) ListStaleOfflineRuntimeGCCandidates(ctx context.Context, arg L
 			return nil, err
 		}
 		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUnusedAgentRuntimes = `-- name: ListUnusedAgentRuntimes :many
+SELECT id, workspace_id, daemon_id, name, runtime_mode, provider, status, device_info, metadata, last_seen_at, created_at, updated_at, owner_id, legacy_daemon_id, visibility, profile_id, custom_name FROM agent_runtime
+WHERE agent_runtime.workspace_id = $1
+  AND agent_runtime.status = 'offline'
+  AND NOT EXISTS (
+    SELECT 1
+    FROM agent
+    WHERE agent.runtime_id = agent_runtime.id
+      AND agent.kind = 'user'
+      AND agent.archived_at IS NULL
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM agent_task_queue
+    WHERE agent_task_queue.completed_at IS NULL
+      AND (
+        agent_task_queue.runtime_id = agent_runtime.id
+        OR agent_task_queue.agent_id IN (
+          SELECT agent.id FROM agent
+          WHERE agent.runtime_id = agent_runtime.id
+            AND agent.kind = 'user'
+        )
+      )
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM runtime_profile
+    WHERE runtime_profile.id = agent_runtime.profile_id
+      AND runtime_profile.workspace_id = agent_runtime.workspace_id
+  )
+ORDER BY agent_runtime.last_seen_at ASC NULLS FIRST, agent_runtime.id ASC
+`
+
+// Manual cleanup preview: the runtimes retention GC would reclaim without its
+// offline TTL. Offline, no non-archived user agent bound, no non-terminal task
+// owned by the runtime or by any user agent bound to it (archived included,
+// matching TeardownRuntime's drain gate), and not an instance of a live custom
+// runtime profile (the interactive delete endpoints refuse those). The delete
+// path re-checks under the runtime row lock, so this is advisory.
+func (q *Queries) ListUnusedAgentRuntimes(ctx context.Context, workspaceID pgtype.UUID) ([]AgentRuntime, error) {
+	rows, err := q.db.Query(ctx, listUnusedAgentRuntimes, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AgentRuntime{}
+	for rows.Next() {
+		var i AgentRuntime
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.DaemonID,
+			&i.Name,
+			&i.RuntimeMode,
+			&i.Provider,
+			&i.Status,
+			&i.DeviceInfo,
+			&i.Metadata,
+			&i.LastSeenAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.OwnerID,
+			&i.LegacyDaemonID,
+			&i.Visibility,
+			&i.ProfileID,
+			&i.CustomName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

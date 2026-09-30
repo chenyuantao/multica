@@ -1901,6 +1901,17 @@ const RuntimeUsageByHourSchema = z.object({
 
 export const RuntimeUsageByHourListSchema = z.array(RuntimeUsageByHourSchema);
 
+// Unused-runtime cleanup (`/api/runtimes/unused*`). The preview only needs
+// ids — callers join them against the cached runtime list for display.
+export const UnusedRuntimeListSchema = z.object({
+  runtimes: z.array(z.object({ id: z.string() }).loose()).default([]),
+}).loose();
+
+export const DeleteUnusedRuntimesResponseSchema = z.object({
+  deleted_ids: z.array(z.string()).default([]),
+  skipped_ids: z.array(z.string()).default([]),
+}).loose();
+
 // ---------------------------------------------------------------------------
 // Agent task responses. The base object stays loose so daemon/runtime fields
 // can drift while task-list consumers still validate the fields they render.

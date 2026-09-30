@@ -5,6 +5,7 @@ export const runtimeKeys = {
   all: (wsId: string) => ["runtimes", wsId] as const,
   list: (wsId: string) => [...runtimeKeys.all(wsId), "list"] as const,
   listMine: (wsId: string) => [...runtimeKeys.all(wsId), "list", "mine"] as const,
+  unused: (wsId: string) => [...runtimeKeys.all(wsId), "unused"] as const,
   usage: (rid: string, days: number, tz: string) =>
     ["runtimes", "usage", rid, days, tz] as const,
   usageByAgent: (rid: string, days: number, tz: string) =>
@@ -44,6 +45,13 @@ export function runtimeUsageByHourOptions(runtimeId: string, days: number, tz: s
     queryKey: runtimeKeys.usageByHour(runtimeId, days, tz),
     queryFn: () => api.getRuntimeUsageByHour(runtimeId, { days, tz }),
     staleTime: 60 * 1000,
+  });
+}
+
+export function unusedRuntimeIdsOptions(wsId: string) {
+  return queryOptions({
+    queryKey: runtimeKeys.unused(wsId),
+    queryFn: () => api.listUnusedRuntimeIds(),
   });
 }
 

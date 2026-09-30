@@ -1,4 +1,19 @@
 {
+  "cleanup": {
+    "action": "Nettoyer les inutilisés",
+    "title_one": "Supprimer {{count}} runtime inutilisé ?",
+    "title_other": "Supprimer {{count}} runtimes inutilisés ?",
+    "description": "Hors ligne, sans agent actif ni tâche en cours. Un daemon qui se reconnecte réenregistre ses runtimes.",
+    "cancel": "Annuler",
+    "confirm_one": "Supprimer {{count}} runtime",
+    "confirm_other": "Supprimer {{count}} runtimes",
+    "submitting": "Suppression…",
+    "deleted_toast_one": "{{count}} runtime supprimé",
+    "deleted_toast_other": "{{count}} runtimes supprimés",
+    "skipped_toast_one": "{{count}} runtime de nouveau utilisé a été conservé",
+    "skipped_toast_other": "{{count}} runtimes de nouveau utilisés ont été conservés",
+    "failed_toast": "Impossible de supprimer les runtimes inutilisés"
+  },
   "page": {
     "title": "Runtimes",
     "tagline": "Machines et workers cloud qui exécutent des sessions CLI pour vos agents.",

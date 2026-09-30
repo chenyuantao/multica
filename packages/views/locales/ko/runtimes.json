@@ -1,4 +1,15 @@
 {
+  "cleanup": {
+    "action": "미사용 정리",
+    "title_other": "미사용 런타임 {{count}}개를 삭제할까요?",
+    "description": "오프라인 상태이며 활성 에이전트나 완료되지 않은 작업이 없습니다. 데몬이 다시 연결되면 다시 등록됩니다.",
+    "cancel": "취소",
+    "confirm_other": "런타임 {{count}}개 삭제",
+    "submitting": "삭제 중…",
+    "deleted_toast_other": "런타임 {{count}}개를 삭제했습니다",
+    "skipped_toast_other": "다시 사용 중인 런타임 {{count}}개는 유지했습니다",
+    "failed_toast": "미사용 런타임을 삭제하지 못했습니다"
+  },
   "page": {
     "title": "런타임",
     "tagline": "에이전트의 CLI 세션을 실행하는 기기와 클라우드 워커입니다.",

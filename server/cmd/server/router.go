@@ -2358,6 +2358,10 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			// Runtimes
 			r.Route("/api/runtimes", func(r chi.Router) {
 				r.Get("/", h.ListAgentRuntimes)
+				// Bulk cleanup of offline runtimes nothing depends on: preview,
+				// then delete the confirmed set (each re-checked server-side).
+				r.Get("/unused", h.ListUnusedAgentRuntimes)
+				r.Post("/unused/delete", h.DeleteUnusedAgentRuntimes)
 				r.Route("/{runtimeId}", func(r chi.Router) {
 					r.Patch("/", h.UpdateAgentRuntime)
 					r.Get("/usage", h.GetRuntimeUsage)
