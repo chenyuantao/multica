@@ -395,6 +395,9 @@ deleted_issue_pr_exclusions AS (
 deleted_issue_members AS (
     DELETE FROM issue_member WHERE workspace_id = $1
 ),
+deleted_comment_ask_contexts AS (
+    DELETE FROM comment_ask_context WHERE workspace_id = $1
+),
 deleted_agent_invocation_targets AS (
     DELETE FROM agent_invocation_target
     WHERE agent_id IN (SELECT id FROM ws_agents)

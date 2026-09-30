@@ -1,29 +1,33 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { MessagesSquare, UsersRound } from "lucide-react";
 import { toast } from "sonner";
 import { useAuthStore } from "@multica/core/auth";
 import { useWorkspaceId } from "@multica/core/hooks";
 import { useModalStore } from "@multica/core/modals";
 import { useWorkspacePaths } from "@multica/core/paths";
-import { directChatPeer, groupChatListOptions, useGroupChatRealtime, useSetGroupChatPinned } from "@multica/core/group-chats";
-import type { GroupChat } from "@multica/core/types";
+import { directChatPeer, groupChatKeys, groupChatListOptions, useGroupChatRealtime, useSetGroupChatPinned } from "@multica/core/group-chats";
+import type { Comment, GroupChat } from "@multica/core/types";
+import { useActorName } from "@multica/core/workspace/hooks";
 import { Button } from "@multica/ui/components/ui/button";
 import { useIsMobile } from "@multica/ui/hooks/use-mobile";
 import { useNavigation } from "../navigation";
 import { useT } from "../i18n";
 import { DragStrip } from "../platform";
+import { chatAskPage, contactAskPage, visibleMessageIds } from "./ask-ai-context";
 import { ChatDetailsPanel } from "./chat-details-panel";
 import { ChatSidebar } from "./chat-sidebar";
 import { ChatThread } from "./chat-thread";
 import { ContactCard } from "./contact-card";
 import { ContactList } from "./contact-list";
 import { ImRail, type ImView } from "./im-rail";
+import { ImSearchDialog } from "./im-search-dialog";
 import { MobileContactDetail, MobileLevel, MobileTabScreen, parseContactParam } from "./mobile-shell";
-import { sortChats } from "./im-utils";
+import { chatDisplayTitle, sortChats } from "./im-utils";
 import { NewChatDialog } from "./new-chat-dialog";
+import { useAskAILauncher } from "./use-ask-ai-launcher";
 import { entryKey, useChatDirectory, type DirectoryEntry } from "./use-chat-directory";
 
 const EMPTY_CHATS: GroupChat[] = [];
@@ -44,10 +48,12 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
   const navigation = useNavigation();
   const paths = useWorkspacePaths();
   const isMobile = useIsMobile();
+  const qc = useQueryClient();
+  const { getActorName } = useActorName();
   const { data = EMPTY_CHATS, isLoading, isError } = useQuery(groupChatListOptions(wsId));
   const [panelOpen, setPanelOpen] = useState(true);
   const [newChatOpen, setNewChatOpen] = useState(false);
-  const [contactKey, setContactKey] = useState<string | null>(null);
+  const contactTarget = parseContactParam(navigation.searchParams.get("contact"));
   const directory = useChatDirectory(wsId);
   const setPinned = useSetGroupChatPinned(wsId);
   const setChatPinned = (chatId: string, pinned: boolean) =>
@@ -68,11 +74,20 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
 
   const openChat = (chatId: string) => navigation.push(paths.imChat(chatId));
 
+  const contactKey = contactTarget ? entryKey(contactTarget.type, contactTarget.id) : null;
   const contact = contactKey ? directory.byKey.get(contactKey) ?? null : null;
-  const selectContact = (entry: DirectoryEntry) => {
-    if (isMobile) navigation.push(paths.memberContact(entry.type, entry.id));
-    else setContactKey(entryKey(entry.type, entry.id));
+  const selectContact = (entry: DirectoryEntry) =>
+    isMobile
+      ? navigation.push(paths.memberContact(entry.type, entry.id))
+      : navigation.replace(paths.memberContact(entry.type, entry.id));
+
+  const askPage = () => {
+    if (view === "contacts") return contact ? contactAskPage(contact) : null;
+    if (!selected || (isMobile && !requested)) return null;
+    const messages = qc.getQueryData<Comment[]>(groupChatKeys.messages(wsId, selected.id)) ?? [];
+    return chatAskPage(selected, chatDisplayTitle(selected, userId, getActorName), messages, visibleMessageIds(), getActorName);
   };
+  const launcher = useAskAILauncher(askPage);
 
   const rail = <ImRail active={view} readingChatId={view === "chats" ? selected?.id : null} />;
   const contactList = (className?: string) => (
@@ -89,24 +104,35 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
     />
   );
 
-  const newChatDialog = (
-    <NewChatDialog
-      wsId={wsId}
-      open={newChatOpen}
-      onOpenChange={setNewChatOpen}
-      onCreated={(chat) => select(chat.id)}
-    />
+  const dialogs = (
+    <>
+      <NewChatDialog
+        wsId={wsId}
+        open={newChatOpen}
+        onOpenChange={setNewChatOpen}
+        onCreated={(chat) => select(chat.id)}
+      />
+      <ImSearchDialog
+        {...launcher.dialog}
+        onOpenChat={view === "chats" ? select : undefined}
+        onOpenContact={view === "contacts" ? selectContact : undefined}
+      />
+    </>
   );
 
   if (isMobile) {
     const settingsOpen = navigation.searchParams.get("view") === "settings";
-    const contactTarget = parseContactParam(navigation.searchParams.get("contact"));
 
     if (view === "contacts") {
-      return contactTarget ? (
-        <MobileContactDetail contact={contactTarget} backHref={paths.member()} backLabel={t(($) => $.contacts.back)} />
-      ) : (
-        <MobileTabScreen active="contacts">{contactList("min-w-0 flex-1 border-r-0")}</MobileTabScreen>
+      return (
+        <>
+          {contactTarget ? (
+            <MobileContactDetail contact={contactTarget} backHref={paths.member()} backLabel={t(($) => $.contacts.back)} />
+          ) : (
+            <MobileTabScreen active="contacts">{contactList("min-w-0 flex-1 border-r-0")}</MobileTabScreen>
+          )}
+          {dialogs}
+        </>
       );
     }
 
@@ -170,6 +196,7 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
             userId={userId}
             panelOpen={false}
             onTogglePanel={() => {}}
+            onAskAI={launcher.show}
             mobileNav={{
               backHref: paths.im(),
               settingsHref: peer
@@ -185,7 +212,7 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
     return (
       <>
         {level}
-        {newChatDialog}
+        {dialogs}
       </>
     );
   }
@@ -211,7 +238,15 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
       <div className="relative flex min-w-0 flex-1">
         {view === "contacts" ? (
           contact ? (
-            <ContactCard key={contactKey} wsId={wsId} entry={contact} chats={chats} userId={userId} onOpenChat={openChat} />
+            <ContactCard
+              key={contactKey}
+              wsId={wsId}
+              entry={contact}
+              chats={chats}
+              userId={userId}
+              onOpenChat={openChat}
+              onAskAI={() => launcher.show()}
+            />
           ) : (
             <div className="flex flex-1 flex-col">
               <DragStrip />
@@ -230,6 +265,7 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
               userId={userId}
               panelOpen={panelOpen}
               onTogglePanel={() => setPanelOpen((v) => !v)}
+              onAskAI={launcher.show}
             />
             {panelOpen && <ChatDetailsPanel wsId={wsId} chat={selected} userId={userId} />}
           </>
@@ -247,7 +283,7 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
         )}
       </div>
 
-      {newChatDialog}
+      {dialogs}
     </div>
   );
 }

@@ -2899,6 +2899,7 @@ func (h *Handler) buildClaimedTaskResponse(r *http.Request, task *db.AgentTaskQu
 			resp.TriggerCommentContent = "The newest triggering comment is no longer available. Address every earlier comment included below."
 		}
 		h.attachGroupChatTranscript(r.Context(), &resp, issue, *task)
+		h.attachAskAIContext(r.Context(), &resp, issue, *task)
 
 		// Resolve the prior agent session / workdir to resume.
 		if task.RerunOfTaskID.Valid {

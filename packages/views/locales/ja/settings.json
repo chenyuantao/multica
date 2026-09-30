@@ -250,8 +250,8 @@
         "description": "開いているタスクの詳細を検索します。"
       },
       "openKnowledgeSearch": {
-        "label": "ナレッジベースを検索",
-        "description": "ナレッジベースのページでのみ使用できます。"
+        "label": "チャット、連絡先、ノートを検索",
+        "description": "チャット、連絡先、ナレッジベースのページでのみ使用できます。"
       },
       "archiveInboxItem": {
         "label": "通知をアーカイブ",

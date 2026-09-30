@@ -251,8 +251,8 @@
         "description": "Search within the open issue detail."
       },
       "openKnowledgeSearch": {
-        "label": "Search knowledge base",
-        "description": "Only available on the Knowledge page."
+        "label": "Search chats, contacts, and notes",
+        "description": "Only available on the Chats, Contacts, and Knowledge pages."
       },
       "archiveInboxItem": {
         "label": "Archive notification",

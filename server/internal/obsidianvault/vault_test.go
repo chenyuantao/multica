@@ -169,6 +169,20 @@ func TestSearchReturnsDirectoryTree(t *testing.T) {
 	}
 }
 
+func TestSearchCountsHitsAcrossTitleAndBody(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "Alpha notes.md", "alpha, ALPHA and beta\n")
+	writeFile(t, root, "other.md", "beta only\n")
+
+	got, err := Search(context.Background(), root, "alpha")
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(got.Nodes) != 1 || got.Nodes[0].Hits != 3 || got.Nodes[0].Match != MatchBoth {
+		t.Fatalf("hits = %#v", got.Nodes)
+	}
+}
+
 func TestSearchTruncates(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, root, "a.md", "alpha")

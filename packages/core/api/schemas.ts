@@ -1162,6 +1162,23 @@ export const GroupChatsListSchema = z.object({
   chats: z.array(GroupChatSchema).default([]),
 }).loose();
 
+export const GroupChatSearchHitSchema = z.object({
+  chat_id: z.string(),
+  message_id: z.string().default(""),
+  snippet: z.string().default("").catch(""),
+  message_at: z.string().default("").catch(""),
+  hit_count: z.number().default(1).catch(1),
+}).loose();
+
+export const AskAIResponseSchema = z.object({
+  agent_id: z.string().default("").catch(""),
+}).loose();
+
+export const GroupChatSearchResultSchema = z.object({
+  query: z.string().default(""),
+  hits: z.array(GroupChatSearchHitSchema).default([]),
+}).loose();
+
 export const DocNodeSchema: z.ZodType<DocNode> = z.lazy(() =>
   z.object({
     name: z.string(),
@@ -1173,6 +1190,7 @@ export const DocNodeSchema: z.ZodType<DocNode> = z.lazy(() =>
     children: z.array(DocNodeSchema).default([]).catch([]),
     match: z.string().default("").catch(""),
     snippet: z.string().default("").catch(""),
+    hits: z.number().default(0).catch(0),
   }).loose(),
 );
 

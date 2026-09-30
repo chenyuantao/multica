@@ -343,10 +343,16 @@ export type { IssueWakeup, IssueWakeupInput, SystemWakeup, WorkspaceSystemWakeup
 
 export type { WorkspaceWakeup, WorkspaceWakeupPage, WorkspaceWakeupFilters, WakeupScope } from "./issue-wakeup";
 export type {
+  AskAIAttachment,
+  AskAIPage,
+  AskAIRequest,
+  AskAISelection,
   GroupChat,
   GroupChatMember,
   GroupChatMemberRef,
   GroupChatMemberType,
+  GroupChatSearchHit,
+  GroupChatSearchResult,
   CreateGroupChatRequest,
   UpdateGroupChatRequest,
 } from "./group-chat";

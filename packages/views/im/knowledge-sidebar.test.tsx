@@ -15,6 +15,7 @@ const node = (path: string, children?: DocNode[]): DocNode => ({
   children: children ?? [],
   match: "",
   snippet: "",
+  hits: 0,
 });
 
 const tree = [

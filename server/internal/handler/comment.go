@@ -16,6 +16,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/multica-ai/multica/server/internal/groupchat"
 	"github.com/multica-ai/multica/server/internal/logger"
 	obsmetrics "github.com/multica-ai/multica/server/internal/metrics"
 	"github.com/multica-ai/multica/server/internal/service"
@@ -1501,6 +1502,9 @@ type CreateCommentRequest struct {
 	SteerTaskIDs []string `json:"steer_task_ids"`
 	// RefMessageID quotes another live message on the same issue.
 	RefMessageID *string `json:"ref_message_id"`
+	// AskAI is the page a group chat message was asked from. The answering
+	// agent reads it with the message; it is never shown in the chat.
+	AskAI *groupchat.AskPage `json:"ask_ai"`
 }
 
 type CommentTriggerPreviewRequest struct {
@@ -1997,6 +2001,9 @@ func (h *Handler) CreateComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	comment := created.Comment()
+	if groupChat && authorType == "member" {
+		h.saveAskAIContext(r, comment, req.AskAI)
+	}
 
 	// Fetch linked attachments so the response includes them.
 	groupedAtt := h.groupAttachments(r, []pgtype.UUID{comment.ID})
@@ -3974,6 +3981,12 @@ func (h *Handler) deleteComment(ctx context.Context, commentID, workspaceID pgty
 			}
 			out.RemovedIDs = append(out.RemovedIDs, pruned.ID)
 			parentID = pruned.ParentID
+		}
+		if err := qtx.DeleteCommentAskContexts(ctx, db.DeleteCommentAskContextsParams{
+			WorkspaceID: target.WorkspaceID,
+			CommentIds:  out.RemovedIDs,
+		}); err != nil {
+			return out, err
 		}
 	}
 

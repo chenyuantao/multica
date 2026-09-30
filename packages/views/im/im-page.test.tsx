@@ -16,6 +16,7 @@ vi.mock("@tanstack/react-query", async () => {
   const actual = await vi.importActual<typeof import("@tanstack/react-query")>("@tanstack/react-query");
   return {
     ...actual,
+    useQueryClient: () => ({ getQueryData: () => undefined }),
     useQuery: vi.fn((options: { queryKey?: unknown[] }) => ({
       data: options?.queryKey?.[0] === "group-chats" ? chatsRef.current : [],
       isLoading: false,
@@ -25,6 +26,7 @@ vi.mock("@tanstack/react-query", async () => {
 });
 vi.mock("@multica/ui/hooks/use-mobile", () => ({ useIsMobile: () => isMobileRef.current }));
 vi.mock("@multica/core/hooks", () => ({ useWorkspaceId: () => "ws-1" }));
+vi.mock("@multica/core/workspace/hooks", () => ({ useActorName: () => ({ getActorName: () => "Someone" }) }));
 vi.mock("@multica/core/auth", () => {
   const state = { user: { id: "user-1" } };
   return {
@@ -38,6 +40,7 @@ vi.mock("@multica/core/paths", async (importOriginal) => {
 vi.mock("@multica/core/group-chats", async () => ({
   directChatPeer: (await vi.importActual<typeof import("@multica/core/group-chats")>("@multica/core/group-chats")).directChatPeer,
   groupChatListOptions: () => ({ queryKey: ["group-chats"] }),
+  groupChatKeys: { messages: (wsId: string, chatId: string) => ["group-chats", wsId, "messages", chatId] },
   useGroupChatRealtime: () => {},
   useSetGroupChatPinned: () => ({ mutate: vi.fn() }),
 }));
@@ -85,6 +88,8 @@ vi.mock("./chat-details-panel", () => ({
   ),
 }));
 vi.mock("./new-chat-dialog", () => ({ NewChatDialog: () => null }));
+vi.mock("./im-search-dialog", () => ({ ImSearchDialog: () => null }));
+vi.mock("./contact-card", () => ({ ContactCard: ({ entry }: { entry: DirectoryEntry }) => <p>{`card ${entry.name}`}</p> }));
 vi.mock("../common/actor-avatar", () => ({ ActorAvatar: () => null }));
 vi.mock("../agents/components/agent-detail-page", () => ({
   AgentDetail: ({ agentId, presentation }: { agentId: string; presentation: string }) => (
@@ -152,6 +157,24 @@ describe("ImPage tab roots on mobile", () => {
   it("drops the tab bar once a level is pushed", () => {
     renderPage("chats", "chat=c1");
     expect(screen.queryByRole("navigation", { name: "Sections" })).not.toBeInTheDocument();
+  });
+});
+
+describe("ImPage contacts on desktop", () => {
+  beforeEach(() => {
+    isMobileRef.current = false;
+  });
+
+  it("puts the picked contact in the URL so other pages can open it", () => {
+    const navigation = renderPage("contacts");
+    fireEvent.click(screen.getByRole("button", { name: /Lambda/ }));
+    expect(navigation.replace).toHaveBeenCalledWith("/acme/member?contact=agent%3Aagent-1");
+  });
+
+  it("shows the contact named by the URL", () => {
+    renderPage("contacts", "contact=member:user-2");
+    expect(screen.getByText("card Ada")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Ada/ })).toHaveAttribute("aria-current", "true");
   });
 });
 

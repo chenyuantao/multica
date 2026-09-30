@@ -251,8 +251,8 @@
         "description": "Rechercher dans la tâche ouverte."
       },
       "openKnowledgeSearch": {
-        "label": "Rechercher dans la base de connaissances",
-        "description": "Disponible uniquement sur la page Base de connaissances."
+        "label": "Rechercher des discussions, contacts et notes",
+        "description": "Disponible uniquement sur les pages Discussions, Contacts et Base de connaissances."
       },
       "archiveInboxItem": {
         "label": "Archiver la notification",

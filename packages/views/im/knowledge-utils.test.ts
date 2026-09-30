@@ -59,7 +59,7 @@ describe("paths", () => {
   });
 
   it("finds nested nodes", () => {
-    const file: DocNode = { name: "c.md", path: "a/b/c.md", type: "file", child_count: 0, modified_at: null, children: [], match: "", snippet: "" };
+    const file: DocNode = { name: "c.md", path: "a/b/c.md", type: "file", child_count: 0, modified_at: null, children: [], match: "", snippet: "", hits: 0 };
     const tree: DocNode[] = [
       { ...file, name: "a", path: "a", type: "dir", children: [{ ...file, name: "b", path: "a/b", type: "dir", children: [file] }] },
     ];
@@ -78,6 +78,7 @@ describe("flattenFiles / recentFiles", () => {
     children: [],
     match: "",
     snippet: "",
+    hits: 0,
   });
   const dir = (path: string, children: DocNode[]): DocNode => ({
     ...file(path, null),

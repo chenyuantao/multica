@@ -314,6 +314,43 @@ describe("ChatThread message menu", () => {
     expect(screen.queryByTestId("composer-quote")).toBeNull();
   });
 
+  it("asks AI about a message, with the text highlighted in it", async () => {
+    const onAskAI = vi.fn();
+    renderWithI18n(
+      <ChatThread wsId="ws-1" chat={chat} userId="user-1" panelOpen={false} onTogglePanel={() => {}} onAskAI={onAskAI} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Ask AI" }));
+    expect(onAskAI).toHaveBeenLastCalledWith();
+
+    const text = screen.getByText("Ship **v2** on Friday").firstChild!;
+    const range = document.createRange();
+    range.setStart(text, 5);
+    range.setEnd(text, 11);
+    window.getSelection()!.removeAllRanges();
+    window.getSelection()!.addRange(range);
+    await openMenu("Ship **v2** on Friday");
+    fireEvent.click(screen.getByRole("menuitem", { name: "Ask AI" }));
+    expect(onAskAI).toHaveBeenLastCalledWith({
+      message_id: "m-1",
+      time: messages[1]!.created_at,
+      sender: "name-user-2",
+      content: "Ship **v2** on Friday",
+      text: "**v2**",
+    });
+
+    window.getSelection()!.removeAllRanges();
+    await openMenu("sounds good");
+    fireEvent.click(screen.getByRole("menuitem", { name: "Ask AI" }));
+    expect(onAskAI.mock.lastCall?.[0]).not.toHaveProperty("text");
+  });
+
+  it("offers no Ask AI entry when the page gives none", async () => {
+    renderThread();
+    expect(screen.queryByRole("button", { name: "Ask AI" })).toBeNull();
+    await openMenu("sounds good");
+    expect(screen.queryByRole("menuitem", { name: "Ask AI" })).toBeNull();
+  });
+
   it("drops the quote when cancelled", async () => {
     renderThread();
     await openMenu("sounds good");

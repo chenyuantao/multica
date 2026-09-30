@@ -80,6 +80,28 @@ WHERE c.workspace_id = @workspace_id
   AND c.deleted_at IS NULL
 ORDER BY c.issue_id, c.created_at DESC, c.id DESC;
 
+-- name: SearchGroupChatMessages :many
+-- One row per chat the person belongs to with messages matching the lowered
+-- LIKE pattern: the newest match and how many messages match.
+SELECT DISTINCT ON (c.issue_id)
+       c.issue_id,
+       c.id AS comment_id,
+       c.content,
+       c.created_at,
+       count(*) OVER (PARTITION BY c.issue_id)::bigint AS hit_count
+FROM comment c
+JOIN issue_member m
+  ON m.issue_id = c.issue_id
+ AND m.workspace_id = c.workspace_id
+ AND m.member_type = 'member'
+ AND m.member_id = @member_id
+WHERE c.workspace_id = @workspace_id
+  AND c.deleted_at IS NULL
+  AND c.author_type <> 'system'
+  AND c.type NOT IN ('status_change', 'system')
+  AND LOWER(c.content) LIKE @pattern
+ORDER BY c.issue_id, c.created_at DESC, c.id DESC;
+
 -- name: ListIssueHumanMemberUserIDs :many
 -- Recipients for group chat realtime events.
 SELECT member_id FROM issue_member

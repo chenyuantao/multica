@@ -11,15 +11,18 @@ import { cn } from "@multica/ui/lib/utils";
 import { ContentEditor, type ContentEditorRef } from "../editor";
 import { useT } from "../i18n";
 import { DragStrip } from "../platform";
+import { AskAIBadge } from "./ask-ai-badge";
 import { joinFrontmatter, noteTitle, parentDir, splitFrontmatter } from "./knowledge-utils";
 
 interface KnowledgeDocumentProps {
   path: string;
   /** `page` drops the title header when a mobile level already shows it. */
   variant?: "pane" | "page";
+  /** Shows the Ask AI entry in the pane header. */
+  onAskAI?: () => void;
 }
 
-export function KnowledgeDocument({ path, variant = "pane" }: KnowledgeDocumentProps) {
+export function KnowledgeDocument({ path, variant = "pane", onAskAI }: KnowledgeDocumentProps) {
   const { t } = useT("im");
   const { data: file, isPending, isError, error, refetch } = useQuery(docFileOptions(path));
   // Bumped to throw away local edits and remount on the latest server text.
@@ -42,6 +45,7 @@ export function KnowledgeDocument({ path, variant = "pane" }: KnowledgeDocumentP
       key={`${file.path}:${generation}`}
       file={file}
       variant={variant}
+      onAskAI={onAskAI}
       onReload={async () => {
         await refetch();
         setGeneration((g) => g + 1);
@@ -61,7 +65,17 @@ type SaveState =
   | { kind: "error" }
   | { kind: "conflict"; revision: string };
 
-function NoteEditor({ file, variant, onReload }: { file: DocFile; variant: "pane" | "page"; onReload: () => Promise<void> }) {
+function NoteEditor({
+  file,
+  variant,
+  onAskAI,
+  onReload,
+}: {
+  file: DocFile;
+  variant: "pane" | "page";
+  onAskAI?: () => void;
+  onReload: () => Promise<void>;
+}) {
   const { t } = useT("im");
   const qc = useQueryClient();
   const save = useSaveDocFile();
@@ -158,8 +172,9 @@ function NoteEditor({ file, variant, onReload }: { file: DocFile; variant: "pane
             <h1 className="truncate text-body-lg font-semibold">{noteTitle(file.name)}</h1>
             {dir && <p className="truncate text-caption text-muted-foreground">{dir.replaceAll("/", " / ")}</p>}
           </div>
-          <div className="relative" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
+          <div className="relative flex items-center gap-3" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
             {status}
+            {onAskAI && <AskAIBadge onClick={onAskAI} />}
           </div>
         </header>
       ) : (

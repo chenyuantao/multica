@@ -1,6 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
+import { attachmentMarkdown } from "../hooks/use-file-upload";
 import type {
+  AskAIPage,
   Comment,
   CreateGroupChatRequest,
   GroupChat,
@@ -24,6 +26,57 @@ export function useCreateGroupChat(wsId: string) {
       qc.setQueryData<GroupChat[]>(groupChatKeys.list(wsId), (old) => upsertChat(old, chat));
     },
     onSettled: () => qc.invalidateQueries({ queryKey: groupChatKeys.list(wsId) }),
+  });
+}
+
+export interface AskAIVariables {
+  query: string;
+  page: AskAIPage | null;
+  /** Uploaded into the chosen chat once it is known, then attached to the question. */
+  files?: File[];
+}
+
+/**
+ * Asks AI: the server picks the agent, then the question and its files go to
+ * the user's direct chat with it. The page travels with the message so the
+ * answering agent reads the same context. Resolves with that chat.
+ */
+export function useAskAI(wsId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ query, page, files = [] }: AskAIVariables) => {
+      const agentId = await api.askAI({
+        query,
+        page,
+        ...(files.length ? { attachments: files.map((f) => ({ name: f.name, content_type: f.type })) } : {}),
+      });
+      if (!agentId) throw new Error("No agent was chosen");
+      const chat = await api.openDirectGroupChat({ member_type: "agent", member_id: agentId });
+      const uploaded = await Promise.all(files.map((file) => api.uploadFile(file, { issueId: chat.id })));
+      const content = [query, ...uploaded.map(attachmentMarkdown)].filter(Boolean).join("\n\n");
+      const message = await api.createComment(
+        chat.id,
+        content,
+        undefined,
+        undefined,
+        uploaded.map((a) => a.id),
+        undefined,
+        undefined,
+        undefined,
+        page,
+      );
+      return { chat, message };
+    },
+    onSuccess: ({ chat, message }) => {
+      qc.setQueryData<GroupChat[]>(groupChatKeys.list(wsId), (old) => upsertChat(old, chat));
+      qc.setQueryData<Comment[]>(groupChatKeys.messages(wsId, chat.id), (old) =>
+        old && !old.some((c) => c.id === message.id) ? [...old, message] : old,
+      );
+    },
+    onSettled: (result) => {
+      qc.invalidateQueries({ queryKey: groupChatKeys.list(wsId) });
+      if (result) qc.invalidateQueries({ queryKey: groupChatKeys.messages(wsId, result.chat.id) });
+    },
   });
 }
 

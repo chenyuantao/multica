@@ -70,6 +70,8 @@ type Node struct {
 	Children   []Node  `json:"children,omitempty"`
 	Match      string  `json:"match,omitempty"`
 	Snippet    string  `json:"snippet,omitempty"`
+	// Hits counts keyword occurrences across the note's title and body.
+	Hits int `json:"hits,omitempty"`
 }
 
 // TreeResult is the fully expanded vault, with empty directories removed.
@@ -226,8 +228,9 @@ func Search(ctx context.Context, root, query string) (SearchResult, error) {
 	matches := make([]Node, 0)
 	truncated := false
 	err = walkFiles(ctx, root, root, "", map[string]struct{}{}, func(node Node, body string) error {
-		titleHit := containsFold(titleText(node.Name, body), q)
-		contentHit := containsFold(body, q)
+		titleHits := countFold(titleText(node.Name, body), q)
+		contentHits := countFold(body, q)
+		titleHit, contentHit := titleHits > 0, contentHits > 0
 		if !titleHit && !contentHit {
 			return nil
 		}
@@ -246,6 +249,7 @@ func Search(ctx context.Context, root, query string) (SearchResult, error) {
 		if contentHit {
 			node.Snippet = snippetAround(body, q)
 		}
+		node.Hits = titleHits + contentHits
 		matches = append(matches, node)
 		return nil
 	})
@@ -631,8 +635,8 @@ func firstHeading(s string) string {
 	return ""
 }
 
-func containsFold(haystack, needle string) bool {
-	return strings.Contains(strings.ToLower(haystack), strings.ToLower(needle))
+func countFold(haystack, needle string) int {
+	return strings.Count(strings.ToLower(haystack), strings.ToLower(needle))
 }
 
 func snippetAround(body, query string) string {

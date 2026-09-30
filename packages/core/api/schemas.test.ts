@@ -42,7 +42,10 @@ import {
   EMPTY_INBOX_UNREAD_SUMMARY,
   EMPTY_SEARCH_PROJECTS_RESPONSE,
   EMPTY_USER,
+  AskAIResponseSchema,
+  DocSearchResultSchema,
   GroupChatsListSchema,
+  GroupChatSearchResultSchema,
   InboxItemListSchema,
   InboxUnreadSummarySchema,
   IssueTriggerPreviewSchema,
@@ -76,7 +79,7 @@ import {
   EMPTY_ISSUE_STATUS_ENTRY,
 } from "./schemas";
 import { parseWithFallback } from "./schema";
-import type { GroupChat } from "../types";
+import type { DocSearchResult, GroupChat, GroupChatSearchResult } from "../types";
 
 const baseIssue = {
   id: "11111111-1111-1111-1111-111111111111",
@@ -1493,6 +1496,52 @@ describe("GroupChatsListSchema unread_count", () => {
       ENDPOINT,
     );
     expect(parsed.chats.map((c) => c.pinned)).toEqual([true, false, false]);
+  });
+});
+
+describe("GroupChatSearchResultSchema", () => {
+  const ENDPOINT = { endpoint: "GET /api/group-chats/search" };
+  const FALLBACK: GroupChatSearchResult = { query: "q", hits: [] };
+
+  it("defaults missing or malformed hit fields", () => {
+    const parsed = parseWithFallback<GroupChatSearchResult>(
+      { query: "q", hits: [{ chat_id: "c1", hit_count: 3, snippet: "a q" }, { chat_id: "c2", hit_count: "x", snippet: 1 }] },
+      GroupChatSearchResultSchema,
+      FALLBACK,
+      ENDPOINT,
+    );
+    expect(parsed.hits).toEqual([
+      { chat_id: "c1", message_id: "", snippet: "a q", message_at: "", hit_count: 3 },
+      { chat_id: "c2", message_id: "", snippet: "", message_at: "", hit_count: 1 },
+    ]);
+  });
+
+  it("falls back to no hits for a malformed body", () => {
+    expect(parseWithFallback(null, GroupChatSearchResultSchema, FALLBACK, ENDPOINT)).toEqual(FALLBACK);
+    expect(parseWithFallback({ query: "q" }, GroupChatSearchResultSchema, FALLBACK, ENDPOINT).hits).toEqual([]);
+  });
+});
+
+describe("AskAIResponseSchema", () => {
+  it("reads a missing or malformed agent_id as no choice", () => {
+    const parse = (raw: unknown) =>
+      parseWithFallback(raw, AskAIResponseSchema, { agent_id: "" }, { endpoint: "POST /api/group-chats/ask" }).agent_id;
+    expect(parse({ agent_id: "a1" })).toBe("a1");
+    expect(parse({ agent_id: 7 })).toBe("");
+    expect(parse(null)).toBe("");
+  });
+});
+
+describe("DocSearchResultSchema hits", () => {
+  it("reads a missing or malformed hits count as zero", () => {
+    const note = (extra: Record<string, unknown>) => ({ name: "a.md", path: "a.md", type: "file", ...extra });
+    const parsed = parseWithFallback<DocSearchResult>(
+      { query: "q", nodes: [note({ hits: 4 }), note({}), note({ hits: "x" })] },
+      DocSearchResultSchema,
+      { query: "q", nodes: [], truncated: false },
+      { endpoint: "POST /api/docs/search" },
+    );
+    expect(parsed.nodes.map((n) => n.hits)).toEqual([4, 0, 0]);
   });
 });
 

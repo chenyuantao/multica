@@ -226,13 +226,15 @@ Les messages de groupe sans destinataire, et ceux qui nomment plusieurs agents, 
 
 Pour un message sans destinataire, le planificateur reçoit les agents du groupe, chacun avec son nom et sa description, et les 30 derniers messages avec l'heure, l'expéditeur et le contenu. Il répond d'abord si un agent doit répondre, et seulement si la réponse est oui, lequel. Quand un message nomme plusieurs agents, la seule question supplémentaire est de savoir s'ils peuvent répondre en même temps ou doivent se suivre. Les réponses ordonnées ne lancent qu'un agent à la fois ; le fil indique qui n'a pas encore fini.
 
+**Demander à l'IA**, dans le sélecteur rapide (Mod+O, le badge IA d'une discussion, d'un contact ou d'une note, ou le menu contextuel d'un message), utilise le même modèle pour choisir l'agent qui répond en discussion directe avec l'auteur de la question. Le planificateur reçoit la question ; la page d'où elle est posée (titre, chemin, date de modification et jusqu'à 24 000 caractères du corps de la note ouverte ; titre, agents et messages visibles à l'écran de la discussion ouverte ; ou le contact sélectionné et sa description), ainsi que le message visé par la question et le texte qui y est sélectionné ; le nom et le type des fichiers joints ; et chaque agent à qui l'auteur peut écrire, avec son ID, son nom et sa description. Il répond par un ID d'agent. S'il n'y a qu'un seul agent possible, aucun appel n'est fait. Le même contexte de page est transmis en XML, avec la question, à l'agent qui répond ; il n'apparaît pas dans la discussion.
+
 | Variable | Défaut | Description |
 |---|---|---|
 | `TYPESAFE_API_KEY` | vide | Clé pour `POST /v1/systemone`. Vide : pas de planification. Un message sans destinataire ne réveille personne, et plusieurs agents nommés répondent dans l'ordre des mentions |
 | `TYPESAFE_BASE_URL` | `https://api.typesafe.ai` | Origine System One. Le chemin `/v1/systemone` est ajouté |
 | `TYPESAFE_MODEL` | `jev-latest` | Identifiant de modèle envoyé à chaque requête de planification |
 
-Laissez `TYPESAFE_API_KEY` vide si ce déploiement ne doit pas envoyer l'historique du groupe à TypeSafe. Un `@` direct vers un agent démarre toujours cet agent. La clé est lue uniquement par le processus API et n'est pas transmise aux runtimes des agents.
+Laissez `TYPESAFE_API_KEY` vide si ce déploiement ne doit pas envoyer l'historique du groupe ni le contenu de page de Demander à l'IA à TypeSafe ; Demander à l'IA ne peut alors pas choisir entre plusieurs agents. Un `@` direct vers un agent démarre toujours cet agent. La clé est lue uniquement par le processus API et n'est pas transmise aux runtimes des agents.
 
 ## Configuration du daemon
 

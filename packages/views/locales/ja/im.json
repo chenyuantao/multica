@@ -144,7 +144,6 @@
     "empty": "ナレッジベースにはまだ Markdown ノートがありません",
     "no_results": "一致するノートはありません",
     "truncated": "結果の一部のみ表示しています。より具体的なキーワードをお試しください。",
-    "recent": "最近の更新",
     "unconfigured": "ナレッジベースが設定されていません。サーバーで OBSIDIAN_VAULT_PATH を設定してください。",
     "unavailable": "ナレッジベースのフォルダにアクセスできません。サーバーの OBSIDIAN_VAULT_PATH を確認してください。",
     "load_failed": "ナレッジベースを読み込めませんでした",
@@ -172,5 +171,29 @@
       "create": "作成",
       "cancel": "キャンセル"
     }
+  },
+  "search": {
+    "title": "検索",
+    "placeholder": "検索、または AI に質問",
+    "scope": "検索対象",
+    "all": "すべて",
+    "chats": "チャット",
+    "contacts": "連絡先",
+    "notes": "ノート",
+    "recent_chats": "最近のチャット",
+    "recent_notes": "最近更新したノート",
+    "show_all": "{{total}} 件をすべて表示",
+    "no_results": "一致する結果はありません",
+    "empty": "キーワードを入力して検索",
+    "load_failed": "結果を読み込めませんでした",
+    "ask_ai": "AI に質問",
+    "ask_pending": "エージェントを選んでいます…",
+    "ask_failed": "回答するエージェントを選べませんでした。もう一度お試しください。",
+    "ask_no_agent": "メッセージを送れるエージェントがいません。",
+    "ask_placeholder": "添付ファイルについて質問",
+    "ask_files_other": "{{count}} 件のファイル",
+    "context": "質問と一緒に送信",
+    "context_chat_other": "{{title}} · 画面上の {{count}} 件のメッセージ",
+    "context_remove": "このコンテキストを送信しない"
   }
 }

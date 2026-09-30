@@ -10,6 +10,7 @@ import { AppLink } from "../navigation";
 import { useT } from "../i18n";
 import { useOpenAgentDetail } from "../modals/agent-detail";
 import { DragStrip } from "../platform";
+import { AskAIBadge } from "./ask-ai-badge";
 import { ChatAvatar } from "./chat-sidebar";
 import { useStartDirectChat } from "./use-direct-chat";
 import type { DirectoryEntry } from "./use-chat-directory";
@@ -20,9 +21,10 @@ interface ContactCardProps {
   chats: GroupChat[];
   userId: string;
   onOpenChat: (chatId: string) => void;
+  onAskAI?: () => void;
 }
 
-export function ContactCard({ wsId, entry, chats, userId, onOpenChat }: ContactCardProps) {
+export function ContactCard({ wsId, entry, chats, userId, onOpenChat, onAskAI }: ContactCardProps) {
   const { t } = useT("im");
   const directChat = useStartDirectChat(wsId);
   const shared = chats.filter(
@@ -31,8 +33,9 @@ export function ContactCard({ wsId, entry, chats, userId, onOpenChat }: ContactC
   const isSelf = entry.type === "member" && entry.id === userId;
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col">
+    <div className="relative flex min-w-0 flex-1 flex-col">
       <DragStrip />
+      {onAskAI && <AskAIBadge onClick={onAskAI} className="absolute top-3 right-4 z-10" />}
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto flex w-full max-w-md flex-col gap-6 px-6 pt-8 pb-10">
           <ContactProfile

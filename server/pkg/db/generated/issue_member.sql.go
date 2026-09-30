@@ -417,6 +417,69 @@ func (q *Queries) RemoveIssueMember(ctx context.Context, arg RemoveIssueMemberPa
 	return result.RowsAffected(), nil
 }
 
+const searchGroupChatMessages = `-- name: SearchGroupChatMessages :many
+SELECT DISTINCT ON (c.issue_id)
+       c.issue_id,
+       c.id AS comment_id,
+       c.content,
+       c.created_at,
+       count(*) OVER (PARTITION BY c.issue_id)::bigint AS hit_count
+FROM comment c
+JOIN issue_member m
+  ON m.issue_id = c.issue_id
+ AND m.workspace_id = c.workspace_id
+ AND m.member_type = 'member'
+ AND m.member_id = $1
+WHERE c.workspace_id = $2
+  AND c.deleted_at IS NULL
+  AND c.author_type <> 'system'
+  AND c.type NOT IN ('status_change', 'system')
+  AND LOWER(c.content) LIKE $3
+ORDER BY c.issue_id, c.created_at DESC, c.id DESC
+`
+
+type SearchGroupChatMessagesParams struct {
+	MemberID    pgtype.UUID `json:"member_id"`
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	Pattern     string      `json:"pattern"`
+}
+
+type SearchGroupChatMessagesRow struct {
+	IssueID   pgtype.UUID        `json:"issue_id"`
+	CommentID pgtype.UUID        `json:"comment_id"`
+	Content   string             `json:"content"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	HitCount  int64              `json:"hit_count"`
+}
+
+// One row per chat the person belongs to with messages matching the lowered
+// LIKE pattern: the newest match and how many messages match.
+func (q *Queries) SearchGroupChatMessages(ctx context.Context, arg SearchGroupChatMessagesParams) ([]SearchGroupChatMessagesRow, error) {
+	rows, err := q.db.Query(ctx, searchGroupChatMessages, arg.MemberID, arg.WorkspaceID, arg.Pattern)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SearchGroupChatMessagesRow{}
+	for rows.Next() {
+		var i SearchGroupChatMessagesRow
+		if err := rows.Scan(
+			&i.IssueID,
+			&i.CommentID,
+			&i.Content,
+			&i.CreatedAt,
+			&i.HitCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setIssueMemberPinned = `-- name: SetIssueMemberPinned :execrows
 UPDATE issue_member
 SET pinned_at = CASE WHEN $1::bool THEN COALESCE(pinned_at, now()) ELSE NULL END

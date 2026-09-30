@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
@@ -261,6 +262,62 @@ func (h *Handler) ListGroupChats(w http.ResponseWriter, r *http.Request) {
 		out = append(out, resp)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"chats": out})
+}
+
+const groupChatSearchMaxRunes = 100
+
+type GroupChatSearchHit struct {
+	ChatID    string `json:"chat_id"`
+	MessageID string `json:"message_id"`
+	// Snippet of the newest matching message, centered on the keyword.
+	Snippet   string `json:"snippet"`
+	MessageAt string `json:"message_at"`
+	// Messages in the chat that contain the keyword.
+	HitCount int64 `json:"hit_count"`
+}
+
+// SearchGroupChats finds messages containing q across the requester's chats
+// and returns one hit per chat. Title matching and ranking stay with the
+// client, which knows the name a direct chat is shown under.
+func (h *Handler) SearchGroupChats(w http.ResponseWriter, r *http.Request) {
+	userID, ok := requireUserID(w, r)
+	if !ok {
+		return
+	}
+	wsUUID, ok := parseUUIDOrBadRequest(w, h.resolveWorkspaceID(r), "workspace_id")
+	if !ok {
+		return
+	}
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	if q == "" {
+		writeError(w, http.StatusBadRequest, "q is required")
+		return
+	}
+	if utf8.RuneCountInString(q) > groupChatSearchMaxRunes {
+		writeError(w, http.StatusBadRequest, "q is too long")
+		return
+	}
+	rows, err := h.Queries.SearchGroupChatMessages(r.Context(), db.SearchGroupChatMessagesParams{
+		MemberID:    parseUUID(userID),
+		WorkspaceID: wsUUID,
+		Pattern:     "%" + escapeLike(strings.ToLower(q)) + "%",
+	})
+	if err != nil {
+		slog.Warn("search group chats failed", append(logger.RequestAttrs(r), "error", err)...)
+		writeError(w, http.StatusInternalServerError, "failed to search chats")
+		return
+	}
+	hits := make([]GroupChatSearchHit, 0, len(rows))
+	for _, row := range rows {
+		hits = append(hits, GroupChatSearchHit{
+			ChatID:    uuidToString(row.IssueID),
+			MessageID: uuidToString(row.CommentID),
+			Snippet:   extractSnippet(row.Content, q),
+			MessageAt: timestampToString(row.CreatedAt),
+			HitCount:  row.HitCount,
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"query": q, "hits": hits})
 }
 
 // keptDirectChats picks, per peer, the direct chat the requester sees: the

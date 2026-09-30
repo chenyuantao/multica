@@ -13,6 +13,8 @@ export interface DocNode {
   /** Search hits only: "title", "content" or "both". */
   match: string;
   snippet: string;
+  /** Search hits only: keyword occurrences across title and body. */
+  hits: number;
 }
 
 export interface DocSearchResult {

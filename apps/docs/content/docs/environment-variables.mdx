@@ -229,13 +229,15 @@ Unaddressed group messages, and messages that name more than one agent, are plan
 
 For a message that names nobody, the planner receives the agents in the group, each with a name and description, and the latest 30 messages with time, sender, and content. It answers whether an agent should reply, and only if that answer is yes, which agent. Several agents named in one message are asked only whether they can reply independently or must go in order. Ordered replies start one agent at a time.
 
+**Ask AI** in the quick switcher (Mod+O, or the AI badge on a chat, contact, or note, or a chat message's context menu) uses the same model to pick the agent that answers in a direct chat with the asker. The planner receives the question; the page it was asked from (the open note's title, path, edit time, and up to 24,000 characters of its body; the open chat's title, agents, and on-screen messages; or the selected contact and description), plus the chat message the question is about and the text highlighted in it; the names and types of attached files; and every agent the asker can message, each with ID, name, and description. It answers with one agent ID. With only one such agent, no call is made. The same page context goes to the answering agent as XML with the question; it is not shown in the chat.
+
 | Variable | Default | Description |
 |---|---|---|
 | `TYPESAFE_API_KEY` | empty | API key for `POST /v1/systemone`. Empty disables planning: unaddressed messages wake nobody, and several named agents reply in mention order |
 | `TYPESAFE_BASE_URL` | `https://api.typesafe.ai` | System One origin. The path `/v1/systemone` is appended |
 | `TYPESAFE_MODEL` | `jev-latest` | Model id sent on each planning request |
 
-Leave `TYPESAFE_API_KEY` empty when this deployment must not send group history to TypeSafe. Direct `@` of one agent still starts that agent. The key is read by the API process only and is not forwarded to agent runtimes.
+Leave `TYPESAFE_API_KEY` empty when this deployment must not send group history or Ask AI page content to TypeSafe; Ask AI then can't choose among several agents. Direct `@` of one agent still starts that agent. The key is read by the API process only and is not forwarded to agent runtimes.
 
 ## Daemon configuration
 

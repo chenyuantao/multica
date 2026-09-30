@@ -589,6 +589,14 @@ type Comment struct {
 	RefMessageID       pgtype.UUID        `json:"ref_message_id"`
 }
 
+type CommentAskContext struct {
+	CommentID   pgtype.UUID        `json:"comment_id"`
+	IssueID     pgtype.UUID        `json:"issue_id"`
+	WorkspaceID pgtype.UUID        `json:"workspace_id"`
+	Page        []byte             `json:"page"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
 type CommentReaction struct {
 	ID          pgtype.UUID        `json:"id"`
 	CommentID   pgtype.UUID        `json:"comment_id"`

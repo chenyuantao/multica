@@ -250,8 +250,8 @@
         "description": "搜索当前打开的任务详情。"
       },
       "openKnowledgeSearch": {
-        "label": "搜索知识库",
-        "description": "仅在知识库页面可用。"
+        "label": "搜索会话、联系人和笔记",
+        "description": "仅在会话、通讯录和知识库页面可用。"
       },
       "archiveInboxItem": {
         "label": "归档通知",

@@ -144,7 +144,6 @@
     "empty": "知识库里还没有 Markdown 笔记",
     "no_results": "没有匹配的笔记",
     "truncated": "结果过多，只显示了一部分。换个更具体的关键词试试。",
-    "recent": "最近修改",
     "unconfigured": "知识库未配置。请在服务端设置 OBSIDIAN_VAULT_PATH。",
     "unavailable": "无法访问知识库目录，请检查服务端的 OBSIDIAN_VAULT_PATH。",
     "load_failed": "知识库加载失败",
@@ -172,5 +171,29 @@
       "create": "创建",
       "cancel": "取消"
     }
+  },
+  "search": {
+    "title": "搜索",
+    "placeholder": "搜索，或向 AI 提问",
+    "scope": "搜索范围",
+    "all": "全部",
+    "chats": "会话",
+    "contacts": "联系人",
+    "notes": "笔记",
+    "recent_chats": "最近会话",
+    "recent_notes": "最近修改的笔记",
+    "show_all": "查看全部 {{total}} 条",
+    "no_results": "没有匹配的结果",
+    "empty": "输入关键词开始搜索",
+    "load_failed": "结果加载失败",
+    "ask_ai": "问 AI",
+    "ask_pending": "正在选择智能体…",
+    "ask_failed": "没能选出回答的智能体，请重试。",
+    "ask_no_agent": "没有你可以单聊的智能体。",
+    "ask_placeholder": "针对附件提问",
+    "ask_files_other": "{{count}} 个附件",
+    "context": "随问题一起发送",
+    "context_chat_other": "{{title}} · 屏幕上的 {{count}} 条消息",
+    "context_remove": "不发送此上下文"
   }
 }

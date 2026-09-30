@@ -2026,6 +2026,8 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 				r.Get("/", h.ListGroupChats)
 				r.Post("/", h.CreateGroupChat)
 				r.Post("/direct", h.OpenDirectGroupChat)
+				r.Get("/search", h.SearchGroupChats)
+				r.Post("/ask", h.AskAI)
 				r.Route("/{id}", func(r chi.Router) {
 					r.Get("/", h.GetGroupChat)
 					r.Patch("/", h.UpdateGroupChat)

@@ -144,7 +144,6 @@
     "empty": "지식 베이스에 아직 Markdown 노트가 없습니다",
     "no_results": "일치하는 노트가 없습니다",
     "truncated": "결과 중 일부만 표시합니다. 더 구체적인 키워드를 사용해 보세요.",
-    "recent": "최근 수정",
     "unconfigured": "지식 베이스가 설정되지 않았습니다. 서버에서 OBSIDIAN_VAULT_PATH를 설정하세요.",
     "unavailable": "지식 베이스 폴더에 접근할 수 없습니다. 서버의 OBSIDIAN_VAULT_PATH를 확인하세요.",
     "load_failed": "지식 베이스를 불러오지 못했습니다",
@@ -172,5 +171,29 @@
       "create": "만들기",
       "cancel": "취소"
     }
+  },
+  "search": {
+    "title": "검색",
+    "placeholder": "검색하거나 AI에게 질문",
+    "scope": "검색 범위",
+    "all": "전체",
+    "chats": "채팅",
+    "contacts": "연락처",
+    "notes": "노트",
+    "recent_chats": "최근 채팅",
+    "recent_notes": "최근 수정한 노트",
+    "show_all": "{{total}}개 모두 보기",
+    "no_results": "일치하는 결과가 없습니다",
+    "empty": "키워드를 입력해 검색하세요",
+    "load_failed": "결과를 불러오지 못했습니다",
+    "ask_ai": "AI에게 질문",
+    "ask_pending": "에이전트를 고르는 중…",
+    "ask_failed": "답변할 에이전트를 고르지 못했습니다. 다시 시도하세요.",
+    "ask_no_agent": "메시지를 보낼 수 있는 에이전트가 없습니다.",
+    "ask_placeholder": "첨부 파일에 대해 질문",
+    "ask_files_other": "파일 {{count}}개",
+    "context": "질문과 함께 전송",
+    "context_chat_other": "{{title}} · 화면의 메시지 {{count}}개",
+    "context_remove": "이 컨텍스트 보내지 않기"
   }
 }

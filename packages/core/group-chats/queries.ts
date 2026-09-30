@@ -7,12 +7,21 @@ export const groupChatKeys = {
   list: (wsId: string) => [...groupChatKeys.all(wsId), "list"] as const,
   messages: (wsId: string, chatId: string) =>
     [...groupChatKeys.all(wsId), "messages", chatId] as const,
+  search: (wsId: string, q: string) => [...groupChatKeys.all(wsId), "search", q] as const,
 };
 
 export function groupChatListOptions(wsId: string) {
   return queryOptions({
     queryKey: groupChatKeys.list(wsId),
     queryFn: () => api.listGroupChats(),
+  });
+}
+
+export function groupChatSearchOptions(wsId: string, q: string) {
+  return queryOptions({
+    queryKey: groupChatKeys.search(wsId, q),
+    queryFn: () => api.searchGroupChats(q),
+    enabled: q.length > 0,
   });
 }
 

@@ -11,7 +11,7 @@ import type { ApiClient } from "../api/client";
 import { inboxKeys } from "../inbox/queries";
 import { createQueryClient } from "../query-client";
 import type { GroupChat } from "../types";
-import { useMarkGroupChatRead, useSetGroupChatPinned } from "./mutations";
+import { useAskAI, useMarkGroupChatRead, useSetGroupChatPinned } from "./mutations";
 import { countUnreadGroupChatMessages, groupChatKeys } from "./queries";
 
 const WS = "ws-1";
@@ -123,5 +123,85 @@ describe("useSetGroupChatPinned", () => {
     act(() => result.current.mutate({ chatId: "a", pinned: true }));
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(pinnedOf("a")).toBe(false);
+  });
+});
+
+describe("useAskAI", () => {
+  function setup(askAI: ReturnType<typeof vi.fn>) {
+    const qc = createQueryClient();
+    qc.setQueryData(groupChatKeys.list(WS), [chat("a", 0)]);
+    const api = {
+      askAI,
+      openDirectGroupChat: vi.fn(async () => chat("direct", 0)),
+      createComment: vi.fn(async () => ({ id: "m1" })),
+      uploadFile: vi.fn(async (file: File) => ({
+        id: `att-${file.name}`,
+        filename: file.name,
+        content_type: file.type,
+        url: "",
+        markdown_url: `https://cdn/${file.name}`,
+      })),
+      listGroupChats: vi.fn(async () => [chat("direct", 0), chat("a", 0)]),
+      listComments: vi.fn(async () => [{ id: "m1" }]),
+    };
+    setApiInstance(api as unknown as ApiClient);
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    );
+    return { qc, api, ...renderHook(() => useAskAI(WS), { wrapper }) };
+  }
+
+  it("sends the question to the direct chat of the chosen agent", async () => {
+    const { qc, api, result } = setup(vi.fn(async () => "agent-7"));
+    let out: Awaited<ReturnType<typeof result.current.mutateAsync>> | undefined;
+    await act(async () => {
+      out = await result.current.mutateAsync({ query: "why?", page: null });
+    });
+
+    expect(api.askAI).toHaveBeenCalledWith({ query: "why?", page: null });
+    expect(api.openDirectGroupChat).toHaveBeenCalledWith({ member_type: "agent", member_id: "agent-7" });
+    expect(api.createComment).toHaveBeenCalledWith("direct", "why?", undefined, undefined, [], undefined, undefined, undefined, null);
+    expect(api.uploadFile).not.toHaveBeenCalled();
+    expect(out?.chat.id).toBe("direct");
+    expect(qc.getQueryData<GroupChat[]>(groupChatKeys.list(WS))?.[0]?.id).toBe("direct");
+  });
+
+  it("uploads files into the chosen chat and sends the page with the message", async () => {
+    const { api, result } = setup(vi.fn(async () => "agent-7"));
+    const page = { selection: { message_id: "x", time: "t", sender: "Ann", content: "it broke" } };
+    const files = [new File(["x"], "shot.png", { type: "image/png" }), new File(["y"], "log.txt", { type: "text/plain" })];
+    await act(async () => {
+      await result.current.mutateAsync({ query: "", page, files });
+    });
+
+    expect(api.askAI).toHaveBeenCalledWith({
+      query: "",
+      page,
+      attachments: [
+        { name: "shot.png", content_type: "image/png" },
+        { name: "log.txt", content_type: "text/plain" },
+      ],
+    });
+    expect(api.uploadFile).toHaveBeenCalledWith(files[0], { issueId: "direct" });
+    expect(api.createComment).toHaveBeenCalledWith(
+      "direct",
+      "![shot.png](https://cdn/shot.png)\n\n[log.txt](https://cdn/log.txt)",
+      undefined,
+      undefined,
+      ["att-shot.png", "att-log.txt"],
+      undefined,
+      undefined,
+      undefined,
+      page,
+    );
+  });
+
+  it("opens no chat when no agent was chosen", async () => {
+    const { api, result } = setup(vi.fn(async () => ""));
+    await act(async () => {
+      await expect(result.current.mutateAsync({ query: "why?", page: null })).rejects.toThrow();
+    });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(api.openDirectGroupChat).not.toHaveBeenCalled();
   });
 });

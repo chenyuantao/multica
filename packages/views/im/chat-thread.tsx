@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Brain, Copy, Loader2, MoreHorizontal, PanelRight, Quote, RotateCw, Square, Trash2 } from "lucide-react";
+import { Brain, Copy, Loader2, MoreHorizontal, PanelRight, Quote, RotateCw, Sparkles, Square, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useTaskMessages } from "@multica/core/chat/queries";
 import {
@@ -15,7 +15,7 @@ import {
 import { useCancelIssueRun } from "@multica/core/issues/mutations";
 import { useCurrentMember } from "@multica/core/permissions";
 import { useActorName } from "@multica/core/workspace/hooks";
-import type { Comment, GroupChat } from "@multica/core/types";
+import type { AskAISelection, Comment, GroupChat } from "@multica/core/types";
 import { copyText } from "@multica/ui/lib/clipboard";
 import { cn } from "@multica/ui/lib/utils";
 import { Button } from "@multica/ui/components/ui/button";
@@ -37,6 +37,8 @@ import { useLocale, useT } from "../i18n";
 import { useOpenAgentDetail } from "../modals/agent-detail";
 import { AppLink } from "../navigation";
 import { DragStrip } from "../platform";
+import { AskAIBadge } from "./ask-ai-badge";
+import { highlightedTextWithin } from "./ask-ai-context";
 import { ChatComposer, QuoteText, type ComposerQuote } from "./chat-composer";
 import { MobileLevelHeader } from "./mobile-shell";
 import { useAgentClickActions, type AgentClickActions } from "./use-agent-click-actions";
@@ -69,13 +71,15 @@ interface ChatThreadProps {
   userId: string;
   panelOpen: boolean;
   onTogglePanel: () => void;
+  /** Opens Ask AI from the header, or about one message from its menu. */
+  onAskAI?: (selection?: AskAISelection) => void;
   /** Mobile stacked layout: back to the chat list, on to chat settings, and profiles as page levels. */
   mobileNav?: { backHref: string; settingsHref: string; onOpenProfile: (actorType: string, actorId: string) => void };
 }
 
 const EMPTY_COMMENTS: Comment[] = [];
 
-export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, mobileNav }: ChatThreadProps) {
+export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAskAI, mobileNav }: ChatThreadProps) {
   const { t } = useT("im");
   const { getActorName } = useActorName();
   const { data = EMPTY_COMMENTS, isError } = useQuery(groupChatMessagesOptions(wsId, chat.id));
@@ -155,6 +159,16 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, mobil
       onCopy: () => void copyMessage(m),
       onQuote: () => setQuoteId(m.id),
       onDelete: mine || isAdmin ? () => setDeleting(m) : undefined,
+      onAskAI: onAskAI
+        ? (text) =>
+            onAskAI({
+              message_id: m.id,
+              time: m.created_at,
+              sender: getActorName(m.author_type, m.author_id),
+              content: m.content,
+              ...(text ? { text } : {}),
+            })
+        : undefined,
     };
   };
 
@@ -266,6 +280,7 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, mobil
             <h1 className="truncate text-body-lg font-semibold">{title}</h1>
             <p className="truncate text-caption text-muted-foreground">{subtitle}</p>
           </div>
+          {onAskAI && <AskAIBadge onClick={() => onAskAI()} />}
           <Button
             variant={panelOpen ? "secondary" : "ghost"}
             size="icon-sm"
@@ -359,16 +374,24 @@ interface MessageActions {
   onQuote: () => void;
   /** Absent when this person may not delete the message. */
   onDelete?: () => void;
+  /** Receives the text highlighted inside the message; empty for the whole message. */
+  onAskAI?: (text: string) => void;
 }
 
 /**
  * Right click opens the message's actions; so does a long press on a touch
  * screen. Phones get the iOS menu look: roomy rows, trailing icons, and the
- * pressed bubble lifted slightly while the menu is open.
+ * pressed bubble lifted slightly while the menu is open. Text highlighted in
+ * the message when the menu opens goes with Ask AI.
  */
 function MessageMenu({ actions, ios, children }: { actions: MessageActions; ios?: boolean; children: React.ReactNode }) {
   const { t } = useT("im");
+  const highlightRef = useRef("");
+  const onAskAI = actions.onAskAI;
   const items = [
+    ...(onAskAI
+      ? [{ key: "ask", icon: Sparkles, label: t(($) => $.search.ask_ai), onClick: () => onAskAI(highlightRef.current) }]
+      : []),
     { key: "copy", icon: Copy, label: t(($) => $.thread.copy), onClick: actions.onCopy },
     { key: "quote", icon: Quote, label: t(($) => $.thread.quote), onClick: actions.onQuote },
     ...(actions.onDelete
@@ -378,6 +401,9 @@ function MessageMenu({ actions, ios, children }: { actions: MessageActions; ios?
   return (
     <ContextMenu>
       <ContextMenuTrigger
+        onContextMenu={(e) => {
+          highlightRef.current = highlightedTextWithin(e.currentTarget);
+        }}
         className={cn(
           "max-w-full min-w-0 select-text [-webkit-touch-callout:none] [@media(hover:none)]:select-none",
           ios

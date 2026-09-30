@@ -1,5 +1,13 @@
-export { countUnreadGroupChatMessages, groupChatKeys, groupChatListOptions, groupChatMessagesOptions } from "./queries";
 export {
+  countUnreadGroupChatMessages,
+  groupChatKeys,
+  groupChatListOptions,
+  groupChatMessagesOptions,
+  groupChatSearchOptions,
+} from "./queries";
+export {
+  type AskAIVariables,
+  useAskAI,
   useCreateGroupChat,
   useOpenDirectGroupChat,
   useUpdateGroupChat,

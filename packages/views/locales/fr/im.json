@@ -148,7 +148,6 @@
     "empty": "Aucune note markdown dans la base de connaissances",
     "no_results": "Aucune note correspondante",
     "truncated": "Seule une partie des résultats est affichée. Essayez un mot-clé plus précis.",
-    "recent": "Modifiées récemment",
     "unconfigured": "La base de connaissances n'est pas configurée. Définissez OBSIDIAN_VAULT_PATH sur le serveur.",
     "unavailable": "Impossible d'accéder au dossier de la base de connaissances. Vérifiez OBSIDIAN_VAULT_PATH sur le serveur.",
     "load_failed": "Impossible de charger la base de connaissances",
@@ -176,5 +175,31 @@
       "create": "Créer",
       "cancel": "Annuler"
     }
+  },
+  "search": {
+    "title": "Rechercher",
+    "placeholder": "Rechercher, ou demander à l'IA",
+    "scope": "Rechercher dans",
+    "all": "Tout",
+    "chats": "Discussions",
+    "contacts": "Contacts",
+    "notes": "Notes",
+    "recent_chats": "Discussions récentes",
+    "recent_notes": "Notes modifiées récemment",
+    "show_all": "Tout afficher ({{total}})",
+    "no_results": "Aucun résultat",
+    "empty": "Saisissez un mot-clé pour rechercher",
+    "load_failed": "Impossible de charger les résultats",
+    "ask_ai": "Demander à l'IA",
+    "ask_pending": "Choix d'un agent…",
+    "ask_failed": "Impossible de choisir un agent pour répondre. Réessayez.",
+    "ask_no_agent": "Aucun agent à qui vous pouvez écrire.",
+    "ask_placeholder": "Poser une question sur les fichiers joints",
+    "ask_files_one": "{{count}} fichier",
+    "ask_files_other": "{{count}} fichiers",
+    "context": "Envoyé avec votre question",
+    "context_chat_one": "{{title}} · {{count}} message à l’écran",
+    "context_chat_other": "{{title}} · {{count}} messages à l’écran",
+    "context_remove": "Ne pas envoyer ce contexte"
   }
 }

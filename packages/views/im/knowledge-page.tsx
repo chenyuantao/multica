@@ -1,19 +1,24 @@
 "use client";
 
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { BookOpen } from "lucide-react";
+import { docsKeys } from "@multica/core/docs";
 import { useWorkspacePaths } from "@multica/core/paths";
+import type { DocFile } from "@multica/core/types";
 import { useIsMobile } from "@multica/ui/hooks/use-mobile";
 import { useNavigation } from "../navigation";
 import { useT } from "../i18n";
 import { DragStrip } from "../platform";
 import { MobileLevel, MobileTabScreen } from "./mobile-shell";
+import { noteAskPage } from "./ask-ai-context";
 import { ImRail } from "./im-rail";
+import { ImSearchDialog } from "./im-search-dialog";
 import { KnowledgeDocument } from "./knowledge-document";
-import { KnowledgeSearchDialog } from "./knowledge-search-dialog";
 import { KnowledgeSidebar } from "./knowledge-sidebar";
 import { noteTitle } from "./knowledge-utils";
 import { NewNoteDialog } from "./new-note-dialog";
+import { useAskAILauncher } from "./use-ask-ai-launcher";
 
 /**
  * Obsidian vault browser in the IM surface (`/knowledge`). The open note is
@@ -26,9 +31,13 @@ export function KnowledgePage() {
   const isMobile = useIsMobile();
   const selectedPath = navigation.searchParams.get("file") || null;
   const [createDir, setCreateDir] = useState<string | null>(null);
+  const qc = useQueryClient();
 
   const select = (path: string) =>
     isMobile ? navigation.push(paths.knowledgeFile(path)) : navigation.replace(paths.knowledgeFile(path));
+  const launcher = useAskAILauncher(() =>
+    selectedPath ? noteAskPage(selectedPath, qc.getQueryData<DocFile>(docsKeys.file(selectedPath))) : null,
+  );
 
   const dialog = (
     <>
@@ -39,8 +48,9 @@ export function KnowledgePage() {
         }}
         onCreated={(file) => select(file.path)}
       />
-      <KnowledgeSearchDialog
-        onSelect={(path) => {
+      <ImSearchDialog
+        {...launcher.dialog}
+        onOpenNote={(path) => {
           if (path !== selectedPath) select(path);
         }}
       />
@@ -79,7 +89,7 @@ export function KnowledgePage() {
       <KnowledgeSidebar selectedPath={selectedPath} onSelect={select} onCreate={setCreateDir} />
       <div className="relative flex min-w-0 flex-1">
         {selectedPath ? (
-          <KnowledgeDocument key={selectedPath} path={selectedPath} />
+          <KnowledgeDocument key={selectedPath} path={selectedPath} onAskAI={() => launcher.show()} />
         ) : (
           <div className="flex flex-1 flex-col">
             <DragStrip />

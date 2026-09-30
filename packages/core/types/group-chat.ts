@@ -35,6 +35,54 @@ export interface GroupChat {
   pinned: boolean;
 }
 
+/** A chat whose messages contain the search keyword. */
+export interface GroupChatSearchHit {
+  chat_id: string;
+  message_id: string;
+  /** Excerpt of the newest matching message, as markdown. */
+  snippet: string;
+  message_at: string;
+  /** Messages in the chat that contain the keyword. */
+  hit_count: number;
+}
+
+export interface GroupChatSearchResult {
+  query: string;
+  hits: GroupChatSearchHit[];
+}
+
+/** A chat message the question is about; `text` is the part the person highlighted. */
+export interface AskAISelection {
+  message_id: string;
+  time: string;
+  sender: string;
+  content: string;
+  text?: string;
+}
+
+/**
+ * The page a question was asked from: one of note, chat or contact, plus the
+ * message picked on it. The planner and the answering agent both read it.
+ */
+export interface AskAIPage {
+  note?: { title: string; path: string; modified_at: string; content: string; truncated: boolean };
+  chat?: { title: string; agents: string[]; messages: { time: string; sender: string; content: string }[] };
+  contact?: { type: GroupChatMemberType; name: string; description: string };
+  selection?: AskAISelection;
+}
+
+export interface AskAIAttachment {
+  name: string;
+  content_type: string;
+}
+
+export interface AskAIRequest {
+  query: string;
+  page: AskAIPage | null;
+  /** Names and types of the files sent with the question. */
+  attachments?: AskAIAttachment[];
+}
+
 export interface GroupChatMemberRef {
   member_type: GroupChatMemberType;
   member_id: string;

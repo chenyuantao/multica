@@ -513,6 +513,9 @@ cleared_pr_exclusions AS (
 ),
 cleared_issue_members AS (
     DELETE FROM issue_member WHERE issue_id IN (SELECT target.id FROM target)
+),
+cleared_comment_ask_contexts AS (
+    DELETE FROM comment_ask_context WHERE issue_id IN (SELECT target.id FROM target)
 )
 DELETE FROM issue WHERE issue.id IN (SELECT target.id FROM target)
 `

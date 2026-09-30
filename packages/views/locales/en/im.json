@@ -148,7 +148,6 @@
     "empty": "No markdown notes in the knowledge base yet",
     "no_results": "No matching notes",
     "truncated": "Showing only some results. Try a more specific keyword.",
-    "recent": "Recently modified",
     "unconfigured": "The knowledge base isn't configured. Set OBSIDIAN_VAULT_PATH on the server.",
     "unavailable": "Can't reach the knowledge base folder. Check OBSIDIAN_VAULT_PATH on the server.",
     "load_failed": "Couldn't load the knowledge base",
@@ -176,5 +175,31 @@
       "create": "Create",
       "cancel": "Cancel"
     }
+  },
+  "search": {
+    "title": "Search",
+    "placeholder": "Search, or ask AI",
+    "scope": "Search in",
+    "all": "All",
+    "chats": "Chats",
+    "contacts": "Contacts",
+    "notes": "Notes",
+    "recent_chats": "Recent chats",
+    "recent_notes": "Recently modified notes",
+    "show_all": "Show all {{total}}",
+    "no_results": "No results",
+    "empty": "Type a keyword to search",
+    "load_failed": "Couldn't load results",
+    "ask_ai": "Ask AI",
+    "ask_pending": "Choosing an agent…",
+    "ask_failed": "Couldn't choose an agent to answer. Try again.",
+    "ask_no_agent": "There's no agent you can message.",
+    "ask_placeholder": "Ask about the attached files",
+    "ask_files_one": "{{count}} file",
+    "ask_files_other": "{{count}} files",
+    "context": "Sent with your question",
+    "context_chat_one": "{{title}} · {{count}} message on screen",
+    "context_chat_other": "{{title}} · {{count}} messages on screen",
+    "context_remove": "Don't send this context"
   }
 }

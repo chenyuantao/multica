@@ -89,6 +89,16 @@ export function toUploadResult(att: Attachment): UploadResult {
   return { ...att, link: att.url, markdownLink: pickMarkdownLink(att) };
 }
 
+/** Markdown for a finished upload. Mirrors the shape the in-editor swap
+ *  produces (`extensions/file-upload.ts` in views: image node for images,
+ *  fileCard link for everything else) — keep the two in sync. */
+export function attachmentMarkdown(att: Attachment): string {
+  const link = pickMarkdownLink(att);
+  return (att.content_type ?? "").startsWith("image/")
+    ? `![${att.filename}](${link})`
+    : `[${att.filename}](${link})`;
+}
+
 export function useFileUpload(
   api: ApiClient,
   // Receives the failing `file` alongside the error so hosts can name it in

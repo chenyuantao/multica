@@ -482,15 +482,20 @@ import {
   type CreateIssueViewRequest,
   GroupChatSchema,
   GroupChatsListSchema,
+  GroupChatSearchResultSchema,
+  AskAIResponseSchema,
   DocFileSchema,
   DocSearchResultSchema,
   DocTreeSchema,
 } from "./schemas";
 import type {
+  AskAIPage,
+  AskAIRequest,
   CreateGroupChatRequest,
   GroupChat,
   GroupChatMemberRef,
   GroupChatMemberType,
+  GroupChatSearchResult,
   UpdateGroupChatRequest,
 } from "../types/group-chat";
 import type {
@@ -1669,6 +1674,7 @@ export class ApiClient {
     suppressAgentIds?: string[],
     steerTaskIds?: string[],
     refMessageId?: string,
+    askAI?: AskAIPage | null,
   ): Promise<Comment> {
     return this.fetch(`/api/issues/${issueId}/comments`, {
       method: "POST",
@@ -1680,6 +1686,7 @@ export class ApiClient {
         ...(suppressAgentIds?.length ? { suppress_agent_ids: suppressAgentIds } : {}),
         ...(steerTaskIds?.length ? { steer_task_ids: steerTaskIds } : {}),
         ...(refMessageId ? { ref_message_id: refMessageId } : {}),
+        ...(askAI ? { ask_ai: askAI } : {}),
       }),
     });
   }
@@ -4534,6 +4541,25 @@ export class ApiClient {
     return parseWithFallback<{ chats: GroupChat[] }>(raw, GroupChatsListSchema, { chats: [] }, {
       endpoint: "GET /api/group-chats",
     }).chats;
+  }
+
+  /** One hit per chat of the current user whose messages contain `q`. */
+  async searchGroupChats(q: string): Promise<GroupChatSearchResult> {
+    const raw = await this.fetch<unknown>(`/api/group-chats/search?${new URLSearchParams({ q })}`);
+    return parseWithFallback<GroupChatSearchResult>(raw, GroupChatSearchResultSchema, { query: q, hits: [] }, {
+      endpoint: "GET /api/group-chats/search",
+    });
+  }
+
+  /** The agent the server picked to answer `query` in a direct chat; "" when the answer was unusable. */
+  async askAI(data: AskAIRequest): Promise<string> {
+    const raw = await this.fetch<unknown>("/api/group-chats/ask", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+    return parseWithFallback<{ agent_id: string }>(raw, AskAIResponseSchema, { agent_id: "" }, {
+      endpoint: "POST /api/group-chats/ask",
+    }).agent_id;
   }
 
   async getGroupChat(chatId: string): Promise<GroupChat | null> {

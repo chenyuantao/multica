@@ -349,6 +349,59 @@ func TestGroupChatUnreadCountAndMarkRead(t *testing.T) {
 	}
 }
 
+func TestSearchGroupChatsCountsMatchingMessagesPerChat(t *testing.T) {
+	ctx := context.Background()
+	memberB := groupChatWorkspaceMember(t, "Group Chat Search B", "group-chat-search-b@multica.test")
+	outsider := groupChatWorkspaceMember(t, "Group Chat Search Outsider", "group-chat-search-outsider@multica.test")
+
+	var chat GroupChatResponse
+	testutil.Call(t, testHandler.CreateGroupChat, groupChatRequestAs(t, testUserID, "POST", "/api/group-chats", map[string]any{
+		"title":   "Search room",
+		"members": []map[string]string{{"member_type": "member", "member_id": memberB}},
+	})).Want(http.StatusCreated).JSON(&chat)
+	t.Cleanup(func() {
+		for _, sql := range []string{
+			`DELETE FROM comment WHERE issue_id = $1`,
+			`DELETE FROM issue_member WHERE issue_id = $1`,
+			`DELETE FROM issue_subscriber WHERE issue_id = $1`,
+			`DELETE FROM issue WHERE id = $1`,
+		} {
+			testPool.Exec(ctx, sql, chat.ID)
+		}
+	})
+	post := func(content, commentType, age string) {
+		dbfx.Exec(t, `
+			INSERT INTO comment (issue_id, workspace_id, author_type, author_id, content, type, created_at)
+			VALUES ($1, $2, 'member', $3, $4, $5, now() - $6::interval)
+		`, chat.ID, testWorkspaceID, memberB, content, commentType, age)
+	}
+	post("first Zephyrine note", "comment", "3 minutes")
+	post("the newest zephyrine_ update", "comment", "1 minute")
+	post("unrelated", "comment", "2 minutes")
+	post("zephyrine moved to done", "status_change", "30 seconds")
+
+	search := func(userID, q string) []GroupChatSearchHit {
+		var out struct {
+			Hits []GroupChatSearchHit `json:"hits"`
+		}
+		testutil.Call(t, testHandler.SearchGroupChats, groupChatRequestAs(t, userID, "GET", "/api/group-chats/search?q="+q, nil)).Want(http.StatusOK).JSON(&out)
+		return out.Hits
+	}
+
+	hits := search(testUserID, "ZEPHYRINE")
+	if len(hits) != 1 || hits[0].ChatID != chat.ID || hits[0].HitCount != 2 || hits[0].Snippet != "the newest zephyrine_ update" {
+		t.Fatalf("hits = %+v, want one hit for the chat counting its two messages", hits)
+	}
+	// LIKE wildcards in the keyword match literally.
+	if hits := search(testUserID, "zephyrine_"); len(hits) != 1 || hits[0].HitCount != 1 {
+		t.Fatalf("literal underscore hits = %+v", hits)
+	}
+	if hits := search(outsider, "zephyrine"); len(hits) != 0 {
+		t.Fatalf("outsider hits = %+v, want none", hits)
+	}
+	testutil.Call(t, testHandler.SearchGroupChats, groupChatRequestAs(t, testUserID, "GET", "/api/group-chats/search?q=%20", nil)).Want(http.StatusBadRequest)
+}
+
 func TestGroupChatPinIsPerPersonAndSortsFirst(t *testing.T) {
 	ctx := context.Background()
 	memberB := groupChatWorkspaceMember(t, "Group Chat Pin B", "group-chat-pin-b@multica.test")

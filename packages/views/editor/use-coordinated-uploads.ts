@@ -51,6 +51,7 @@ import {
 import { createSafeId } from "@multica/core/utils";
 import { contentReferencesAttachment, type Attachment } from "@multica/core/types";
 import {
+  attachmentMarkdown,
   toUploadResult,
   type UploadContext,
   type UploadResult,
@@ -98,15 +99,7 @@ export function __liveEditorRegistryKeysForTest(): string[] {
   return [...liveEditors.keys()];
 }
 
-/** Markdown for a finished upload. Mirrors the shape the in-editor swap
- *  produces (`extensions/file-upload.ts`: image node for images, fileCard link
- *  for everything else) — keep the two in sync. */
-export function attachmentMarkdown(att: Attachment): string {
-  const link = toUploadResult(att).markdownLink;
-  return (att.content_type ?? "").startsWith("image/")
-    ? `![${att.filename}](${link})`
-    : `[${att.filename}](${link})`;
-}
+export { attachmentMarkdown };
 
 const DELIVER_RETRY_MS = 50;
 const DELIVER_MAX_TRIES = 100; // ~5s — editor init is a passive effect away
