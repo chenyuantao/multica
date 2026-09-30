@@ -59,7 +59,9 @@
     "load_failed": "Impossible de charger les messages",
     "back": "Retour aux discussions",
     "settings": "Paramètres de la discussion",
-    "not_found": "Cette discussion n'est pas disponible"
+    "not_found": "Cette discussion n'est pas disponible",
+    "activity_tool": "Utilise un outil",
+    "activity_thinking": "Réflexion"
   },
   "composer": {
     "placeholder": "Message à {{title}} — @ pour solliciter un agent",

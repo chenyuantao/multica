@@ -1,4 +1,8 @@
 import type { Comment, GroupChat, GroupChatMemberType, TaskMessagePayload } from "@multica/core/types";
+import { buildSteps, isCallStep } from "../common/task-transcript/build-steps";
+import { buildTimeline } from "../common/task-transcript/build-timeline";
+import { redactSecrets } from "../common/task-transcript/redact";
+import { traceEventSummary, traceToolArgSummary } from "../common/task-transcript/trace-event-presenter";
 
 /** Messages closer than this read as one exchange and share a time separator. */
 const SEPARATOR_GAP_MS = 5 * 60 * 1000;
@@ -12,15 +16,31 @@ export function thinkingTaskId(message: Comment): string | null {
   return message.source_task_id || null;
 }
 
-/** The latest text the run has said so far; tool calls and reasoning are not progress. */
-export function latestProgressText(messages: readonly TaskMessagePayload[] | undefined): string | null {
-  if (!messages) return null;
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const m = messages[i];
-    const text = m?.type === "text" ? m.content?.trim() : "";
-    if (text) return text;
+export type RunActivity = { kind: "tool"; label: string } | { kind: "thinking"; label: string };
+
+export interface RunProgress {
+  /** The latest text the run has said so far. */
+  text: string | null;
+  /** What the run is doing after that text: a tool call or reasoning. */
+  activity: RunActivity | null;
+}
+
+export function runProgress(messages: readonly TaskMessagePayload[] | undefined): RunProgress {
+  if (!messages?.length) return { text: null, activity: null };
+  const steps = buildSteps(buildTimeline([...messages]));
+  const lastText = steps.findLast((s) => s.kind === "text" && s.item.content?.trim());
+  const text = lastText && !isCallStep(lastText) ? lastText.item.content!.trim() : null;
+  // A call still waiting on its result outranks prose streamed alongside it.
+  const current = steps.findLast((s) => isCallStep(s) && !s.result)
+    ?? steps.findLast((s) => s.kind !== "text" || s.item.content?.trim());
+  let activity: RunActivity | null = null;
+  if (current && isCallStep(current)) {
+    const detail = redactSecrets(traceToolArgSummary(current.call?.input));
+    activity = { kind: "tool", label: [current.tool, detail].filter(Boolean).join(" · ") };
+  } else if (current?.kind === "thinking") {
+    activity = { kind: "thinking", label: traceEventSummary({ type: "thinking", content: current.item.content }) };
   }
-  return null;
+  return { text, activity };
 }
 
 export interface ComposerMention {

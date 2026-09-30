@@ -59,7 +59,9 @@
     "load_failed": "Couldn't load messages",
     "back": "Back to chats",
     "settings": "Chat settings",
-    "not_found": "This chat isn't available"
+    "not_found": "This chat isn't available",
+    "activity_tool": "Using a tool",
+    "activity_thinking": "Thinking"
   },
   "composer": {
     "placeholder": "Message {{title}} — @ to address one agent",

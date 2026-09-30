@@ -56,7 +56,9 @@
     "load_failed": "メッセージを読み込めませんでした",
     "back": "チャット一覧に戻る",
     "settings": "チャット設定",
-    "not_found": "このチャットは利用できません"
+    "not_found": "このチャットは利用できません",
+    "activity_tool": "ツールを実行中",
+    "activity_thinking": "思考中"
   },
   "composer": {
     "placeholder": "{{title}} にメッセージ — @ でエージェントを 1 つ指定",

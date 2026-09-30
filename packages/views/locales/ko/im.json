@@ -56,7 +56,9 @@
     "load_failed": "메시지를 불러오지 못했습니다",
     "back": "채팅 목록으로",
     "settings": "채팅 설정",
-    "not_found": "이 채팅을 사용할 수 없습니다"
+    "not_found": "이 채팅을 사용할 수 없습니다",
+    "activity_tool": "도구 실행 중",
+    "activity_thinking": "생각 중"
   },
   "composer": {
     "placeholder": "{{title}}에 메시지 보내기 — @로 에이전트 하나 지정",

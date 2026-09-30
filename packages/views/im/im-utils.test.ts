@@ -6,10 +6,10 @@ import {
   activeMentionQuery,
   dayRelation,
   encodeMentions,
-  latestProgressText,
   resolveComposerMentions,
   needsTimeSeparator,
   plainTextPreview,
+  runProgress,
   sortChatsByActivity,
   thinkingTaskId,
 } from "./im-utils";
@@ -112,25 +112,56 @@ describe("thinkingTaskId", () => {
   });
 });
 
-describe("latestProgressText", () => {
-  const msg = (seq: number, type: TaskMessagePayload["type"], content?: string): TaskMessagePayload => ({
-    task_id: "t-1", issue_id: "i-1", seq, type, content,
+describe("runProgress", () => {
+  const msg = (seq: number, type: TaskMessagePayload["type"], over: Partial<TaskMessagePayload> = {}): TaskMessagePayload => ({
+    task_id: "t-1", issue_id: "i-1", seq, type, ...over,
   });
 
-  it("picks the latest non-empty text, skipping tools and reasoning", () => {
+  it("joins streamed text fragments and keeps the latest text", () => {
     expect(
-      latestProgressText([
-        msg(1, "text", "reading the issue"),
-        msg(2, "text", "checking the workspace"),
-        msg(3, "tool_use"),
-        msg(4, "thinking", "internal"),
-        msg(5, "text", "  "),
+      runProgress([
+        msg(1, "text", { content: "reading " }),
+        msg(2, "text", { content: "the issue" }),
+        msg(3, "text", { content: "  " }),
       ]),
-    ).toBe("checking the workspace");
+    ).toEqual({ text: "reading the issue", activity: null });
   });
 
-  it("is null before the run says anything", () => {
-    expect(latestProgressText(undefined)).toBeNull();
-    expect(latestProgressText([msg(1, "thinking", "internal")])).toBeNull();
+  it("reports a running tool call after the text", () => {
+    expect(
+      runProgress([
+        msg(1, "text", { content: "checking tests" }),
+        msg(2, "tool_use", { tool: "Bash", call_id: "c-1", input: { command: "pnpm test" } }),
+      ]),
+    ).toEqual({ text: "checking tests", activity: { kind: "tool", label: "Bash · pnpm test" } });
+  });
+
+  it("keeps the finished tool call visible until new progress arrives", () => {
+    expect(
+      runProgress([
+        msg(1, "tool_use", { tool: "Read", call_id: "c-1", input: { file_path: "src/a.ts" } }),
+        msg(2, "tool_result", { tool: "Read", call_id: "c-1", output: "..." }),
+      ]).activity,
+    ).toEqual({ kind: "tool", label: "Read · src/a.ts" });
+  });
+
+  it("reports reasoning after the text", () => {
+    expect(
+      runProgress([msg(1, "text", { content: "on it" }), msg(2, "thinking", { content: "weigh options\nmore" })]),
+    ).toEqual({ text: "on it", activity: { kind: "thinking", label: "weigh options" } });
+  });
+
+  it("drops the activity once the run speaks again", () => {
+    expect(
+      runProgress([
+        msg(1, "tool_use", { tool: "Bash", call_id: "c-1", input: { command: "ls" } }),
+        msg(2, "tool_result", { tool: "Bash", call_id: "c-1", output: "a" }),
+        msg(3, "text", { content: "found it" }),
+      ]),
+    ).toEqual({ text: "found it", activity: null });
+  });
+
+  it("is empty before the run emits anything", () => {
+    expect(runProgress(undefined)).toEqual({ text: null, activity: null });
   });
 });

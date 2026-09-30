@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { MoreHorizontal, PanelRight, RotateCw } from "lucide-react";
+import { Brain, Loader2, MoreHorizontal, PanelRight, RotateCw } from "lucide-react";
 import { useTaskMessages } from "@multica/core/chat/queries";
 import { groupChatMessagesOptions, useSendGroupChatMessage } from "@multica/core/group-chats";
 import { useActorName } from "@multica/core/workspace/hooks";
@@ -22,8 +22,8 @@ import {
   dayRelation,
   formatClock,
   isSameDay,
-  latestProgressText,
   needsTimeSeparator,
+  runProgress,
   thinkingTaskId,
   type ComposerMention,
 } from "./im-utils";
@@ -282,12 +282,31 @@ function MessageRow({
 
 /** Stands in for the reply with the run's latest progress until the reply replaces it. */
 function ThinkingBubble({ taskId, title }: { taskId: string; title: string }) {
+  const { t } = useT("im");
   const { data } = useTaskMessages(taskId, true);
-  const progress = latestProgressText(data);
+  const { text, activity } = useMemo(() => runProgress(data), [data]);
+  const activityLabel = !activity
+    ? null
+    : activity.label ||
+      (activity.kind === "tool" ? t(($) => $.thread.activity_tool) : t(($) => $.thread.activity_thinking));
   return (
-    <Bubble title={title} className={cn(progress && "opacity-70")}>
-      <RichContent content={progress ?? THINKING_MESSAGE} density="compact" />
-    </Bubble>
+    <>
+      <Bubble title={title} className={cn(text && "opacity-70")}>
+        <RichContent content={text ?? THINKING_MESSAGE} density="compact" />
+      </Bubble>
+      {activityLabel && (
+        <span className="flex max-w-full min-w-0 items-center gap-1 text-micro text-muted-foreground" aria-live="polite">
+          {activity?.kind === "tool" ? (
+            <Loader2 aria-hidden className="size-3 shrink-0 animate-spin motion-reduce:animate-none" />
+          ) : (
+            <Brain aria-hidden className="size-3 shrink-0" />
+          )}
+          <span className="truncate" title={activityLabel}>
+            {activityLabel}
+          </span>
+        </span>
+      )}
+    </>
   );
 }
 

@@ -56,7 +56,9 @@
     "load_failed": "消息加载失败",
     "back": "返回群聊列表",
     "settings": "群聊设置",
-    "not_found": "该群聊不存在或你已不在群内"
+    "not_found": "该群聊不存在或你已不在群内",
+    "activity_tool": "正在调用工具",
+    "activity_thinking": "正在思考"
   },
   "composer": {
     "placeholder": "发消息到 {{title}} — 输入 @ 指定一个智能体",
