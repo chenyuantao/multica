@@ -76,7 +76,7 @@ export function NewChatDialog({ wsId, open, onOpenChange, onCreated }: NewChatDi
       }}
     >
       <DialogContent className="sm:max-w-md">
-        <form onSubmit={submit} className="flex flex-col gap-4">
+        <form onSubmit={submit} className="flex min-w-0 flex-col gap-4">
           <DialogHeader>
             <DialogTitle>{t(($) => $.new_chat.title)}</DialogTitle>
             <DialogDescription>{t(($) => $.new_chat.description)}</DialogDescription>
