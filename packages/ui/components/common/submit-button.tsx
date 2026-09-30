@@ -59,6 +59,7 @@ function SubmitButton({
   if (running) {
     const stopButton = (
       <Button
+        variant="destructive"
         size="icon-sm"
         className="rounded-full"
         onPointerDown={keepFocusInComposer}
