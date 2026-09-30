@@ -386,6 +386,7 @@
   },
   "page": {
     "title": "Settings",
+    "back": "Back",
     "my_account": "My Account",
     "workspace_fallback": "Workspace",
     "tabs": {

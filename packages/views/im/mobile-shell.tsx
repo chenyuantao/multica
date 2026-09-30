@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, ChevronLeft, Menu, MessageCircle, UsersRound } from "lucide-react";
+import { BookOpen, Menu, MessageCircle, UsersRound } from "lucide-react";
 import { useWorkspacePaths } from "@multica/core/paths";
 import { cn } from "@multica/ui/lib/utils";
 import { AgentDetail } from "../agents/components/agent-detail-page";
@@ -8,6 +8,7 @@ import { MemberDetailPage } from "../members/member-detail-page";
 import { AppLink, useBackOrReplace } from "../navigation";
 import { useT } from "../i18n";
 import type { ImRailSection } from "./im-rail";
+import { MobileBackButton } from "./mobile-back-button";
 
 /** A phone tab root: the section's list above the bottom tab bar. */
 export function MobileTabScreen({ active, children }: { active: ImRailSection; children: React.ReactNode }) {
@@ -49,24 +50,6 @@ export function MobileTabBar({ active }: { active: ImRailSection }) {
         </AppLink>
       ))}
     </nav>
-  );
-}
-
-/**
- * Steps back to the previous level, or replaces with `fallback` when the level
- * was opened cold (a shared link, a refresh) and history would leave the app.
- */
-export function MobileBackButton({ fallback, label }: { fallback: string; label: string }) {
-  const backOrReplace = useBackOrReplace();
-  return (
-    <button
-      type="button"
-      onClick={() => backOrReplace(fallback)}
-      aria-label={label}
-      className="relative flex size-9 shrink-0 items-center justify-center rounded-md text-foreground transition-colors hover:bg-foreground/5 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-    >
-      <ChevronLeft className="size-6" />
-    </button>
   );
 }
 

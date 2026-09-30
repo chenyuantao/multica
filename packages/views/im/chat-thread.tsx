@@ -322,7 +322,7 @@ function MessageLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className={cn("mb-5 flex items-start gap-2.5", mine ? "justify-end pl-15" : "pr-15")}>
+    <div className={cn("mb-5 flex items-start gap-2.5", mine && "justify-end")}>
       {!mine && <span className="flex shrink-0">{avatar}</span>}
       <div className={cn("grid min-w-0 max-w-[min(74%,660px)] gap-1", mine ? "justify-items-end" : "justify-items-start")}>
         {authorName && <span className="mb-0.5 ml-0.5 text-micro text-muted-foreground">{authorName}</span>}

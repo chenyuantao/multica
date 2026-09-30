@@ -385,6 +385,7 @@
   },
   "page": {
     "title": "設定",
+    "back": "戻る",
     "my_account": "マイアカウント",
     "workspace_fallback": "ワークスペース",
     "tabs": {

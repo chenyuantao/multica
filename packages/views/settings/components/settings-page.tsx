@@ -26,7 +26,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useAuthStore } from "@multica/core/auth";
-import { useCurrentWorkspace } from "@multica/core/paths";
+import { useCurrentWorkspace, useWorkspacePaths } from "@multica/core/paths";
 import { useFeatureEnabled } from "@multica/core/config";
 import { useCurrentMember } from "@multica/core/permissions";
 import {
@@ -35,6 +35,7 @@ import {
 } from "@multica/core/feature-flags";
 import { resolvePublicFileUrl } from "@multica/core/workspace/avatar-url";
 import { ActorAvatar } from "@multica/ui/components/common/actor-avatar";
+import { useIsMobile } from "@multica/ui/hooks/use-mobile";
 import { cn } from "@multica/ui/lib/utils";
 import { resolveSettingsLocation, settingsHref } from "./settings-navigation";
 import { AppLink, useNavigation } from "../../navigation";
@@ -62,6 +63,7 @@ import { HighlightText } from "../../search/highlight-text";
 import { useSettingsSearchIndex } from "./use-settings-search-index";
 import { WakeupsTab } from "./wakeups-tab";
 import { CollapsedNavTrigger } from "../../layout/page-header";
+import { MobileBackButton } from "../../im/mobile-back-button";
 import { useT } from "../../i18n";
 
 export interface ExtraSettingsTab {
@@ -109,6 +111,8 @@ export function SettingsPage({ extraDeviceTabs = [] }: SettingsPageProps = {}) {
   const { role } = useCurrentMember(workspace?.id ?? "");
   const isMember = role === "member";
   const navigation = useNavigation();
+  const paths = useWorkspacePaths();
+  const isMobile = useIsMobile();
   const pluginsEnabled = useFeatureEnabled(PLUGINS_V1_FLAG, false);
   const billingEnabled = useFeatureEnabled(
     BILLING_WORKSPACE_SUBSCRIPTIONS_FLAG,
@@ -429,6 +433,7 @@ export function SettingsPage({ extraDeviceTabs = [] }: SettingsPageProps = {}) {
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background md:flex-row">
       <aside className="shrink-0 border-b border-surface-border md:flex md:w-60 md:flex-col md:border-b-0 md:border-r">
         <div className="flex h-16 shrink-0 items-center gap-1 px-4 md:px-5">
+          {isMobile && <MobileBackButton fallback={paths.im()} label={t(($) => $.page.back)} />}
           <CollapsedNavTrigger />
           <h1 className="text-title font-semibold tracking-tight">
             {t(($) => $.page.title)}

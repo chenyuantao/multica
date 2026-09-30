@@ -42,6 +42,7 @@ vi.mock("./connected-apps-tab", () => ({
 
 vi.mock("@multica/core/paths", () => ({
   useCurrentWorkspace: () => ({ id: "ws-1", name: "Acme" }),
+  useWorkspacePaths: () => ({ im: () => "/acme/im" }),
 }));
 vi.mock("@multica/core/workspace/avatar-url", () => ({
   resolvePublicFileUrl: (url: string | null | undefined) => url ?? null,
@@ -146,6 +147,23 @@ describe("SettingsPage nav trigger", () => {
       screen.queryByRole("button", { name: "Toggle left sidebar" }),
     ).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Settings" })).toBeInTheDocument();
+  });
+});
+
+describe("SettingsPage mobile back", () => {
+  it("returns to chats when opened cold from the phone tab bar", () => {
+    renderWithI18n(<SettingsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+
+    expect(replace).toHaveBeenCalledWith("/acme/im");
+  });
+
+  it("has no back button on wide screens", () => {
+    layout.compact = false;
+    renderWithI18n(<SettingsPage />);
+
+    expect(screen.queryByRole("button", { name: "Back" })).not.toBeInTheDocument();
   });
 });
 
