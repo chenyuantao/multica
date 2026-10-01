@@ -71,14 +71,16 @@ func TestRouteUniqueBareName(t *testing.T) {
 type scripted struct {
 	answers   map[string]typesafe.Answer
 	questions map[string]any
+	state     any
 	err       error
 	called    bool
 	enabled   bool
 }
 
 func (s *scripted) Enabled() bool { return s.enabled }
-func (s *scripted) Evaluate(_ context.Context, _ any, questions map[string]any) (map[string]typesafe.Answer, error) {
+func (s *scripted) Evaluate(_ context.Context, state any, questions map[string]any) (map[string]typesafe.Answer, error) {
 	s.called = true
+	s.state = state
 	s.questions = questions
 	return s.answers, s.err
 }

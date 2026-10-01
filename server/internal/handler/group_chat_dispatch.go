@@ -236,7 +236,7 @@ func (h *Handler) groupChatTurns(ctx context.Context, issue db.Issue, roster []g
 		if c.CreatedAt.Valid {
 			when = c.CreatedAt.Time.UTC().Format(time.RFC3339)
 		}
-		return groupchat.Turn{ID: uuidToString(c.ID), Author: name, Role: c.AuthorType, Text: c.Content, Time: when}
+		return groupchat.Turn{ID: uuidToString(c.ID), Author: name, AuthorID: uuidToString(c.AuthorID), Role: c.AuthorType, Text: c.Content, Time: when}
 	}
 	byCommentID := make(map[string]db.Comment, len(comments))
 	for _, c := range comments {
@@ -259,7 +259,61 @@ func (h *Handler) groupChatTurns(ctx context.Context, issue db.Issue, roster []g
 		}
 		turns = append(turns, turn)
 	}
+	h.markGroupChatAttachments(ctx, issue, turns)
 	return turns
+}
+
+// markGroupChatAttachments flags messages that carry a file. The filter
+// keeps those messages, because Jev cannot judge the file.
+func (h *Handler) markGroupChatAttachments(ctx context.Context, issue db.Issue, turns []groupchat.Turn) {
+	ids := make([]pgtype.UUID, 0, len(turns))
+	seen := map[string]bool{}
+	add := func(id string) {
+		if id == "" || seen[id] {
+			return
+		}
+		parsed, err := util.ParseUUID(id)
+		if err != nil {
+			return
+		}
+		seen[id] = true
+		ids = append(ids, parsed)
+	}
+	for _, turn := range turns {
+		add(turn.ID)
+		if turn.Ref != nil {
+			add(turn.Ref.ID)
+		}
+	}
+	if len(ids) == 0 {
+		return
+	}
+	rows, err := h.Queries.ListAttachmentsByCommentIDs(ctx, db.ListAttachmentsByCommentIDsParams{
+		Column1: ids, WorkspaceID: issue.WorkspaceID,
+	})
+	if err != nil {
+		slog.Warn("group chat attachments failed", "issue_id", uuidToString(issue.ID), "error", err)
+		// Without this list every message might be a file, so keep them all.
+		for i := range turns {
+			turns[i].Attachment = true
+			if turns[i].Ref != nil {
+				turns[i].Ref.Attachment = true
+			}
+		}
+		return
+	}
+	has := map[string]bool{}
+	for _, row := range rows {
+		if row.CommentID.Valid {
+			has[uuidToString(row.CommentID)] = true
+		}
+	}
+	for i := range turns {
+		turns[i].Attachment = has[turns[i].ID]
+		if turns[i].Ref != nil {
+			turns[i].Ref.Attachment = has[turns[i].Ref.ID]
+		}
+	}
 }
 
 // groupChatRefMessage loads the live message a group message quotes, from the
@@ -293,7 +347,8 @@ func (h *Handler) attachGroupChatTranscript(ctx context.Context, resp *AgentTask
 	if task.TriggerCommentID.Valid {
 		triggerIDs = append(triggerIDs, uuidToString(task.TriggerCommentID))
 	}
-	transcript := groupchat.SelectTranscript(h.groupChatTurns(ctx, issue, roster), triggerIDs, groupChatPromptRunes, groupChatMessageRunes)
+	turns := h.groupChatTurns(ctx, issue, roster)
+	transcript := groupchat.SelectTranscript(turns, triggerIDs, groupChatPromptRunes, groupChatMessageRunes)
 	if len(transcript.Excerpts) == 0 {
 		return
 	}
@@ -303,7 +358,38 @@ func (h *Handler) attachGroupChatTranscript(ctx context.Context, resp *AgentTask
 		transcript.Title = issue.Title
 		transcript.Notice = issue.Description.String
 	}
+	h.hideIrrelevantGroupChatMessages(ctx, &transcript, turns, triggerIDs, roster, issue, task)
 	resp.GroupChatTranscript = transcript.Render(uuidToString(issue.ID), groupChatRoleLine(task))
+}
+
+// hideIrrelevantGroupChatMessages asks Jev, in a second request after the
+// agent is already known, which delivered messages that agent does not need.
+// A failure leaves the transcript unchanged. The latest check message and the
+// contiguous messages that person sent just before it are never hidden.
+func (h *Handler) hideIrrelevantGroupChatMessages(ctx context.Context, transcript *groupchat.Transcript, turns []groupchat.Turn, triggerIDs []string, roster []groupChatPerson, issue db.Issue, task db.AgentTaskQueue) {
+	if h.GroupChatDecider == nil || !h.GroupChatDecider.Enabled() || !task.AgentID.Valid {
+		return
+	}
+	agentID := uuidToString(task.AgentID)
+	var card groupchat.Card
+	found := false
+	for _, p := range roster {
+		if p.Type == "agent" && p.ID == agentID {
+			card = groupchat.Card{ID: p.ID, Name: p.Name, Description: p.Description}
+			found = true
+			break
+		}
+	}
+	if !found {
+		return
+	}
+	protected := groupchat.RequiredVisible(turns, triggerIDs)
+	hidden, err := groupchat.FilterForAgent(ctx, h.GroupChatDecider, card, transcript.Excerpts, protected)
+	if err != nil {
+		slog.Warn("group chat message filter failed", "issue_id", uuidToString(issue.ID), "agent_id", agentID, "error", err)
+		return
+	}
+	groupchat.HideMessages(transcript, hidden)
 }
 
 func groupChatRoleLine(task db.AgentTaskQueue) string {

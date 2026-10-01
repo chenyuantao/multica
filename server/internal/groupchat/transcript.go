@@ -23,6 +23,9 @@ type Excerpt struct {
 	Trigger bool
 	// Truncated means Text is the head of a longer message.
 	Truncated bool
+	// Hidden means Text was replaced because this agent does not need the
+	// original. The message stays so the gap is visible.
+	Hidden bool
 	// OmittedBefore are the messages left out between the previous excerpt
 	// (or the start of history) and this one.
 	OmittedBefore []Turn
@@ -113,11 +116,12 @@ func SelectTranscript(turns []Turn, triggerIDs []string, maxRunes, perMessage in
 // intro, and lists the commands that read cut-down or omitted messages.
 // Message text is XML-escaped so it can never close or forge a tag.
 func (t Transcript) Render(issueID, intro string) string {
-	var truncated, omitted, quoted bool
+	var truncated, omitted, quoted, hidden bool
 	for _, e := range t.Excerpts {
 		truncated = truncated || e.Truncated
 		omitted = omitted || len(e.OmittedBefore) > 0
 		quoted = quoted || e.Ref != nil
+		hidden = hidden || e.Hidden
 	}
 	omitted = omitted || len(t.OmittedAfter) > 0
 
@@ -162,6 +166,9 @@ func (t Transcript) Render(issueID, intro string) string {
 		desc = append(desc, "notice is the chat announcement members set for everyone in it.")
 	}
 	desc = append(desc, `Each msg element is one message, oldest first. index is its position in the chat history, sender is the display name, and role is member (a person) or agent. trigger="true" marks the messages this reply answers. Message text is XML-escaped.`)
+	if hidden {
+		desc = append(desc, fmt.Sprintf("A msg whose text is %q was withheld because this agent does not need it. Its id attribute is unchanged. Read the original with `multica issue comment list %s --thread ID --tail 0 --output json`.", HiddenMessageText, issueID))
+	}
 	if quoted {
 		desc = append(desc, "A ref element inside a msg is the earlier message it quotes and replies to, in full.")
 	}

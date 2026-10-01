@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"slices"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"github.com/multica-ai/multica/server/internal/groupchat"
 	"github.com/multica-ai/multica/server/internal/testutil"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
+	"github.com/multica-ai/multica/server/pkg/typesafe"
 )
 
 func groupChatRequestAs(t *testing.T, userID, method, path string, body any) *http.Request {
@@ -631,5 +633,104 @@ func TestDirectChatTranscriptOmitsTitleAndNotice(t *testing.T) {
 	roomXML := render(room.ID)
 	if !strings.Contains(roomXML, "<title>Launch &lt;room&gt;</title>") || !strings.Contains(roomXML, "<notice>\nShip on Friday\n</notice>") {
 		t.Fatalf("group transcript missing title or notice:\n%s", roomXML)
+	}
+}
+
+type groupChatFilterEvaluator struct {
+	choice    string
+	state     groupchat.FilterState
+	questions map[string]any
+}
+
+func (e *groupChatFilterEvaluator) Enabled() bool { return true }
+func (e *groupChatFilterEvaluator) Evaluate(_ context.Context, state any, questions map[string]any) (map[string]typesafe.Answer, error) {
+	e.state, _ = state.(groupchat.FilterState)
+	e.questions = questions
+	out := make(map[string]typesafe.Answer, len(questions))
+	for key := range questions {
+		out[key] = typesafe.Answer{Type: "choice", Choice: e.choice}
+	}
+	return out, nil
+}
+
+func TestGroupChatTranscriptHidesMessagesTheAgentDoesNotNeed(t *testing.T) {
+	ctx := context.Background()
+	agentID := createHandlerTestAgent(t, "filter-transcript-agent", nil)
+	var room GroupChatResponse
+	testutil.Call(t, testHandler.CreateGroupChat, groupChatRequestAs(t, testUserID, "POST", "/api/group-chats", map[string]any{
+		"title":   "Filter room",
+		"members": []map[string]string{{"member_type": "agent", "member_id": agentID}},
+	})).Want(http.StatusCreated).JSON(&room)
+	t.Cleanup(func() {
+		for _, sql := range []string{
+			`DELETE FROM agent_task_queue WHERE issue_id = $1`,
+			`DELETE FROM attachment WHERE issue_id = $1`,
+			`DELETE FROM issue_member WHERE issue_id = $1`,
+			`DELETE FROM issue_subscriber WHERE issue_id = $1`,
+			`DELETE FROM comment WHERE issue_id = $1`,
+			`DELETE FROM issue WHERE id = $1`,
+		} {
+			testPool.Exec(ctx, sql, room.ID)
+		}
+	})
+
+	insert := func(authorType, authorID, content, age string) string {
+		t.Helper()
+		var id string
+		dbfx.QueryRow(t, `
+			INSERT INTO comment (issue_id, workspace_id, author_type, author_id, content, type, created_at)
+			VALUES ($1, $2, $3, $4, $5, 'comment', now() - $6::interval)
+			RETURNING id::text
+		`, room.ID, testWorkspaceID, authorType, authorID, content, age).Scan(&id)
+		return id
+	}
+	insert("member", testUserID, "last week deploy notes", "4 minutes")
+	fileID := insert("member", testUserID, "![shot.png](https://example.test/shot.png)", "3 minutes")
+	dbfx.Insert(t, "attachment", testutil.Cols{
+		"workspace_id": testWorkspaceID, "issue_id": room.ID, "comment_id": fileID,
+		"uploader_type": "member", "uploader_id": testUserID,
+		"filename": "shot.png", "url": "https://example.test/shot.png",
+		"content_type": "image/png", "size_bytes": 1,
+	})
+	insert("agent", agentID, "on it", "2 minutes")
+	insert("member", testUserID, "and the logs", "1 minute")
+	checkID := insert("member", testUserID, "please check the deploy", "1 second")
+
+	ev := &groupChatFilterEvaluator{choice: "屏蔽"}
+	prev := testHandler.GroupChatDecider
+	testHandler.GroupChatDecider = ev
+	t.Cleanup(func() { testHandler.GroupChatDecider = prev })
+
+	issue, err := testHandler.Queries.GetIssue(ctx, parseUUID(room.ID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var resp AgentTaskResponse
+	testHandler.attachGroupChatTranscript(ctx, &resp, issue, db.AgentTaskQueue{
+		AgentID:          parseUUID(agentID),
+		TriggerCommentID: parseUUID(checkID),
+	})
+	xml := resp.GroupChatTranscript
+	if strings.Contains(xml, "last week deploy notes") || strings.Contains(xml, ">on it</msg>") {
+		t.Fatalf("unrelated messages stayed visible:\n%s", xml)
+	}
+	if !strings.Contains(xml, "and the logs") || !strings.Contains(xml, "please check the deploy") || !strings.Contains(xml, "shot.png") {
+		t.Fatalf("the check burst or the attachment was hidden:\n%s", xml)
+	}
+	if strings.Count(xml, "<msg ") != 5 || strings.Count(xml, ">"+groupchat.HiddenMessageText+"</msg>") != 2 {
+		t.Fatalf("hidden messages were dropped instead of replaced:\n%s", xml)
+	}
+	if !strings.Contains(xml, `id="`+fileID+`"`) {
+		t.Fatalf("attachment message lost its id:\n%s", xml)
+	}
+	if ev.state.Agent.Name != "filter-transcript-agent" || len(ev.questions) != 2 {
+		t.Fatalf("filter call state=%+v questions=%d", ev.state.Agent, len(ev.questions))
+	}
+	for _, message := range ev.state.Messages {
+		if message.Content == "please check the deploy" || message.Content == "and the logs" {
+			if _, ok := ev.questions[fmt.Sprintf("m%d", message.Index)]; ok {
+				t.Fatalf("protected message %d was submitted: %+v", message.Index, ev.questions)
+			}
+		}
 	}
 }

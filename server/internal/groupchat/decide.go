@@ -65,9 +65,15 @@ type Message struct {
 type Turn struct {
 	ID     string
 	Author string
-	Role   string
-	Text   string
-	Time   string
+	// AuthorID is the sender's id. It stays off the model wire and is how a
+	// burst of messages from one person is recognized.
+	AuthorID string
+	Role     string
+	Text     string
+	Time     string
+	// Attachment means the message carries a file. Jev cannot judge that
+	// file, so the message is never hidden.
+	Attachment bool
 	// Ref is the message this one quotes, carried in full.
 	Ref *Turn
 }
