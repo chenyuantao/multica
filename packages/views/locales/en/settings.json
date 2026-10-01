@@ -691,6 +691,16 @@
       "granted": "This browser can show notification banners.",
       "denied": "Blocked by your browser. Enable notifications for this site in your browser settings.",
       "enabled_badge": "Enabled"
+    },
+    "push": {
+      "label": "Push to this device",
+      "hint": "Get inbox notifications here while Multica is closed. Nothing is pushed while Multica is open on any of your devices.",
+      "install_hint": "On iPhone or iPad, add Multica to your Home Screen from Safari's Share menu, then open it from there to turn this on.",
+      "denied": "Notifications are blocked. Allow them for Multica in your system or browser settings.",
+      "enable": "Turn on",
+      "disable": "Turn off",
+      "toast_enable_failed": "Couldn't turn on push notifications.",
+      "toast_disable_failed": "Couldn't turn off push notifications."
     }
   },
   "tokens": {

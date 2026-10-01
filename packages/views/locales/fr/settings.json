@@ -691,6 +691,16 @@
       "granted": "Ce navigateur peut afficher des bannières de notification.",
       "denied": "Bloqué par votre navigateur. Activez les notifications pour ce site dans ses réglages.",
       "enabled_badge": "Activé"
+    },
+    "push": {
+      "label": "Notifications push sur cet appareil",
+      "hint": "Recevez ici les notifications de la boîte de réception lorsque Multica est fermé. Rien n'est envoyé tant que Multica est ouvert sur l'un de vos appareils.",
+      "install_hint": "Sur iPhone ou iPad, ajoutez Multica à l'écran d'accueil depuis le menu Partager de Safari, puis ouvrez-le depuis l'écran d'accueil pour activer cette option.",
+      "denied": "Les notifications sont bloquées. Autorisez-les pour Multica dans les réglages du système ou du navigateur.",
+      "enable": "Activer",
+      "disable": "Désactiver",
+      "toast_enable_failed": "Impossible d'activer les notifications push.",
+      "toast_disable_failed": "Impossible de désactiver les notifications push."
     }
   },
   "tokens": {

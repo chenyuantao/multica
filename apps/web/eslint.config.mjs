@@ -4,6 +4,10 @@ export default [
   ...nextConfig,
   { ignores: [".next/", ".source/"] },
   {
+    files: ["public/sw.js"],
+    languageOptions: { globals: { self: "readonly", URL: "readonly" } },
+  },
+  {
     files: ["**/*.test.{ts,tsx}", "**/test/**/*.{ts,tsx}"],
     rules: {
       "react/display-name": "off",

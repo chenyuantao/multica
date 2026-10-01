@@ -687,6 +687,16 @@
       "granted": "当前浏览器可以弹出通知横幅。",
       "denied": "已被浏览器拦截。请在浏览器设置中为本站点开启通知权限。",
       "enabled_badge": "已启用"
+    },
+    "push": {
+      "label": "推送到此设备",
+      "hint": "Multica 关闭时在此设备上接收收件箱通知。只要你在任一设备上打开着 Multica，就不会推送。",
+      "install_hint": "在 iPhone 或 iPad 上，请先在 Safari 中通过「分享 → 添加到主屏幕」安装 Multica，再从主屏幕打开后开启。",
+      "denied": "通知权限已被拦截。请在系统或浏览器设置中允许 Multica 发送通知。",
+      "enable": "开启",
+      "disable": "关闭",
+      "toast_enable_failed": "开启推送失败。",
+      "toast_disable_failed": "关闭推送失败。"
     }
   },
   "tokens": {

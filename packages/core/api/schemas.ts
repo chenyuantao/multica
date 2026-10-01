@@ -69,6 +69,7 @@ import type {
   IssueStatusEntry,
   ListIssueStatusesResponse,
   NotificationPreferenceResponse,
+  PushConfigResponse,
   PluginInstallation,
   PluginInstallationListResponse,
   PluginPackage,
@@ -1072,6 +1073,16 @@ export const NotificationPreferenceResponseSchema = z.object({
 export const EMPTY_NOTIFICATION_PREFERENCE_RESPONSE: NotificationPreferenceResponse = {
   workspace_id: "",
   preferences: {},
+};
+
+export const PushConfigResponseSchema = z.object({
+  web_push_public_key: z.string().catch(""),
+}).loose();
+
+// Fail closed: an unreadable config must not offer a subscribe button that
+// cannot work.
+export const EMPTY_PUSH_CONFIG_RESPONSE: PushConfigResponse = {
+  web_push_public_key: "",
 };
 
 export const CreateFeedbackResponseSchema = z.object({

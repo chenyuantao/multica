@@ -983,6 +983,30 @@ describe("ApiClient notification preferences", () => {
   });
 });
 
+describe("ApiClient push config", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it.each([
+    { name: "a wrong-typed key", body: { web_push_public_key: 42 } },
+    { name: "an older server without the endpoint", body: [] },
+  ])("reads $name as Web Push unavailable", async ({ body }) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify(body), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+
+    const client = new ApiClient("https://api.example.test");
+    await expect(client.getPushConfig()).resolves.toEqual({ web_push_public_key: "" });
+  });
+});
+
 describe("ApiClient Inbox response schemas", () => {
   const legacyRow = {
     id: "inbox-1",

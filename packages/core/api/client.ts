@@ -159,6 +159,8 @@ import type {
   WebhookDelivery,
   NotificationPreferenceResponse,
   NotificationPreferences,
+  PushConfigResponse,
+  PushSubscriptionInput,
   PluginHookResult,
   PluginInstallation,
   PluginInstallationListResponse,
@@ -408,6 +410,8 @@ import {
   EMPTY_INBOX_ITEMS,
   NotificationPreferenceResponseSchema,
   EMPTY_NOTIFICATION_PREFERENCE_RESPONSE,
+  PushConfigResponseSchema,
+  EMPTY_PUSH_CONFIG_RESPONSE,
   LabelSchema,
   ListLabelsResponseSchema,
   ListIssueStatusesResponseSchema,
@@ -3054,6 +3058,28 @@ export class ApiClient {
       EMPTY_NOTIFICATION_PREFERENCE_RESPONSE,
       { endpoint: "PATCH /api/notification-preferences" },
     );
+  }
+
+  // Push notifications (account-level devices)
+  async getPushConfig(): Promise<PushConfigResponse> {
+    const raw = await this.fetch<unknown>("/api/push/config");
+    return parseWithFallback(raw, PushConfigResponseSchema, EMPTY_PUSH_CONFIG_RESPONSE, {
+      endpoint: "GET /api/push/config",
+    });
+  }
+
+  async registerPushSubscription(input: PushSubscriptionInput): Promise<void> {
+    await this.fetch("/api/push/subscriptions", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  async deletePushSubscription(input: Pick<PushSubscriptionInput, "platform" | "token">): Promise<void> {
+    await this.fetch("/api/push/subscriptions", {
+      method: "DELETE",
+      body: JSON.stringify(input),
+    });
   }
 
   // App Config

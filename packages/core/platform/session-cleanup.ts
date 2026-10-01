@@ -5,6 +5,7 @@ import type { StorageAdapter } from "../types/storage";
 import type { Workspace } from "../types";
 import { workspaceKeys } from "../workspace/queries";
 import { defaultStorage } from "./storage";
+import { unsubscribeWebPush } from "./web-push";
 import {
   clearAllWorkspaceStorage,
   clearWorkspaceStorage,
@@ -73,6 +74,9 @@ export function clearClientSessionData(
   // could read. Deleting it is asynchronous; nothing waits on it because the
   // next session attaches under its own user id either way.
   void wipeLocalSearchIndex();
+
+  // A device subscription would keep delivering the previous user's inbox.
+  void unsubscribeWebPush();
 
   queryClient.clear();
 }

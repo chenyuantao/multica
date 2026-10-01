@@ -687,6 +687,16 @@
       "granted": "이 브라우저에서 알림 배너를 표시할 수 있습니다.",
       "denied": "브라우저에서 차단되었습니다. 브라우저 설정에서 이 사이트의 알림을 허용하세요.",
       "enabled_badge": "사용 중"
+    },
+    "push": {
+      "label": "이 기기로 푸시 알림",
+      "hint": "Multica가 닫혀 있을 때 이 기기에서 인박스 알림을 받습니다. 어느 기기에서든 Multica가 열려 있으면 푸시하지 않습니다.",
+      "install_hint": "iPhone 또는 iPad에서는 Safari 공유 메뉴에서 Multica를 홈 화면에 추가한 다음, 홈 화면에서 열어 켜세요.",
+      "denied": "알림이 차단되었습니다. 시스템 또는 브라우저 설정에서 Multica의 알림을 허용하세요.",
+      "enable": "켜기",
+      "disable": "끄기",
+      "toast_enable_failed": "푸시 알림을 켜지 못했습니다.",
+      "toast_disable_failed": "푸시 알림을 끄지 못했습니다."
     }
   },
   "tokens": {
