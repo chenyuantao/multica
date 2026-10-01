@@ -252,7 +252,11 @@
       },
       "openKnowledgeSearch": {
         "label": "Rechercher des discussions, contacts et notes",
-        "description": "Disponible uniquement sur les pages Discussions, Contacts et Base de connaissances."
+        "description": "Disponible uniquement sur les pages Discussions, Contacts, Base de connaissances et Paramètres."
+      },
+      "askAIPickElement": {
+        "label": "Demander à l’IA à propos d’un élément de la page",
+        "description": "Choisissez d’abord un élément, puis la recherche Demander à l’IA s’ouvre avec. Disponible uniquement sur les pages Discussions, Contacts, Base de connaissances et Paramètres."
       },
       "archiveInboxItem": {
         "label": "Archiver la notification",

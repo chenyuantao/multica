@@ -3,6 +3,7 @@ package groupchat
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -79,6 +80,31 @@ func TestAskPageClamp(t *testing.T) {
 	if len([]rune(sel.Selection.Content)) != AskMessageMaxRunes || len([]rune(sel.Selection.Text)) != AskMessageMaxRunes {
 		t.Fatal("selection was not clamped")
 	}
+
+	attrs := map[string]string{}
+	for i := 0; i < AskElementMaxEntries+5; i++ {
+		attrs[fmt.Sprintf("data-%03d", i)] = strings.Repeat("v", AskElementFieldMaxRunes+1)
+	}
+	el := &AskPage{Element: &AskElement{
+		HTML:       strings.Repeat("<", AskElementMaxRunes+1),
+		Text:       "short",
+		Attributes: attrs,
+		Images:     make([]AskImage, AskElementMaxImages+3),
+	}}
+	el.Clamp()
+	e := el.Element
+	if len([]rune(e.HTML)) != AskElementMaxRunes || e.Text != "short" || !e.Truncated {
+		t.Fatalf("html runes = %d text = %q truncated = %v", len([]rune(e.HTML)), e.Text, e.Truncated)
+	}
+	if len(e.Attributes) != AskElementMaxEntries || len([]rune(e.Attributes["data-000"])) != AskElementFieldMaxRunes {
+		t.Fatalf("attributes kept = %d", len(e.Attributes))
+	}
+	if _, ok := e.Attributes[fmt.Sprintf("data-%03d", AskElementMaxEntries)]; ok {
+		t.Fatal("attributes past the limit were kept")
+	}
+	if len(e.Images) != AskElementMaxImages {
+		t.Fatalf("images kept = %d", len(e.Images))
+	}
 }
 
 func TestRenderAskContextEscapesAndDescribesOnlyWhatIsThere(t *testing.T) {
@@ -114,6 +140,36 @@ func TestRenderAskContextEscapesAndDescribesOnlyWhatIsThere(t *testing.T) {
 	}
 	if strings.Contains(got, "<note") || strings.Contains(got, "note is the") || strings.Contains(got, "<contact") {
 		t.Fatalf("absent parts were rendered:\n%s", got)
+	}
+
+	element := RenderAskContext("c3", &AskPage{Element: &AskElement{
+		Path:       "/acme/im",
+		Params:     map[string]string{"view": "chats", "chat": `a"b`},
+		Tag:        "button",
+		Selector:   "main > button:nth-of-type(2)",
+		Attributes: map[string]string{"aria-label": "Deploy", "class": "btn"},
+		HTML:       "<button>Deploy</button>",
+		Text:       "Deploy",
+		Images:     []AskImage{{Src: "https://x/a.png", Alt: "logo"}},
+	}})
+	for _, want := range []string{
+		`<element path="/acme/im" tag="button" selector="main &gt; button:nth-of-type(2)">`,
+		"<param name=\"chat\">a\"b</param>\n<param name=\"view\">chats</param>",
+		"<attr name=\"aria-label\">Deploy</attr>\n<attr name=\"class\">btn</attr>",
+		"<html>&lt;button&gt;Deploy&lt;/button&gt;</html>",
+		"<text>Deploy</text>",
+		`<img src="https://x/a.png" alt="logo"/>`,
+		"element is the part of the page",
+	} {
+		if !strings.Contains(element, want) {
+			t.Fatalf("missing %q in:\n%s", want, element)
+		}
+	}
+
+	location := RenderAskContext("c4", &AskPage{Location: &AskLocation{Path: "/acme/settings", Params: map[string]string{"tab": "a<b"}}})
+	if !strings.Contains(location, "<location path=\"/acme/settings\">\n<param name=\"tab\">a&lt;b</param>\n</location>") ||
+		!strings.Contains(location, "location is the URL path") {
+		t.Fatalf("location = %s", location)
 	}
 
 	contact := RenderAskContext("c2", &AskPage{Contact: &AskContact{Type: "agent", Name: "Ops", Description: "Runs deploys"}})

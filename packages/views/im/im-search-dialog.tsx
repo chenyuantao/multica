@@ -7,11 +7,10 @@ import {
   FileText,
   Image as ImageIcon,
   Loader2,
-  MessagesSquare,
   Quote,
   SearchIcon,
   Sparkles,
-  UserRound,
+  SquareDashedMousePointer,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -22,7 +21,7 @@ import { docsSearchOptions, docsTreeOptions } from "@multica/core/docs";
 import { groupChatListOptions, groupChatSearchOptions, useAskAI } from "@multica/core/group-chats";
 import { useWorkspaceId } from "@multica/core/hooks";
 import { useWorkspacePaths } from "@multica/core/paths";
-import type { AskAIPage, DocNode, GroupChat } from "@multica/core/types";
+import type { AskAIElement, AskAIPage, AskAISelection, DocNode, GroupChat } from "@multica/core/types";
 import { useActorName } from "@multica/core/workspace/hooks";
 import {
   createShortcutChord,
@@ -42,7 +41,9 @@ import { FileDropOverlay, useFileDropZone } from "../editor";
 import { useLocale, useT } from "../i18n";
 import { useNavigation } from "../navigation";
 import { HighlightText } from "../search/highlight-text";
+import { describeElement, elementLabel } from "./ask-ai-element";
 import { ChatAvatar } from "./chat-sidebar";
+import { ElementPicker } from "./element-picker";
 import { chatActivityAt, chatDisplayTitle, formatListStamp, plainTextPreview, sortChats } from "./im-utils";
 import { rankChats, rankContacts, rankNotes, type SearchScope } from "./im-search-utils";
 import { loadErrorText } from "./knowledge-sidebar";
@@ -89,14 +90,16 @@ interface ImSearchDialogProps extends AskAIDialogState {
  * `openKnowledgeSearch` shortcut (Mod+O) or an Ask AI entry on the IM
  * surfaces. The All tab shows one group per kind; the other tabs search a
  * single kind. The first row always asks AI: the server picks an agent and
- * the question, its files and the quoted page go to the user's direct chat
- * with it. Attaching a file makes the dialog a question only.
+ * the question, its files, the page and whatever was picked on it go to the
+ * user's direct chat with it. The element picker hides the dialog until a
+ * node is clicked. Attaching a file makes the dialog a question only.
  */
 export function ImSearchDialog({
   open,
   onOpenChange,
-  context,
-  onClearContext,
+  page,
+  selection,
+  onClearSelection,
   onOpenChat,
   onOpenContact,
   onOpenNote,
@@ -116,6 +119,10 @@ export function ImSearchDialog({
   const [query, setQuery] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [active, setActive] = useState("");
+  const [picking, setPicking] = useState(false);
+  /** Picking started from the shortcut with the dialog closed; cancelling closes it again. */
+  const [pickOnly, setPickOnly] = useState(false);
+  const [element, setElement] = useState<AskAIElement | null>(null);
   const trimmed = query.trim();
   const q = useDebouncedValue(trimmed, 200);
   const asking = files.length > 0;
@@ -126,21 +133,33 @@ export function ImSearchDialog({
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.repeat || isImeComposing(e)) return;
-      if (!shortcutMatchesEvent(getShortcut("openKnowledgeSearch"), e)) return;
+      const toggle = shortcutMatchesEvent(getShortcut("openKnowledgeSearch"), e);
+      const pickShortcut = shortcutMatchesEvent(getShortcut("askAIPickElement"), e);
+      if (!toggle && !pickShortcut) return;
       // Another dialog or menu owns the keyboard; only our own may be toggled.
       if (!open && isPortalLayerShortcutTarget(e.target)) return;
       e.preventDefault();
-      onOpenChange(!open);
+      if (toggle) {
+        onOpenChange(!open);
+      } else if (picking) {
+        cancelPick();
+      } else {
+        // Picking first, so the dialog only appears once a node is chosen.
+        if (!open) onOpenChange(true);
+        startPick(!open);
+      }
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [open, onOpenChange]);
+  });
 
   useEffect(() => {
     if (open) return;
     setQuery("");
     setScope("all");
     setFiles([]);
+    setPicking(false);
+    setElement(null);
   }, [open]);
 
   const addFiles = (list: File[]) => {
@@ -243,9 +262,26 @@ export function ImSearchDialog({
     inputRef.current?.focus();
   };
 
+  const startPick = (closeOnCancel: boolean) => {
+    setPicking(true);
+    setPickOnly(closeOnCancel);
+  };
+  const cancelPick = () => {
+    setPicking(false);
+    if (pickOnly) onOpenChange(false);
+  };
+  const pick = (el: Element) => {
+    setElement(describeElement(el, navigation));
+    setPicking(false);
+  };
+
   // The dialog stays open until the question is sent, so a failure can be retried.
   const ask = () => {
     if (!canAsk) return;
+    const context: AskAIPage | null =
+      selection || element
+        ? { ...page, ...(selection ? { selection } : {}), ...(element ? { element } : {}) }
+        : page;
     askAI.mutate(
       { query: trimmed, page: context, files },
       {
@@ -282,10 +318,13 @@ export function ImSearchDialog({
   const now = new Date();
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open && !picking} onOpenChange={onOpenChange}>
+      {picking && <ElementPicker onPick={pick} onCancel={cancelPick} />}
       <DialogContent
+        data-element-picker-ignore=""
         className="top-[20%] translate-y-0 overflow-hidden rounded-xl! p-0 sm:max-w-xl!"
         showCloseButton={false}
+        initialFocus={inputRef}
       >
         <DialogHeader className="sr-only">
           <DialogTitle>{t(($) => $.search.title)}</DialogTitle>
@@ -298,7 +337,12 @@ export function ImSearchDialog({
           onValueChange={setActive}
           className="relative flex size-full flex-col overflow-hidden rounded-xl bg-popover text-popover-foreground"
         >
-          {context && <AskContextQuote context={context} onClear={onClearContext} />}
+          <AskContextQuote
+            selection={selection}
+            element={element}
+            onClearSelection={onClearSelection}
+            onClearElement={() => setElement(null)}
+          />
           <div className="flex items-center gap-3 px-4 pt-3 pb-2">
             <SearchIcon className="size-5 shrink-0 text-muted-foreground" />
             <CommandPrimitive.Input
@@ -319,6 +363,16 @@ export function ImSearchDialog({
               }}
               className="flex-1 bg-transparent text-body outline-none placeholder:text-muted-foreground"
             />
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="-mr-2 shrink-0 text-muted-foreground"
+              onClick={() => startPick(false)}
+              aria-label={t(($) => $.search.pick_element)}
+              title={t(($) => $.search.pick_element)}
+            >
+              <SquareDashedMousePointer />
+            </Button>
             <FileUploadButton multiple className="-mx-1 shrink-0" onSelect={(file) => addFiles([file])} />
             <ShortcutKeycaps shortcut={createShortcutChord("Escape")} className="hidden shrink-0 sm:inline-flex" />
           </div>
@@ -440,55 +494,63 @@ export function ImSearchDialog({
   );
 }
 
-/** What a question carries from the page, quoted above the input. */
-function AskContextQuote({ context, onClear }: { context: AskAIPage; onClear: () => void }) {
+/**
+ * What the person picked to ask about, quoted above the input. The page
+ * itself is sent too but never shown here.
+ */
+function AskContextQuote({
+  selection,
+  element,
+  onClearSelection,
+  onClearElement,
+}: {
+  selection: AskAISelection | null;
+  element: AskAIElement | null;
+  onClearSelection: () => void;
+  onClearElement: () => void;
+}) {
   const { t } = useT("im");
-  const lines: { key: string; icon: typeof FileText; text: string }[] = [];
-  if (context.note) lines.push({ key: "note", icon: FileText, text: context.note.title });
-  if (context.chat) {
+  const lines: { key: string; icon: typeof FileText; text: string; onClear: () => void }[] = [];
+  if (selection) {
+    const text = plainTextPreview(selection.text || selection.content) || t(($) => $.thread.quote_attachment);
     lines.push({
-      key: "chat",
-      icon: MessagesSquare,
-      text: t(($) => $.search.context_chat, { title: context.chat.title, count: context.chat.messages.length }),
+      key: "selection",
+      icon: Quote,
+      text: t(($) => $.thread.quote_line, { name: selection.sender, text }),
+      onClear: onClearSelection,
     });
   }
-  if (context.contact) lines.push({ key: "contact", icon: UserRound, text: context.contact.name });
-  if (context.selection) {
-    const s = context.selection;
-    const text = plainTextPreview(s.text || s.content) || t(($) => $.thread.quote_attachment);
-    lines.push({ key: "selection", icon: Quote, text: t(($) => $.thread.quote_line, { name: s.sender, text }) });
+  if (element) {
+    lines.push({ key: "element", icon: SquareDashedMousePointer, text: elementLabel(element), onClear: onClearElement });
   }
   if (lines.length === 0) return null;
   return (
-    <div
-      role="group"
+    <ul
       aria-label={t(($) => $.search.context)}
-      className="mx-3 mt-3 flex items-start gap-1 rounded-lg border-l-2 border-brand bg-muted/60 py-1 pr-1 pl-2.5 text-caption text-muted-foreground"
+      className="mx-3 mt-3 flex flex-col gap-0.5 rounded-lg border-l-2 border-brand bg-muted/60 py-1 pr-1 pl-2.5 text-caption text-muted-foreground"
     >
-      <ul className="flex min-w-0 flex-1 flex-col gap-0.5 py-0.5">
-        {lines.map(({ key, icon: Icon, text }) => {
-          const label = text.replace(/\s+/g, " ").trim();
-          return (
-            <li key={key} className="flex min-w-0 items-center gap-1.5">
-              <Icon aria-hidden className="size-3.5 shrink-0" />
-              <span className="min-w-0 truncate" title={label}>
-                {label}
-              </span>
-            </li>
-          );
-        })}
-      </ul>
-      <Button
-        variant="ghost"
-        size="icon-xs"
-        className="shrink-0 rounded-md"
-        onClick={onClear}
-        aria-label={t(($) => $.search.context_remove)}
-        title={t(($) => $.search.context_remove)}
-      >
-        <X />
-      </Button>
-    </div>
+      {lines.map(({ key, icon: Icon, text, onClear }) => {
+        const label = text.replace(/\s+/g, " ").trim();
+        return (
+          <li key={key} className="flex min-w-0 items-center gap-1.5">
+            <Icon aria-hidden className="size-3.5 shrink-0" />
+            <span className="min-w-0 flex-1 truncate" title={label}>
+              {label}
+            </span>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              className="shrink-0 rounded-md"
+              onClick={onClear}
+              aria-label={t(($) => $.search.context_remove)}
+              title={t(($) => $.search.context_remove)}
+            >
+              <X />
+            </Button>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 

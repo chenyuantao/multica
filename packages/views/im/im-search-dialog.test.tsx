@@ -84,6 +84,7 @@ import { ImSearchDialog } from "./im-search-dialog";
 import { useAskAILauncher } from "./use-ask-ai-launcher";
 
 const pressOpen = () => fireEvent.keyDown(document, { key: "o", metaKey: true });
+const pressPick = () => fireEvent.keyDown(document, { key: "j", metaKey: true });
 const optionTexts = (group: HTMLElement) => within(group).getAllByRole("option").map((o) => o.textContent);
 
 type HarnessProps = Omit<Parameters<typeof ImSearchDialog>[0], keyof ReturnType<typeof useAskAILauncher>["dialog"]> & {
@@ -99,6 +100,10 @@ function Harness({ askPage, selection, ...props }: HarnessProps) {
       <button type="button" onClick={() => launcher.show(selection)}>
         entry
       </button>
+      <section aria-label="status card">
+        <h2>Deploy status</h2>
+        <img src="https://cdn.test/graph.png" alt="graph" />
+      </section>
       <ImSearchDialog {...launcher.dialog} {...props} />
     </>
   );
@@ -110,7 +115,7 @@ function renderDialog(props: HarnessProps = {}) {
     replace: vi.fn(),
     back: vi.fn(),
     pathname: "/acme/im",
-    searchParams: new URLSearchParams(),
+    searchParams: new URLSearchParams("chat=c-new"),
     hash: "",
     getShareableUrl: (path) => path,
   };
@@ -199,8 +204,8 @@ describe("ImSearchDialog", () => {
     renderDialog({ askPage: () => page, onOpenChat });
     pressOpen();
     expect(await screen.findByRole("option", { name: /Ask AI/ })).toHaveAttribute("aria-disabled", "true");
-
-    expect(within(screen.getByRole("group", { name: "Sent with your question" })).getByText("Ops")).toBeInTheDocument();
+    // The page goes with the question silently; nothing to quote or remove.
+    expect(screen.queryByRole("list", { name: "Sent with your question" })).toBeNull();
 
     const input = await search("  who deploys?  ");
     expect(screen.getAllByRole("option")[0]).toHaveTextContent("Ask AIwho deploys?");
@@ -213,20 +218,116 @@ describe("ImSearchDialog", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
-  it("reads the page when it opens and lets the quoted context be dropped", async () => {
+  it("focuses the input, not the quoted context, when opened from Mod+O or an entry", async () => {
+    const selection = { message_id: "m9", time: "t", sender: "Ann", content: "deploy failed" };
+    renderDialog({ selection });
+    pressOpen();
+    await waitFor(() => expect(screen.getByRole("combobox")).toHaveFocus());
+
+    pressOpen();
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: "entry" }));
+    expect(await screen.findByRole("list", { name: "Sent with your question" })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("combobox")).toHaveFocus());
+  });
+
+  it("reads the page when it opens and keeps it when a picked message is dropped", async () => {
     let title = "Ops room";
     const askPage = () => ({ chat: { title, agents: [], messages: [{ time: "t", sender: "Ann", content: "hi" }] } });
-    renderDialog({ askPage });
-    pressOpen();
-    const quote = await screen.findByRole("group", { name: "Sent with your question" });
-    expect(quote).toHaveTextContent("Ops room · 1 message on screen");
+    const selection = { message_id: "m9", time: "t", sender: "Ann", content: "deploy failed" };
+    renderDialog({ askPage, selection });
+    fireEvent.click(screen.getByRole("button", { name: "entry" }));
+    const quote = await screen.findByRole("list", { name: "Sent with your question" });
+    expect(quote).toHaveTextContent("Ann: deploy failed");
+    expect(quote).not.toHaveTextContent("Ops room");
     title = "Changed later";
 
     fireEvent.click(within(quote).getByRole("button", { name: "Don't send this context" }));
-    expect(screen.queryByRole("group", { name: "Sent with your question" })).toBeNull();
+    expect(screen.queryByRole("list", { name: "Sent with your question" })).toBeNull();
     const input = await search("status?");
     fireEvent.keyDown(input, { key: "Enter" });
-    expect(askMutate).toHaveBeenCalledWith({ query: "status?", page: null, files: [] }, expect.anything());
+    expect(askMutate).toHaveBeenCalledWith(
+      { query: "status?", page: { chat: { title: "Ops room", agents: [], messages: [{ time: "t", sender: "Ann", content: "hi" }] } }, files: [] },
+      expect.anything(),
+    );
+  });
+
+  it("hides itself while an element is picked and sends the element with the page", async () => {
+    const page = { contact: { type: "agent" as const, name: "Ops", description: "" } };
+    renderDialog({ askPage: () => page });
+    pressOpen();
+    fireEvent.click(await screen.findByRole("button", { name: "Pick an element on the page" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(screen.getByRole("status")).toHaveTextContent("Click an element to ask about it");
+
+    const card = screen.getByRole("region", { name: "status card" });
+    fireEvent.pointerMove(card);
+    expect(screen.getByTestId("element-picker-outline")).toBeInTheDocument();
+    const pageClick = vi.fn();
+    document.addEventListener("click", pageClick);
+    fireEvent.click(card);
+    document.removeEventListener("click", pageClick);
+    // The click is swallowed so the page's own controls never fire.
+    expect(pageClick).not.toHaveBeenCalled();
+    expect(screen.queryByRole("status")).toBeNull();
+    const quote = await screen.findByRole("list", { name: "Sent with your question" });
+    expect(quote).toHaveTextContent("<section> Deploy status");
+    await waitFor(() => expect(screen.getByRole("combobox")).toHaveFocus());
+
+    const input = await search("is it green?");
+    fireEvent.keyDown(input, { key: "Enter" });
+    const sent = askMutate.mock.calls[0]![0].page as AskAIPage;
+    expect(sent.contact).toEqual(page.contact);
+    expect(sent.element).toMatchObject({
+      path: "/acme/im",
+      params: { chat: "c-new" },
+      tag: "section",
+      attributes: { "aria-label": "status card" },
+      text: expect.stringContaining("Deploy status"),
+      images: [{ src: "https://cdn.test/graph.png", alt: "graph" }],
+      truncated: false,
+    });
+    expect(sent.element!.html).toContain("<h2>Deploy status</h2>");
+  });
+
+  it("picks first on Mod+J and opens only once an element is chosen", async () => {
+    renderDialog();
+    pressPick();
+    expect(await screen.findByRole("status")).toHaveTextContent("Click an element to ask about it");
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    fireEvent.click(screen.getByRole("region", { name: "status card" }));
+    expect(await screen.findByRole("list", { name: "Sent with your question" })).toHaveTextContent("<section> Deploy status");
+    await waitFor(() => expect(screen.getByRole("combobox")).toHaveFocus());
+  });
+
+  it("closes again when a Mod+J pick is cancelled, but returns to an open dialog", async () => {
+    renderDialog();
+    pressPick();
+    await screen.findByRole("status");
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    pressOpen();
+    await screen.findByRole("dialog");
+    pressPick();
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    pressPick();
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("comes back unchanged when picking is cancelled with Escape", async () => {
+    renderDialog();
+    pressOpen();
+    fireEvent.change(await screen.findByRole("combobox"), { target: { value: "draft" } });
+    fireEvent.click(screen.getByRole("button", { name: "Pick an element on the page" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(await screen.findByRole("combobox")).toHaveValue("draft");
+    expect(screen.queryByRole("list", { name: "Sent with your question" })).toBeNull();
   });
 
   it("carries a message picked from the chat alongside the page", async () => {
@@ -235,7 +336,7 @@ describe("ImSearchDialog", () => {
     renderDialog({ askPage: () => page, selection });
     fireEvent.click(screen.getByRole("button", { name: "entry" }));
 
-    const quote = await screen.findByRole("group", { name: "Sent with your question" });
+    const quote = await screen.findByRole("list", { name: "Sent with your question" });
     expect(quote).toHaveTextContent("Ann: step 3");
     const input = await search("why?");
     fireEvent.keyDown(input, { key: "Enter" });

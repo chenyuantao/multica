@@ -76,24 +76,30 @@ describe("keyboard shortcut definitions", () => {
     }
   });
 
-  it("keeps the floating chat toggle usable on every platform and runtime", () => {
-    const action = SHORTCUT_ACTION_BY_ID.toggleChat;
-    expect(action.defaultShortcut).toEqual(
+  it("binds Mod+J to the Ask AI element picker and keeps it usable everywhere", () => {
+    expect(SHORTCUT_ACTION_BY_ID.askAIPickElement.defaultShortcut).toEqual(
       createShortcutChord("J", { primary: true }),
     );
-    for (const platform of ["macos", "windows", "linux"] as const) {
-      for (const runtime of ["web", "desktop"] as const) {
-        expect(
-          isShortcutAllowedForAction(
-            "toggleChat",
-            createShortcutChord("J", { primary: true }),
-            platform,
-            runtime,
-          ),
-          `Mod+J must stay assignable on ${platform}/${runtime}`,
-        ).toBe(true);
+    for (const actionId of ["askAIPickElement", "toggleChat"] as const) {
+      for (const platform of ["macos", "windows", "linux"] as const) {
+        for (const runtime of ["web", "desktop"] as const) {
+          expect(
+            isShortcutAllowedForAction(
+              actionId,
+              createShortcutChord("J", { primary: true }),
+              platform,
+              runtime,
+            ),
+            `Mod+J must stay assignable to ${actionId} on ${platform}/${runtime}`,
+          ).toBe(true);
+        }
       }
     }
+  });
+
+  it("leaves the floating chat toggle unbound but usable from its composer", () => {
+    const action = SHORTCUT_ACTION_BY_ID.toggleChat;
+    expect(action.defaultShortcut).toBeNull();
     // Dismissing chat has to work with the caret inside its own composer.
     expect(action.allowInEditable).toBe(true);
   });

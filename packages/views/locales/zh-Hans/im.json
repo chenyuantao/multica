@@ -193,7 +193,8 @@
     "ask_placeholder": "针对附件提问",
     "ask_files_other": "{{count}} 个附件",
     "context": "随问题一起发送",
-    "context_chat_other": "{{title}} · 屏幕上的 {{count}} 条消息",
-    "context_remove": "不发送此上下文"
+    "context_remove": "不发送此上下文",
+    "pick_element": "拾取页面元素",
+    "pick_hint": "点击页面上的元素，随问题一起发送 · 按 Esc 取消"
   }
 }

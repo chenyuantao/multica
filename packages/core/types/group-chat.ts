@@ -60,15 +60,37 @@ export interface AskAISelection {
   text?: string;
 }
 
+/** The URL path and query parameters of a page. */
+export interface AskAILocation {
+  path: string;
+  params: Record<string, string>;
+}
+
+/** A DOM node picked on the page, with the URL path and query parameters of that page. */
+export interface AskAIElement extends AskAILocation {
+  tag: string;
+  selector: string;
+  attributes: Record<string, string>;
+  html: string;
+  text: string;
+  images: { src: string; alt: string }[];
+  /** `html` or `text` was cut short. */
+  truncated: boolean;
+}
+
 /**
- * The page a question was asked from: one of note, chat or contact, plus the
- * message picked on it. The planner and the answering agent both read it.
+ * The page a question was asked from: one of note, chat or contact, or just
+ * the location for pages without a richer description (Settings), plus the
+ * message and the element picked on it. The planner and the answering agent
+ * both read it.
  */
 export interface AskAIPage {
   note?: { title: string; path: string; modified_at: string; content: string; truncated: boolean };
   chat?: { title: string; agents: string[]; messages: { time: string; sender: string; content: string }[] };
   contact?: { type: GroupChatMemberType; name: string; description: string };
+  location?: AskAILocation;
   selection?: AskAISelection;
+  element?: AskAIElement;
 }
 
 export interface AskAIAttachment {

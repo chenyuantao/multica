@@ -13,6 +13,7 @@ export type ShortcutActionId =
   | "toggleChat"
   | "findInIssue"
   | "openKnowledgeSearch"
+  | "askAIPickElement"
   | "archiveInboxItem"
   | "send"
   | "goBack"
@@ -87,13 +88,11 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDefinition[] = [
     defaultShortcut: primary("/"),
     allowInEditable: false,
   },
-  // Mod+J follows the "toggle a docked panel" convention, and is one of the few
-  // letters this module's own policy leaves free on every platform and runtime:
-  // it is neither app-owned (PRIMARY_RESERVED_KEYS) nor browser-owned
-  // (BROWSER_ONLY_PRIMARY_RESERVED_KEYS). `allowInEditable` because the point of
-  // the binding is reaching — and dismissing — chat without a mouse, which has
-  // to keep working while the caret sits in the chat composer itself.
-  { id: "toggleChat", category: "general", defaultShortcut: primary("J"), allowInEditable: true },
+  // Unbound by default; Mod+J went to askAIPickElement. `allowInEditable`
+  // because the point of a binding is reaching — and dismissing — chat
+  // without a mouse, which has to keep working while the caret sits in the
+  // chat composer itself.
+  { id: "toggleChat", category: "general", defaultShortcut: null, allowInEditable: true },
   { id: "findInIssue", category: "general", defaultShortcut: primary("F"), allowInEditable: true },
   // Mod+O mirrors "Open…" / quick switcher (Obsidian's own binding). The
   // browser's open-file dialog yields to preventDefault, so it is not reserved.
@@ -101,6 +100,16 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDefinition[] = [
     id: "openKnowledgeSearch",
     category: "general",
     defaultShortcut: primary("O"),
+    allowInEditable: true,
+  },
+  // Mod+J is one of the few letters this module's own policy leaves free on
+  // every platform and runtime: it is neither app-owned
+  // (PRIMARY_RESERVED_KEYS) nor browser-owned
+  // (BROWSER_ONLY_PRIMARY_RESERVED_KEYS).
+  {
+    id: "askAIPickElement",
+    category: "general",
+    defaultShortcut: primary("J"),
     allowInEditable: true,
   },
   {

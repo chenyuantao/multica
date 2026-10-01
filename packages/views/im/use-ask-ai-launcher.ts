@@ -5,26 +5,30 @@ import type { AskAIPage, AskAISelection } from "@multica/core/types";
 
 export interface AskAIDialogState {
   open: boolean;
-  /** Sent with the question and quoted above the input. */
-  context: AskAIPage | null;
+  /** The page it was opened on; always sent with the question and never shown. */
+  page: AskAIPage | null;
+  /** The message it was opened about; quoted above the input and removable. */
+  selection: AskAISelection | null;
   onOpenChange: (open: boolean) => void;
-  onClearContext: () => void;
+  onClearSelection: () => void;
 }
 
 /**
  * Open state of the IM quick switcher. The page is read once, when it opens,
- * so the quoted context is exactly what a question sends.
+ * so a question sends what was on screen at that moment.
  */
 export function useAskAILauncher(askPage?: () => AskAIPage | null) {
-  const [state, setState] = useState<{ open: boolean; context: AskAIPage | null }>({ open: false, context: null });
-  const show = (selection?: AskAISelection) => {
-    const page = askPage?.() ?? null;
-    setState({ open: true, context: selection ? { ...page, selection } : page });
-  };
+  const [state, setState] = useState<Pick<AskAIDialogState, "open" | "page" | "selection">>({
+    open: false,
+    page: null,
+    selection: null,
+  });
+  const show = (selection?: AskAISelection) =>
+    setState({ open: true, page: askPage?.() ?? null, selection: selection ?? null });
   const dialog: AskAIDialogState = {
     ...state,
-    onOpenChange: (open) => (open ? show() : setState({ open: false, context: null })),
-    onClearContext: () => setState((s) => ({ ...s, context: null })),
+    onOpenChange: (open) => (open ? show() : setState({ open: false, page: null, selection: null })),
+    onClearSelection: () => setState((s) => ({ ...s, selection: null })),
   };
   return { show, dialog };
 }

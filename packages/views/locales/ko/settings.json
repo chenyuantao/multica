@@ -251,7 +251,11 @@
       },
       "openKnowledgeSearch": {
         "label": "채팅, 연락처, 노트 검색",
-        "description": "채팅, 연락처, 지식 베이스 페이지에서만 사용할 수 있습니다."
+        "description": "채팅, 연락처, 지식 베이스, 설정 페이지에서만 사용할 수 있습니다."
+      },
+      "askAIPickElement": {
+        "label": "페이지 요소에 대해 AI에게 묻기",
+        "description": "먼저 요소를 선택하면 그 요소와 함께 AI에게 묻기 검색이 열립니다. 채팅, 연락처, 지식 베이스, 설정 페이지에서만 사용할 수 있습니다."
       },
       "archiveInboxItem": {
         "label": "알림 보관",

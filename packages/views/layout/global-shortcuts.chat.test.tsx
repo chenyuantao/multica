@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "@testing-library/react";
-import { configureShortcutPlatform } from "@multica/core/shortcuts";
+import { configureShortcutPlatform, createShortcutChord, useShortcutStore } from "@multica/core/shortcuts";
 import { GlobalShortcuts } from "./global-shortcuts";
 
 // The floating chat overlay is reachable from the keyboard (MUL-5522). What
@@ -49,7 +49,7 @@ vi.mock("../search/search-store", () => ({
   useSearchStore: { getState: () => ({ toggle: h.searchToggle }) },
 }));
 
-/** Mod+J on macOS, dispatched the way a real keypress reaches the document. */
+/** The toggle's binding (Mod+J on macOS), dispatched the way a real keypress reaches the document. */
 function pressToggleChat(target: EventTarget = document): boolean {
   const event = new KeyboardEvent("keydown", {
     key: "j",
@@ -65,12 +65,15 @@ beforeEach(() => {
   // Pin the platform: jsdom's user agent reports the host OS, so Command vs
   // Control would otherwise depend on where the suite runs.
   configureShortcutPlatform("macos");
+  // The toggle ships unbound; bind it the way a user would in Settings.
+  useShortcutStore.getState().setShortcut("toggleChat", createShortcutChord("J", { primary: true }));
   h.chat.floatingChatEnabled = true;
   h.navigation.pathname = "/acme/issues";
 });
 
 afterEach(() => {
   configureShortcutPlatform(null);
+  useShortcutStore.getState().resetAll();
   vi.clearAllMocks();
 });
 

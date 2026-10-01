@@ -198,8 +198,8 @@
     "ask_files_one": "{{count}} fichier",
     "ask_files_other": "{{count}} fichiers",
     "context": "Envoyé avec votre question",
-    "context_chat_one": "{{title}} · {{count}} message à l’écran",
-    "context_chat_other": "{{title}} · {{count}} messages à l’écran",
-    "context_remove": "Ne pas envoyer ce contexte"
+    "context_remove": "Ne pas envoyer ce contexte",
+    "pick_element": "Choisir un élément de la page",
+    "pick_hint": "Cliquez sur un élément pour poser une question à son sujet · Échap pour annuler"
   }
 }

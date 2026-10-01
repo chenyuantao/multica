@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from "@testing-library/react";
+import { act, fireEvent, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SidebarProvider, useSidebar } from "@multica/ui/components/ui/sidebar";
@@ -50,6 +50,15 @@ vi.mock("@multica/core/paths", () => ({
   }),
 }));
 vi.mock("../../im/use-group-chat-unread", () => ({ useGroupChatUnreadTotal: () => 0 }));
+// The Ask AI dialog has its own suite; here only the page it is given matters.
+const askAI = vi.hoisted(() => ({ page: null as unknown, onOpenChange: (_open: boolean) => {} }));
+vi.mock("../../im/im-search-dialog", () => ({
+  ImSearchDialog: (props: { open: boolean; page: unknown; onOpenChange: (open: boolean) => void }) => {
+    askAI.page = props.page;
+    askAI.onOpenChange = props.onOpenChange;
+    return props.open ? <div role="dialog" aria-label="Ask AI" /> : null;
+  },
+}));
 vi.mock("@multica/core/workspace/avatar-url", () => ({
   resolvePublicFileUrl: (url: string | null | undefined) => url ?? null,
 }));
@@ -384,5 +393,19 @@ describe("SettingsPage search", () => {
       { target: { value: "plugins" } },
     );
     expect(screen.getByText("No matching settings")).toBeInTheDocument();
+  });
+});
+
+describe("SettingsPage Ask AI", () => {
+  it("asks from any settings page with only its path and parameters", () => {
+    navigationState.search = "tab=labels&section=x";
+    renderWithI18n(<SettingsPage />);
+    expect(screen.queryByRole("dialog", { name: "Ask AI" })).toBeNull();
+
+    act(() => askAI.onOpenChange(true));
+    expect(screen.getByRole("dialog", { name: "Ask AI" })).toBeInTheDocument();
+    expect(askAI.page).toEqual({
+      location: { path: "/acme/settings", params: { tab: "labels", section: "x" } },
+    });
   });
 });

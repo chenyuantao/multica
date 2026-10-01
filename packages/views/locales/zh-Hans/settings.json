@@ -251,7 +251,11 @@
       },
       "openKnowledgeSearch": {
         "label": "搜索会话、联系人和笔记",
-        "description": "仅在会话、通讯录和知识库页面可用。"
+        "description": "仅在会话、通讯录、知识库和设置页面可用。"
+      },
+      "askAIPickElement": {
+        "label": "拾取页面元素问 AI",
+        "description": "先拾取元素，选中后打开问 AI 搜索框。仅在会话、通讯录、知识库和设置页面可用。"
       },
       "archiveInboxItem": {
         "label": "归档通知",

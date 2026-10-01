@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -14,6 +15,15 @@ const (
 	AskMessageMaxRunes = 4000
 	// AskMaxMessages caps the on-screen chat messages.
 	AskMaxMessages = 50
+	// AskElementMaxRunes caps the picked element's markup and its text.
+	AskElementMaxRunes = 8000
+	// AskElementFieldMaxRunes caps every other string of a picked element.
+	AskElementFieldMaxRunes = 1000
+	// AskElementMaxEntries caps a picked element's attributes and the page's
+	// query parameters.
+	AskElementMaxEntries = 50
+	// AskElementMaxImages caps the images listed from a picked element.
+	AskElementMaxImages = 20
 )
 
 // ErrNoAnswerer means the asker cannot open a direct chat with any agent.
@@ -43,12 +53,41 @@ type AskAgent struct {
 }
 
 // AskPage is the one surface the question was asked from, plus the message
-// the person picked on it.
+// and the element the person picked on it. Pages without a richer
+// description (Settings) send only their location.
 type AskPage struct {
 	Note      *AskNote      `json:"note,omitempty"`
 	Chat      *AskChat      `json:"chat,omitempty"`
 	Contact   *AskContact   `json:"contact,omitempty"`
+	Location  *AskLocation  `json:"location,omitempty"`
 	Selection *AskSelection `json:"selection,omitempty"`
+	Element   *AskElement   `json:"element,omitempty"`
+}
+
+// AskLocation is the URL path and query parameters of the page.
+type AskLocation struct {
+	Path   string            `json:"path"`
+	Params map[string]string `json:"params,omitempty"`
+}
+
+// AskElement is a DOM node the person picked on the page, with the URL path
+// and query parameters of that page.
+type AskElement struct {
+	Path       string            `json:"path"`
+	Params     map[string]string `json:"params,omitempty"`
+	Tag        string            `json:"tag"`
+	Selector   string            `json:"selector"`
+	Attributes map[string]string `json:"attributes,omitempty"`
+	HTML       string            `json:"html"`
+	Text       string            `json:"text"`
+	Images     []AskImage        `json:"images,omitempty"`
+	// Truncated reports that HTML or Text was cut short.
+	Truncated bool `json:"truncated,omitempty"`
+}
+
+type AskImage struct {
+	Src string `json:"src"`
+	Alt string `json:"alt,omitempty"`
 }
 
 // AskSelection is a chat message the question was asked about. Text is the
@@ -105,11 +144,59 @@ func (p *AskPage) Clamp() {
 		p.Selection.Content, _ = truncateRunes(p.Selection.Content, AskMessageMaxRunes)
 		p.Selection.Text, _ = truncateRunes(p.Selection.Text, AskMessageMaxRunes)
 	}
+	if l := p.Location; l != nil {
+		l.Path, _ = truncateRunes(l.Path, AskElementFieldMaxRunes)
+		l.Params = clampEntries(l.Params)
+	}
+	if e := p.Element; e != nil {
+		var cutHTML, cutText bool
+		e.HTML, cutHTML = truncateRunes(e.HTML, AskElementMaxRunes)
+		e.Text, cutText = truncateRunes(e.Text, AskElementMaxRunes)
+		e.Truncated = e.Truncated || cutHTML || cutText
+		e.Path, _ = truncateRunes(e.Path, AskElementFieldMaxRunes)
+		e.Tag, _ = truncateRunes(e.Tag, AskElementFieldMaxRunes)
+		e.Selector, _ = truncateRunes(e.Selector, AskElementFieldMaxRunes)
+		e.Params = clampEntries(e.Params)
+		e.Attributes = clampEntries(e.Attributes)
+		if len(e.Images) > AskElementMaxImages {
+			e.Images = e.Images[:AskElementMaxImages]
+		}
+		for i := range e.Images {
+			e.Images[i].Src, _ = truncateRunes(e.Images[i].Src, AskElementFieldMaxRunes)
+			e.Images[i].Alt, _ = truncateRunes(e.Images[i].Alt, AskElementFieldMaxRunes)
+		}
+	}
+}
+
+// clampEntries keeps the first AskElementMaxEntries keys in sorted order and
+// caps every key and value.
+func clampEntries(m map[string]string) map[string]string {
+	if len(m) == 0 {
+		return nil
+	}
+	out := make(map[string]string, min(len(m), AskElementMaxEntries))
+	for _, k := range sortedKeys(m) {
+		if len(out) == AskElementMaxEntries {
+			break
+		}
+		key, _ := truncateRunes(k, AskElementFieldMaxRunes)
+		out[key], _ = truncateRunes(m[k], AskElementFieldMaxRunes)
+	}
+	return out
+}
+
+func sortedKeys(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // Empty reports whether the page carries nothing to show.
 func (p *AskPage) Empty() bool {
-	return p == nil || (p.Note == nil && p.Chat == nil && p.Contact == nil && p.Selection == nil)
+	return p == nil || (p.Note == nil && p.Chat == nil && p.Contact == nil && p.Location == nil && p.Selection == nil && p.Element == nil)
 }
 
 // RenderAskContext writes the page a message was asked from as an
@@ -148,6 +235,14 @@ func RenderAskContext(messageID string, p *AskPage) string {
 		fmt.Fprintf(&b, "<contact type=\"%s\" name=\"%s\">%s</contact>\n", escapeAttr(c.Type), escapeAttr(c.Name), escapeText(c.Description))
 		desc = append(desc, "contact is the profile that was open; type is member (a person) or agent, and the text is its description.")
 	}
+	if l := p.Location; l != nil {
+		fmt.Fprintf(&b, "<location path=\"%s\">\n", escapeAttr(l.Path))
+		for _, k := range sortedKeys(l.Params) {
+			fmt.Fprintf(&b, "<param name=\"%s\">%s</param>\n", escapeAttr(k), escapeText(l.Params[k]))
+		}
+		b.WriteString("</location>\n")
+		desc = append(desc, "location is the URL path and query parameters of the page that was open.")
+	}
 	if s := p.Selection; s != nil {
 		fmt.Fprintf(&b, "<selection message_id=\"%s\" time=\"%s\" sender=\"%s\">\n", escapeAttr(s.MessageID), escapeAttr(s.Time), escapeAttr(s.Sender))
 		fmt.Fprintf(&b, "<message>%s</message>\n", escapeText(s.Content))
@@ -156,6 +251,25 @@ func RenderAskContext(messageID string, p *AskPage) string {
 		}
 		b.WriteString("</selection>\n")
 		desc = append(desc, "selection is the message the person asked about; highlight, when present, is the part of it they selected.")
+	}
+	if e := p.Element; e != nil {
+		fmt.Fprintf(&b, `<element path="%s" tag="%s" selector="%s"`, escapeAttr(e.Path), escapeAttr(e.Tag), escapeAttr(e.Selector))
+		if e.Truncated {
+			b.WriteString(` truncated="true"`)
+		}
+		b.WriteString(">\n")
+		for _, k := range sortedKeys(e.Params) {
+			fmt.Fprintf(&b, "<param name=\"%s\">%s</param>\n", escapeAttr(k), escapeText(e.Params[k]))
+		}
+		for _, k := range sortedKeys(e.Attributes) {
+			fmt.Fprintf(&b, "<attr name=\"%s\">%s</attr>\n", escapeAttr(k), escapeText(e.Attributes[k]))
+		}
+		fmt.Fprintf(&b, "<html>%s</html>\n<text>%s</text>\n", escapeText(e.HTML), escapeText(e.Text))
+		for _, img := range e.Images {
+			fmt.Fprintf(&b, "<img src=\"%s\" alt=\"%s\"/>\n", escapeAttr(img.Src), escapeAttr(img.Alt))
+		}
+		b.WriteString("</element>\n")
+		desc = append(desc, `element is the part of the page the person picked: path and param are the page's URL path and query parameters; tag, selector and attr describe the DOM node; html is its markup, text its visible text and img the images inside it; truncated="true" means html or text was cut short.`)
 	}
 	fmt.Fprintf(&b, "<desc>\nThe person sent the message with this message_id through Ask AI from the page described here. Use it as context for your answer.\n%s\n</desc>\n</ask_ai_context>", strings.Join(desc, "\n"))
 	return b.String()

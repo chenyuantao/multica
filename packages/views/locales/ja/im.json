@@ -193,7 +193,8 @@
     "ask_placeholder": "添付ファイルについて質問",
     "ask_files_other": "{{count}} 件のファイル",
     "context": "質問と一緒に送信",
-    "context_chat_other": "{{title}} · 画面上の {{count}} 件のメッセージ",
-    "context_remove": "このコンテキストを送信しない"
+    "context_remove": "このコンテキストを送信しない",
+    "pick_element": "ページの要素を選択",
+    "pick_hint": "要素をクリックすると質問と一緒に送信します · Esc でキャンセル"
   }
 }

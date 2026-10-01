@@ -193,7 +193,8 @@
     "ask_placeholder": "첨부 파일에 대해 질문",
     "ask_files_other": "파일 {{count}}개",
     "context": "질문과 함께 전송",
-    "context_chat_other": "{{title}} · 화면의 메시지 {{count}}개",
-    "context_remove": "이 컨텍스트 보내지 않기"
+    "context_remove": "이 컨텍스트 보내지 않기",
+    "pick_element": "페이지 요소 선택",
+    "pick_hint": "요소를 클릭하면 질문과 함께 전송됩니다 · Esc로 취소"
   }
 }

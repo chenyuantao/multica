@@ -64,6 +64,9 @@ import { useSettingsSearchIndex } from "./use-settings-search-index";
 import { WakeupsTab } from "./wakeups-tab";
 import { CollapsedNavTrigger } from "../../layout/page-header";
 import { MobileTabBar } from "../../im/mobile-tab-bar";
+import { describeLocation } from "../../im/ask-ai-element";
+import { ImSearchDialog } from "../../im/im-search-dialog";
+import { useAskAILauncher } from "../../im/use-ask-ai-launcher";
 import { useT } from "../../i18n";
 
 export interface ExtraSettingsTab {
@@ -118,6 +121,8 @@ export function SettingsPage({ extraDeviceTabs = [] }: SettingsPageProps = {}) {
     false,
   );
   const appsAvailable = useComposioAvailable();
+  // Settings pages have no richer description for Ask AI than where they are.
+  const askAILauncher = useAskAILauncher(() => ({ location: describeLocation(navigation) }));
   const entry = (
     value: string,
     label: string,
@@ -579,11 +584,20 @@ export function SettingsPage({ extraDeviceTabs = [] }: SettingsPageProps = {}) {
     </div>
   );
 
-  if (!isMobile) return page;
+  const askAI = <ImSearchDialog {...askAILauncher.dialog} />;
+  if (!isMobile) {
+    return (
+      <>
+        {page}
+        {askAI}
+      </>
+    );
+  }
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       {page}
       <MobileTabBar active="settings" />
+      {askAI}
     </div>
   );
 }

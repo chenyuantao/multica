@@ -16,7 +16,7 @@ export function AskAIBadge({ onClick, className }: { onClick: () => void; classN
       title={label}
       style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
       className={cn(
-        "ai-gradient relative inline-flex h-7 shrink-0 items-center gap-1 rounded-full px-2.5 text-caption font-semibold text-white shadow-sm transition-[filter] outline-none hover:brightness-110 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+        "ai-gradient relative inline-flex h-6 shrink-0 items-center gap-1 rounded-full px-2.5 text-caption font-semibold text-white shadow-sm transition-[filter] outline-none hover:brightness-110 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
         className,
       )}
     >

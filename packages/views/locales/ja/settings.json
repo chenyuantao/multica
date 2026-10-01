@@ -251,7 +251,11 @@
       },
       "openKnowledgeSearch": {
         "label": "チャット、連絡先、ノートを検索",
-        "description": "チャット、連絡先、ナレッジベースのページでのみ使用できます。"
+        "description": "チャット、連絡先、ナレッジベース、設定のページでのみ使用できます。"
+      },
+      "askAIPickElement": {
+        "label": "ページの要素について AI に質問",
+        "description": "先に要素を選択すると、その要素付きで AI に質問の検索が開きます。チャット、連絡先、ナレッジベース、設定のページでのみ使用できます。"
       },
       "archiveInboxItem": {
         "label": "通知をアーカイブ",
