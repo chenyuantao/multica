@@ -11,7 +11,7 @@ import { AppSidebar } from "./app-sidebar";
 
 const { appForeground, chatSessions, chatStore, detail, deletePin, invitationApi, navigation, pins, sidebarState, summary, workspaces } = vi.hoisted(() => ({
   appForeground: { current: true },
-  sidebarState: { setOpenMobile: vi.fn(), isCompact: false },
+  sidebarState: { setOpenMobile: vi.fn(), isCompact: false, isMobile: false },
   chatSessions: { current: [] as { id?: string; unread_count?: number }[] },
   chatStore: { current: { activeSessionId: null as string | null, isOpen: false } },
   detail: { current: { isPending: false, isError: false, data: null as unknown, error: null as unknown } },
@@ -83,6 +83,10 @@ vi.mock("@multica/ui/components/ui/sidebar", () => ({
   SidebarMenuItem: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   SidebarRail: () => null,
   useSidebar: () => ({ setOpenMobile: sidebarState.setOpenMobile, isCompact: sidebarState.isCompact }),
+}));
+vi.mock("@multica/ui/hooks/use-mobile", () => ({
+  useIsMobile: () => sidebarState.isMobile,
+  useIsCompact: () => sidebarState.isCompact,
 }));
 vi.mock("@multica/ui/components/ui/dropdown-menu", () => ({
   DropdownMenu: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -329,6 +333,8 @@ describe("primary rail slot", () => {
 
   beforeEach(() => {
     sidebarState.isCompact = false;
+    sidebarState.isMobile = false;
+    navigation.current = { pathname: "/acme/issues" };
   });
 
   it("renders the rail before the sidebar on wide screens", () => {
@@ -342,6 +348,22 @@ describe("primary rail slot", () => {
     const { container } = render(<AppSidebar rail={rail} />);
     const nav = screen.getByRole("navigation", { name: "Sections" });
     expect(container.querySelector("[data-slot='sidebar']")?.contains(nav)).toBe(true);
+  });
+
+  // Phone settings has the bottom tab bar, so the sheet would repeat it.
+  it("leaves the rail out of the sheet on phone settings", () => {
+    sidebarState.isCompact = true;
+    sidebarState.isMobile = true;
+    navigation.current = { pathname: "/acme/settings" };
+    render(<AppSidebar rail={rail} />);
+    expect(screen.queryByRole("navigation", { name: "Sections" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the rail in the sheet on other phone pages", () => {
+    sidebarState.isCompact = true;
+    sidebarState.isMobile = true;
+    render(<AppSidebar rail={rail} />);
+    expect(screen.getByRole("navigation", { name: "Sections" })).toBeInTheDocument();
   });
 });
 

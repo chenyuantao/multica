@@ -1,20 +1,17 @@
 "use client";
 
-import { BookOpen, Menu, MessageCircle, UsersRound } from "lucide-react";
+import { MessageCircle } from "lucide-react";
 import { useAuthStore } from "@multica/core/auth";
 import { useWorkspaceId } from "@multica/core/hooks";
-import { useWorkspacePaths } from "@multica/core/paths";
 import { Button } from "@multica/ui/components/ui/button";
-import { cn } from "@multica/ui/lib/utils";
 import { AgentDetail } from "../agents/components/agent-detail-page";
 import { MemberDetailPage } from "../members/member-detail-page";
-import { AppLink, useBackOrReplace } from "../navigation";
+import { useBackOrReplace } from "../navigation";
 import { useT } from "../i18n";
 import type { ImRailSection } from "./im-rail";
 import { MobileBackButton } from "./mobile-back-button";
-import { UnreadBadge } from "./unread-badge";
+import { MobileTabBar } from "./mobile-tab-bar";
 import { useStartDirectChat } from "./use-direct-chat";
-import { useGroupChatUnreadTotal } from "./use-group-chat-unread";
 
 /** A phone tab root: the section's list above the bottom tab bar. */
 export function MobileTabScreen({ active, children }: { active: ImRailSection; children: React.ReactNode }) {
@@ -23,49 +20,6 @@ export function MobileTabScreen({ active, children }: { active: ImRailSection; c
       <div className="flex min-h-0 flex-1">{children}</div>
       <MobileTabBar active={active} />
     </div>
-  );
-}
-
-export function MobileTabBar({ active }: { active: ImRailSection }) {
-  const { t } = useT("im");
-  const paths = useWorkspacePaths();
-  const chatsUnread = useGroupChatUnreadTotal();
-  const tabs = [
-    { id: "chats", href: paths.im(), label: t(($) => $.tabs.chats), icon: MessageCircle },
-    { id: "contacts", href: paths.member(), label: t(($) => $.tabs.contacts), icon: UsersRound },
-    { id: "knowledge", href: paths.knowledge(), label: t(($) => $.tabs.knowledge), icon: BookOpen },
-    { id: "settings", href: paths.settings(), label: t(($) => $.tabs.me), icon: Menu },
-  ] as const;
-
-  return (
-    <nav
-      aria-label={t(($) => $.rail.sections)}
-      className="flex shrink-0 border-t bg-sidebar pb-[env(safe-area-inset-bottom)]"
-    >
-      {tabs.map(({ id, href, label, icon: Icon }) => (
-        <AppLink
-          key={id}
-          href={href}
-          aria-current={active === id ? "page" : undefined}
-          className={cn(
-            "flex h-14 flex-1 flex-col items-center justify-center gap-0.5 text-muted-foreground transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset",
-            active === id && "text-brand",
-          )}
-        >
-          <span className="relative flex">
-            <Icon className="size-6" strokeWidth={1.8} />
-            {id === "chats" && (
-              <UnreadBadge
-                count={chatsUnread}
-                label={t(($) => $.sidebar.unread, { count: chatsUnread })}
-                className="absolute -top-1.5 left-4"
-              />
-            )}
-          </span>
-          <span className="text-micro">{label}</span>
-        </AppLink>
-      ))}
-    </nav>
   );
 }
 

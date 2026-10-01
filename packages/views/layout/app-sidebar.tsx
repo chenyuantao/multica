@@ -5,6 +5,7 @@ import { issueStatusCategory } from "@multica/core/issues";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@multica/ui/lib/utils";
 import { useScrollFade } from "@multica/ui/hooks/use-scroll-fade";
+import { useIsMobile } from "@multica/ui/hooks/use-mobile";
 import { AppLink, useNavigation } from "../navigation";
 import { HelpLauncher } from "./help-launcher";
 import { JoinDiscordCard } from "./join-discord-card";
@@ -473,6 +474,9 @@ export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle, 
   useEffect(() => {
     setOpenMobile(false);
   }, [pathname, setOpenMobile]);
+  // Phone settings carries the bottom tab bar, which already switches sections.
+  const isMobile = useIsMobile();
+  const sheetRail = isCompact && !(isMobile && pathname === p.settings()) ? rail : undefined;
 
   const wsId = workspace?.id;
   // Nav badge. Reads the cross-workspace unread summary fetched just below
@@ -631,7 +635,7 @@ export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle, 
     <>
       {rail && !isCompact && <div className="relative z-20 hidden lg:flex">{rail}</div>}
       <Sidebar variant="inset" className={rail ? RAIL_OFFSET_CLASS_NAME : undefined}>
-        <CompactRailFrame rail={isCompact ? rail : undefined}>
+        <CompactRailFrame rail={sheetRail}>
           {topSlot}
           {/* Workspace Switcher */}
           <SidebarHeader className={cn("py-3", headerClassName)} style={headerStyle}>

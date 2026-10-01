@@ -385,7 +385,6 @@
   },
   "page": {
     "title": "설정",
-    "back": "뒤로",
     "my_account": "내 계정",
     "workspace_fallback": "워크스페이스",
     "tabs": {

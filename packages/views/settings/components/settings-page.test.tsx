@@ -42,8 +42,14 @@ vi.mock("./connected-apps-tab", () => ({
 
 vi.mock("@multica/core/paths", () => ({
   useCurrentWorkspace: () => ({ id: "ws-1", name: "Acme" }),
-  useWorkspacePaths: () => ({ im: () => "/acme/im" }),
+  useWorkspacePaths: () => ({
+    im: () => "/acme/im",
+    member: () => "/acme/member",
+    knowledge: () => "/acme/knowledge",
+    settings: () => "/acme/settings",
+  }),
 }));
+vi.mock("../../im/use-group-chat-unread", () => ({ useGroupChatUnreadTotal: () => 0 }));
 vi.mock("@multica/core/workspace/avatar-url", () => ({
   resolvePublicFileUrl: (url: string | null | undefined) => url ?? null,
 }));
@@ -150,20 +156,21 @@ describe("SettingsPage nav trigger", () => {
   });
 });
 
-describe("SettingsPage mobile back", () => {
-  it("returns to chats when opened cold from the phone tab bar", () => {
+describe("SettingsPage phone tab bar", () => {
+  it("is a tab root on phones: bottom tabs with Me current, no back button", () => {
     renderWithI18n(<SettingsPage />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Back" }));
-
-    expect(replace).toHaveBeenCalledWith("/acme/im");
+    const tabs = screen.getByRole("navigation", { name: "Sections" });
+    expect(within(tabs).getByRole("link", { name: "Me" })).toHaveAttribute("aria-current", "page");
+    expect(within(tabs).getByRole("link", { name: "Chats" })).toHaveAttribute("href", "/acme/im");
+    expect(screen.queryByRole("button", { name: "Back" })).not.toBeInTheDocument();
   });
 
-  it("has no back button on wide screens", () => {
+  it("has no bottom tabs on wide screens", () => {
     layout.compact = false;
     renderWithI18n(<SettingsPage />);
 
-    expect(screen.queryByRole("button", { name: "Back" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Sections" })).not.toBeInTheDocument();
   });
 });
 
