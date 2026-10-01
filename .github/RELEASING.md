@@ -26,7 +26,8 @@ creates no tag.
 `.github/workflows/branch-images.yml` runs on every branch push. It builds
 multi-arch `multica-backend` and `multica-web` images and pushes them to GHCR
 tagged with the branch name. Characters Docker rejects, including `/`, become
-`-`, so `feat/foo` is published as `feat-foo`.
+`-`, so `feat/foo` is published as `feat-foo`. Each build is also tagged
+`sha-<commit>`, an immutable tag deploy targets can pin.
 
 These tags move on the next push to that branch. The workflow refuses `latest`
 and semver tags such as `v1.2.3`, so a branch cannot overwrite a release. It

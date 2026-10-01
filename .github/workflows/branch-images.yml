@@ -93,8 +93,10 @@ jobs:
         REMOTE_API_URL=http://backend:8080
         NEXT_PUBLIC_APP_VERSION=${{ needs.tag.outputs.value }}
 
-  # Redeploys Zeabur services that run the branch images. Repositories without
-  # ZEABUR_DEPLOY_BRANCH configured skip this job.
+  # Points the Zeabur prebuilt-image services at this commit's immutable
+  # `sha-<commit>` tag, which makes Zeabur pull and deploy the new image.
+  # `service redeploy` only works for services bound to a GitHub repository.
+  # Repositories without ZEABUR_DEPLOY_BRANCH configured skip this job.
   zeabur-redeploy:
     needs: [backend, web]
     if: vars.ZEABUR_DEPLOY_BRANCH != '' && github.ref_name == vars.ZEABUR_DEPLOY_BRANCH
@@ -117,8 +119,8 @@ jobs:
       - name: Log in to Zeabur
         run: npx -y zeabur@latest auth login --token "$ZEABUR_TOKEN" --interactive=false
 
-      - name: Redeploy backend
-        run: npx -y zeabur@latest service redeploy --id "$BACKEND_ID" --env-id "$ENV_ID" -y --interactive=false
+      - name: Deploy backend image
+        run: npx -y zeabur@latest service update tag --id "$BACKEND_ID" --env-id "$ENV_ID" --tag "sha-$GITHUB_SHA" -y --interactive=false
 
-      - name: Redeploy web
-        run: npx -y zeabur@latest service redeploy --id "$WEB_ID" --env-id "$ENV_ID" -y --interactive=false
+      - name: Deploy web image
+        run: npx -y zeabur@latest service update tag --id "$WEB_ID" --env-id "$ENV_ID" --tag "sha-$GITHUB_SHA" -y --interactive=false
