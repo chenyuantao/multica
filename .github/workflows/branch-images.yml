@@ -92,3 +92,33 @@ jobs:
       extra_build_args: |
         REMOTE_API_URL=http://backend:8080
         NEXT_PUBLIC_APP_VERSION=${{ needs.tag.outputs.value }}
+
+  # Redeploys Zeabur services that run the branch images. Repositories without
+  # ZEABUR_DEPLOY_BRANCH configured skip this job.
+  zeabur-redeploy:
+    needs: [backend, web]
+    if: vars.ZEABUR_DEPLOY_BRANCH != '' && github.ref_name == vars.ZEABUR_DEPLOY_BRANCH
+    runs-on: ubuntu-latest
+    env:
+      ZEABUR_TOKEN: ${{ secrets.ZEABUR_TOKEN }}
+      ENV_ID: ${{ vars.ZEABUR_ENV_ID }}
+      BACKEND_ID: ${{ vars.ZEABUR_BACKEND_SERVICE_ID }}
+      WEB_ID: ${{ vars.ZEABUR_WEB_SERVICE_ID }}
+    steps:
+      - name: Check Zeabur configuration
+        run: |
+          for name in ZEABUR_TOKEN ENV_ID BACKEND_ID WEB_ID; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::$name is not configured."
+              exit 1
+            fi
+          done
+
+      - name: Log in to Zeabur
+        run: npx -y zeabur@latest auth login --token "$ZEABUR_TOKEN" --interactive=false
+
+      - name: Redeploy backend
+        run: npx -y zeabur@latest service redeploy --id "$BACKEND_ID" --env-id "$ENV_ID" -y --interactive=false
+
+      - name: Redeploy web
+        run: npx -y zeabur@latest service redeploy --id "$WEB_ID" --env-id "$ENV_ID" -y --interactive=false
