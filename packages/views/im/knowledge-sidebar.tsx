@@ -17,8 +17,8 @@ import {
 import { copyText } from "@multica/ui/lib/clipboard";
 import { cn } from "@multica/ui/lib/utils";
 import { useDebouncedValue } from "../common/use-debounced-value";
-import { useLocale, useT } from "../i18n";
-import { formatClock, isSameDay } from "./im-utils";
+import { useT } from "../i18n";
+import { formatStamp } from "./im-utils";
 import { ImSidebarHeader, ImSidebarShell } from "./im-sidebar-shell";
 import { ancestorDirs, parentDir } from "./knowledge-utils";
 
@@ -287,20 +287,7 @@ function RowMenu({ label, items }: { label: string; items: { label: string; onSe
 
 function DocStamp({ iso }: { iso: string }) {
   const { t } = useT("im");
-  const { t: tc } = useT("common");
-  const locale = useLocale();
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  const now = new Date();
-  const yesterday = new Date(now);
-  yesterday.setDate(now.getDate() - 1);
-  const days = Math.floor((now.getTime() - d.getTime()) / 86_400_000);
-  const text = isSameDay(d, now)
-    ? formatClock(iso, locale)
-    : isSameDay(d, yesterday)
-      ? t(($) => $.thread.yesterday, { time: formatClock(iso, locale) })
-      : days < 7
-        ? tc(($) => $.time.days_ago, { count: Math.max(days, 2) })
-        : d.toLocaleDateString(locale, { month: "short", day: "numeric" });
+  if (Number.isNaN(new Date(iso).getTime())) return null;
+  const text = formatStamp(iso, new Date(), (time) => t(($) => $.thread.yesterday, { time }));
   return <span className="shrink-0 text-caption text-muted-foreground tabular-nums">{text}</span>;
 }

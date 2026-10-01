@@ -6,6 +6,7 @@ import {
   activeMentionQuery,
   dayRelation,
   encodeMentions,
+  formatStamp,
   resolveComposerMentions,
   needsTimeSeparator,
   plainTextPreview,
@@ -78,6 +79,26 @@ describe("time helpers", () => {
     expect(dayRelation(new Date(2026, 8, 28, 9).toISOString(), now)).toBe("today");
     expect(dayRelation(new Date(2026, 8, 27, 23).toISOString(), now)).toBe("yesterday");
     expect(dayRelation(new Date(2026, 8, 20).toISOString(), now)).toBe("other");
+  });
+
+  it("stamps today, yesterday, this year, and earlier years", () => {
+    const now = new Date(2026, 0, 1, 12);
+    const yesterday = (time: string) => `昨天 ${time}`;
+    expect(formatStamp(new Date(2026, 0, 1, 9, 5).toISOString(), now, yesterday)).toBe("09:05");
+    expect(formatStamp(new Date(2025, 11, 31, 23, 40).toISOString(), now, yesterday)).toBe("昨天 23:40");
+    expect(formatStamp(new Date(2025, 11, 30, 8).toISOString(), now, yesterday)).toBe("2025/12/30");
+    const later = new Date(2026, 8, 28, 12);
+    expect(formatStamp(new Date(2026, 2, 7, 8).toISOString(), later, yesterday)).toBe("03/07");
+  });
+
+  it("appends the clock to dates when asked", () => {
+    const now = new Date(2026, 8, 28, 12);
+    const yesterday = (time: string) => `昨天 ${time}`;
+    const opts = { withTime: true };
+    expect(formatStamp(new Date(2026, 8, 28, 9, 5).toISOString(), now, yesterday, opts)).toBe("09:05");
+    expect(formatStamp(new Date(2026, 8, 27, 14, 5).toISOString(), now, yesterday, opts)).toBe("昨天 14:05");
+    expect(formatStamp(new Date(2026, 8, 20, 14, 5).toISOString(), now, yesterday, opts)).toBe("09/20 14:05");
+    expect(formatStamp(new Date(2025, 8, 20, 14, 5).toISOString(), now, yesterday, opts)).toBe("2025/09/20 14:05");
   });
 });
 

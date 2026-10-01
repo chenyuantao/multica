@@ -33,7 +33,7 @@ import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } 
 import { ActorAvatar } from "../common/actor-avatar";
 import { useAppForeground } from "../common/use-app-foreground";
 import { RichContent } from "../rich-content";
-import { useLocale, useT } from "../i18n";
+import { useT } from "../i18n";
 import { useOpenAgentDetail } from "../modals/agent-detail";
 import { AppLink } from "../navigation";
 import { DragStrip } from "../platform";
@@ -45,8 +45,8 @@ import { useAgentClickActions, type AgentClickActions } from "./use-agent-click-
 import {
   THINKING_MESSAGE,
   chatDisplayTitle,
-  dayRelation,
   formatClock,
+  formatStamp,
   isSameDay,
   needsTimeSeparator,
   plainTextPreview,
@@ -465,16 +465,9 @@ function QuotedLine({ quote, onJump }: { quote: ComposerQuote | null; onJump: (i
 /** Shows the day only when it changes from the previous message; otherwise just the clock. */
 function TimeSeparator({ iso, showDay }: { iso: string; showDay: boolean }) {
   const { t } = useT("im");
-  const locale = useLocale();
-  const time = formatClock(iso, locale);
-  const relation = dayRelation(iso, new Date());
-  const label = !showDay
-    ? time
-    : relation === "today"
-      ? t(($) => $.thread.today, { time })
-      : relation === "yesterday"
-        ? t(($) => $.thread.yesterday, { time })
-        : new Date(iso).toLocaleString(locale, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  const label = showDay
+    ? formatStamp(iso, new Date(), (time) => t(($) => $.thread.yesterday, { time }), { withTime: true })
+    : formatClock(iso);
   return <p className="mt-4 mb-[18px] text-center text-caption text-muted-foreground">{label}</p>;
 }
 
@@ -506,8 +499,7 @@ function MessageRow({
   /** Phones: style the long-press menu after iOS. */
   iosMenu?: boolean;
 }) {
-  const locale = useLocale();
-  const time = formatClock(message.created_at, locale);
+  const time = formatClock(message.created_at);
 
   if (message.author_type === "system" || message.type === "status_change" || message.type === "system") {
     return <p className="my-3.5 text-center text-caption text-muted-foreground">{message.content}</p>;

@@ -58,7 +58,6 @@
     "agents_other": "{{count}} agents",
     "select": "Sélectionnez une discussion",
     "no_messages": "Aucun message pour l'instant",
-    "today": "Aujourd'hui {{time}}",
     "yesterday": "Hier {{time}}",
     "sending": "Envoi…",
     "failed": "Non envoyé",

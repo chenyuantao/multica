@@ -146,17 +146,33 @@ export function dayRelation(iso: string, now: Date): DayRelation {
   return isSameDay(d, yesterday) ? "yesterday" : "other";
 }
 
-export function formatClock(iso: string, locale: string): string {
-  return new Date(iso).toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit" });
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
 }
 
-/** Chat list stamp: clock time today, weekday within a week, else the date. */
-export function formatListStamp(iso: string, locale: string, now: Date): string {
+/** `HH:mm` on a 24-hour clock. */
+export function formatClock(iso: string): string {
   const d = new Date(iso);
-  if (isSameDay(d, now)) return formatClock(iso, locale);
-  const ageMs = now.getTime() - d.getTime();
-  if (ageMs < 7 * 24 * 60 * 60 * 1000) return d.toLocaleDateString(locale, { weekday: "short" });
-  return d.toLocaleDateString(locale, { month: "short", day: "numeric" });
+  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
+/**
+ * `HH:mm` today, the localized "yesterday HH:mm", `MM/DD` within this year,
+ * else `YYYY/MM/DD`. `withTime` appends `HH:mm` to the dates too.
+ */
+export function formatStamp(
+  iso: string,
+  now: Date,
+  yesterday: (time: string) => string,
+  { withTime = false }: { withTime?: boolean } = {},
+): string {
+  const d = new Date(iso);
+  const relation = dayRelation(iso, now);
+  if (relation === "today") return formatClock(iso);
+  if (relation === "yesterday") return yesterday(formatClock(iso));
+  const monthDay = `${pad2(d.getMonth() + 1)}/${pad2(d.getDate())}`;
+  const date = d.getFullYear() === now.getFullYear() ? monthDay : `${d.getFullYear()}/${monthDay}`;
+  return withTime ? `${date} ${formatClock(iso)}` : date;
 }
 
 /** A two-person chat is named after the other side; a group keeps its own name. */

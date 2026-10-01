@@ -54,7 +54,6 @@
     "agents_other": "{{count}} 个智能体",
     "select": "选择一个群聊",
     "no_messages": "还没有消息",
-    "today": "今天 {{time}}",
     "yesterday": "昨天 {{time}}",
     "sending": "发送中…",
     "failed": "发送失败",

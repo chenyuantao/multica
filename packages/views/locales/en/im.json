@@ -58,7 +58,6 @@
     "agents_other": "{{count}} agents",
     "select": "Select a chat",
     "no_messages": "No messages yet",
-    "today": "Today {{time}}",
     "yesterday": "Yesterday {{time}}",
     "sending": "Sending…",
     "failed": "Not sent",

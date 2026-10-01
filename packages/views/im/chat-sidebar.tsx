@@ -9,8 +9,8 @@ import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } 
 import { cn } from "@multica/ui/lib/utils";
 import { ActorAvatar } from "../common/actor-avatar";
 import { useAppForeground } from "../common/use-app-foreground";
-import { useLocale, useT } from "../i18n";
-import { chatActivityAt, chatDisplayTitle, formatListStamp, plainTextPreview } from "./im-utils";
+import { useT } from "../i18n";
+import { chatActivityAt, chatDisplayTitle, formatStamp, plainTextPreview } from "./im-utils";
 import { ImSidebarHeader, ImSidebarShell } from "./im-sidebar-shell";
 import { UnreadBadge } from "./unread-badge";
 
@@ -197,7 +197,6 @@ function ChatListItem({
   onSelect: () => void;
 }) {
   const { t } = useT("im");
-  const locale = useLocale();
   const { getActorName } = useActorName();
   const last = chat.last_message;
   const text = last ? plainTextPreview(last.content) : "";
@@ -232,7 +231,7 @@ function ChatListItem({
             />
           )}
           <span className="shrink-0 text-micro text-muted-foreground tabular-nums">
-            {formatListStamp(chatActivityAt(chat), locale, new Date())}
+            {formatStamp(chatActivityAt(chat), new Date(), (time) => t(($) => $.thread.yesterday, { time }))}
           </span>
         </span>
         <span className="mt-[3px] flex items-center gap-2">

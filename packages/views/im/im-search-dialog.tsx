@@ -38,13 +38,13 @@ import { ActorAvatar } from "../common/actor-avatar";
 import { ShortcutKeycaps } from "../common/shortcut-keycaps";
 import { useDebouncedValue } from "../common/use-debounced-value";
 import { FileDropOverlay, useFileDropZone } from "../editor";
-import { useLocale, useT } from "../i18n";
+import { useT } from "../i18n";
 import { useNavigation } from "../navigation";
 import { HighlightText } from "../search/highlight-text";
 import { describeElement, elementLabel } from "./ask-ai-element";
 import { ChatAvatar } from "./chat-sidebar";
 import { ElementPicker } from "./element-picker";
-import { chatActivityAt, chatDisplayTitle, formatListStamp, plainTextPreview, sortChats } from "./im-utils";
+import { chatActivityAt, chatDisplayTitle, formatStamp, plainTextPreview, sortChats } from "./im-utils";
 import { rankChats, rankContacts, rankNotes, type SearchScope } from "./im-search-utils";
 import { loadErrorText } from "./knowledge-sidebar";
 import { flattenFiles, noteTitle, parentDir, recentFiles } from "./knowledge-utils";
@@ -106,7 +106,6 @@ export function ImSearchDialog({
 }: ImSearchDialogProps) {
   const { t } = useT("im");
   const { t: tEditor } = useT("editor");
-  const locale = useLocale();
   const navigation = useNavigation();
   const paths = useWorkspacePaths();
   const wsId = useWorkspaceId();
@@ -455,7 +454,7 @@ export function ImSearchDialog({
                           row={row}
                           userId={userId}
                           query={highlight}
-                          stamp={formatListStamp(chatActivityAt(row.chat), locale, now)}
+                          stamp={formatStamp(chatActivityAt(row.chat), now, (time) => t(($) => $.thread.yesterday, { time }))}
                         />
                       ) : row.kind === "contact" ? (
                         <ContactResult entry={row.entry} userId={userId} query={highlight} />

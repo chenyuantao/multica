@@ -54,7 +54,6 @@
     "agents_other": "エージェント {{count}} 件",
     "select": "チャットを選択",
     "no_messages": "まだメッセージはありません",
-    "today": "今日 {{time}}",
     "yesterday": "昨日 {{time}}",
     "sending": "送信中…",
     "failed": "未送信",
