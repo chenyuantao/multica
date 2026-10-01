@@ -263,6 +263,14 @@ const ThinkingMessage = "思考中..."
 // UnfinishedMessage replaces ThinkingMessage when the run ends without a reply.
 const UnfinishedMessage = "这次没有完成回复。"
 
+// Event payload flags. The thinking bubble is not a message yet, so its
+// comment:created must not notify anyone; the comment:updated that fills it
+// is the moment the reply lands and is notified like a new comment.
+const (
+	PayloadPlaceholder = "group_chat_placeholder"
+	PayloadReply       = "group_chat_reply"
+)
+
 // Placeholder is the thinking bubble stored on the task that will fill it.
 type Placeholder struct {
 	CommentID string `json:"comment_id"`

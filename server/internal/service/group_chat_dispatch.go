@@ -77,7 +77,7 @@ func (s *TaskService) OpenGroupChatThinking(ctx context.Context, issue db.Issue,
 		CommentID: util.UUIDToString(created.ID),
 		Open:      true,
 	})
-	s.publishGroupChatComment(issue, created.Comment(), protocol.EventCommentCreated)
+	s.publishGroupChatComment(issue, created.Comment(), protocol.EventCommentCreated, groupchat.PayloadPlaceholder)
 }
 
 // groupChatParent is the parent a new comment on the issue may carry. Group
@@ -130,7 +130,7 @@ func (s *TaskService) deliverGroupChatReply(ctx context.Context, task db.AgentTa
 	}
 	s.CloseGroupChatPlaceholder(ctx, task.ID, placeholder.CommentID)
 	if issue, err := s.Queries.GetIssue(ctx, existing.IssueID); err == nil {
-		s.publishGroupChatComment(issue, updated.Comment(), protocol.EventCommentUpdated)
+		s.publishGroupChatComment(issue, updated.Comment(), protocol.EventCommentUpdated, groupchat.PayloadReply)
 	}
 }
 
@@ -185,7 +185,7 @@ func (s *TaskService) settleGroupChatThinking(ctx context.Context, task db.Agent
 			return
 		}
 		if issue, err := s.Queries.GetIssue(ctx, existing.IssueID); err == nil {
-			s.publishGroupChatComment(issue, updated.Comment(), protocol.EventCommentUpdated)
+			s.publishGroupChatComment(issue, updated.Comment(), protocol.EventCommentUpdated, groupchat.PayloadReply)
 		}
 	}
 	s.storeGroupChatPlaceholder(ctx, task.ID, groupchat.Placeholder{CommentID: placeholder.CommentID, Open: false})
@@ -211,7 +211,10 @@ func (s *TaskService) storeGroupChatPlaceholder(ctx context.Context, taskID pgty
 	}
 }
 
-func (s *TaskService) publishGroupChatComment(issue db.Issue, comment db.Comment, eventType string) {
+// publishGroupChatComment broadcasts a thinking-bubble write. flag is
+// groupchat.PayloadPlaceholder when the bubble opens and
+// groupchat.PayloadReply when its final text lands.
+func (s *TaskService) publishGroupChatComment(issue db.Issue, comment db.Comment, eventType, flag string) {
 	if s.Bus == nil {
 		return
 	}
@@ -226,6 +229,7 @@ func (s *TaskService) publishGroupChatComment(issue db.Issue, comment db.Comment
 			"comment":      fields,
 			"issue_title":  issue.Title,
 			"issue_status": issue.Status,
+			flag:           true,
 		},
 	})
 }

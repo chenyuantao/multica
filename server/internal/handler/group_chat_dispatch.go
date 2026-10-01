@@ -389,8 +389,11 @@ func (h *Handler) absorbGroupChatThinking(w http.ResponseWriter, r *http.Request
 	resp := commentToResponse(comment, nil, groupedAtt[uuidToString(comment.ID)])
 	resp.IssueRevision = updated.IssueRevision
 	h.publish(protocol.EventCommentUpdated, uuidToString(issue.WorkspaceID), authorType, authorID, map[string]any{
-		"comment":        resp,
-		"issue_revision": updated.IssueRevision,
+		"comment":              resp,
+		"issue_revision":       updated.IssueRevision,
+		"issue_title":          issue.Title,
+		"issue_status":         issue.Status,
+		groupchat.PayloadReply: true,
 	})
 	var parentComment *db.Comment
 	if comment.ParentID.Valid {

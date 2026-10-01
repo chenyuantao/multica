@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/multica-ai/multica/server/internal/events"
+	"github.com/multica-ai/multica/server/internal/groupchat"
 	"github.com/multica-ai/multica/server/internal/handler"
 	"github.com/multica-ai/multica/server/internal/issuestatus"
 	"github.com/multica-ai/multica/server/internal/util"
@@ -660,6 +661,64 @@ func notifyMentionedMembers(
 	}
 }
 
+// notifyNewComment notifies the issue's subscribers and the @mentioned members
+// about a comment carried in a comment event payload.
+func notifyNewComment(ctx context.Context, queries *db.Queries, bus *events.Bus, e events.Event, payload map[string]any) {
+	// The comment payload can come as handler.CommentResponse from the
+	// HTTP handler, or as map[string]any from the agent comment path in
+	// task.go. Handle both.
+	var issueID, commentID, commentContent, authorType string
+	switch c := payload["comment"].(type) {
+	case handler.CommentResponse:
+		issueID = c.IssueID
+		commentID = c.ID
+		commentContent = c.Content
+		authorType = c.AuthorType
+	case map[string]any:
+		issueID, _ = c["issue_id"].(string)
+		commentID, _ = c["id"].(string)
+		commentContent, _ = c["content"].(string)
+		authorType, _ = c["author_type"].(string)
+	default:
+		return
+	}
+
+	// Platform-authored system comments (MUL-2538 child-done parent
+	// notify) must NOT create inbox rows or parse mentions from their
+	// body — the comment is a controlled platform signal, not a human
+	// commenter. Mention parsing is the dangerous bit: if the body
+	// transcluded a child title containing `mention://member/<uuid>`,
+	// the parent's assignee inbox would light up via the generic path.
+	// Skip the listener entirely; the WS broadcast still delivers the
+	// comment to the issue timeline.
+	if authorType == "system" {
+		return
+	}
+
+	issueTitle, _ := payload["issue_title"].(string)
+	issueStatus, _ := payload["issue_status"].(string)
+
+	commentDetails := emptyDetails
+	if commentID != "" {
+		commentDetails, _ = json.Marshal(map[string]string{
+			"comment_id": commentID,
+		})
+	}
+
+	notifySubscribers(ctx, queries, bus, issueID, issueStatus, e.WorkspaceID, e,
+		nil, "new_comment", "info",
+		issueTitle, commentContent,
+		commentDetails)
+
+	// Notify @mentions in comment content.
+	mentions := parseMentions(commentContent)
+	if len(mentions) > 0 {
+		skip := map[string]bool{e.ActorID: true}
+		notifyMentionedMembers(bus, queries, e, mentions, issueID, issueTitle, issueStatus,
+			issueTitle, skip, commentDetails)
+	}
+}
+
 // registerNotificationListeners wires up event bus listeners that create inbox
 // notifications using the subscriber table. This replaces the old hardcoded
 // notification logic from inbox_listeners.go.
@@ -901,60 +960,25 @@ func registerNotificationListeners(bus *events.Bus, queries *db.Queries) {
 		if !ok {
 			return
 		}
-
-		// The comment payload can come as handler.CommentResponse from the
-		// HTTP handler, or as map[string]any from the agent comment path in
-		// task.go. Handle both.
-		var issueID, commentID, commentContent, authorType string
-		switch c := payload["comment"].(type) {
-		case handler.CommentResponse:
-			issueID = c.IssueID
-			commentID = c.ID
-			commentContent = c.Content
-			authorType = c.AuthorType
-		case map[string]any:
-			issueID, _ = c["issue_id"].(string)
-			commentID, _ = c["id"].(string)
-			commentContent, _ = c["content"].(string)
-			authorType, _ = c["author_type"].(string)
-		default:
+		// A group chat thinking bubble is not a message yet; the reply that
+		// fills it is notified on comment:updated below.
+		if placeholder, _ := payload[groupchat.PayloadPlaceholder].(bool); placeholder {
 			return
 		}
+		notifyNewComment(ctx, queries, bus, e, payload)
+	})
 
-		// Platform-authored system comments (MUL-2538 child-done parent
-		// notify) must NOT create inbox rows or parse mentions from their
-		// body — the comment is a controlled platform signal, not a human
-		// commenter. Mention parsing is the dangerous bit: if the body
-		// transcluded a child title containing `mention://member/<uuid>`,
-		// the parent's assignee inbox would light up via the generic path.
-		// Skip the listener entirely; the WS broadcast still delivers the
-		// comment to the issue timeline.
-		if authorType == "system" {
+	// comment:updated — only a group chat reply landing in its thinking bubble
+	// is a new message; ordinary edits notify nobody.
+	bus.Subscribe(protocol.EventCommentUpdated, func(e events.Event) {
+		payload, ok := e.Payload.(map[string]any)
+		if !ok {
 			return
 		}
-
-		issueTitle, _ := payload["issue_title"].(string)
-		issueStatus, _ := payload["issue_status"].(string)
-
-		commentDetails := emptyDetails
-		if commentID != "" {
-			commentDetails, _ = json.Marshal(map[string]string{
-				"comment_id": commentID,
-			})
+		if reply, _ := payload[groupchat.PayloadReply].(bool); !reply {
+			return
 		}
-
-		notifySubscribers(ctx, queries, bus, issueID, issueStatus, e.WorkspaceID, e,
-			nil, "new_comment", "info",
-			issueTitle, commentContent,
-			commentDetails)
-
-		// Notify @mentions in comment content.
-		mentions := parseMentions(commentContent)
-		if len(mentions) > 0 {
-			skip := map[string]bool{e.ActorID: true}
-			notifyMentionedMembers(bus, queries, e, mentions, issueID, issueTitle, issueStatus,
-				issueTitle, skip, commentDetails)
-		}
+		notifyNewComment(ctx, queries, bus, e, payload)
 	})
 
 	// issue_reaction:added — notify the issue creator
