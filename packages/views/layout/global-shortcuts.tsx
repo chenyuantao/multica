@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useSidebar } from "@multica/ui/components/ui/sidebar";
+import { useIsMobile } from "@multica/ui/hooks/use-mobile";
 import {
   getShortcut,
   isEditableShortcutTarget,
@@ -49,6 +50,7 @@ export function GlobalShortcuts() {
   const { toggleSidebar } = useSidebar();
   const navigation = useNavigation();
   const workspacePaths = useWorkspacePaths();
+  const isMobile = useIsMobile();
 
   // Subscribe so changing a binding in Settings immediately refreshes the
   // listener closure; getShortcut remains useful to non-React call sites.
@@ -78,7 +80,8 @@ export function GlobalShortcuts() {
     // swallowing it for an action that would visibly do nothing.
     const canToggleFloatingChat = () =>
       useChatStore.getState().floatingChatEnabled &&
-      !isFloatingChatRouteSuppressed(navigation.pathname, chatPath);
+      !isMobile &&
+      !isFloatingChatRouteSuppressed(navigation.pathname, [chatPath, workspacePaths.settings()]);
 
     const handleKeyDown = (event: KeyboardEvent) => {
       // Component/editor handlers run before this document-level listener.
@@ -139,7 +142,7 @@ export function GlobalShortcuts() {
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [navigation, overrides, toggleSidebar, workspacePaths]);
+  }, [isMobile, navigation, overrides, toggleSidebar, workspacePaths]);
 
   return null;
 }

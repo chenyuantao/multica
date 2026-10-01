@@ -1,6 +1,7 @@
 "use client";
 
 import { useChatStore } from "@multica/core/chat";
+import { useIsMobile } from "@multica/ui/hooks/use-mobile";
 import { useWorkspacePaths } from "@multica/core/paths";
 import { useNavigation } from "../navigation";
 import { ChatFab } from "./components/chat-fab";
@@ -14,18 +15,19 @@ import { isFloatingChatRouteSuppressed } from "./floating-chat-visibility";
  *
  *  1. The Settings → Chat preference (`floatingChatEnabled`). When a user turns
  *     the floating window off, Chat lives only in its dedicated tab.
- *  2. The Chat tab route itself. On `/:slug/chat` the full-page surface already
- *     owns the conversation, so a floating copy of the same `activeSessionId`
- *     would be pure duplication — hide it there.
+ *  2. The route. On `/:slug/chat` the full-page surface already owns the
+ *     conversation, so a floating copy of the same `activeSessionId` would be
+ *     pure duplication; Settings does not show it either.
+ *  3. The viewport. Mobile widths have no room for the overlay.
  */
 export function FloatingChat() {
   const enabled = useChatStore((s) => s.floatingChatEnabled);
   const { pathname } = useNavigation();
   const wsPaths = useWorkspacePaths();
+  const isMobile = useIsMobile();
 
-  if (!enabled) return null;
-  // Suppress on the Chat tab — it renders the same conversation full-page.
-  if (isFloatingChatRouteSuppressed(pathname, wsPaths.chat())) return null;
+  if (!enabled || isMobile) return null;
+  if (isFloatingChatRouteSuppressed(pathname, [wsPaths.chat(), wsPaths.settings()])) return null;
 
   return (
     <>
