@@ -57,7 +57,7 @@ type CommentResponse struct {
 	// deleted since; readers treat a missing target as gone.
 	RefMessageID *string              `json:"ref_message_id,omitempty"`
 	Reactions    []ReactionResponse   `json:"reactions"`
-	Attachments   []AttachmentResponse `json:"attachments"`
+	Attachments  []AttachmentResponse `json:"attachments"`
 	// Orientation stats — populated only on the roots_only path and omitted in
 	// every other mode, so the default response shape stays byte-identical for
 	// existing callers. ReplyCount is the number of descendants in the thread;
@@ -1920,6 +1920,15 @@ func (h *Handler) CreateComment(w http.ResponseWriter, r *http.Request) {
 
 	if h.absorbGroupChatThinking(w, r, issue, authoringTask, req.Content, attachmentIDs, suppressAgentIDs, steerTaskIDs, authorType, authorID) {
 		return
+	}
+
+	// An agent reply in a group chat quotes the message that started its run,
+	// unless the agent already chose a quote. The thinking bubble carries the
+	// same quote from the moment it opens.
+	if groupChat && !refMessageID.Valid && authoringTask != nil &&
+		authoringTask.TriggerCommentID.Valid &&
+		authoringTask.IssueID.Valid && uuidToString(authoringTask.IssueID) == uuidToString(issue.ID) {
+		refMessageID = authoringTask.TriggerCommentID
 	}
 
 	createParams := db.CreateCommentParams{

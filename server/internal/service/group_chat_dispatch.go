@@ -68,6 +68,7 @@ func (s *TaskService) OpenGroupChatThinking(ctx context.Context, issue db.Issue,
 		Content:      groupchat.ThinkingMessage,
 		Type:         "comment",
 		SourceTaskID: task.ID,
+		RefMessageID: task.TriggerCommentID,
 	})
 	if err != nil {
 		slog.Warn("group chat thinking comment was not posted", "task_id", util.UUIDToString(task.ID), "error", err)
@@ -199,6 +200,12 @@ func sameID(a, b pgtype.UUID) bool {
 // comment from the same run is stored on its own.
 func (s *TaskService) CloseGroupChatPlaceholder(ctx context.Context, taskID pgtype.UUID, commentID string) {
 	s.storeGroupChatPlaceholder(ctx, taskID, groupchat.Placeholder{CommentID: commentID, Open: false})
+}
+
+// ReopenGroupChatPlaceholder undoes CloseGroupChatPlaceholder when the run
+// that owns the bubble keeps going.
+func (s *TaskService) ReopenGroupChatPlaceholder(ctx context.Context, taskID pgtype.UUID, commentID string) {
+	s.storeGroupChatPlaceholder(ctx, taskID, groupchat.Placeholder{CommentID: commentID, Open: true})
 }
 
 func (s *TaskService) storeGroupChatPlaceholder(ctx context.Context, taskID pgtype.UUID, placeholder groupchat.Placeholder) {

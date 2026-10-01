@@ -114,7 +114,16 @@ func (h *Handler) enqueueGroupChatPlan(ctx context.Context, issue db.Issue, comm
 		if err != nil {
 			continue
 		}
-		task, err := h.TaskService.EnqueueTaskForMention(ctx, issue, agentID, commentID, service.OriginNamed)
+		// A supplement replaces the unfinished request before the new one
+		// takes the single queued slot. A new question, or any failure to
+		// judge, leaves that request running.
+		fresh := h.cancelSupersededGroupChatTask(ctx, issue, agentID, commentID)
+		var task db.AgentTaskQueue
+		if fresh {
+			task, err = h.TaskService.EnqueueTaskForMentionFresh(ctx, issue, agentID, commentID, service.OriginNamed)
+		} else {
+			task, err = h.TaskService.EnqueueTaskForMention(ctx, issue, agentID, commentID, service.OriginNamed)
+		}
 		if err != nil {
 			if !errors.Is(err, service.ErrDuplicatePendingTask) {
 				slog.Warn("group chat enqueue failed", "issue_id", uuidToString(issue.ID), "agent_id", rawID, "error", err)
@@ -136,6 +145,114 @@ func (h *Handler) enqueueGroupChatPlan(ctx context.Context, issue db.Issue, comm
 	if err := h.Queries.SetGroupChatDispatch(ctx, db.SetGroupChatDispatchParams{ID: first, Plan: raw}); err != nil {
 		slog.Warn("group chat dispatch plan was not stored", "task_id", uuidToString(first), "error", err)
 	}
+}
+
+// cancelSupersededGroupChatTask cancels this agent's unfinished request when
+// Jev says the new message supplements it. It returns whether that request
+// had already started, so the replacement starts a fresh session. Queued work
+// never wrote a session and stays on the normal enqueue path. Jev being off,
+// or any error, leaves the unfinished request alone.
+func (h *Handler) cancelSupersededGroupChatTask(ctx context.Context, issue db.Issue, agentID, commentID pgtype.UUID) bool {
+	if h.GroupChatDecider == nil || !h.GroupChatDecider.Enabled() {
+		return false
+	}
+	tasks, err := h.Queries.ListActiveTasksByIssue(ctx, issue.ID)
+	if err != nil {
+		slog.Warn("group chat active tasks failed", "issue_id", uuidToString(issue.ID), "error", err)
+		return false
+	}
+	previous, ok := unfinishedGroupChatTask(tasks, agentID)
+	if !ok || sameUUID(previous.TriggerCommentID, commentID) || !previous.TriggerCommentID.Valid {
+		return false
+	}
+	prev, err := h.Queries.GetComment(ctx, previous.TriggerCommentID)
+	if err != nil {
+		slog.Warn("group chat previous request failed to load", "task_id", uuidToString(previous.ID), "error", err)
+		return false
+	}
+	latest, err := h.Queries.GetComment(ctx, commentID)
+	if err != nil {
+		slog.Warn("group chat latest message failed to load", "comment_id", uuidToString(commentID), "error", err)
+		return false
+	}
+	supersede, err := groupchat.Supersedes(ctx, h.GroupChatDecider, prev.Content, latest.Content)
+	if err != nil {
+		slog.Warn("group chat supersede judgment failed", "issue_id", uuidToString(issue.ID), "agent_id", uuidToString(agentID), "error", err)
+		return false
+	}
+	if !supersede {
+		return false
+	}
+	// The superseded request leaves no trace in the chat: its thinking bubble
+	// is closed before the cancel so it is not rewritten as a cancellation
+	// notice, then removed.
+	placeholder, open := groupchat.OpenPlaceholder(previous.Context)
+	if open {
+		h.TaskService.CloseGroupChatPlaceholder(ctx, previous.ID, placeholder.CommentID)
+	}
+	if _, err := h.TaskService.CancelTask(ctx, previous.ID); err != nil {
+		slog.Warn("group chat superseded task was not cancelled", "task_id", uuidToString(previous.ID), "error", err)
+		if open {
+			h.TaskService.ReopenGroupChatPlaceholder(ctx, previous.ID, placeholder.CommentID)
+		}
+		return false
+	}
+	if open {
+		h.removeGroupChatThinking(ctx, issue, previous.AgentID, placeholder.CommentID)
+	}
+	return previous.Status != "queued"
+}
+
+// removeGroupChatThinking deletes a thinking bubble that still says the agent
+// is thinking. A bubble the agent already filled is kept.
+func (h *Handler) removeGroupChatThinking(ctx context.Context, issue db.Issue, agentID pgtype.UUID, rawID string) {
+	commentID, err := util.ParseUUID(rawID)
+	if err != nil {
+		return
+	}
+	existing, err := h.Queries.GetComment(ctx, commentID)
+	if err != nil || existing.DeletedAt.Valid || existing.Content != groupchat.ThinkingMessage || !sameUUID(existing.AuthorID, agentID) {
+		return
+	}
+	deleted, err := h.deleteComment(ctx, existing.ID, existing.WorkspaceID)
+	if err != nil {
+		slog.Warn("superseded thinking comment was not removed", "comment_id", rawID, "error", err)
+		return
+	}
+	workspaceID := uuidToString(issue.WorkspaceID)
+	for _, removedID := range deleted.RemovedIDs {
+		payload := map[string]any{
+			"comment_id": uuidToString(removedID),
+			"issue_id":   uuidToString(issue.ID),
+		}
+		if deleted.IssueRevision > 0 {
+			payload["issue_revision"] = deleted.IssueRevision
+		}
+		h.publish(protocol.EventCommentDeleted, workspaceID, "agent", uuidToString(agentID), payload)
+	}
+}
+
+// unfinishedGroupChatTask is the newest request this agent has not answered:
+// still queued or claimed, or running while its thinking bubble is open.
+func unfinishedGroupChatTask(tasks []db.AgentTaskQueue, agentID pgtype.UUID) (db.AgentTaskQueue, bool) {
+	for _, task := range tasks {
+		if !sameUUID(task.AgentID, agentID) {
+			continue
+		}
+		switch task.Status {
+		case "queued", "dispatched":
+			return task, true
+		case "running", "waiting_local_directory":
+			if _, open := groupchat.OpenPlaceholder(task.Context); open {
+				return task, true
+			}
+		}
+	}
+	return db.AgentTaskQueue{}, false
+}
+
+func sameUUID(a, b pgtype.UUID) bool {
+	return a.Valid && b.Valid && a.Bytes == b.Bytes
 }
 
 // isGroupChat reports whether the issue is a group chat.

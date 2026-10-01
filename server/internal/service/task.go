@@ -1386,6 +1386,13 @@ func (s *TaskService) EnqueueTaskForMention(ctx context.Context, issue db.Issue,
 	return s.enqueueMentionTask(ctx, issue, agentID, triggerCommentID, false, pgtype.UUID{}, false, "", pgtype.UUID{}, pgtype.UUID{}, origin)
 }
 
+// EnqueueTaskForMentionFresh is EnqueueTaskForMention for a request that
+// cancelled a run already in progress. The new task must not resume the
+// session that run was still writing.
+func (s *TaskService) EnqueueTaskForMentionFresh(ctx context.Context, issue db.Issue, agentID pgtype.UUID, triggerCommentID pgtype.UUID, origin RunOrigin) (db.AgentTaskQueue, error) {
+	return s.enqueueMentionTask(ctx, issue, agentID, triggerCommentID, false, pgtype.UUID{}, true, "", pgtype.UUID{}, pgtype.UUID{}, origin)
+}
+
 // EnqueueTaskForThreadParent creates a queued task for the agent who authored
 // the direct parent comment a member replied to.
 func (s *TaskService) EnqueueTaskForThreadParent(ctx context.Context, issue db.Issue, agentID pgtype.UUID, triggerCommentID pgtype.UUID) (db.AgentTaskQueue, error) {
@@ -7507,6 +7514,7 @@ func commentEventFields(c db.Comment) map[string]any {
 		"type":           c.Type,
 		"parent_id":      util.UUIDToPtr(c.ParentID),
 		"source_task_id": util.UUIDToPtr(c.SourceTaskID),
+		"ref_message_id": util.UUIDToPtr(c.RefMessageID),
 		"created_at":     util.TimestampToString(c.CreatedAt),
 	}
 }
@@ -7520,7 +7528,14 @@ func (s *TaskService) createAgentComment(ctx context.Context, issueID, agentID p
 	if err != nil {
 		return
 	}
+	// Group chat messages stay top-level. The trigger they answer is kept as a
+	// quote so a reply still points at the question that started the run.
+	triggerParent := parentID
 	parentID = groupChatParent(ctx, s.Queries, issue.ID, parentID)
+	var refID pgtype.UUID
+	if commentType == "comment" && triggerParent.Valid && !parentID.Valid {
+		refID = triggerParent
+	}
 	// Resolve the thread root for thread-level side effects without overwriting
 	// parentID. The stored parent_id must remain the exact comment being replied
 	// to; recursive thread reads recover the root when needed.
@@ -7543,6 +7558,7 @@ func (s *TaskService) createAgentComment(ctx context.Context, issueID, agentID p
 		Type:         commentType,
 		ParentID:     parentID,
 		SourceTaskID: sourceTaskID,
+		RefMessageID: refID,
 	})
 	if err != nil {
 		return

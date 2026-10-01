@@ -3,7 +3,9 @@
 // Jev answers typed questions about a state. It does not generate chat text.
 // Group-chat routing uses it to choose whether anyone replies, who, and
 // whether those replies are independent or ordered, then in a later call
-// which delivered messages that agent does not need. The API key comes from
+// which delivered messages that agent does not need. When that agent still
+// has an unfinished request, another call asks whether the newest message
+// supplements it. The API key comes from
 // TYPESAFE_API_KEY. An empty key disables the client: Evaluate returns
 // ErrNotConfigured and does not open a connection.
 package typesafe

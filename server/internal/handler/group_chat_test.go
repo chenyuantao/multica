@@ -653,6 +653,60 @@ func (e *groupChatFilterEvaluator) Evaluate(_ context.Context, state any, questi
 	return out, nil
 }
 
+func TestDirectChatTranscriptHidesUnrelatedMessages(t *testing.T) {
+	ctx := context.Background()
+	agentID := createHandlerTestAgent(t, "direct-filter-agent", nil)
+	var chat GroupChatResponse
+	testutil.Call(t, testHandler.OpenDirectGroupChat, groupChatRequestAs(t, testUserID, "POST", "/api/group-chats/direct", map[string]any{
+		"member_type": "agent", "member_id": agentID,
+	})).Want(http.StatusCreated).JSON(&chat)
+	t.Cleanup(func() {
+		for _, sql := range []string{
+			`DELETE FROM agent_task_queue WHERE issue_id = $1`,
+			`DELETE FROM issue_member WHERE issue_id = $1`,
+			`DELETE FROM issue_subscriber WHERE issue_id = $1`,
+			`DELETE FROM comment WHERE issue_id = $1`,
+			`DELETE FROM issue WHERE id = $1`,
+		} {
+			testPool.Exec(ctx, sql, chat.ID)
+		}
+	})
+	insert := func(content, age string) string {
+		t.Helper()
+		var id string
+		dbfx.QueryRow(t, `
+			INSERT INTO comment (issue_id, workspace_id, author_type, author_id, content, type, created_at)
+			VALUES ($1, $2, 'member', $3, $4, 'comment', now() - $5::interval)
+			RETURNING id::text
+		`, chat.ID, testWorkspaceID, testUserID, content, age).Scan(&id)
+		return id
+	}
+	insert("lunch plans from last week", "2 minutes")
+	checkID := insert("what failed in the deploy?", "1 second")
+
+	ev := &groupChatFilterEvaluator{choice: "屏蔽"}
+	prev := testHandler.GroupChatDecider
+	testHandler.GroupChatDecider = ev
+	t.Cleanup(func() { testHandler.GroupChatDecider = prev })
+
+	issue, err := testHandler.Queries.GetIssue(ctx, parseUUID(chat.ID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var resp AgentTaskResponse
+	testHandler.attachGroupChatTranscript(ctx, &resp, issue, db.AgentTaskQueue{
+		AgentID:          parseUUID(agentID),
+		TriggerCommentID: parseUUID(checkID),
+	})
+	xml := resp.GroupChatTranscript
+	if strings.Contains(xml, "lunch plans from last week") || !strings.Contains(xml, ">"+groupchat.HiddenMessageText+"</msg>") {
+		t.Fatalf("direct chat left the unrelated message visible:\n%s", xml)
+	}
+	if !strings.Contains(xml, "what failed in the deploy?") || len(ev.questions) != 1 {
+		t.Fatalf("the question was hidden or not judged alone:\n%s\nquestions=%d", xml, len(ev.questions))
+	}
+}
+
 func TestGroupChatTranscriptHidesMessagesTheAgentDoesNotNeed(t *testing.T) {
 	ctx := context.Background()
 	agentID := createHandlerTestAgent(t, "filter-transcript-agent", nil)
@@ -733,4 +787,189 @@ func TestGroupChatTranscriptHidesMessagesTheAgentDoesNotNeed(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestGroupChatSupplementCancelsTheUnfinishedTask(t *testing.T) {
+	ev := &groupChatFilterEvaluator{choice: "追加"}
+	prev := testHandler.GroupChatDecider
+	testHandler.GroupChatDecider = ev
+	t.Cleanup(func() { testHandler.GroupChatDecider = prev })
+
+	queued := newSupersedeChat(t, "supersede-queued")
+	postSupersede(t, queued, "check the deploy")
+	postSupersede(t, queued, "and include the logs")
+	if n := taskStatusCount(t, queued, "cancelled"); n != 1 {
+		t.Fatalf("cancelled queued tasks = %d, want 1", n)
+	}
+	if n := taskStatusCount(t, queued, "queued"); n != 1 {
+		t.Fatalf("replacement queued tasks = %d, want 1", n)
+	}
+	if n := dbfx.Count(t, `SELECT count(*) FROM agent_task_queue WHERE issue_id = $1 AND status = 'queued' AND force_fresh_session`, queued); n != 0 {
+		t.Fatalf("a queued request that never started forced a fresh session")
+	}
+	assertOnlyNewThinking := func(chatID string) {
+		t.Helper()
+		if n := dbfx.Count(t, `SELECT count(*) FROM comment WHERE issue_id = $1 AND author_type = 'agent'`, chatID); n != 1 {
+			t.Fatalf("agent messages = %d, want only the replacement's thinking bubble", n)
+		}
+		if n := dbfx.Count(t, `
+			SELECT count(*) FROM comment c
+			JOIN agent_task_queue q ON q.id = c.source_task_id
+			WHERE c.issue_id = $1 AND c.content = $2 AND q.status = 'queued'`, chatID, groupchat.ThinkingMessage); n != 1 {
+			t.Fatalf("the replacement has no thinking bubble")
+		}
+	}
+	assertOnlyNewThinking(queued)
+
+	running := newSupersedeChat(t, "supersede-running")
+	postSupersede(t, running, "check the deploy")
+	dbfx.Exec(t, `UPDATE agent_task_queue SET status = 'running', started_at = now() WHERE issue_id = $1 AND status = 'queued'`, running)
+	postSupersede(t, running, "and include the logs")
+	if n := taskStatusCount(t, running, "cancelled"); n != 1 {
+		t.Fatalf("cancelled running tasks = %d, want 1", n)
+	}
+	if n := dbfx.Count(t, `SELECT count(*) FROM agent_task_queue WHERE issue_id = $1 AND status = 'queued' AND force_fresh_session`, running); n != 1 {
+		t.Fatalf("replacement of a started run did not force a fresh session")
+	}
+	assertOnlyNewThinking(running)
+}
+
+func TestGroupChatNewQuestionLeavesTheUnfinishedTask(t *testing.T) {
+	ev := &groupChatFilterEvaluator{choice: "新问题"}
+	prev := testHandler.GroupChatDecider
+	testHandler.GroupChatDecider = ev
+	t.Cleanup(func() { testHandler.GroupChatDecider = prev })
+
+	chat := newSupersedeChat(t, "supersede-new-question")
+	postSupersede(t, chat, "check the deploy")
+	dbfx.Exec(t, `UPDATE agent_task_queue SET status = 'running', started_at = now() WHERE issue_id = $1 AND status = 'queued'`, chat)
+	postSupersede(t, chat, "what is for lunch")
+	if n := taskStatusCount(t, chat, "running"); n != 1 {
+		t.Fatalf("running tasks = %d, want 1", n)
+	}
+	if n := taskStatusCount(t, chat, "queued"); n != 1 {
+		t.Fatalf("queued tasks = %d, want 1", n)
+	}
+	if n := taskStatusCount(t, chat, "cancelled"); n != 0 {
+		t.Fatalf("cancelled tasks = %d, want 0", n)
+	}
+}
+
+func TestGroupChatFinishedReplyIsNotSuperseded(t *testing.T) {
+	ev := &groupChatFilterEvaluator{choice: "追加"}
+	prev := testHandler.GroupChatDecider
+	testHandler.GroupChatDecider = ev
+	t.Cleanup(func() { testHandler.GroupChatDecider = prev })
+
+	chat := newSupersedeChat(t, "supersede-replied")
+	postSupersede(t, chat, "check the deploy")
+	dbfx.Exec(t, `UPDATE agent_task_queue SET status = 'running', started_at = now(), context = jsonb_set(COALESCE(context, '{}'), '{group_chat_placeholder,open}', 'false') WHERE issue_id = $1`, chat)
+	postSupersede(t, chat, "and include the logs")
+	if n := taskStatusCount(t, chat, "running"); n != 1 {
+		t.Fatalf("running tasks = %d, want 1", n)
+	}
+	if n := taskStatusCount(t, chat, "cancelled"); n != 0 {
+		t.Fatalf("cancelled tasks = %d, want 0", n)
+	}
+	if n := taskStatusCount(t, chat, "queued"); n != 1 {
+		t.Fatalf("queued tasks = %d, want 1", n)
+	}
+}
+
+func newSupersedeChat(t *testing.T, agentName string) string {
+	t.Helper()
+	agentID := createHandlerTestAgent(t, agentName, nil)
+	var chat GroupChatResponse
+	testutil.Call(t, testHandler.CreateGroupChat, groupChatRequestAs(t, testUserID, "POST", "/api/group-chats", map[string]any{
+		"title":   agentName,
+		"members": []map[string]string{{"member_type": "agent", "member_id": agentID}},
+	})).Want(http.StatusCreated).JSON(&chat)
+	t.Cleanup(func() {
+		ctx := context.Background()
+		for _, sql := range []string{
+			`DELETE FROM agent_task_queue WHERE issue_id = $1`,
+			`DELETE FROM issue_member WHERE issue_id = $1`,
+			`DELETE FROM issue_subscriber WHERE issue_id = $1`,
+			`DELETE FROM comment WHERE issue_id = $1`,
+			`DELETE FROM issue WHERE id = $1`,
+		} {
+			testPool.Exec(ctx, sql, chat.ID)
+		}
+	})
+	return chat.ID
+}
+
+func postSupersede(t *testing.T, chatID, content string) {
+	t.Helper()
+	testutil.Call(t, testHandler.CreateComment, withURLParam(groupChatRequestAs(t, testUserID, "POST", "/api/issues/"+chatID+"/comments", map[string]string{
+		"content": content,
+	}), "id", chatID)).Want(http.StatusCreated)
+}
+
+func taskStatusCount(t *testing.T, chatID, status string) int {
+	t.Helper()
+	return dbfx.Count(t, `SELECT count(*) FROM agent_task_queue WHERE issue_id = $1 AND status = $2`, chatID, status)
+}
+
+func TestGroupChatReplyQuotesTheTriggerMessage(t *testing.T) {
+	ctx := context.Background()
+	agentID := createHandlerTestAgent(t, "reply-ref-agent", nil)
+	var chat GroupChatResponse
+	testutil.Call(t, testHandler.CreateGroupChat, groupChatRequestAs(t, testUserID, "POST", "/api/group-chats", map[string]any{
+		"title":   "Reply ref",
+		"members": []map[string]string{{"member_type": "agent", "member_id": agentID}},
+	})).Want(http.StatusCreated).JSON(&chat)
+	t.Cleanup(func() {
+		for _, sql := range []string{
+			`DELETE FROM agent_task_queue WHERE issue_id = $1`,
+			`DELETE FROM issue_member WHERE issue_id = $1`,
+			`DELETE FROM issue_subscriber WHERE issue_id = $1`,
+			`DELETE FROM comment WHERE issue_id = $1`,
+			`DELETE FROM issue WHERE id = $1`,
+		} {
+			testPool.Exec(ctx, sql, chat.ID)
+		}
+	})
+
+	var trigger CommentResponse
+	testutil.Call(t, testHandler.CreateComment, withURLParam(groupChatRequestAs(t, testUserID, "POST", "/api/issues/"+chat.ID+"/comments", map[string]string{
+		"content": "please check the deploy",
+	}), "id", chat.ID)).Want(http.StatusCreated).JSON(&trigger)
+	if trigger.RefMessageID != nil {
+		t.Fatalf("the question quoted %v", *trigger.RefMessageID)
+	}
+
+	var thinkingID, refID string
+	dbfx.QueryRow(t, `SELECT id::text, ref_message_id::text FROM comment WHERE issue_id = $1 AND content = $2`, chat.ID, groupchat.ThinkingMessage).Scan(&thinkingID, &refID)
+	if refID != trigger.ID {
+		t.Fatalf("thinking ref = %q, want %s", refID, trigger.ID)
+	}
+	var taskID string
+	dbfx.QueryRow(t, `SELECT id::text FROM agent_task_queue WHERE issue_id = $1 AND trigger_comment_id = $2`, chat.ID, trigger.ID).Scan(&taskID)
+
+	reply := postGroupChatAsAgent(t, chat.ID, agentID, taskID, map[string]any{"content": "the deploy failed in the logs"})
+	if reply.ID != thinkingID || reply.RefMessageID == nil || *reply.RefMessageID != trigger.ID {
+		t.Fatalf("reply id=%s ref=%v, want the thinking comment quoting %s", reply.ID, reply.RefMessageID, trigger.ID)
+	}
+
+	follow := postGroupChatAsAgent(t, chat.ID, agentID, taskID, map[string]any{"content": "and the metrics look normal"})
+	if follow.ID == thinkingID || follow.RefMessageID == nil || *follow.RefMessageID != trigger.ID {
+		t.Fatalf("follow-up id=%s ref=%v, want a new comment quoting %s", follow.ID, follow.RefMessageID, trigger.ID)
+	}
+
+	other := dbfx.Comment(t, chat.ID, "an older note")
+	chosen := postGroupChatAsAgent(t, chat.ID, agentID, taskID, map[string]any{"content": "about that note", "ref_message_id": other})
+	if chosen.RefMessageID == nil || *chosen.RefMessageID != other {
+		t.Fatalf("explicit ref = %v, want %s", chosen.RefMessageID, other)
+	}
+}
+
+func postGroupChatAsAgent(t *testing.T, chatID, agentID, taskID string, body map[string]any) CommentResponse {
+	t.Helper()
+	req := groupChatRequestAs(t, testUserID, "POST", "/api/issues/"+chatID+"/comments", body)
+	req.Header.Set("X-Agent-ID", agentID)
+	req.Header.Set("X-Task-ID", taskID)
+	var resp CommentResponse
+	testutil.Call(t, testHandler.CreateComment, withURLParam(req, "id", chatID)).Want(http.StatusCreated).JSON(&resp)
+	return resp
 }
