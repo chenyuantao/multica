@@ -106,7 +106,8 @@ func SelectTranscript(turns []Turn, triggerIDs []string, maxRunes, perMessage in
 }
 
 // Render writes the transcript as a <group_chat> XML block, oldest first.
-// It opens with the chat <title> and, when set, its <notice>. Each <msg> carries its history index, id, time, sender and role; triggers,
+// A group chat opens with its <title> and, when set, its <notice>. A direct
+// chat leaves both unset. Each <msg> carries its history index, id, time, sender and role; triggers,
 // cut-down messages and quotes are marked on it, and omitted ranges become
 // <omitted> elements. The closing <desc> explains the markup, starting with
 // intro, and lists the commands that read cut-down or omitted messages.

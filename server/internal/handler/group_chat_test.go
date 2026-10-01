@@ -4,10 +4,12 @@ import (
 	"context"
 	"net/http"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/multica-ai/multica/server/internal/groupchat"
 	"github.com/multica-ai/multica/server/internal/testutil"
+	db "github.com/multica-ai/multica/server/pkg/db/generated"
 )
 
 func groupChatRequestAs(t *testing.T, userID, method, path string, body any) *http.Request {
@@ -567,5 +569,67 @@ func TestGroupChatAttachmentOnlyMessageStartsNoAgent(t *testing.T) {
 	}), "id", chat.ID)).Want(http.StatusCreated)
 	if n := tasks(); n != 1 {
 		t.Fatalf("tasks after text message = %d, want 1", n)
+	}
+}
+
+func TestDirectChatTranscriptOmitsTitleAndNotice(t *testing.T) {
+	ctx := context.Background()
+	agentID := createHandlerTestAgent(t, "direct-transcript-agent", nil)
+
+	var direct GroupChatResponse
+	testutil.Call(t, testHandler.OpenDirectGroupChat, groupChatRequestAs(t, testUserID, "POST", "/api/group-chats/direct", map[string]any{
+		"member_type": "agent", "member_id": agentID,
+	})).Want(http.StatusCreated).JSON(&direct)
+	var room GroupChatResponse
+	testutil.Call(t, testHandler.CreateGroupChat, groupChatRequestAs(t, testUserID, "POST", "/api/group-chats", map[string]any{
+		"title":   "Launch <room>",
+		"members": []map[string]string{{"member_type": "agent", "member_id": agentID}},
+	})).Want(http.StatusCreated).JSON(&room)
+
+	for _, id := range []string{direct.ID, room.ID} {
+		t.Cleanup(func() {
+			for _, sql := range []string{
+				`DELETE FROM agent_task_queue WHERE issue_id = $1`,
+				`DELETE FROM issue_member WHERE issue_id = $1`,
+				`DELETE FROM issue_subscriber WHERE issue_id = $1`,
+				`DELETE FROM comment WHERE issue_id = $1`,
+				`DELETE FROM issue WHERE id = $1`,
+			} {
+				testPool.Exec(ctx, sql, id)
+			}
+		})
+	}
+
+	for _, id := range []string{direct.ID, room.ID} {
+		testutil.Call(t, testHandler.CreateComment, withURLParam(groupChatRequestAs(t, testUserID, "POST", "/api/issues/"+id+"/comments", map[string]string{
+			"content": "ping",
+		}), "id", id)).Want(http.StatusCreated)
+		testutil.Call(t, testHandler.UpdateGroupChat, withURLParam(groupChatRequestAs(t, testUserID, "PATCH", "/api/group-chats/"+id, map[string]string{
+			"description": "Ship on Friday",
+		}), "id", id)).Want(http.StatusOK)
+	}
+
+	render := func(id string) string {
+		t.Helper()
+		issue, err := testHandler.Queries.GetIssue(ctx, parseUUID(id))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var resp AgentTaskResponse
+		testHandler.attachGroupChatTranscript(ctx, &resp, issue, db.AgentTaskQueue{})
+		return resp.GroupChatTranscript
+	}
+
+	directXML := render(direct.ID)
+	if strings.Contains(directXML, "<title>") || strings.Contains(directXML, "<notice>") {
+		t.Fatalf("direct chat transcript includes a heading:\n%s", directXML)
+	}
+	if !strings.Contains(directXML, ">ping</msg>") {
+		t.Fatalf("direct chat transcript missing the message:\n%s", directXML)
+	}
+
+	roomXML := render(room.ID)
+	if !strings.Contains(roomXML, "<title>Launch &lt;room&gt;</title>") || !strings.Contains(roomXML, "<notice>\nShip on Friday\n</notice>") {
+		t.Fatalf("group transcript missing title or notice:\n%s", roomXML)
 	}
 }
