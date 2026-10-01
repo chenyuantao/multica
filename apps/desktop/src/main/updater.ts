@@ -4,6 +4,7 @@ import type {
   ManualUpdateCheckResult,
   UpdaterPreferences,
 } from "../shared/updater-types";
+import { installMacSelfUpdate } from "./mac-self-update";
 import {
   DEFAULT_UPDATER_PREFERENCES,
   loadUpdaterPreferences,
@@ -110,6 +111,9 @@ function checkForUpdatesOnce(): Promise<unknown> {
 }
 
 export function setupAutoUpdater(getMainWindow: () => BrowserWindow | null): void {
+  if (process.platform === "darwin" && app.isPackaged) {
+    installMacSelfUpdate(autoUpdater);
+  }
   const preferencesFilePath = updaterPreferencesPath(app.getPath("userData"));
   let automaticUpdatesEnabled =
     DEFAULT_UPDATER_PREFERENCES.automaticUpdates;
