@@ -27,6 +27,7 @@ import (
 	"github.com/multica-ai/multica/server/internal/maintenance"
 	obsmetrics "github.com/multica-ai/multica/server/internal/metrics"
 	"github.com/multica-ai/multica/server/internal/profiling"
+	"github.com/multica-ai/multica/server/internal/push"
 	"github.com/multica-ai/multica/server/internal/realtime"
 	"github.com/multica-ai/multica/server/internal/scheduler"
 	"github.com/multica-ai/multica/server/internal/selfhosttelemetry"
@@ -615,6 +616,21 @@ func main() {
 	registerSubscriberListeners(bus, pool)
 	registerActivityListeners(bus, queries)
 	registerNotificationListeners(bus, queries)
+
+	var presence realtime.UserPresence = realtime.LocalUserPresence{Hub: hub}
+	if relay != nil && storeRedis != nil {
+		redisPresence := realtime.NewRedisUserPresence(hub, storeRedis)
+		redisPresence.Start(relayCtx)
+		presence = redisPresence
+	}
+	pushSenders := map[string]push.Sender{}
+	if cfg := push.WebPushConfigFromEnv(); cfg.Enabled() {
+		pushSenders[push.PlatformWebPush] = push.NewWebPushSender(cfg)
+	}
+	if pushService := push.NewService(queries, presence, pushSenders, slog.Default()); pushService != nil {
+		pushService.Register(bus)
+		slog.Info("push: inbox notifications enabled", "platforms", len(pushSenders))
+	}
 
 	metricsConfig := obsmetrics.ConfigFromEnv()
 	var metricsServer *http.Server

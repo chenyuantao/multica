@@ -1350,6 +1350,18 @@ type ProjectResource struct {
 	CreatedBy    pgtype.UUID        `json:"created_by"`
 }
 
+type PushSubscription struct {
+	ID        pgtype.UUID        `json:"id"`
+	UserID    pgtype.UUID        `json:"user_id"`
+	Platform  string             `json:"platform"`
+	Token     string             `json:"token"`
+	P256dh    string             `json:"p256dh"`
+	Auth      string             `json:"auth"`
+	UserAgent string             `json:"user_agent"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
 type QuickAction struct {
 	ID            pgtype.UUID        `json:"id"`
 	WorkspaceID   pgtype.UUID        `json:"workspace_id"`

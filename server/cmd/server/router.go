@@ -1941,6 +1941,14 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			r.Delete("/{id}", h.RevokePersonalAccessToken)
 		})
 
+		// Account-level: one device receives every workspace's inbox.
+		r.Route("/api/push", func(r chi.Router) {
+			r.Use(handler.RequireHumanActor)
+			r.Get("/config", h.GetPushConfig)
+			r.Post("/subscriptions", h.RegisterPushSubscription)
+			r.Delete("/subscriptions", h.DeletePushSubscription)
+		})
+
 		// Cloud Billing proxy. Same upstream service / port as
 		// cloud-runtime — multica-cloud's Fleet and Billing share
 		// :8080 and the same chi router. All routes here forward

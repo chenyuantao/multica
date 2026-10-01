@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS uq_push_subscription_platform_token;
