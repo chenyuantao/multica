@@ -11,6 +11,16 @@ pushes publish moving image tags separately; see [Branch images](#branch-images)
 The verification job runs the Go tests and `govulncheck` before any publishing
 job starts. The vulnerability scan is fail-closed by default.
 
+## Automatic branch releases
+
+Pushes to the branches listed under `on.push.branches` in
+`.github/workflows/release.yml` release without a manual tag. After the
+verification job passes, it tags the pushed commit with the next patch version
+(highest `vX.Y.Z` tag plus one; with no tags, the version in
+`apps/desktop/package.json` plus one) and publishes from that tag. Re-running a
+workflow for an already-tagged commit reuses its tag. A failed verification
+creates no tag.
+
 ## Branch images
 
 `.github/workflows/branch-images.yml` runs on every branch push. It builds
