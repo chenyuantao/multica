@@ -164,6 +164,9 @@
     "keep_mine": "Garder ma version",
     "placeholder": "Commencez à écrire…",
     "back": "Retour à la base de connaissances",
+    "card": {
+      "open_in_knowledge": "Ouvrir dans la base de connaissances"
+    },
     "dialog": {
       "title": "Nouvelle note",
       "location": "Emplacement : {{dir}}",

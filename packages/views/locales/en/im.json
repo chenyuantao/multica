@@ -164,6 +164,9 @@
     "keep_mine": "Keep my version",
     "placeholder": "Start writing…",
     "back": "Back to knowledge base",
+    "card": {
+      "open_in_knowledge": "Open in knowledge base"
+    },
     "dialog": {
       "title": "New note",
       "location": "Location: {{dir}}",

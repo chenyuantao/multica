@@ -160,6 +160,9 @@
     "keep_mine": "自分の版を残す",
     "placeholder": "書き始める…",
     "back": "ナレッジベースに戻る",
+    "card": {
+      "open_in_knowledge": "ナレッジベースで開く"
+    },
     "dialog": {
       "title": "新しいノート",
       "location": "場所：{{dir}}",

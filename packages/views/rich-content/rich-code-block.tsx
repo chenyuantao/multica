@@ -42,17 +42,23 @@ import {
 } from "../editor/html-block-preview";
 import { highlightCode } from "../editor/syntax-highlight";
 import { LazyRichBlock } from "./lazy-rich-block";
+import { parseObsidianNote } from "./obsidian-note";
+import { ObsidianNoteCard } from "./obsidian-note-card";
 
 /**
  * Languages that may become a rich block. Anything else — including unknown
- * and absent languages — renders as static highlighted code.
+ * and absent languages — renders as static highlighted code. An `obsidian`
+ * fence becomes a note card only when its JSON body parses; otherwise it stays
+ * source.
  */
-export type RichFenceLanguage = "mermaid" | "html";
+export type RichFenceLanguage = "mermaid" | "html" | "obsidian";
+
+type DynamicFenceLanguage = Exclude<RichFenceLanguage, "obsidian">;
 
 export function isRichFenceLanguage(
   language: string | undefined,
 ): language is RichFenceLanguage {
-  return language === "mermaid" || language === "html";
+  return language === "mermaid" || language === "html" || language === "obsidian";
 }
 
 /**
@@ -185,6 +191,31 @@ export function RichFenceBlock({
   /** From the fence info string: ```html title="…". */
   title?: string | null;
 }) {
+  if (language === "obsidian") return <ObsidianNoteFence body={body} />;
+  return <DynamicFenceBlock language={language} body={body} title={title} />;
+}
+
+function ObsidianNoteFence({ body }: { body: string }) {
+  const note = useMemo(() => parseObsidianNote(body), [body]);
+  if (!note) {
+    return (
+      <CodeBlockShell language="obsidian" code={body}>
+        <StaticCodeBody language="obsidian" body={body} />
+      </CodeBlockShell>
+    );
+  }
+  return <ObsidianNoteCard note={note} />;
+}
+
+function DynamicFenceBlock({
+  language,
+  body,
+  title,
+}: {
+  language: DynamicFenceLanguage;
+  body: string;
+  title?: string | null;
+}) {
   const reservedHeightPx = useReservedHeightPx(language, body);
   return (
     <LazyRichBlock reservedHeightPx={reservedHeightPx} sourceKey={body}>
@@ -197,12 +228,12 @@ export function RichFenceBlock({
   );
 }
 
-const DEFAULT_RESERVED_PX: Record<RichFenceLanguage, number> = {
+const DEFAULT_RESERVED_PX: Record<DynamicFenceLanguage, number> = {
   mermaid: MERMAID_BLOCK_DEFAULT_RESERVED_PX,
   html: HTML_BLOCK_DEFAULT_RESERVED_PX,
 };
 
-const cachedReservedPx: Record<RichFenceLanguage, (body: string) => number> = {
+const cachedReservedPx: Record<DynamicFenceLanguage, (body: string) => number> = {
   mermaid: reservedMermaidBlockHeightPx,
   html: reservedHtmlBlockHeightPx,
 };
@@ -218,7 +249,7 @@ const cachedReservedPx: Record<RichFenceLanguage, (body: string) => number> = {
  * and does NOT repair. Deferring the read to an effect keeps the first frame
  * identical everywhere and still gets the zero-shift benefit immediately after.
  */
-function useReservedHeightPx(language: RichFenceLanguage, body: string): number {
+function useReservedHeightPx(language: DynamicFenceLanguage, body: string): number {
   const [height, setHeight] = useState(DEFAULT_RESERVED_PX[language]);
   useEffect(() => {
     const cached = cachedReservedPx[language](body);

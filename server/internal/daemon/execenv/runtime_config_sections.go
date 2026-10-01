@@ -968,6 +968,15 @@ func writeInlineBlocksPolicy(b *strings.Builder) {
 	b.WriteString("\n**Charts and diagrams:** put them in the text as a fenced `html` or `mermaid` code block — it renders in place (name it with `title=\"...\"` after the language). An attached file, HTML included, shows as a card instead. Theming and sizing: the multica-platform issues reference.\n")
 }
 
+// writeObsidianNotePolicy tells the same web-rendered surfaces how to report
+// an Obsidian note the agent created or modified. The web turns a closed
+// `obsidian` fence holding this JSON into a note card that opens the note from
+// the deployment's vault, and the docs API addresses notes by vault-relative
+// path only — an absolute path cannot be opened.
+func writeObsidianNotePolicy(b *strings.Builder) {
+	b.WriteString("\n**Obsidian notes:** for each Obsidian note you create or modify, add one fenced `obsidian` code block to your reply holding only this JSON: `{\"name\": \"<file name without .md>\", \"summary\": \"<first 50 characters of the note body, frontmatter and Markdown markup removed>\", \"path\": \"<path from the vault root, forward slashes, ending in .md>\"}`. It renders as a note card that opens the note. The vault root is the nearest ancestor directory containing `.obsidian/`; `path` is never absolute and never starts with `/`.\n")
+}
+
 // writeOutput emits the kind-specific Output section: the always-on delivery
 // invariant plus one per-surface file-delivery policy line per kind.
 func writeOutput(b *strings.Builder, kind taskKind, ctx TaskContextForEnv) {
@@ -1006,6 +1015,7 @@ func writeOutput(b *strings.Builder, kind taskKind, ctx TaskContextForEnv) {
 		} else {
 			b.WriteString("**Delivering files here:** run `multica attachment upload <local-path>` — it binds the file to your reply and it renders as an attachment card. That command is the ONLY way a file reaches the user; a path written into your reply text is not.\n")
 			writeInlineBlocksPolicy(b)
+			writeObsidianNotePolicy(b)
 		}
 	default:
 		if ctx.IsSquadLeader {
@@ -1017,6 +1027,7 @@ func writeOutput(b *strings.Builder, kind taskKind, ctx TaskContextForEnv) {
 		b.WriteString("Keep comments concise and natural — state the outcome, not the process.\n\n")
 		b.WriteString("**Delivering files here:** pass `--attachment <path>` to `multica issue comment add` (repeatable) — the only way a screenshot or artifact reaches the reader.\n")
 		writeInlineBlocksPolicy(b)
+		writeObsidianNotePolicy(b)
 	}
 	b.WriteString("\n")
 	writeDeliveryInvariant(b)

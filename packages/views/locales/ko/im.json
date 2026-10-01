@@ -160,6 +160,9 @@
     "keep_mine": "내 버전 유지",
     "placeholder": "작성 시작…",
     "back": "지식 베이스로 돌아가기",
+    "card": {
+      "open_in_knowledge": "지식 베이스에서 열기"
+    },
     "dialog": {
       "title": "새 노트",
       "location": "위치: {{dir}}",
