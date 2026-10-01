@@ -1,13 +1,12 @@
 name: Branch images
 
-# Push to a branch publishes moving GHCR tags for the self-hosted images.
-# The tag is the branch name, sanitized to a Docker tag (`/` becomes `-`).
-# `latest` and release versions stay on the Release workflow.
+# Manually publishes moving GHCR tags for the self-hosted images of the
+# selected branch. The tag is the branch name, sanitized to a Docker tag
+# (`/` becomes `-`). `latest` and release versions stay on the Release
+# workflow. Branch pushes no longer trigger it: deployments build from the
+# GitHub repository directly.
 
 on:
-  push:
-    branches:
-      - "**"
   workflow_dispatch:
 
 permissions:
@@ -92,35 +91,3 @@ jobs:
       extra_build_args: |
         REMOTE_API_URL=http://backend:8080
         NEXT_PUBLIC_APP_VERSION=${{ needs.tag.outputs.value }}
-
-  # Points the Zeabur prebuilt-image services at this commit's immutable
-  # `sha-<commit>` tag, which makes Zeabur pull and deploy the new image.
-  # `service redeploy` only works for services bound to a GitHub repository.
-  # Repositories without ZEABUR_DEPLOY_BRANCH configured skip this job.
-  zeabur-redeploy:
-    needs: [backend, web]
-    if: vars.ZEABUR_DEPLOY_BRANCH != '' && github.ref_name == vars.ZEABUR_DEPLOY_BRANCH
-    runs-on: ubuntu-latest
-    env:
-      ZEABUR_TOKEN: ${{ secrets.ZEABUR_TOKEN }}
-      ENV_ID: ${{ vars.ZEABUR_ENV_ID }}
-      BACKEND_ID: ${{ vars.ZEABUR_BACKEND_SERVICE_ID }}
-      WEB_ID: ${{ vars.ZEABUR_WEB_SERVICE_ID }}
-    steps:
-      - name: Check Zeabur configuration
-        run: |
-          for name in ZEABUR_TOKEN ENV_ID BACKEND_ID WEB_ID; do
-            if [[ -z "${!name}" ]]; then
-              echo "::error::$name is not configured."
-              exit 1
-            fi
-          done
-
-      - name: Log in to Zeabur
-        run: npx -y zeabur@latest auth login --token "$ZEABUR_TOKEN" --interactive=false
-
-      - name: Deploy backend image
-        run: npx -y zeabur@latest service update tag --id "$BACKEND_ID" --env-id "$ENV_ID" --tag "sha-$GITHUB_SHA" -y --interactive=false
-
-      - name: Deploy web image
-        run: npx -y zeabur@latest service update tag --id "$WEB_ID" --env-id "$ENV_ID" --tag "sha-$GITHUB_SHA" -y --interactive=false
