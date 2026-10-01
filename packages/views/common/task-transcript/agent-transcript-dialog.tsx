@@ -27,6 +27,7 @@ import {
   Info,
   Coins,
   GitBranch,
+  MessagesSquare,
 } from "lucide-react";
 import { cn } from "@multica/ui/lib/utils";
 import { copyText } from "@multica/ui/lib/clipboard";
@@ -77,6 +78,7 @@ import {
   type TraceRow,
   type TraceStep,
 } from "./build-steps";
+import { formatTranscriptXml, readGroupChatTranscript } from "./group-chat-transcript";
 import { buildRunOutcome } from "./run-outcome";
 import { RunTimeline } from "./run-timeline";
 import {
@@ -279,7 +281,16 @@ const VirtuosoList = forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElem
     return <div ref={ref} {...props} className="divide-y" />;
   },
 );
-const LIST_COMPONENTS: Components<TraceRow> = { List: VirtuosoList };
+const LIST_COMPONENTS: Components<ListRow> = { List: VirtuosoList };
+
+/** The group history the run was handed; it precedes every step. */
+interface GroupChatListRow {
+  kind: "group_chat";
+  seq: number;
+  text: string;
+}
+type ListRow = TraceRow | GroupChatListRow;
+const GROUP_CHAT_ROW_SEQ = -1;
 const COPY_FEEDBACK_DURATION_MS = 2000;
 
 function useCopyFeedback() {
@@ -557,6 +568,23 @@ export function AgentTranscriptDialog({
     [rows, sortDirection],
   );
 
+  const groupChatXml = useMemo(() => {
+    const raw = readGroupChatTranscript(promptText);
+    return raw ? formatTranscriptXml(raw) : "";
+  }, [promptText]);
+  // A step facet never selects the transcript; a search does when it matches.
+  const groupChatRow = useMemo<GroupChatListRow | null>(() => {
+    if (!groupChatXml || activeFilterKeys.length > 0) return null;
+    if (trimmedQuery.length > 0 && !groupChatXml.toLowerCase().includes(trimmedQuery)) return null;
+    return { kind: "group_chat", seq: GROUP_CHAT_ROW_SEQ, text: groupChatXml };
+  }, [groupChatXml, activeFilterKeys.length, trimmedQuery]);
+  const listRows = useMemo<ListRow[]>(() => {
+    if (!groupChatRow) return displayRows;
+    return sortDirection === "newest_first"
+      ? [...displayRows, groupChatRow]
+      : [groupChatRow, ...displayRows];
+  }, [displayRows, groupChatRow, sortDirection]);
+
   const runStart = task.started_at ?? task.dispatched_at ?? steps[0]?.startedAt;
   const runStartMs = timeMs(runStart);
   const lastStamp = useMemo(() => {
@@ -592,8 +620,8 @@ export function AgentTranscriptDialog({
   // filter, or task changes can shrink the list, so `listEpoch` remounts the
   // instance (fresh at top) instead of letting firstItemIndex climb.
   const firstItemIndex =
-    sortDirection === "newest_first" ? 1_000_000 - displayRows.length : 0;
-  const listEpoch = `${task.id}:${sortDirection}:${activeFilterKeys.join(",")}:${trimmedQuery}`;
+    sortDirection === "newest_first" ? 1_000_000 - listRows.length : 0;
+  const listEpoch = `${task.id}:${sortDirection}:${activeFilterKeys.join(",")}:${trimmedQuery}:${groupChatRow ? "gc" : ""}`;
 
   const handleSortDirectionChange = useCallback(
     (dir: TranscriptSortDirection) => {
@@ -620,7 +648,7 @@ export function AgentTranscriptDialog({
   // smooth animation spans multiple flushes and its in-flight position reads
   // as user displacement. The scroll-event enforcement in handleScrollerRef
   // is the authoritative pin; this effect just shortens the first-paint gap.
-  const displayCount = displayRows.length;
+  const displayCount = listRows.length;
   useLayoutEffect(() => {
     if (!followCtl.isFollowing()) return;
     virtuosoRef.current?.scrollToIndex({ index: 0, align: "start", behavior: "auto" });
@@ -660,7 +688,11 @@ export function AgentTranscriptDialog({
 
   const scrollToStep = useCallback(
     (seq: number) => {
-      const index = displayRows.findIndex((row) => row.seq === seq || rowCalls(row).some((c) => c.seq === seq));
+      const index = listRows.findIndex(
+        (row) =>
+          row.kind !== "group_chat" &&
+          (row.seq === seq || rowCalls(row).some((c) => c.seq === seq)),
+      );
       if (index < 0) return;
       // Explicit navigation away from the live end unlatches the newest-first
       // follow — otherwise the scroll-event enforcement would pin the viewport
@@ -668,7 +700,7 @@ export function AgentTranscriptDialog({
       if (index > 0) followCtl.disengage();
       virtuosoRef.current?.scrollToIndex({ index, align: "center", behavior: "smooth" });
     },
-    [displayRows, followCtl],
+    [listRows, followCtl],
   );
 
   // Clicking the timeline lands on the first step at or after that offset.
@@ -1286,7 +1318,7 @@ export function AgentTranscriptDialog({
         {/* ── Steps, and the inspector when one is selected ───────────── */}
         <div className="flex min-h-0 flex-1">
           <div className="flex min-w-0 flex-1 flex-col">
-            {contentState ? <div className="flex h-full items-center justify-center p-4">{contentState}</div> : displayRows.length === 0 ? (
+            {contentState ? <div className="flex h-full items-center justify-center p-4">{contentState}</div> : listRows.length === 0 ? (
               <div className="flex h-full items-center justify-center text-body text-muted-foreground">
                 {isLive && steps.length === 0 ? (
                   <div className="flex items-center gap-2">
@@ -1306,7 +1338,7 @@ export function AgentTranscriptDialog({
                 key={listEpoch}
                 ref={virtuosoRef}
                 style={{ height: "100%" }}
-                data={displayRows}
+                data={listRows}
                 firstItemIndex={firstItemIndex}
                 // Open a live chronological transcript pinned to the newest
                 // step (#5921); the per-listEpoch remount re-applies this after
@@ -1325,7 +1357,9 @@ export function AgentTranscriptDialog({
                 scrollerRef={handleScrollerRef}
                 computeItemKey={(_, row) => row.seq}
                 components={LIST_COMPONENTS}
-                itemContent={(_, row) => (
+                itemContent={(_, row) => row.kind === "group_chat" ? (
+                  <GroupChatRow text={row.text} />
+                ) : (
                   <TranscriptRow
                     row={row}
                     formatText={formatText}
@@ -1481,6 +1515,26 @@ function TranscriptRow(props: TranscriptRowProps) {
   if (isGroupRow(row)) return <GroupRow {...props} row={row} />;
   if (!isCallStep(row) && row.kind === "text") return <ProseRow {...props} row={row} />;
   return <StepRow {...props} row={row} />;
+}
+
+/** The group history the run was handed, as indented XML at the run's start. */
+function GroupChatRow({ text }: { text: string }) {
+  const { t } = useT("agents");
+  return (
+    <div className="flex items-start gap-2 px-4 py-2">
+      <span className="w-11 shrink-0 pt-0.5 text-right font-mono text-micro tabular-nums text-faint-foreground">
+        {formatOffset(0)}
+      </span>
+      <span aria-hidden className="mt-0.5 w-0.5 self-stretch rounded-full bg-border" />
+      <MessagesSquare aria-hidden className="mt-1 h-3 w-3 shrink-0 text-muted-foreground" />
+      <div className="min-w-0 flex-1">
+        <span className="text-caption font-medium text-foreground">
+          {t(($) => $.transcript.kind_group_chat)}
+        </span>
+        <ToolDetailSurface text={text} language="xml" />
+      </div>
+    </div>
+  );
 }
 
 /** The offset column: where in the run this happened. */

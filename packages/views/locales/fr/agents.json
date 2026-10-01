@@ -904,6 +904,7 @@
     "kind_tool": "Outil",
     "kind_thinking": "Réflexion",
     "kind_error": "Erreur",
+    "kind_group_chat": "Historique du groupe",
     "group_calls_one": "{{count}} appel",
     "group_calls_other": "{{count}} appels",
     "step_running": "Toujours en cours",
