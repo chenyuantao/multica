@@ -178,6 +178,21 @@ export function envWithLocalBins(env = process.env, root = desktopRoot) {
   return { ...env, [pathKey]: mergedPath };
 }
 
+// electron-builder only skips certificate import when these are unset; an
+// empty string (what CI passes when the signing secret is absent) is resolved
+// as a path relative to the project dir and fails with "<dir> not a file".
+const CERTIFICATE_LINK_ENV_KEYS = ["CSC_LINK", "CSC_INSTALLER_LINK"];
+
+export function withoutEmptyCertificateLinks(env = process.env) {
+  const result = { ...env };
+  for (const key of CERTIFICATE_LINK_ENV_KEYS) {
+    if (typeof result[key] === "string" && result[key].trim() === "") {
+      delete result[key];
+    }
+  }
+  return result;
+}
+
 function hostPlatformKey(platform = process.platform) {
   if (platform === "darwin") return "mac";
   if (platform === "win32") return "win";
@@ -459,7 +474,7 @@ function main() {
     const result = spawnSync("electron-builder", builderArgs, {
       stdio: "inherit",
       cwd: desktopRoot,
-      env: envWithLocalBins(),
+      env: withoutEmptyCertificateLinks(envWithLocalBins()),
       shell: true,
     });
 

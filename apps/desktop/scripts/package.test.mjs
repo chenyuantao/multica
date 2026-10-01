@@ -12,6 +12,7 @@ import {
   parsePackageArgs,
   resolveBuildMatrix,
   stripLeadingSeparator,
+  withoutEmptyCertificateLinks,
 } from "./package.mjs";
 
 describe("normalizeGitVersion", () => {
@@ -394,6 +395,25 @@ describe("builderArgsForTarget", () => {
       "--publish",
       "never",
     ]);
+  });
+});
+
+describe("withoutEmptyCertificateLinks", () => {
+  it("drops empty certificate links so electron-builder skips signing import", () => {
+    const result = withoutEmptyCertificateLinks({
+      CSC_LINK: "",
+      CSC_INSTALLER_LINK: "  ",
+      CSC_KEY_PASSWORD: "",
+      PATH: "/usr/bin",
+    });
+    expect(result).not.toHaveProperty("CSC_LINK");
+    expect(result).not.toHaveProperty("CSC_INSTALLER_LINK");
+    expect(result).toEqual({ CSC_KEY_PASSWORD: "", PATH: "/usr/bin" });
+  });
+
+  it("keeps configured certificate links", () => {
+    const env = { CSC_LINK: "base64cert=", CSC_INSTALLER_LINK: "/tmp/i.p12" };
+    expect(withoutEmptyCertificateLinks(env)).toEqual(env);
   });
 });
 
