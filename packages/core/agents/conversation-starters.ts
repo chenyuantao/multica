@@ -1,4 +1,18 @@
 import type { Agent, AgentConversationStarter } from "../types";
+import { AGENT_CONVERSATION_STARTERS_MAX } from "./constants";
+
+/**
+ * The starters an agent's owner actually configured, without the generic
+ * fallbacks: surfaces that stay visible for the whole conversation offer an
+ * entry only for agents that have their own. Archived agents offer none.
+ */
+export function configuredConversationStarters(
+  agent: Pick<Agent, "archived_at" | "conversation_starters"> | null | undefined,
+): AgentConversationStarter[] {
+  if (!agent || agent.archived_at) return [];
+  const { starters, isFallback } = selectConversationStarters(agent.conversation_starters, []);
+  return isFallback ? [] : starters.slice(0, AGENT_CONVERSATION_STARTERS_MAX);
+}
 
 /**
  * Resolve what a new chat with this agent actually shows.

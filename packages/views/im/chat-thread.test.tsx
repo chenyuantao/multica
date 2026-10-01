@@ -47,7 +47,14 @@ vi.mock("../modals/agent-detail", () => ({ useOpenAgentDetail: () => openAgentDe
 vi.mock("./use-direct-chat", () => ({ useStartDirectChat: () => ({ start: startDirectChat, isPending: false }) }));
 vi.mock("../platform", () => ({ DragStrip: () => null }));
 vi.mock("./mobile-shell", () => ({ MobileLevelHeader: () => null }));
-vi.mock("../common/actor-avatar", () => ({ ActorAvatar: () => null }));
+vi.mock("../common/actor-avatar", () => ({
+  ActorAvatar: ({ onPickConversationStarter }: { onPickConversationStarter?: (prompt: string) => void }) =>
+    onPickConversationStarter ? (
+      <button type="button" onClick={() => onPickConversationStarter("Summarize the thread.")}>
+        hover starter
+      </button>
+    ) : null,
+}));
 vi.mock("../rich-content", () => ({ RichContent: ({ content }: { content: string }) => <p>{content}</p> }));
 vi.mock("./chat-composer", () => ({
   QuoteText: ({ quote }: { quote: { name: string; text: string } }) => <span>{`${quote.name}: ${quote.text}`}</span>,
@@ -168,6 +175,82 @@ describe("ChatThread agent author", () => {
 
     expect(startDirectChat).toHaveBeenCalledWith({ member_type: "agent", member_id: "agent-1" });
     expect(openAgentDetail).not.toHaveBeenCalled();
+  });
+});
+
+describe("ChatThread conversation starters", () => {
+  const agent = {
+    id: "agent-1",
+    archived_at: null,
+    conversation_starters: [
+      { label: "Weekly report", prompt: "Draft this week's report." },
+      { label: "Review PR", prompt: "Review the open PR." },
+      { label: "Plan", prompt: "Plan the sprint." },
+      { label: "Extra", prompt: "Not shown." },
+    ],
+  };
+  const agentMember = { member_type: "agent" as const, member_id: "agent-1", added_by_type: null, added_by_id: null, created_at: "2026-09-28T00:00:00Z" };
+
+  function mockQueries(agents: unknown[]) {
+    vi.mocked(useQuery).mockImplementation(
+      ((opts: { queryKey: unknown[] }) =>
+        ({ data: opts.queryKey[0] === "messages" ? messages : agents, isError: false })) as never,
+    );
+  }
+
+  function renderChat(over: Partial<GroupChat>) {
+    return renderWithI18n(
+      <ChatThread wsId="ws-1" chat={{ ...chat, ...over }} userId="user-1" panelOpen={false} onTogglePanel={() => {}} />,
+    );
+  }
+
+  beforeEach(() => {
+    messages = [];
+    sendMutateAsync.mockReset().mockReturnValue(new Promise(() => {}));
+  });
+
+  it("sends a direct chat's starter as is, showing at most three", () => {
+    mockQueries([agent]);
+    renderChat({ is_direct: true, members: [...chat.members, agentMember] });
+
+    expect(screen.getAllByRole("button", { name: /Weekly report|Review PR|Plan|Extra/ })).toHaveLength(3);
+    fireEvent.click(screen.getByRole("button", { name: "Weekly report" }));
+
+    expect(sendMutateAsync).toHaveBeenCalledWith({
+      content: "Draft this week's report.",
+      attachmentIds: [],
+      refMessageId: undefined,
+    });
+  });
+
+  it("shows no starters for an agent that configured none", () => {
+    mockQueries([{ ...agent, conversation_starters: [] }]);
+    renderChat({ is_direct: true, members: [...chat.members, agentMember] });
+
+    expect(screen.queryByRole("group", { name: "Conversation starters" })).toBeNull();
+  });
+
+  it("mentions the agent when a group chat sends its starter from the hover card", () => {
+    mockQueries([agent]);
+    messages = [{ ...message("m-0", "done"), author_type: "agent", author_id: "agent-1" }];
+    renderChat({ members: [...chat.members, agentMember] });
+
+    expect(screen.queryByRole("group", { name: "Conversation starters" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "hover starter" }));
+
+    expect(sendMutateAsync).toHaveBeenCalledWith({
+      content: "[@name-agent-1](mention://agent/agent-1) Summarize the thread.",
+      attachmentIds: [],
+      refMessageId: undefined,
+    });
+  });
+
+  it("offers no hover starter for an agent that has left the group", () => {
+    mockQueries([agent]);
+    messages = [{ ...message("m-0", "done"), author_type: "agent", author_id: "agent-1" }];
+    renderChat({});
+
+    expect(screen.queryByRole("button", { name: "hover starter" })).toBeNull();
   });
 });
 

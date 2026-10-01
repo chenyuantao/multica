@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Brain, Copy, Loader2, MoreHorizontal, PanelRight, Quote, RotateCw, Sparkles, Square, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { configuredConversationStarters } from "@multica/core/agents";
 import { useTaskMessages } from "@multica/core/chat/queries";
 import {
   directChatPeer,
@@ -15,7 +16,8 @@ import {
 import { useCancelIssueRun } from "@multica/core/issues/mutations";
 import { useCurrentMember } from "@multica/core/permissions";
 import { useActorName } from "@multica/core/workspace/hooks";
-import type { AskAISelection, Comment, GroupChat } from "@multica/core/types";
+import { agentListOptions } from "@multica/core/workspace/queries";
+import type { Agent, AskAISelection, Comment, GroupChat } from "@multica/core/types";
 import { copyText } from "@multica/ui/lib/clipboard";
 import { cn } from "@multica/ui/lib/utils";
 import { Button } from "@multica/ui/components/ui/button";
@@ -30,6 +32,7 @@ import {
   AlertDialogTitle,
 } from "@multica/ui/components/ui/alert-dialog";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@multica/ui/components/ui/context-menu";
+import { ConversationStarterChips } from "../chat/components/conversation-starter-list";
 import { ActorAvatar } from "../common/actor-avatar";
 import { useAppForeground } from "../common/use-app-foreground";
 import { RichContent } from "../rich-content";
@@ -45,6 +48,7 @@ import { useAgentClickActions, type AgentClickActions } from "./use-agent-click-
 import {
   THINKING_MESSAGE,
   chatDisplayTitle,
+  encodeMentions,
   formatClock,
   formatStamp,
   isSameDay,
@@ -78,11 +82,13 @@ interface ChatThreadProps {
 }
 
 const EMPTY_COMMENTS: Comment[] = [];
+const EMPTY_AGENTS: Agent[] = [];
 
 export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAskAI, mobileNav }: ChatThreadProps) {
   const { t } = useT("im");
   const { getActorName } = useActorName();
   const { data = EMPTY_COMMENTS, isError } = useQuery(groupChatMessagesOptions(wsId, chat.id));
+  const { data: agentList = EMPTY_AGENTS } = useQuery(agentListOptions(wsId));
   const send = useSendGroupChatMessage(wsId, chat.id);
   const remove = useDeleteGroupChatMessage(wsId, chat.id);
   const [pending, setPending] = useState<PendingMessage[]>([]);
@@ -242,14 +248,32 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAsk
         agents: t(($) => $.thread.agents, { count: agents.length }),
       });
 
-  const onSend = (content: string, attachmentIds: string[]) => {
+  const queue = (content: string, attachmentIds: string[], refMessageId?: string) => {
     const localId = `local-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const knownIds = new Set(messages.map((m) => m.id));
-    const refMessageId = composerQuote?.id;
-    setQuoteId(null);
     setPending((prev) => [...prev, { localId, content, attachmentIds, refMessageId, status: "sending", knownIds }]);
     void deliver(localId, content, attachmentIds, refMessageId);
   };
+
+  const onSend = (content: string, attachmentIds: string[]) => {
+    const refMessageId = composerQuote?.id;
+    setQuoteId(null);
+    queue(content, attachmentIds, refMessageId);
+  };
+
+  // A starter is sent as is and leaves the composer's draft and quote alone.
+  const peerStarters =
+    peer?.member_type === "agent"
+      ? configuredConversationStarters(agentList.find((a) => a.id === peer.member_id))
+      : [];
+  const memberAgentIds = useMemo(() => new Set(agents.map((m) => m.member_id)), [agents]);
+  const askAgentInGroup = (agentId: string) =>
+    peer || !memberAgentIds.has(agentId)
+      ? undefined
+      : (prompt: string) => {
+          const name = getActorName("agent", agentId);
+          queue(`${encodeMentions(`@${name}`, [{ type: "agent", id: agentId, name }])} ${prompt}`, []);
+        };
 
   return (
     <section className="flex h-full min-w-0 flex-1 flex-col bg-background">
@@ -316,6 +340,9 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAsk
                     authorName={getActorName(m.author_type, m.author_id)}
                     onOpenProfile={mobileNav?.onOpenProfile}
                     agentClicks={agentClicks}
+                    onPickConversationStarter={
+                      m.author_type === "agent" ? askAgentInGroup(m.author_id) : undefined
+                    }
                     quote={m.ref_message_id ? quoteOf(m.ref_message_id) : undefined}
                     onJumpToQuote={jumpTo}
                     actions={actionsFor(m)}
@@ -340,6 +367,11 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAsk
       </div>
 
       <div className="mx-auto w-full max-w-3xl">
+        <ConversationStarterChips
+          starters={peerStarters}
+          onPick={(prompt) => queue(prompt, [])}
+          className="px-4 pt-2"
+        />
         <ChatComposer
           key={chat.id}
           chatId={chat.id}
@@ -480,6 +512,7 @@ function MessageRow({
   authorName,
   onOpenProfile,
   agentClicks,
+  onPickConversationStarter,
   quote,
   onJumpToQuote,
   actions,
@@ -492,6 +525,8 @@ function MessageRow({
   onOpenProfile?: (actorType: string, actorId: string) => void;
   /** An agent author's profile on click, its direct chat on double click. */
   agentClicks: AgentClickActions;
+  /** Sends a starter from the agent author's hover card. */
+  onPickConversationStarter?: (prompt: string) => void;
   /** Set when the message quotes another; `null` once that one is deleted. */
   quote?: ComposerQuote | null;
   onJumpToQuote: (id: string) => void;
@@ -515,6 +550,7 @@ function MessageRow({
         size="xl"
         className={MESSAGE_AVATAR_CLASS}
         enableHoverCard={!onOpenProfile}
+        onPickConversationStarter={onPickConversationStarter}
         onOpenProfile={
           isAgent
             ? () => agentClicks.open(message.author_id)

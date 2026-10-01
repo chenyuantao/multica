@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { I18nProvider } from "@multica/core/i18n/react";
 import enCommon from "../../locales/en/common.json";
 import enAgents from "../../locales/en/agents.json";
+import enChat from "../../locales/en/chat.json";
 
-const TEST_RESOURCES = { en: { common: enCommon, agents: enAgents } };
+const TEST_RESOURCES = { en: { common: enCommon, agents: enAgents, chat: enChat } };
 
 vi.mock("@multica/core/hooks", () => ({
   useWorkspaceId: () => "ws-1",
@@ -123,10 +124,10 @@ function makeAgent(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function renderCard() {
+function renderCard(onPickConversationStarter?: (prompt: string) => void) {
   return render(
     <I18nProvider locale="en" resources={TEST_RESOURCES}>
-      <AgentProfileCard agentId="agent-1" />
+      <AgentProfileCard agentId="agent-1" onPickConversationStarter={onPickConversationStarter} />
     </I18nProvider>,
   );
 }
@@ -191,5 +192,25 @@ describe("AgentProfileCard — Model row", () => {
     // No effort token anywhere on the card.
     expect(screen.queryByText("high")).toBeNull();
     expect(screen.queryByText("medium")).toBeNull();
+  });
+});
+
+describe("AgentProfileCard — conversation starters", () => {
+  const starters = [{ label: "Weekly report", prompt: "Draft this week's report." }];
+
+  it("hands over the picked starter's prompt", () => {
+    mockAgents.current = [makeAgent({ conversation_starters: starters })];
+    const onPick = vi.fn();
+    renderCard(onPick);
+
+    fireEvent.click(screen.getByRole("button", { name: "Weekly report" }));
+    expect(onPick).toHaveBeenCalledWith("Draft this week's report.");
+  });
+
+  it("shows no starters where the surface cannot send one", () => {
+    mockAgents.current = [makeAgent({ conversation_starters: starters })];
+    renderCard();
+
+    expect(screen.queryByRole("group", { name: enChat.conversation_starters.aria_label })).toBeNull();
   });
 });

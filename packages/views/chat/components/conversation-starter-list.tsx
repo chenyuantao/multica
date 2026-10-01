@@ -1,6 +1,7 @@
 "use client";
 
 import type { AgentConversationStarter } from "@multica/core/types";
+import { Button } from "@multica/ui/components/ui/button";
 import { cn } from "@multica/ui/lib/utils";
 import { useT } from "../../i18n";
 
@@ -73,6 +74,41 @@ export function ConversationStarterList({
         >
           {item.label}
         </button>
+      ))}
+    </div>
+  );
+}
+
+/** Starters as a row of pills; a click hands over the full prompt, which the caller sends as is. */
+export function ConversationStarterChips({
+  starters,
+  onPick,
+  className,
+}: {
+  starters: AgentConversationStarter[];
+  onPick: (prompt: string) => void;
+  className?: string;
+}) {
+  const { t } = useT("chat");
+  if (starters.length === 0) return null;
+  return (
+    <div
+      role="group"
+      aria-label={t(($) => $.conversation_starters.aria_label)}
+      className={cn("flex min-w-0 flex-wrap gap-1.5", className)}
+    >
+      {starters.map((item, index) => (
+        <Button
+          key={index}
+          type="button"
+          variant="outline"
+          size="sm"
+          className="max-w-full min-w-0 rounded-full"
+          title={item.prompt}
+          onClick={() => onPick(item.prompt)}
+        >
+          <span className="truncate">{item.label}</span>
+        </Button>
       ))}
     </div>
   );

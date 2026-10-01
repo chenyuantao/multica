@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import type { Agent, AgentRuntime } from "@multica/core/types";
-import { useAgentPresenceDetail } from "@multica/core/agents";
+import { configuredConversationStarters, useAgentPresenceDetail } from "@multica/core/agents";
 import { useWorkspaceId } from "@multica/core/hooks";
 import {
   deriveRuntimeHealth,
@@ -19,15 +19,18 @@ import { AppLink, resolveClickIntent } from "../../navigation";
 import { HealthIcon } from "../../runtimes/components/shared";
 import { availabilityConfig } from "../presence";
 import { VisibilityBadge } from "./visibility-badge";
+import { ConversationStarterChips } from "../../chat/components/conversation-starter-list";
 import { useT } from "../../i18n";
 
 interface AgentProfileCardProps {
   agentId: string;
   /** Replaces the detail link's in-place navigation on a plain click. */
   onOpenDetail?: () => void;
+  /** Shows the agent's configured conversation starters; a pick sends that prompt. */
+  onPickConversationStarter?: (prompt: string) => void;
 }
 
-export function AgentProfileCard({ agentId, onOpenDetail }: AgentProfileCardProps) {
+export function AgentProfileCard({ agentId, onOpenDetail, onPickConversationStarter }: AgentProfileCardProps) {
   const { t } = useT("agents");
   const wsId = useWorkspaceId();
   const p = useWorkspacePaths();
@@ -139,6 +142,13 @@ export function AgentProfileCard({ agentId, onOpenDetail }: AgentProfileCardProp
         )}
         {owner && <MetaRow label={t(($) => $.profile_card.owner_label)} value={owner.name} />}
       </div>
+
+      {onPickConversationStarter && (
+        <ConversationStarterChips
+          starters={configuredConversationStarters(agent)}
+          onPick={onPickConversationStarter}
+        />
+      )}
     </div>
   );
 }

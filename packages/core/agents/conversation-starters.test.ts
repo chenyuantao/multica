@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 import {
   canCustomizeConversationStarters,
+  configuredConversationStarters,
   selectConversationStarters,
 } from "./conversation-starters";
 
@@ -43,6 +44,39 @@ describe("selectConversationStarters", () => {
     expect(
       selectConversationStarters([{ label: "Orphan", prompt: "" }], fallback),
     ).toEqual({ starters: fallback, isFallback: true });
+  });
+});
+
+describe("configuredConversationStarters", () => {
+  const row = (n: number) => ({ label: `Label ${n}`, prompt: `Prompt ${n}` });
+
+  it("offers nothing without the owner's own starters", () => {
+    expect(configuredConversationStarters(null)).toEqual([]);
+    expect(configuredConversationStarters({ archived_at: null })).toEqual([]);
+    expect(
+      configuredConversationStarters({
+        archived_at: null,
+        conversation_starters: [{ label: "Half", prompt: " " }],
+      }),
+    ).toEqual([]);
+  });
+
+  it("offers nothing for an archived agent", () => {
+    expect(
+      configuredConversationStarters({
+        archived_at: "2026-08-01T00:00:00Z",
+        conversation_starters: [row(1)],
+      }),
+    ).toEqual([]);
+  });
+
+  it("keeps at most three complete starters", () => {
+    expect(
+      configuredConversationStarters({
+        archived_at: null,
+        conversation_starters: [row(1), row(2), row(3), row(4)],
+      }),
+    ).toEqual([row(1), row(2), row(3)]);
   });
 });
 

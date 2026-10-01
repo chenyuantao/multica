@@ -87,6 +87,11 @@ interface ActorAvatarProps {
    * the current route. Modifier and middle clicks still open the page in a tab.
    */
   onOpenProfile?: () => void;
+  /**
+   * Adds the agent's configured conversation starters to its profile hover
+   * card; a pick closes the card and hands over the prompt to send.
+   */
+  onPickConversationStarter?: (prompt: string) => void;
 }
 
 const FOCUSABLE_ANCESTOR_SELECTOR =
@@ -108,6 +113,7 @@ export function ActorAvatar({
   hoverCardVariant = "profile",
   profileLink,
   onOpenProfile,
+  onPickConversationStarter,
 }: ActorAvatarProps) {
   const {
     getActorName,
@@ -184,6 +190,7 @@ export function ActorAvatar({
         agentId={actorId}
         variant={hoverCardVariant}
         onOpenDetail={onOpenProfile}
+        onPickConversationStarter={onPickConversationStarter}
       >
         {content}
       </AgentAvatarHoverCard>
@@ -301,18 +308,31 @@ function AgentAvatarHoverCard({
   agentId,
   variant,
   onOpenDetail,
+  onPickConversationStarter,
   children,
 }: {
   agentId: string;
   variant: AgentHoverCardVariant;
   onOpenDetail?: () => void;
+  onPickConversationStarter?: (prompt: string) => void;
   children: React.ReactNode;
 }) {
-  const content =
+  const content = (close: () => void) =>
     variant === "live" ? (
       <AgentLivePeekCard agentId={agentId} />
     ) : (
-      <AgentProfileCard agentId={agentId} onOpenDetail={onOpenDetail} />
+      <AgentProfileCard
+        agentId={agentId}
+        onOpenDetail={onOpenDetail}
+        onPickConversationStarter={
+          onPickConversationStarter
+            ? (prompt) => {
+                close();
+                onPickConversationStarter(prompt);
+              }
+            : undefined
+        }
+      />
     );
   return (
     <ActorAvatarHoverCardShell content={content}>
@@ -368,11 +388,13 @@ function ActorAvatarHoverCardShell({
   content,
   children,
 }: {
-  content: React.ReactNode;
+  /** A function receives `close` for content whose actions should dismiss the card. */
+  content: React.ReactNode | ((close: () => void) => React.ReactNode);
   children: React.ReactNode;
 }) {
   const triggerRef = useRef<HTMLSpanElement>(null);
   const [standalone, setStandalone] = useState(false);
+  const [open, setOpen] = useState(false);
 
   useEffect(() => {
     const el = triggerRef.current;
@@ -387,7 +409,7 @@ function ActorAvatarHoverCardShell({
     : "inline-flex cursor-pointer";
 
   return (
-    <HoverCard>
+    <HoverCard open={open} onOpenChange={setOpen}>
       <HoverCardTrigger
         render={<span ref={triggerRef} />}
         tabIndex={tabIndex}
@@ -396,7 +418,7 @@ function ActorAvatarHoverCardShell({
         {children}
       </HoverCardTrigger>
       <HoverCardContent align="start" className="w-72">
-        {content}
+        {typeof content === "function" ? content(() => setOpen(false)) : content}
       </HoverCardContent>
     </HoverCard>
   );
