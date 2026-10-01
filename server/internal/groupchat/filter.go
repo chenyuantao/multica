@@ -124,10 +124,10 @@ func FilterForAgent(ctx context.Context, ev Evaluator, agent Card, excerpts []Ex
 		keyToID[key] = excerpt.ID
 		questions[key] = map[string]any{
 			"type":         "choice",
-			"instructions": fmt.Sprintf("index 为 %d 的消息（发送者 %s）是否要对「%s」隐藏？只判断这一条，其余消息只作为上下文。", excerpt.Index, excerpt.Author, name),
+			"instructions": fmt.Sprintf("对照用户当前的问题，index 为 %d 的消息（发送者 %s）是否要对「%s」隐藏？只判断这一条，其余消息只作为上下文。", excerpt.Index, excerpt.Author, name),
 			"criteria": map[string]string{
-				"保留": "这名 Agent 需要看到这条消息才能正确回复。",
-				"屏蔽": "这条消息与这名 Agent 无关，它不需要关心。",
+				"保留": "回复当前问题需要看到这条消息。",
+				"屏蔽": "这条消息与当前问题无关，这名 Agent 不需要关心。",
 			},
 		}
 	}

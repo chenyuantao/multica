@@ -13,6 +13,7 @@ import (
 
 	"github.com/multica-ai/multica/server/internal/groupchat"
 	"github.com/multica-ai/multica/server/internal/logger"
+	"github.com/multica-ai/multica/server/internal/util"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
 )
 
@@ -136,6 +137,7 @@ func (h *Handler) attachAskAIContext(ctx context.Context, resp *AgentTaskRespons
 		slog.Warn("ask ai context could not be loaded", "task_id", uuidToString(task.ID), "error", err)
 		return
 	}
+	question := h.askQuestionText(ctx, issue, task)
 	byID := make(map[string]string, len(rows))
 	for _, row := range rows {
 		var page groupchat.AskPage
@@ -143,6 +145,7 @@ func (h *Handler) attachAskAIContext(ctx context.Context, resp *AgentTaskRespons
 			continue
 		}
 		id := uuidToString(row.CommentID)
+		h.hideAskChatMessages(ctx, issue, task, &page, question)
 		byID[id] = groupchat.RenderAskContext(id, &page)
 	}
 	blocks := make([]string, 0, len(byID))
@@ -156,4 +159,95 @@ func (h *Handler) attachAskAIContext(ctx context.Context, resp *AgentTaskRespons
 		}
 	}
 	resp.GroupChatTranscript = strings.Join(blocks, "\n\n")
+}
+
+func (h *Handler) askQuestionText(ctx context.Context, issue db.Issue, task db.AgentTaskQueue) string {
+	if !task.TriggerCommentID.Valid {
+		return ""
+	}
+	comment, err := h.Queries.GetCommentInWorkspace(ctx, db.GetCommentInWorkspaceParams{ID: task.TriggerCommentID, WorkspaceID: issue.WorkspaceID})
+	if err != nil {
+		return ""
+	}
+	return comment.Content
+}
+
+// hideAskChatMessages runs the same Jev filter on the chat that was open when
+// someone asked AI. The agent is already chosen. The question and the message
+// they asked about stay; a file stays because Jev cannot judge it.
+func (h *Handler) hideAskChatMessages(ctx context.Context, issue db.Issue, task db.AgentTaskQueue, page *groupchat.AskPage, question string) {
+	if page == nil || page.Chat == nil || len(page.Chat.Messages) == 0 {
+		return
+	}
+	if h.GroupChatDecider == nil || !h.GroupChatDecider.Enabled() || !task.AgentID.Valid {
+		return
+	}
+	roster, ok := h.groupChatRosterIfChat(ctx, issue)
+	if !ok {
+		return
+	}
+	agentID := uuidToString(task.AgentID)
+	var card groupchat.Card
+	found := false
+	for _, person := range roster {
+		if person.Type == "agent" && person.ID == agentID {
+			card = groupchat.Card{ID: person.ID, Name: person.Name, Description: person.Description}
+			found = true
+			break
+		}
+	}
+	if !found {
+		return
+	}
+	excerpts := make([]groupchat.Excerpt, 0, len(page.Chat.Messages)+1)
+	var attachmentIDs []pgtype.UUID
+	for i, message := range page.Chat.Messages {
+		excerpts = append(excerpts, groupchat.Excerpt{
+			Turn:  groupchat.Turn{ID: message.ID, Author: message.Sender, Text: message.Content, Time: message.Time},
+			Index: i,
+		})
+		if parsed, err := util.ParseUUID(message.ID); err == nil {
+			attachmentIDs = append(attachmentIDs, parsed)
+		}
+	}
+	if len(attachmentIDs) > 0 {
+		rows, err := h.Queries.ListAttachmentsByCommentIDs(ctx, db.ListAttachmentsByCommentIDsParams{
+			Column1: attachmentIDs, WorkspaceID: issue.WorkspaceID,
+		})
+		if err != nil {
+			slog.Warn("ask ai attachments failed", "issue_id", uuidToString(issue.ID), "error", err)
+			return
+		}
+		has := map[string]bool{}
+		for _, row := range rows {
+			if row.CommentID.Valid {
+				has[uuidToString(row.CommentID)] = true
+			}
+		}
+		for i := range excerpts {
+			excerpts[i].Attachment = has[excerpts[i].ID]
+		}
+	}
+	protected := map[string]bool{}
+	if page.Selection != nil && strings.TrimSpace(page.Selection.MessageID) != "" {
+		protected[page.Selection.MessageID] = true
+	}
+	if question = strings.TrimSpace(question); question != "" {
+		excerpts = append(excerpts, groupchat.Excerpt{
+			Turn:  groupchat.Turn{ID: "ask-question", Author: "user", Role: "member", Text: question},
+			Index: len(excerpts),
+		})
+		protected["ask-question"] = true
+	}
+	hidden, err := groupchat.FilterForAgent(ctx, h.GroupChatDecider, card, excerpts, protected)
+	if err != nil {
+		slog.Warn("ask ai message filter failed", "issue_id", uuidToString(issue.ID), "agent_id", agentID, "error", err)
+		return
+	}
+	for i := range page.Chat.Messages {
+		id := page.Chat.Messages[i].ID
+		if id != "" && hidden[id] {
+			page.Chat.Messages[i].Content = groupchat.HiddenMessageText
+		}
+	}
 }

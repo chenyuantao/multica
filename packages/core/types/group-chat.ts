@@ -86,7 +86,7 @@ export interface AskAIElement extends AskAILocation {
  */
 export interface AskAIPage {
   note?: { title: string; path: string; modified_at: string; content: string; truncated: boolean };
-  chat?: { title: string; agents: string[]; messages: { time: string; sender: string; content: string }[] };
+  chat?: { title: string; agents: string[]; messages: { id?: string; time: string; sender: string; content: string }[] };
   contact?: { type: GroupChatMemberType; name: string; description: string };
   location?: AskAILocation;
   selection?: AskAISelection;

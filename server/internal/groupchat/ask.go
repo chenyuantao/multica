@@ -225,11 +225,20 @@ func RenderAskContext(messageID string, p *AskPage) string {
 		for _, name := range c.Agents {
 			fmt.Fprintf(&b, "<agent name=\"%s\"/>\n", escapeAttr(name))
 		}
+		hidden := false
 		for _, m := range c.Messages {
-			fmt.Fprintf(&b, "<msg time=\"%s\" sender=\"%s\">%s</msg>\n", escapeAttr(m.Time), escapeAttr(m.Sender), escapeText(m.Content))
+			b.WriteString("<msg")
+			if m.ID != "" {
+				fmt.Fprintf(&b, ` id="%s"`, escapeAttr(m.ID))
+			}
+			fmt.Fprintf(&b, ` time="%s" sender="%s">%s</msg>`+"\n", escapeAttr(m.Time), escapeAttr(m.Sender), escapeText(m.Content))
+			hidden = hidden || m.Content == HiddenMessageText
 		}
 		b.WriteString("</chat>\n")
 		desc = append(desc, "chat is the chat that was open: its agents and the messages that were on screen, oldest first.")
+		if hidden {
+			desc = append(desc, fmt.Sprintf("A msg whose text is %q was withheld because this agent does not need it for the current question. Its id attribute is unchanged. Read the original with `multica issue comment list` using that id.", HiddenMessageText))
+		}
 	}
 	if c := p.Contact; c != nil {
 		fmt.Fprintf(&b, "<contact type=\"%s\" name=\"%s\">%s</contact>\n", escapeAttr(c.Type), escapeAttr(c.Name), escapeText(c.Description))

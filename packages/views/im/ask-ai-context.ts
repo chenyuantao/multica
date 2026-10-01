@@ -41,7 +41,7 @@ export function chatAskPage(
             m.type !== "system" &&
             !(m.author_type === "agent" && m.content === THINKING_MESSAGE),
         )
-        .map((m) => ({ time: m.created_at, sender: getActorName(m.author_type, m.author_id), content: m.content })),
+        .map((m) => ({ id: m.id, time: m.created_at, sender: getActorName(m.author_type, m.author_id), content: m.content })),
     },
   };
 }

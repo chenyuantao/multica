@@ -54,8 +54,11 @@ type State struct {
 	Messages []Message `json:"messages"`
 }
 
-// Message is one recent group message.
+// Message is one recent group message. ID is set for Ask AI page messages
+// so a hidden one can still be read back. Planning calls leave it empty, and
+// omitempty keeps it off that wire.
 type Message struct {
+	ID      string `json:"id,omitempty"`
 	Time    string `json:"time"`
 	Sender  string `json:"sender"`
 	Content string `json:"content"`

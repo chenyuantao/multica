@@ -126,3 +126,74 @@ func TestAskAIContextReachesTheAnsweringAgentAsXML(t *testing.T) {
 		t.Fatalf("the context leaked into the visible message: %q", msg.Content)
 	}
 }
+
+func TestAskAIContextHidesChatMessagesTheAgentDoesNotNeed(t *testing.T) {
+	ctx := context.Background()
+	agentID := createHandlerTestAgent(t, "ask-ai-filter-agent", nil)
+	var chat GroupChatResponse
+	testutil.Call(t, testHandler.OpenDirectGroupChat, groupChatRequestAs(t, testUserID, "POST", "/api/group-chats/direct", map[string]any{
+		"member_type": "agent", "member_id": agentID,
+	})).Want(http.StatusCreated).JSON(&chat)
+	t.Cleanup(func() {
+		for _, sql := range []string{
+			`DELETE FROM agent_task_queue WHERE issue_id = $1`,
+			`DELETE FROM comment_ask_context WHERE issue_id = $1`,
+			`DELETE FROM issue_member WHERE issue_id = $1`,
+			`DELETE FROM issue_subscriber WHERE issue_id = $1`,
+			`DELETE FROM comment WHERE issue_id = $1`,
+			`DELETE FROM issue WHERE id = $1`,
+		} {
+			testPool.Exec(ctx, sql, chat.ID)
+		}
+	})
+
+	var msg CommentResponse
+	testutil.Call(t, testHandler.CreateComment, withURLParam(groupChatRequestAs(t, testUserID, "POST", "/api/issues/"+chat.ID+"/comments", map[string]any{
+		"content": "what failed in the deploy?",
+		"ask_ai": map[string]any{
+			"chat": map[string]any{
+				"title":  "Launch",
+				"agents": []string{"Ops"},
+				"messages": []map[string]string{
+					{"id": "m-lunch", "time": "t1", "sender": "Ann", "content": "lunch plans"},
+					{"id": "m-deploy", "time": "t2", "sender": "Ann", "content": "deploy failed"},
+				},
+			},
+			"selection": map[string]string{"message_id": "m-deploy", "time": "t2", "sender": "Ann", "content": "deploy failed"},
+		},
+	}), "id", chat.ID)).Want(http.StatusCreated).JSON(&msg)
+
+	ev := &groupChatFilterEvaluator{choice: "屏蔽"}
+	prev := testHandler.GroupChatDecider
+	testHandler.GroupChatDecider = ev
+	t.Cleanup(func() { testHandler.GroupChatDecider = prev })
+
+	issue, err := testHandler.Queries.GetIssue(ctx, parseUUID(chat.ID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var resp AgentTaskResponse
+	testHandler.attachAskAIContext(ctx, &resp, issue, db.AgentTaskQueue{
+		AgentID:          parseUUID(agentID),
+		TriggerCommentID: parseUUID(msg.ID),
+	})
+	xml := resp.GroupChatTranscript
+	if strings.Contains(xml, "lunch plans") || !strings.Contains(xml, ">"+groupchat.HiddenMessageText+"</msg>") || !strings.Contains(xml, `id="m-lunch"`) {
+		t.Fatalf("unrelated on-screen message was not hidden:\n%s", xml)
+	}
+	if !strings.Contains(xml, "deploy failed") || !strings.Contains(xml, `id="m-deploy"`) {
+		t.Fatalf("the message being asked about was hidden:\n%s", xml)
+	}
+	if len(ev.questions) != 1 {
+		t.Fatalf("questions = %d, want only the unrelated message", len(ev.questions))
+	}
+	sawQuestion := false
+	for _, message := range ev.state.Messages {
+		if message.Content == "what failed in the deploy?" {
+			sawQuestion = true
+		}
+	}
+	if !sawQuestion {
+		t.Fatalf("the question was not in the filter state: %+v", ev.state.Messages)
+	}
+}

@@ -41,8 +41,8 @@ describe("chatAskPage", () => {
       title: "Launch",
       agents: ["agent:a1"],
       messages: [
-        { time: "t-m1", sender: "member:u1", content: "text m1" },
-        { time: "t-m2", sender: "agent:a1", content: "text m2" },
+        { id: "m1", time: "t-m1", sender: "member:u1", content: "text m1" },
+        { id: "m2", time: "t-m2", sender: "agent:a1", content: "text m2" },
       ],
     });
   });
