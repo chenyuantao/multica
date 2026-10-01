@@ -70,6 +70,20 @@ html[lang|="ja"] {
 @source "../../../../../packages/views/**/*.{ts,tsx}";
 @source "./**/*.tsx";
 
+/* Desktop-specific: native apps keep the arrow cursor on clickable controls.
+   Covers the UA default on links, every `cursor-pointer` utility (including
+   variants), and the rich-text checkbox/link rules. `:where()` keeps
+   specificity at zero so the drag/resize cursor contracts in base.css still
+   win; text, resize, and grab cursors are untouched. */
+:where(
+  a:any-link,
+  [class*="cursor-pointer"],
+  .rich-text-editor a,
+  .rich-text-editor input[type="checkbox"]
+) {
+  cursor: default !important;
+}
+
 /* Desktop-specific: override sidebar container padding for traffic light layout */
 [data-slot="sidebar-container"] {
   padding: 0 !important;
