@@ -30,6 +30,9 @@ type Excerpt struct {
 
 // Transcript is the bounded history shown to the agent that replies.
 type Transcript struct {
+	// Title is the chat name; Notice is its announcement and may be empty.
+	Title    string
+	Notice   string
 	Excerpts []Excerpt
 	// OmittedAfter are the messages newer than the last excerpt that were left out.
 	OmittedAfter []Turn
@@ -103,7 +106,7 @@ func SelectTranscript(turns []Turn, triggerIDs []string, maxRunes, perMessage in
 }
 
 // Render writes the transcript as a <group_chat> XML block, oldest first.
-// Each <msg> carries its history index, id, time, sender and role; triggers,
+// It opens with the chat <title> and, when set, its <notice>. Each <msg> carries its history index, id, time, sender and role; triggers,
 // cut-down messages and quotes are marked on it, and omitted ranges become
 // <omitted> elements. The closing <desc> explains the markup, starting with
 // intro, and lists the commands that read cut-down or omitted messages.
@@ -119,6 +122,13 @@ func (t Transcript) Render(issueID, intro string) string {
 
 	var b strings.Builder
 	b.WriteString("<group_chat>\n")
+	title, notice := strings.TrimSpace(t.Title), strings.TrimSpace(t.Notice)
+	if title != "" {
+		fmt.Fprintf(&b, "<title>%s</title>\n", escapeText(title))
+	}
+	if notice != "" {
+		fmt.Fprintf(&b, "<notice>\n%s\n</notice>\n", escapeText(notice))
+	}
 	for _, e := range t.Excerpts {
 		writeOmitted(&b, e.OmittedBefore)
 		fmt.Fprintf(&b, `<msg index="%d"%s`, e.Index, turnAttrs(e.Turn))
@@ -143,6 +153,12 @@ func (t Transcript) Render(issueID, intro string) string {
 	var desc []string
 	if intro = strings.TrimSpace(intro); intro != "" {
 		desc = append(desc, intro)
+	}
+	if title != "" {
+		desc = append(desc, "title is the chat name.")
+	}
+	if notice != "" {
+		desc = append(desc, "notice is the chat announcement members set for everyone in it.")
 	}
 	desc = append(desc, `Each msg element is one message, oldest first. index is its position in the chat history, sender is the display name, and role is member (a person) or agent. trigger="true" marks the messages this reply answers. Message text is XML-escaped.`)
 	if quoted {

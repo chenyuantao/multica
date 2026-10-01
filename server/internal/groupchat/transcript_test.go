@@ -101,6 +101,25 @@ func TestTranscriptRender(t *testing.T) {
 	}
 }
 
+func TestTranscriptRenderCarriesTitleAndNotice(t *testing.T) {
+	transcript := SelectTranscript([]Turn{turn("m1", "member", "hi")}, nil, 24000, 6000)
+	transcript.Title = " Launch <v2> "
+	transcript.Notice = "Ship on Friday & tag QA\n"
+	got := transcript.Render("issue-1", "")
+	if !strings.HasPrefix(got, "<group_chat>\n<title>Launch &lt;v2&gt;</title>\n<notice>\nShip on Friday &amp; tag QA\n</notice>\n<msg ") {
+		t.Fatalf("got %q", got)
+	}
+	if !strings.Contains(got, "title is the chat name.") || !strings.Contains(got, "notice is the chat announcement") {
+		t.Fatalf("title and notice are not explained:\n%s", got)
+	}
+
+	transcript.Notice = "  "
+	got = transcript.Render("issue-1", "")
+	if strings.Contains(got, "notice") || !strings.Contains(got, "<title>Launch &lt;v2&gt;</title>\n<msg ") {
+		t.Fatalf("an empty notice should be left out:\n%s", got)
+	}
+}
+
 func TestTranscriptRenderCarriesQuotedMessageWhole(t *testing.T) {
 	quoted := Turn{ID: "a1", Author: "Ops", Role: "agent", Text: "use <b>v2</b> " + strings.Repeat("q", 300), Time: "2026-09-30T02:16:00Z"}
 	turns := []Turn{

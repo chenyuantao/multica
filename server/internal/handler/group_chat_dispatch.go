@@ -297,6 +297,8 @@ func (h *Handler) attachGroupChatTranscript(ctx context.Context, resp *AgentTask
 	if len(transcript.Excerpts) == 0 {
 		return
 	}
+	transcript.Title = issue.Title
+	transcript.Notice = issue.Description.String
 	resp.GroupChatTranscript = transcript.Render(uuidToString(issue.ID), groupChatRoleLine(task))
 }
 
