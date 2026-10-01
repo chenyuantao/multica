@@ -66,6 +66,9 @@ const sourceSerif = Source_Serif_4({
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  // Without `cover`, iOS reports env(safe-area-inset-*) as 0, so the phone tab
+  // bar could not clear the home indicator.
+  viewportFit: "cover",
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#ffffff" },
     { media: "(prefers-color-scheme: dark)", color: "#05070b" },
@@ -95,9 +98,8 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     title: "Multica",
-    // `default` keeps the web view below the status bar. Going edge-to-edge
-    // (`black-translucent` + viewport-fit=cover) needs env(safe-area-inset-*)
-    // padding, which no surface in the app has yet.
+    // `default` keeps the web view below the status bar. `black-translucent`
+    // would draw under it and need env(safe-area-inset-top) on every header.
     statusBarStyle: "default",
   },
   openGraph: {
