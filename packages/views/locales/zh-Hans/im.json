@@ -110,7 +110,9 @@
     "announcement": "群公告",
     "announcement_placeholder": "添加群公告…",
     "announcement_failed": "群公告保存失败",
+    "open_chat": "进入会话",
     "back": "返回群聊",
+    "back_to_info": "返回群聊详情",
     "back_to_settings": "返回群聊设置"
   },
   "new_chat": {

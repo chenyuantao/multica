@@ -19,6 +19,12 @@ interface ChatSidebarProps {
   isLoading: boolean;
   isError: boolean;
   selectedId: string | null;
+  /**
+   * Chat whose messages are on screen. Its badge clears while the app is in
+   * front. Omit to treat the selection as the open conversation; pass null
+   * when the selection is only showing details.
+   */
+  readingId?: string | null;
   userId: string;
   onSelect: (chatId: string) => void;
   onNewChat: () => void;
@@ -33,6 +39,7 @@ export function ChatSidebar({
   isLoading,
   isError,
   selectedId,
+  readingId,
   userId,
   onSelect,
   onNewChat,
@@ -44,7 +51,8 @@ export function ChatSidebar({
   // The open chat is read as soon as it lands while the app is in front, so
   // its badge would only flash; in the background it stays visible.
   const foreground = useAppForeground();
-  const readingId = foreground ? selectedId : null;
+  const openId = readingId === undefined ? selectedId : readingId;
+  const readingChatId = foreground ? openId : null;
   const { getActorName } = useActorName();
   const [query, setQuery] = useState("");
   const q = query.trim().toLowerCase();
@@ -83,7 +91,7 @@ export function ChatSidebar({
                     chat={chat}
                     userId={userId}
                     selected={chat.id === selectedId}
-                    unread={chat.id === readingId ? 0 : chat.unread_count}
+                    unread={chat.id === readingChatId ? 0 : chat.unread_count}
                     onSelect={() => onSelect(chat.id)}
                   />
                 </ChatListMenu>

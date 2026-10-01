@@ -114,7 +114,9 @@
     "announcement": "Annonce",
     "announcement_placeholder": "Ajouter une annonce…",
     "announcement_failed": "Impossible d'enregistrer l'annonce",
+    "open_chat": "Ouvrir la discussion",
     "back": "Retour à la discussion",
+    "back_to_info": "Retour aux détails de la discussion",
     "back_to_settings": "Retour aux paramètres de la discussion"
   },
   "new_chat": {

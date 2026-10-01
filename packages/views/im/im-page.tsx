@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { MessagesSquare, UsersRound } from "lucide-react";
 import { toast } from "sonner";
@@ -13,7 +13,7 @@ import type { Comment, GroupChat } from "@multica/core/types";
 import { useActorName } from "@multica/core/workspace/hooks";
 import { Button } from "@multica/ui/components/ui/button";
 import { useIsMobile } from "@multica/ui/hooks/use-mobile";
-import { useNavigation } from "../navigation";
+import { AppLink, useNavigation } from "../navigation";
 import { useT } from "../i18n";
 import { DragStrip } from "../platform";
 import { chatAskPage, contactAskPage, visibleMessageIds } from "./ask-ai-context";
@@ -37,9 +37,10 @@ const EMPTY_CHATS: GroupChat[] = [];
  * it owns its own sidebar, thread and details columns. The rail section is
  * route-driven: chats (`/im`) and contacts (`/member`). On phones each
  * section is a bottom tab whose list is the root, and the columns become
- * route-driven levels: thread (`?chat=`), settings (`&view=settings`), and a
- * profile (`&contact=type:id`) opened from either; on `/member` a profile is
- * the only level.
+ * route-driven levels: a group's details (`?chat=&view=info`) before its
+ * thread (`?chat=`), settings (`&view=settings`), and a profile
+ * (`&contact=type:id`) opened from either; on `/member` a profile is
+ * the only level. A direct chat still opens its thread.
  */
 export function ImPage({ view = "chats" }: { view?: ImView }) {
   const { t } = useT("im");
@@ -68,9 +69,18 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
   const requestedId = view === "chats" ? navigation.searchParams.get("chat") : null;
   const requested = chats.find((c) => c.id === requestedId) ?? null;
   const selected = requested ?? (requestedId || isMobile ? null : chats[0] ?? null);
+  const viewParam = view === "chats" ? navigation.searchParams.get("view") : null;
+  const selectedIsGroup = !!selected && !directChatPeer(selected, userId);
+  // A group opens onto its details. The thread is the explicit conversation
+  // URL (`?chat=` without `view=info`), including deep links and "message".
+  // With no chat in the URL, desktop still previews the first group instead
+  // of dropping into its messages.
+  const showGroupInfo = selectedIsGroup && (viewParam === "info" || (!isMobile && !requestedId));
 
-  const select = (chatId: string) =>
-    isMobile ? navigation.push(paths.imChat(chatId)) : navigation.replace(paths.imChat(chatId));
+  const go = (href: string) => (isMobile ? navigation.push(href) : navigation.replace(href));
+  const chatHref = (chat: GroupChat | undefined, chatId: string) =>
+    chat && !directChatPeer(chat, userId) ? paths.imChatInfo(chatId) : paths.imChat(chatId);
+  const select = (chatId: string) => go(chatHref(chats.find((c) => c.id === chatId), chatId));
 
   const openChat = (chatId: string) => navigation.push(paths.imChat(chatId));
 
@@ -89,7 +99,9 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
   };
   const launcher = useAskAILauncher(askPage);
 
-  const rail = <ImRail active={view} readingChatId={view === "chats" ? selected?.id : null} />;
+  const rail = (
+    <ImRail active={view} readingChatId={view === "chats" && !showGroupInfo ? selected?.id ?? null : null} />
+  );
   const contactList = (className?: string) => (
     <ContactList
       people={directory.people}
@@ -110,7 +122,7 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
         wsId={wsId}
         open={newChatOpen}
         onOpenChange={setNewChatOpen}
-        onCreated={(chat) => select(chat.id)}
+        onCreated={(chat) => go(chatHref(chat, chat.id))}
       />
       <ImSearchDialog
         {...launcher.dialog}
@@ -170,6 +182,12 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
           backHref={paths.imChatSettings(requested.id)}
           backLabel={t(($) => $.panel.back_to_settings)}
         />
+      ) : viewParam === "info" ? (
+        <MobileContactDetail
+          contact={contactTarget}
+          backHref={paths.imChatInfo(requested.id)}
+          backLabel={t(($) => $.panel.back_to_info)}
+        />
       ) : (
         <MobileContactDetail contact={contactTarget} backHref={paths.imChat(requested.id)} backLabel={t(($) => $.panel.back)} />
       );
@@ -182,6 +200,27 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
             userId={userId}
             variant="page"
             onOpenMember={(m) => navigation.push(paths.imChatSettingsContact(requested.id, m.member_type, m.member_id))}
+          />
+        </MobileLevel>
+      );
+    } else if (showGroupInfo) {
+      level = (
+        <MobileLevel
+          title={chatDisplayTitle(requested, userId, getActorName)}
+          backHref={paths.im()}
+          backLabel={t(($) => $.thread.back)}
+        >
+          <div className="shrink-0 border-b px-4 py-3">
+            <Button nativeButton={false} render={<AppLink href={paths.imChat(requested.id)} />}>
+              {t(($) => $.panel.open_chat)}
+            </Button>
+          </div>
+          <ChatDetailsPanel
+            wsId={wsId}
+            chat={requested}
+            userId={userId}
+            variant="page"
+            onOpenMember={(m) => navigation.push(paths.imChatInfoContact(requested.id, m.member_type, m.member_id))}
           />
         </MobileLevel>
       );
@@ -228,6 +267,7 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
           isLoading={isLoading}
           isError={isError}
           selectedId={selected?.id ?? null}
+          readingId={showGroupInfo ? null : selected?.id ?? null}
           userId={userId}
           onSelect={select}
           onNewChat={() => setNewChatOpen(true)}
@@ -256,6 +296,25 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
               </div>
             </div>
           )
+        ) : showGroupInfo && selected ? (
+          <div className="flex min-w-0 flex-1 flex-col">
+            <header className="relative flex h-14 shrink-0 items-center justify-end border-b px-5">
+              <div className="absolute inset-0">
+                <DragStrip />
+              </div>
+              <Button
+                nativeButton={false}
+                className="relative"
+                style={{ WebkitAppRegion: "no-drag" } as CSSProperties}
+                render={<AppLink href={paths.imChat(selected.id)} />}
+              >
+                {t(($) => $.panel.open_chat)}
+              </Button>
+            </header>
+            <div className="mx-auto flex min-h-0 w-full max-w-lg flex-1 flex-col">
+              <ChatDetailsPanel wsId={wsId} chat={selected} userId={userId} variant="page" />
+            </div>
+          </div>
         ) : selected ? (
           <>
             <ChatThread

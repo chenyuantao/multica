@@ -110,7 +110,9 @@
     "announcement": "お知らせ",
     "announcement_placeholder": "お知らせを追加…",
     "announcement_failed": "お知らせを保存できませんでした",
+    "open_chat": "チャットを開く",
     "back": "チャットに戻る",
+    "back_to_info": "チャット詳細に戻る",
     "back_to_settings": "チャット設定に戻る"
   },
   "new_chat": {

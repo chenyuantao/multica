@@ -114,7 +114,9 @@
     "announcement": "Announcement",
     "announcement_placeholder": "Add an announcement…",
     "announcement_failed": "Couldn't save the announcement",
+    "open_chat": "Open chat",
     "back": "Back to chat",
+    "back_to_info": "Back to chat details",
     "back_to_settings": "Back to chat settings"
   },
   "new_chat": {

@@ -200,8 +200,7 @@ describe("ImSearchDialog", () => {
 
   it("offers Ask AI first and sends the question with the page it was asked from", async () => {
     const page = { contact: { type: "agent" as const, name: "Ops", description: "Runs deploys" } };
-    const onOpenChat = vi.fn();
-    renderDialog({ askPage: () => page, onOpenChat });
+    const navigation = renderDialog({ askPage: () => page, onOpenChat: vi.fn() });
     pressOpen();
     expect(await screen.findByRole("option", { name: /Ask AI/ })).toHaveAttribute("aria-disabled", "true");
     // The page goes with the question silently; nothing to quote or remove.
@@ -214,7 +213,7 @@ describe("ImSearchDialog", () => {
     expect(askMutate).toHaveBeenCalledWith({ query: "who deploys?", page, files: [] }, expect.anything());
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     act(() => askMutate.mock.calls[0]![1].onSuccess({ chat: { id: "c-dm" } }));
-    expect(onOpenChat).toHaveBeenCalledWith("c-dm");
+    expect(navigation.push).toHaveBeenCalledWith("/acme/im?chat=c-dm");
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 

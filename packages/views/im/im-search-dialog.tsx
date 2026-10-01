@@ -287,8 +287,9 @@ export function ImSearchDialog({
       {
         onSuccess: ({ chat }) => {
           onOpenChange(false);
-          if (onOpenChat) onOpenChat(chat.id);
-          else navigation.push(paths.imChat(chat.id));
+          // The answer lands in the thread. List selection stays on the
+          // group's details; this path is the conversation itself.
+          navigation.push(paths.imChat(chat.id));
         },
         onError: (err) => {
           const noAgent = err instanceof ApiError && (err.body as { code?: string } | undefined)?.code === "ask_ai_no_agent";

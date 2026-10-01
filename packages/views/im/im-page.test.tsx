@@ -69,7 +69,14 @@ vi.mock("./use-chat-directory", async () => {
 });
 vi.mock("./use-group-chat-unread", () => ({ useGroupChatUnreadTotal: () => unreadTotalRef.current }));
 vi.mock("./im-rail", () => ({ ImRail: () => null }));
-vi.mock("./chat-sidebar", () => ({ ChatSidebar: () => null, ChatAvatar: () => null }));
+vi.mock("./chat-sidebar", () => ({
+  ChatSidebar: ({ onSelect }: { onSelect: (id: string) => void }) => (
+    <button type="button" onClick={() => onSelect("c1")}>
+      select chat
+    </button>
+  ),
+  ChatAvatar: () => null,
+}));
 vi.mock("./chat-thread", () => ({
   ChatThread: ({ mobileNav }: { mobileNav?: { settingsHref: string; onOpenProfile: (type: string, id: string) => void } }) => (
     <>
@@ -270,5 +277,60 @@ describe("ImPage chat levels on mobile", () => {
     expect(screen.getByText("member user-2 embedded")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Back to chat" }));
     expect(navigation.back).toHaveBeenCalled();
+  });
+});
+
+describe("ImPage group details before the conversation", () => {
+  it("opens a group's details from the list on mobile", () => {
+    const navigation = renderPage("chats");
+    fireEvent.click(screen.getByRole("button", { name: "select chat" }));
+    expect(navigation.push).toHaveBeenCalledWith("/acme/im?chat=c1&view=info");
+  });
+
+  it("shows the details and a way into the conversation on mobile", () => {
+    renderPage("chats", "chat=c1&view=info");
+    expect(screen.getByRole("button", { name: "settings agent" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "thread settings" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open chat" })).toHaveAttribute("href", "/acme/im?chat=c1");
+  });
+
+  it("returns from a profile opened in the details to those details", () => {
+    const navigation = renderPage("chats", "chat=c1&view=info");
+    fireEvent.click(screen.getByRole("button", { name: "settings agent" }));
+    expect(navigation.push).toHaveBeenCalledWith("/acme/im?chat=c1&view=info&contact=agent%3Aagent-1");
+
+    const profile = renderPage("chats", "chat=c1&view=info&contact=agent:agent-1");
+    fireEvent.click(screen.getByRole("button", { name: "Back to chat details" }));
+    expect(profile.replace).toHaveBeenCalledWith("/acme/im?chat=c1&view=info");
+  });
+
+  it("opens a group's details from the list on desktop", () => {
+    isMobileRef.current = false;
+    const navigation = renderPage("chats");
+    fireEvent.click(screen.getByRole("button", { name: "select chat" }));
+    expect(navigation.replace).toHaveBeenCalledWith("/acme/im?chat=c1&view=info");
+  });
+
+  it("keeps a direct chat opening its conversation", () => {
+    isMobileRef.current = false;
+    chatsRef.current = [{
+      ...chat,
+      is_direct: true,
+      members: [
+        { member_type: "member", member_id: "user-1" },
+        { member_type: "agent", member_id: "agent-1" },
+      ],
+    }];
+    const navigation = renderPage("chats");
+    fireEvent.click(screen.getByRole("button", { name: "select chat" }));
+    expect(navigation.replace).toHaveBeenCalledWith("/acme/im?chat=c1");
+  });
+
+  it("shows the details and a way into the conversation on desktop", () => {
+    isMobileRef.current = false;
+    renderPage("chats", "chat=c1&view=info");
+    expect(screen.getByRole("button", { name: "settings agent" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "thread author" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open chat" })).toHaveAttribute("href", "/acme/im?chat=c1");
   });
 });
