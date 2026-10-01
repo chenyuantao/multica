@@ -622,7 +622,7 @@ function MessageLayout({
   return (
     <div className={cn("mb-5 flex items-start gap-2.5", mine && "justify-end")}>
       {!mine && <span className="flex shrink-0">{avatar}</span>}
-      <div className={cn("grid min-w-0 max-w-[min(74%,660px)] gap-1", mine ? "justify-items-end" : "justify-items-start")}>
+      <div className={cn("grid min-w-0 max-w-[min(78%,660px)] gap-1 md:max-w-[min(74%,660px)]", mine ? "justify-items-end" : "justify-items-start")}>
         {authorName && (
           <span
             className={cn("mb-0.5 ml-0.5 text-micro text-muted-foreground", onAuthorDoubleClick && "cursor-default select-none")}
