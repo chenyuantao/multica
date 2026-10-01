@@ -9,7 +9,7 @@ import (
 // HiddenMessageText replaces a message withheld from the selected agent.
 // The message stays in the transcript, with its id, so the agent can read
 // the original through the comment tool.
-const HiddenMessageText = "Hidden."
+const HiddenMessageText = "***HIDDEN***"
 
 // FilterState is the second Jev request. The agent is already chosen; each
 // question asks whether one delivered message should be hidden from that agent.

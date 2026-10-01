@@ -178,7 +178,7 @@ func TestHideMessagesReplacesContentAndDropsQuotedSecrets(t *testing.T) {
 	if strings.Contains(out, "secret") || strings.Contains(out, "quoted") {
 		t.Fatalf("withheld text leaked:\n%s", out)
 	}
-	if strings.Count(out, "<msg ") != 2 || !strings.Contains(out, ">Hidden.</msg>") || !strings.Contains(out, `id="old"`) || !strings.Contains(out, "Its id attribute is unchanged") {
+	if strings.Count(out, "<msg ") != 2 || !strings.Contains(out, ">***HIDDEN***</msg>") || !strings.Contains(out, `id="old"`) || !strings.Contains(out, "Its id attribute is unchanged") {
 		t.Fatalf("render:\n%s", out)
 	}
 }
