@@ -7356,7 +7356,10 @@ var errPriorEnvRootWaitAborted = errors.New("waiting for the prior env root was 
 // A busy lock here has one cause in a healthy system: the server hands a task
 // to a daemon only when no other task for the same (issue, agent) is dispatched
 // or running (ClaimAgentTask's serialization), so by the time this task exists
-// its predecessor is already finished as far as the server is concerned. The
+// its predecessor is already finished as far as the server is concerned. Group
+// and direct chats are the exception when the agent allows more than one task
+// at a time: those runs overlap, and the later one is marked to start a fresh
+// session instead of resuming the one still being written. The
 // process is not: it learns of its cancellation from its own poll tick and
 // takes a few seconds to exit, and it holds .task_lock until it does. That is
 // the whole of the gap — a machine-local fact, visible right here.

@@ -761,6 +761,10 @@ WHERE atq.id = $1 AND a.workspace_id = $2;
 -- a task is only claimable when no other task for the same issue AND same agent is
 -- already dispatched or running. This allows different agents to work on the same
 -- issue in parallel while preventing a single agent from running duplicate tasks.
+-- A group chat or direct chat is the exception when that agent allows more than
+-- one task at a time: the caller's max_concurrent_tasks check is the only cap,
+-- and a run claimed while another is still active on that chat starts a fresh
+-- session so the two do not write one transcript.
 -- Chat tasks (issue_id IS NULL) use chat_session_id for serialization instead.
 -- Quick-create tasks have no issue / chat / autopilot link, so they serialize on
 -- "any other quick-create-shaped task" (all four FKs NULL) for the same agent —
@@ -769,7 +773,18 @@ WHERE atq.id = $1 AND a.workspace_id = $2;
 UPDATE agent_task_queue
 SET status = 'dispatched',
     dispatched_at = now(),
-    prepare_lease_expires_at = now() + make_interval(secs => @prepare_lease_secs::double precision)
+    prepare_lease_expires_at = now() + make_interval(secs => @prepare_lease_secs::double precision),
+    force_fresh_session = agent_task_queue.force_fresh_session OR (
+        EXISTS (
+            SELECT 1 FROM agent_task_queue active
+            WHERE active.agent_id = agent_task_queue.agent_id
+              AND active.issue_id IS NOT NULL
+              AND active.issue_id = agent_task_queue.issue_id
+              AND active.id <> agent_task_queue.id
+              AND active.status IN ('dispatched', 'running', 'waiting_local_directory')
+        )
+        AND EXISTS (SELECT 1 FROM issue_member m WHERE m.issue_id = agent_task_queue.issue_id)
+    )
 WHERE id = (
     SELECT atq.id FROM agent_task_queue atq
     WHERE atq.agent_id = @agent_id
@@ -800,7 +815,18 @@ WHERE id = (
           WHERE active.agent_id = atq.agent_id
             AND active.status IN ('dispatched', 'running', 'waiting_local_directory')
             AND (
-              (atq.issue_id IS NOT NULL AND active.issue_id = atq.issue_id)
+              (
+                atq.issue_id IS NOT NULL
+                AND active.issue_id = atq.issue_id
+                AND NOT (
+                  EXISTS (SELECT 1 FROM issue_member m WHERE m.issue_id = atq.issue_id)
+                  AND EXISTS (
+                    SELECT 1 FROM agent parallel_agent
+                    WHERE parallel_agent.id = atq.agent_id
+                      AND parallel_agent.max_concurrent_tasks > 1
+                  )
+                )
+              )
               OR (atq.chat_session_id IS NOT NULL AND active.chat_session_id = atq.chat_session_id)
               OR (
                 atq.issue_id IS NULL
