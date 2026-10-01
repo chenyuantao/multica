@@ -287,7 +287,17 @@ type Hub struct {
 	// Subscription lifecycle hooks. Both can be nil.
 	onFirstSubscriber SubscriptionCallback
 	onLastSubscriber  SubscriptionCallback
+
+	// User presence hooks, fired when a user's room on this node crosses
+	// 0↔1 connections. Kept apart from the subscription hooks because the
+	// relay owns those and replaces them on Start/Stop.
+	onUserOnline  UserPresenceCallback
+	onUserOffline UserPresenceCallback
 }
+
+// UserPresenceCallback receives the user id whose local connection count
+// crossed 0↔1.
+type UserPresenceCallback func(userID string)
 
 // NewHub creates a new Hub instance.
 func NewHub() *Hub {
@@ -315,6 +325,39 @@ func (h *Hub) SetSubscriptionCallbacks(onFirst, onLast SubscriptionCallback) {
 	defer h.mu.Unlock()
 	h.onFirstSubscriber = onFirst
 	h.onLastSubscriber = onLast
+}
+
+// SetUserPresenceCallbacks registers callbacks fired when a user gains their
+// first connection on this node (onOnline) or loses their last (onOffline).
+func (h *Hub) SetUserPresenceCallbacks(onOnline, onOffline UserPresenceCallback) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.onUserOnline = onOnline
+	h.onUserOffline = onOffline
+}
+
+// LocalUserIDs returns the users with at least one connection on this node.
+func (h *Hub) LocalUserIDs() []string {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	out := make([]string, 0)
+	for k := range h.rooms {
+		if k.Type == ScopeUser {
+			out = append(out, k.ID)
+		}
+	}
+	return out
+}
+
+func notifyUsersOffline(cb UserPresenceCallback, emptied []scopeKey) {
+	if cb == nil {
+		return
+	}
+	for _, key := range emptied {
+		if key.Type == ScopeUser {
+			cb(key.ID)
+		}
+	}
 }
 
 // Run starts the hub event loop.
@@ -366,6 +409,7 @@ func (h *Hub) removeClient(client *Client) {
 	}
 	close(client.send)
 	cb := h.onLastSubscriber
+	offline := h.onUserOffline
 	total := len(h.clients)
 	h.mu.Unlock()
 
@@ -376,6 +420,7 @@ func (h *Hub) removeClient(client *Client) {
 			cb(key.Type, key.ID)
 		}
 	}
+	notifyUsersOffline(offline, emptied)
 	for _, key := range emptied {
 		M.DecRoom(key.Type)
 	}
@@ -413,6 +458,7 @@ func (h *Hub) subscribe(client *Client, scopeType, scopeID string) bool {
 	}
 	room[client] = true
 	cb := h.onFirstSubscriber
+	online := h.onUserOnline
 	h.mu.Unlock()
 
 	M.SubscribesTotal(scopeType).Add(1)
@@ -420,6 +466,9 @@ func (h *Hub) subscribe(client *Client, scopeType, scopeID string) bool {
 		M.IncRoom(scopeType)
 		if cb != nil {
 			cb(scopeType, scopeID)
+		}
+		if online != nil && scopeType == ScopeUser {
+			online(scopeID)
 		}
 	}
 	return true
@@ -452,6 +501,7 @@ func (h *Hub) unsubscribe(client *Client, scopeType, scopeID string) bool {
 		}
 	}
 	cb := h.onLastSubscriber
+	offline := h.onUserOffline
 	h.mu.Unlock()
 
 	M.UnsubscribesTotal(scopeType).Add(1)
@@ -459,6 +509,9 @@ func (h *Hub) unsubscribe(client *Client, scopeType, scopeID string) bool {
 		M.DecRoom(scopeType)
 		if cb != nil {
 			cb(scopeType, scopeID)
+		}
+		if offline != nil && scopeType == ScopeUser {
+			offline(scopeID)
 		}
 	}
 	return true
@@ -622,10 +675,7 @@ func (h *Hub) evictSlow(slow []*Client) {
 
 	h.mu.Lock()
 	evicted := 0
-	type emptied struct {
-		Type, ID string
-	}
-	var drainedRooms []emptied
+	var drainedRooms []scopeKey
 	for _, c := range slow {
 		if !h.clients[c] {
 			continue
@@ -636,7 +686,7 @@ func (h *Hub) evictSlow(slow []*Client) {
 				delete(room, c)
 				if len(room) == 0 {
 					delete(h.rooms, key)
-					drainedRooms = append(drainedRooms, emptied{key.Type, key.ID})
+					drainedRooms = append(drainedRooms, key)
 				}
 			}
 		}
@@ -645,6 +695,7 @@ func (h *Hub) evictSlow(slow []*Client) {
 		evicted++
 	}
 	cb := h.onLastSubscriber
+	offline := h.onUserOffline
 	h.mu.Unlock()
 
 	if evicted > 0 {
@@ -659,6 +710,7 @@ func (h *Hub) evictSlow(slow []*Client) {
 			cb(r.Type, r.ID)
 		}
 	}
+	notifyUsersOffline(offline, drainedRooms)
 }
 
 // Snapshot returns a JSON-friendly summary of the hub state.
