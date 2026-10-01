@@ -280,57 +280,55 @@ describe("ImPage chat levels on mobile", () => {
   });
 });
 
-describe("ImPage group details before the conversation", () => {
-  it("opens a group's details from the list on mobile", () => {
+describe("ImPage chat list still opens the conversation", () => {
+  it("pushes the thread from the mobile chat list", () => {
     const navigation = renderPage("chats");
     fireEvent.click(screen.getByRole("button", { name: "select chat" }));
-    expect(navigation.push).toHaveBeenCalledWith("/acme/im?chat=c1&view=info");
+    expect(navigation.push).toHaveBeenCalledWith("/acme/im?chat=c1");
   });
 
-  it("shows the details and a way into the conversation on mobile", () => {
-    renderPage("chats", "chat=c1&view=info");
-    expect(screen.getByRole("button", { name: "settings agent" })).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "thread settings" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Open chat" })).toHaveAttribute("href", "/acme/im?chat=c1");
-  });
-
-  it("returns from a profile opened in the details to those details", () => {
-    const navigation = renderPage("chats", "chat=c1&view=info");
-    fireEvent.click(screen.getByRole("button", { name: "settings agent" }));
-    expect(navigation.push).toHaveBeenCalledWith("/acme/im?chat=c1&view=info&contact=agent%3Aagent-1");
-
-    const profile = renderPage("chats", "chat=c1&view=info&contact=agent:agent-1");
-    fireEvent.click(screen.getByRole("button", { name: "Back to chat details" }));
-    expect(profile.replace).toHaveBeenCalledWith("/acme/im?chat=c1&view=info");
-  });
-
-  it("opens a group's details from the list on desktop", () => {
+  it("replaces into the thread from the desktop chat list", () => {
     isMobileRef.current = false;
-    const navigation = renderPage("chats");
-    fireEvent.click(screen.getByRole("button", { name: "select chat" }));
-    expect(navigation.replace).toHaveBeenCalledWith("/acme/im?chat=c1&view=info");
-  });
-
-  it("keeps a direct chat opening its conversation", () => {
-    isMobileRef.current = false;
-    chatsRef.current = [{
-      ...chat,
-      is_direct: true,
-      members: [
-        { member_type: "member", member_id: "user-1" },
-        { member_type: "agent", member_id: "agent-1" },
-      ],
-    }];
     const navigation = renderPage("chats");
     fireEvent.click(screen.getByRole("button", { name: "select chat" }));
     expect(navigation.replace).toHaveBeenCalledWith("/acme/im?chat=c1");
   });
+});
+
+describe("ImPage group details from contacts", () => {
+  it("opens a group's details from the mobile contacts list", () => {
+    const navigation = renderPage("contacts");
+    fireEvent.click(screen.getByRole("button", { name: /Launch/ }));
+    expect(navigation.push).toHaveBeenCalledWith("/acme/member?chat=c1");
+  });
+
+  it("shows the details and a way into the conversation on mobile", () => {
+    const navigation = renderPage("contacts", "chat=c1");
+    expect(screen.getByRole("button", { name: "settings agent" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open chat" })).toHaveAttribute("href", "/acme/im?chat=c1");
+    fireEvent.click(screen.getByRole("button", { name: "settings agent" }));
+    expect(navigation.push).toHaveBeenCalledWith("/acme/member?chat=c1&contact=agent%3Aagent-1");
+  });
+
+  it("returns from a profile opened in the details to those details", () => {
+    const navigation = renderPage("contacts", "chat=c1&contact=agent:agent-1");
+    fireEvent.click(screen.getByRole("button", { name: "Back to chat details" }));
+    expect(navigation.replace).toHaveBeenCalledWith("/acme/member?chat=c1");
+  });
+
+  it("opens a group's details from the desktop contacts list", () => {
+    isMobileRef.current = false;
+    const navigation = renderPage("contacts");
+    fireEvent.click(screen.getByRole("button", { name: /Launch/ }));
+    expect(navigation.replace).toHaveBeenCalledWith("/acme/member?chat=c1");
+  });
 
   it("shows the details and a way into the conversation on desktop", () => {
     isMobileRef.current = false;
-    renderPage("chats", "chat=c1&view=info");
+    renderPage("contacts", "chat=c1");
     expect(screen.getByRole("button", { name: "settings agent" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "thread author" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open chat" })).toHaveAttribute("href", "/acme/im?chat=c1");
+    expect(screen.getByRole("button", { name: /Launch/ })).toHaveAttribute("aria-current", "true");
   });
 });

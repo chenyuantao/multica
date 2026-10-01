@@ -17,6 +17,7 @@ interface ContactListProps {
   chats: GroupChat[];
   userId: string;
   selectedKey: string | null;
+  selectedChatId: string | null;
   onSelect: (entry: DirectoryEntry) => void;
   onOpenChat: (chatId: string) => void;
   onCreateAgent: () => void;
@@ -25,7 +26,18 @@ interface ContactListProps {
 
 type Folder = "chats" | "people" | "agents";
 
-export function ContactList({ people, agents, chats, userId, selectedKey, onSelect, onOpenChat, onCreateAgent, className }: ContactListProps) {
+export function ContactList({
+  people,
+  agents,
+  chats,
+  userId,
+  selectedKey,
+  selectedChatId,
+  onSelect,
+  onOpenChat,
+  onCreateAgent,
+  className,
+}: ContactListProps) {
   const { t } = useT("im");
   const [query, setQuery] = useState("");
   const [closed, setClosed] = useState<ReadonlySet<Folder>>(() => new Set());
@@ -82,14 +94,22 @@ export function ContactList({ people, agents, chats, userId, selectedKey, onSele
         ) : (
           <>
             <FolderSection label={t(($) => $.contacts.chats)} count={visibleChats.length} open={!closed.has("chats")} onToggle={() => toggle("chats")}>
-              {visibleChats.map((chat) => (
-                <li key={chat.id} className="border-b border-foreground/5 last:border-b-0">
-                  <button type="button" onClick={() => onOpenChat(chat.id)} className={cn(rowClass, "hover:bg-foreground/5")}>
-                    <ChatAvatar chat={chat} userId={userId} />
-                    <RowCopy title={chat.title} detail={t(($) => $.contacts.members, { count: chat.members.length })} />
-                  </button>
-                </li>
-              ))}
+              {visibleChats.map((chat) => {
+                const selected = chat.id === selectedChatId;
+                return (
+                  <li key={chat.id} className="border-b border-foreground/5 last:border-b-0">
+                    <button
+                      type="button"
+                      onClick={() => onOpenChat(chat.id)}
+                      aria-current={selected ? "true" : undefined}
+                      className={cn(rowClass, selected ? "bg-brand/12 hover:bg-brand/12" : "hover:bg-foreground/5")}
+                    >
+                      <ChatAvatar chat={chat} userId={userId} />
+                      <RowCopy title={chat.title} detail={t(($) => $.contacts.members, { count: chat.members.length })} />
+                    </button>
+                  </li>
+                );
+              })}
             </FolderSection>
             <FolderSection label={t(($) => $.contacts.people)} count={visiblePeople.length} open={!closed.has("people")} onToggle={() => toggle("people")}>
               {entryRows(visiblePeople)}

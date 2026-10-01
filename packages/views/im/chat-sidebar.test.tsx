@@ -62,23 +62,6 @@ describe("ChatSidebar unread badges", () => {
     expect(screen.queryByLabelText("2 unread messages")).toBeNull();
   });
 
-  it("keeps a selected chat's badge while its details are on screen", () => {
-    renderWithI18n(
-      <ChatSidebar
-        chats={[chat("a", 3), chat("b", 2)]}
-        isLoading={false}
-        isError={false}
-        selectedId="b"
-        readingId={null}
-        userId="user-1"
-        onSelect={() => {}}
-        onNewChat={() => {}}
-        onSetPinned={() => {}}
-      />,
-    );
-    expect(screen.getByLabelText("2 unread messages")).toHaveTextContent("2");
-  });
-
   it("keeps the open chat's badge while the app is in the background", () => {
     appForeground.value = false;
     renderSidebar("b");

@@ -58,20 +58,20 @@ function workspaceScoped(slug: string) {
     inbox: () => `${ws}/inbox`,
     im: () => `${ws}/im`,
     imChat: (chatId: string) => `${ws}/im?chat=${encode(chatId)}`,
-    // Group list selection lands here: the details column, not the thread.
-    imChatInfo: (chatId: string) => `${ws}/im?chat=${encode(chatId)}&view=info`,
     imChatSettings: (chatId: string) => `${ws}/im?chat=${encode(chatId)}&view=settings`,
     // Phone levels stacked on a chat: a profile opened from the thread, and
     // one opened from the chat settings.
     imChatContact: (chatId: string, actorType: string, actorId: string) =>
       `${ws}/im?chat=${encode(chatId)}&contact=${encode(`${actorType}:${actorId}`)}`,
-    imChatInfoContact: (chatId: string, actorType: string, actorId: string) =>
-      `${ws}/im?chat=${encode(chatId)}&view=info&contact=${encode(`${actorType}:${actorId}`)}`,
     imChatSettingsContact: (chatId: string, actorType: string, actorId: string) =>
       `${ws}/im?chat=${encode(chatId)}&view=settings&contact=${encode(`${actorType}:${actorId}`)}`,
     member: () => `${ws}/member`,
     memberContact: (actorType: string, actorId: string) =>
       `${ws}/member?contact=${encode(`${actorType}:${actorId}`)}`,
+    // A group picked from the contacts list: details first, not the thread.
+    memberChat: (chatId: string) => `${ws}/member?chat=${encode(chatId)}`,
+    memberChatContact: (chatId: string, actorType: string, actorId: string) =>
+      `${ws}/member?chat=${encode(chatId)}&contact=${encode(`${actorType}:${actorId}`)}`,
     knowledge: () => `${ws}/knowledge`,
     knowledgeFile: (path: string) => `${ws}/knowledge?file=${encode(path)}`,
     chat: () => `${ws}/chat`,
