@@ -95,6 +95,7 @@ import { OfflineBanner } from "@/components/chat/offline-banner";
 import { RuntimeRequiredBanner } from "@/components/chat/runtime-required-banner";
 import { useChatSelectStore } from "@/data/chat-select-store";
 import { isAgentRuntimeBound } from "@/lib/is-agent-runtime-bound";
+import { buildSpeechCorpus } from "@/lib/speech-corpus";
 
 export default function ChatTab() {
   const qc = useQueryClient();
@@ -494,6 +495,15 @@ export default function ChatTab() {
     availability === "none" ||
     isArchived === true ||
     !runtimeBound;
+  const speechCorpus = useMemo(
+    () =>
+      buildSpeechCorpus({
+        agentName: currentAgent?.name,
+        snippets: visibleMessages.slice(-8).map((message) => message.content),
+      }),
+    [currentAgent?.name, visibleMessages],
+  );
+
   const disabledReason = !currentAgent
     ? t("composer.no_agent")
     : accessRevoked
@@ -566,6 +576,7 @@ export default function ChatTab() {
           allowStop={pendingTask?.status !== "queued"}
           disabled={disabled}
           disabledReason={disabledReason}
+          speechCorpus={speechCorpus}
         />
       </KeyboardAvoidingView>
 

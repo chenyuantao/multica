@@ -22,6 +22,16 @@
     "working": "Agent is working…",
     "message": "Message…"
   },
+  "voice": {
+    "listening": "Voice input",
+    "release_send": "Release to send",
+    "release_cancel": "Release to cancel",
+    "release_edit": "Release to edit",
+    "cancel": "Cancel",
+    "edit": "Edit",
+    "unavailable": "Voice input is unavailable",
+    "permission": "Allow microphone access to dictate a message."
+  },
   "empty": {
     "greeting": "Hi, I'm {{name}}",
     "no_agent_title": "Chat with your agents",

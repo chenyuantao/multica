@@ -339,6 +339,16 @@ La télémétrie propre à Multica pour les instances auto-hébergées envoie un
 
 Seuls les fichiers `.md` sont renvoyés. Un dossier n'apparaît que s'il contient encore une note Markdown après ce filtre, et la réponse imbrique ces dossiers pour afficher un arbre. La lecture renvoie le texte complet. L'enregistrement reçoit des modifications par plages sur ce texte, puis réécrit toute la note, comme Obsidian. Tout utilisateur connecté de ce déploiement peut lire et modifier le coffre.
 
+## Saisie vocale
+
+| Variable | Défaut | Description |
+|---|---|---|
+| `DASHSCOPE_API_KEY` | vide | Clé DashScope pour la dictée mobile. L'app envoie l'audio à `/api/speech/realtime` ; ce processus le relaie. Vide désactive la socket |
+| `DASHSCOPE_ASR_MODEL` | `qwen3-asr-flash-realtime` | Modèle de reconnaissance temps réel |
+| `DASHSCOPE_ASR_REALTIME_URL` | `wss://dashscope.aliyuncs.com/api-ws/v1/realtime` | WebSocket DashScope. Hors de Chine : `wss://dashscope-intl.aliyuncs.com/api-ws/v1/realtime` |
+
+La clé reste sur le serveur. Le mode manuel termine l'énoncé au relâchement du doigt.
+
 ## Étapes suivantes
 
 - [Connexion et inscription](/auth-setup) — méthodes de connexion et restrictions d'inscription.

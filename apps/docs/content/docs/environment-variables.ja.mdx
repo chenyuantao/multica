@@ -342,6 +342,16 @@ multica config show
 
 返すファイルは `.md` のみです。フィルタ後も Markdown を含むディレクトリだけが残り、レスポンスはフォルダツリーとして入れ子になります。ノートの取得は全文です。保存は元の本文に対する範囲編集を受け取り、Obsidian と同じくファイル全体を書き戻します。このデプロイにログインできるユーザーなら誰でもボルトを読み書きできます。
 
+## 音声入力
+
+| 変数 | デフォルト | 説明 |
+|---|---|---|
+| `DASHSCOPE_API_KEY` | 空 | モバイルの長押し音声入力用 DashScope キー。アプリは `/api/speech/realtime` に音声を送り、このプロセスが転送する。空なら無効 |
+| `DASHSCOPE_ASR_MODEL` | `qwen3-asr-flash-realtime` | リアルタイム認識モデル |
+| `DASHSCOPE_ASR_REALTIME_URL` | `wss://dashscope.aliyuncs.com/api-ws/v1/realtime` | DashScope の WebSocket。中国国外は `wss://dashscope-intl.aliyuncs.com/api-ws/v1/realtime` |
+
+キーはサーバーに置いたままです。手動モードなので、指を離した時点でその発話が終わります。
+
 ## 次のステップ
 
 - [ログインとサインアップ](/auth-setup) — ログイン方式とサインアップ制限。

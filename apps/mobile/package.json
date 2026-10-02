@@ -40,6 +40,7 @@
     "@shikijs/langs": "^4.0.2",
     "@shikijs/themes": "^4.0.2",
     "@shopify/flash-list": "2.0.2",
+    "@siteed/audio-studio": "3.2.1",
     "@tanstack/react-query": "^5.96.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

@@ -342,6 +342,16 @@ multica config show
 
 응답에는 `.md` 파일만 포함됩니다. 필터 후에도 Markdown 노트가 남아 있는 디렉터리만 나타나며, 응답은 폴더 트리를 그리도록 중첩됩니다. 노트를 읽으면 전체 내용이 반환됩니다. 저장은 그 원문에 대한 구간 수정을 받은 뒤, Obsidian과 같이 파일 전체를 다시 씁니다. 이 배포에 로그인한 사용자는 누구나 보관함을 읽고 수정할 수 있습니다.
 
+## 음성 입력
+
+| 변수 | 기본값 | 설명 |
+|---|---|---|
+| `DASHSCOPE_API_KEY` | 비어 있음 | 모바일 길게 눌러 말하기용 DashScope 키. 앱은 `/api/speech/realtime`로 오디오를 보내고 이 프로세스가 전달합니다. 비우면 소켓이 꺼집니다 |
+| `DASHSCOPE_ASR_MODEL` | `qwen3-asr-flash-realtime` | 실시간 인식 모델 |
+| `DASHSCOPE_ASR_REALTIME_URL` | `wss://dashscope.aliyuncs.com/api-ws/v1/realtime` | DashScope 실시간 WebSocket. 중국 외 지역은 `wss://dashscope-intl.aliyuncs.com/api-ws/v1/realtime` |
+
+키는 서버에만 둡니다. 수동 모드라 손가락을 떼는 순간 그 발화가 끝납니다.
+
 ## 다음 단계
 
 - [로그인과 가입](/auth-setup) — 로그인 방식과 가입 제한을 알아봅니다.

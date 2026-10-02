@@ -342,6 +342,16 @@ First-party self-host telemetry sends one deployment-level snapshot per UTC day 
 
 The docs endpoints return `.md` files only. A directory is included when it still contains a Markdown note after that filter, and the response nests those directories so a client can render a folder tree. Reading a note returns its full text. Saving sends range edits against that text; the server writes the whole note back, the same way Obsidian does. Any signed-in user of the deployment can read and edit the vault.
 
+## Voice input
+
+| Variable | Default | Description |
+|---|---|---|
+| `DASHSCOPE_API_KEY` | empty | DashScope key for mobile press-to-talk. The app streams audio to `/api/speech/realtime`; this process forwards it. Empty disables the socket |
+| `DASHSCOPE_ASR_MODEL` | `qwen3-asr-flash-realtime` | Realtime ASR model |
+| `DASHSCOPE_ASR_REALTIME_URL` | `wss://dashscope.aliyuncs.com/api-ws/v1/realtime` | DashScope realtime WebSocket. Use `wss://dashscope-intl.aliyuncs.com/api-ws/v1/realtime` outside China |
+
+The key stays on the server. Recognition runs in manual mode so the utterance ends when the finger lifts.
+
 ## Next steps
 
 - [Sign-in and signup](/auth-setup) — sign-in methods and signup restrictions.

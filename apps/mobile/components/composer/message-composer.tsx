@@ -66,6 +66,10 @@ import {
   type MentionChip,
 } from "@/components/issue/composer-attachment-row";
 import { useT } from "@/lib/i18n";
+import {
+  VoiceHoldLayer,
+  voiceHoldSuppressesExpand,
+} from "@/components/chat/voice-hold";
 
 export interface MessageComposerReplyTarget {
   actorName: string;
@@ -124,6 +128,11 @@ interface Props {
   disabled?: boolean;
   disabledReason?: string;
 
+  /** Chat opts in. A long-press on an empty composer starts press-to-talk. */
+  enableVoice?: boolean;
+  /** Recent conversation text used to bias speech recognition. */
+  speechCorpus?: string;
+
   /** When true the composer renders flush at the bottom of its parent
    *  WITHOUT the KeyboardStickyView keyboard-aware lift + safe-area
    *  inset. Chat's parent owns its own KeyboardAvoidingView and
@@ -172,6 +181,8 @@ export function MessageComposer({
   renderStop,
   disabled = false,
   disabledReason,
+  enableVoice = false,
+  speechCorpus = "",
   manageKeyboard = true,
 }: Props) {
   const { colorScheme } = useColorScheme();
@@ -236,8 +247,9 @@ export function MessageComposer({
     !hasInFlightUpload &&
     (text.trim().length > 0 || mentions.length > 0);
 
+  const suppressExpandUntil = useRef(0);
   const expand = useCallback(() => {
-    if (disabled) return;
+    if (disabled || voiceHoldSuppressesExpand(suppressExpandUntil.current)) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     setExpanded(true);
     // Tapping the pill = "I want to write a new message". Drop any
@@ -246,6 +258,29 @@ export function MessageComposer({
     onClearReplyTarget?.();
     requestAnimationFrame(() => inputRef.current?.focus());
   }, [disabled, onClearReplyTarget]);
+
+  const submitSpoken = useCallback(
+    async (spoken: string) => {
+      const trimmed = spoken.trim();
+      if (!trimmed || disabled || isSending || submitting) return;
+      setText("");
+      setSubmitting(true);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      try {
+        await onSubmit({ content: trimmed, attachmentIds: [], mentions: [] });
+        inputRef.current?.blur();
+        Keyboard.dismiss();
+        setExpanded(false);
+      } catch {
+        setText(trimmed);
+        setExpanded(true);
+        requestAnimationFrame(() => inputRef.current?.focus());
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [disabled, isSending, onSubmit, setText, submitting],
+  );
 
   const handleSubmit = useCallback(async () => {
     if (!canSend) return;
@@ -611,11 +646,39 @@ export function MessageComposer({
   // When the parent owns keyboard handling (chat.tsx wraps in
   // KeyboardAvoidingView + SafeAreaView), skip the KeyboardStickyView —
   // double-stacking causes the composer to jump twice on keyboard show.
-  if (!manageKeyboard) return body;
-
-  return (
+  const framed = !manageKeyboard ? (
+    body
+  ) : (
     <KeyboardStickyView offset={{ closed: 0, opened: insets.bottom }}>
       {body}
     </KeyboardStickyView>
+  );
+
+  if (!enableVoice) return framed;
+
+  const voiceReady =
+    text.trim().length === 0 &&
+    attachments.length === 0 &&
+    mentions.length === 0 &&
+    !disabled &&
+    !isSending &&
+    !submitting;
+
+  return (
+    <VoiceHoldLayer
+      enabled={voiceReady}
+      corpus={speechCorpus}
+      suppressExpandUntil={suppressExpandUntil}
+      onSend={(spoken) => {
+        void submitSpoken(spoken);
+      }}
+      onEdit={(spoken) => {
+        setText(spoken);
+        setExpanded(true);
+        requestAnimationFrame(() => inputRef.current?.focus());
+      }}
+    >
+      {framed}
+    </VoiceHoldLayer>
   );
 }

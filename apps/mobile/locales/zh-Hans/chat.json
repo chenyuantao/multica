@@ -22,6 +22,16 @@
     "working": "智能体正在处理...",
     "message": "消息..."
   },
+  "voice": {
+    "listening": "语音输入模式",
+    "release_send": "松手发送",
+    "release_cancel": "松开取消",
+    "release_edit": "松开编辑",
+    "cancel": "取消",
+    "edit": "编辑",
+    "unavailable": "语音输入暂时不可用",
+    "permission": "需要麦克风权限才能语音输入。"
+  },
   "empty": {
     "greeting": "你好，我是 {{name}}",
     "no_agent_title": "与智能体聊天",

@@ -57,6 +57,8 @@ interface Props {
   disabled?: boolean;
   /** When `disabled`, replaces the pill label with the reason. */
   disabledReason?: string;
+  /** Recent conversation text used to bias speech recognition. */
+  speechCorpus?: string;
 }
 
 const IS_IOS = process.env.EXPO_OS === "ios";
@@ -70,6 +72,7 @@ export function ChatComposer({
   allowStop = true,
   disabled = false,
   disabledReason,
+  speechCorpus = "",
 }: Props) {
   const wsSlug = useWorkspaceStore((s) => s.currentWorkspaceSlug);
   const { t } = useT("chat");
@@ -116,6 +119,8 @@ export function ChatComposer({
       pillIcon="chatbubble-ellipses-outline"
       disabled={disabled}
       disabledReason={disabledReason}
+      enableVoice
+      speechCorpus={speechCorpus}
       isSending={sending}
       renderStop={allowStop ? () => <StopButton onPress={handleStop} /> : undefined}
       manageKeyboard={false}

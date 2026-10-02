@@ -81,6 +81,19 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         },
       ],
       [
+        "@siteed/audio-studio",
+        {
+          enablePhoneStateHandling: false,
+          enableNotifications: false,
+          enableBackgroundAudio: false,
+          enableDeviceDetection: false,
+          iosConfig: {
+            microphoneUsageDescription:
+              "Allow Multica to use the microphone to dictate chat messages.",
+          },
+        },
+      ],
+      [
         "expo-build-properties",
         {
           ios: {

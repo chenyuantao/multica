@@ -1465,6 +1465,10 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 	r.Get("/ws", func(w http.ResponseWriter, r *http.Request) {
 		realtime.HandleWebSocket(hub, mc, pr, slugResolver, w, r)
 	})
+	// Press-to-talk ASR. Outside Auth because React Native's WebSocket cannot
+	// set Authorization; the first frame carries the session token. The
+	// DashScope key is read from the server environment.
+	r.Get("/api/speech/realtime", h.SpeechRealtime)
 
 	// Local file serving (when using local storage). Served through the
 	// handler so /uploads/* carries the same preview security headers as the
