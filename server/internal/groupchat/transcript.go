@@ -10,6 +10,9 @@ const (
 	// minExcerptRunes is the shortest cut-down message worth showing. A
 	// message that would be cut below this is left out instead.
 	minExcerptRunes = 200
+	// maxTranscriptMessages is how many of the newest messages a transcript
+	// may include. Older messages are omitted.
+	maxTranscriptMessages = 20
 	// maxOmittedIDs caps the message ids listed for one omitted range.
 	maxOmittedIDs = 5
 )
@@ -41,17 +44,21 @@ type Transcript struct {
 	OmittedAfter []Turn
 }
 
-// SelectTranscript keeps turns inside maxRunes. The budget is filled in
-// priority order: the latest message from a person, the messages that
-// triggered this run (newest first), then everything else newest first.
-// Each message is capped at perMessage runes. Excerpts come back in
-// chronological order.
+// SelectTranscript keeps the newest maxTranscriptMessages turns inside
+// maxRunes. Older turns are omitted. The budget is filled in priority
+// order: the latest message from a person, the messages that triggered
+// this run (newest first), then everything else newest first. Each message
+// is capped at perMessage runes. Excerpts come back in chronological order.
 func SelectTranscript(turns []Turn, triggerIDs []string, maxRunes, perMessage int) Transcript {
 	triggers := make(map[string]bool, len(triggerIDs))
 	for _, id := range triggerIDs {
 		if id = strings.TrimSpace(id); id != "" {
 			triggers[id] = true
 		}
+	}
+	windowStart := len(turns) - maxTranscriptMessages
+	if windowStart < 0 {
+		windowStart = 0
 	}
 	remaining := maxRunes
 	chosen := make(map[int]Excerpt, len(turns))
@@ -77,18 +84,18 @@ func SelectTranscript(turns []Turn, triggerIDs []string, maxRunes, perMessage in
 		turn.Text = text
 		chosen[i] = Excerpt{Turn: turn, Index: i, Trigger: triggers[turn.ID], Truncated: truncated}
 	}
-	for i := len(turns) - 1; i >= 0; i-- {
+	for i := len(turns) - 1; i >= windowStart; i-- {
 		if turns[i].Role == "member" {
 			include(i)
 			break
 		}
 	}
-	for i := len(turns) - 1; i >= 0; i-- {
+	for i := len(turns) - 1; i >= windowStart; i-- {
 		if triggers[turns[i].ID] {
 			include(i)
 		}
 	}
-	for i := len(turns) - 1; i >= 0; i-- {
+	for i := len(turns) - 1; i >= windowStart; i-- {
 		include(i)
 	}
 
@@ -108,13 +115,15 @@ func SelectTranscript(turns []Turn, triggerIDs []string, maxRunes, perMessage in
 	return out
 }
 
-// Render writes the transcript as a <group_chat> XML block, oldest first.
-// A group chat opens with its <title> and, when set, its <notice>. A direct
-// chat leaves both unset. Each <msg> carries its history index, id, time, sender and role; triggers,
+// Render writes the transcript as a <group_chat> XML block. A group chat
+// opens with its <title> and, when set, its <notice>. A direct chat leaves
+// both unset. <desc> follows those and sits above every <msg>, so the stable
+// markup explanation stays above the sliding history. Each <msg> is oldest
+// first and carries its history index, id, time, sender and role; triggers,
 // cut-down messages and quotes are marked on it, and omitted ranges become
-// <omitted> elements. The closing <desc> explains the markup, starting with
-// intro, and lists the commands that read cut-down or omitted messages.
-// Message text is XML-escaped so it can never close or forge a tag.
+// <omitted> elements. <desc> starts with intro and lists the commands that
+// read cut-down or omitted messages. Message text is XML-escaped so it can
+// never close or forge a tag.
 func (t Transcript) Render(issueID, intro string) string {
 	var truncated, omitted, quoted, hidden bool
 	for _, e := range t.Excerpts {
@@ -134,27 +143,6 @@ func (t Transcript) Render(issueID, intro string) string {
 	if notice != "" {
 		fmt.Fprintf(&b, "<notice>\n%s\n</notice>\n", escapeText(notice))
 	}
-	for _, e := range t.Excerpts {
-		writeOmitted(&b, e.OmittedBefore)
-		fmt.Fprintf(&b, `<msg index="%d"%s`, e.Index, turnAttrs(e.Turn))
-		if e.Trigger {
-			b.WriteString(` trigger="true"`)
-		}
-		if e.Truncated {
-			b.WriteString(` truncated="true"`)
-		}
-		b.WriteString(">")
-		if e.Ref != nil {
-			fmt.Fprintf(&b, "\n<ref%s>%s</ref>\n", turnAttrs(*e.Ref), escapeText(strings.TrimSpace(e.Ref.Text)))
-		}
-		b.WriteString(escapeText(e.Text))
-		if e.Ref != nil {
-			b.WriteString("\n")
-		}
-		b.WriteString("</msg>\n")
-	}
-	writeOmitted(&b, t.OmittedAfter)
-
 	var desc []string
 	if intro = strings.TrimSpace(intro); intro != "" {
 		desc = append(desc, intro)
@@ -178,7 +166,28 @@ func (t Transcript) Render(issueID, intro string) string {
 	if omitted {
 		desc = append(desc, fmt.Sprintf("An omitted element stands for messages left out, with their time span and ids. Read the messages after a time with `multica issue comment list %s --since TIME --output json`.", issueID))
 	}
-	fmt.Fprintf(&b, "<desc>\n%s\n</desc>\n</group_chat>", strings.Join(desc, "\n"))
+	fmt.Fprintf(&b, "<desc>\n%s\n</desc>\n", strings.Join(desc, "\n"))
+	for _, e := range t.Excerpts {
+		writeOmitted(&b, e.OmittedBefore)
+		fmt.Fprintf(&b, `<msg index="%d"%s`, e.Index, turnAttrs(e.Turn))
+		if e.Trigger {
+			b.WriteString(` trigger="true"`)
+		}
+		if e.Truncated {
+			b.WriteString(` truncated="true"`)
+		}
+		b.WriteString(">")
+		if e.Ref != nil {
+			fmt.Fprintf(&b, "\n<ref%s>%s</ref>\n", turnAttrs(*e.Ref), escapeText(strings.TrimSpace(e.Ref.Text)))
+		}
+		b.WriteString(escapeText(e.Text))
+		if e.Ref != nil {
+			b.WriteString("\n")
+		}
+		b.WriteString("</msg>\n")
+	}
+	writeOmitted(&b, t.OmittedAfter)
+	b.WriteString("</group_chat>")
 	return b.String()
 }
 
