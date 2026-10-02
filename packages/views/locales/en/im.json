@@ -71,6 +71,7 @@
     "activity_thinking": "Thinking",
     "stop": "Stop",
     "stopping": "Stopping…",
+    "view_progress": "View progress",
     "stop_failed": "Couldn't stop the reply",
     "copy": "Copy",
     "copied": "Copied",

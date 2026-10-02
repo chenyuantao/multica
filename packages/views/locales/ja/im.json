@@ -66,6 +66,7 @@
     "activity_tool": "ツールを実行中",
     "activity_thinking": "思考中",
     "stop": "停止",
+    "view_progress": "生成過程を見る",
     "stopping": "停止中…",
     "stop_failed": "返信を停止できませんでした",
     "copy": "コピー",

@@ -36,6 +36,10 @@ vi.mock("@multica/core/group-chats", async () => ({
 
 vi.mock("@multica/core/issues/mutations", () => ({ useCancelIssueRun: () => cancelRun }));
 vi.mock("@multica/core/chat/queries", () => ({ useTaskMessages: () => ({ data: [] }) }));
+vi.mock("../common/task-transcript/agent-transcript-dialog", () => ({
+  AgentTranscriptDialog: ({ open, agentName }: { open: boolean; agentName: string }) =>
+    open ? <div role="dialog">{agentName}</div> : null,
+}));
 
 vi.mock("@multica/core/workspace/hooks", () => ({
   useActorName: () => ({ getActorName: (_type: string, id: string) => `name-${id}` }),
@@ -322,8 +326,17 @@ describe("ChatThread thinking bubble", () => {
 
   it("stops the run the bubble stands in for", () => {
     renderThinking();
-    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+    const stop = screen.getByRole("button", { name: "Stop" });
+    expect(stop.className).toContain("text-destructive");
+    expect(stop.querySelector("svg")).toHaveAttribute("fill", "currentColor");
+    fireEvent.click(stop);
     expect(cancelRun.mutate).toHaveBeenCalledWith("task-1", expect.anything());
+  });
+
+  it("opens the run progress from the thinking bubble", () => {
+    renderThinking();
+    fireEvent.click(screen.getByRole("button", { name: "View progress" }));
+    expect(screen.getByRole("dialog")).toHaveTextContent("name-agent-1");
   });
 
   it("shows the stop control without hover on touch screens", () => {

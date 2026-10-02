@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Brain, Copy, Loader2, MoreHorizontal, PanelRight, Quote, RotateCw, Sparkles, Square, Trash2 } from "lucide-react";
+import { Brain, Copy, Info, Loader2, MoreHorizontal, PanelRight, Quote, RotateCw, Sparkles, Square, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { configuredConversationStarters } from "@multica/core/agents";
 import { useTaskMessages } from "@multica/core/chat/queries";
@@ -14,10 +14,11 @@ import {
   useSendGroupChatMessage,
 } from "@multica/core/group-chats";
 import { useCancelIssueRun } from "@multica/core/issues/mutations";
+import { issueTasksOptions } from "@multica/core/issues/queries";
 import { useCurrentMember } from "@multica/core/permissions";
 import { useActorName } from "@multica/core/workspace/hooks";
 import { agentListOptions } from "@multica/core/workspace/queries";
-import type { Agent, AskAISelection, Comment, GroupChat } from "@multica/core/types";
+import type { Agent, AgentTask, AskAISelection, Comment, GroupChat } from "@multica/core/types";
 import { copyText } from "@multica/ui/lib/clipboard";
 import { cn } from "@multica/ui/lib/utils";
 import { Button } from "@multica/ui/components/ui/button";
@@ -33,6 +34,8 @@ import {
 } from "@multica/ui/components/ui/alert-dialog";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@multica/ui/components/ui/context-menu";
 import { ConversationStarterChips } from "../chat/components/conversation-starter-list";
+import { AgentTranscriptDialog } from "../common/task-transcript/agent-transcript-dialog";
+import { buildTimeline } from "../common/task-transcript/build-timeline";
 import { ActorAvatar } from "../common/actor-avatar";
 import { useAppForeground } from "../common/use-app-foreground";
 import { RichContent } from "../rich-content";
@@ -572,7 +575,13 @@ function MessageRow({
   return (
     <MessageLayout mine={mine} avatar={avatar} authorName={mine ? undefined : authorName} onAuthorDoubleClick={chatWithAgent}>
       {thinkingTask ? (
-        <ThinkingBubble chatId={message.issue_id} taskId={thinkingTask} title={time} />
+        <ThinkingBubble
+          chatId={message.issue_id}
+          taskId={thinkingTask}
+          agentId={message.author_id}
+          agentName={authorName ?? ""}
+          title={time}
+        />
       ) : (
         <MessageMenu actions={actions} ios={iosMenu}>
           {bubble}
@@ -583,15 +592,36 @@ function MessageRow({
   );
 }
 
+const thinkingControlClass =
+  "shrink-0 opacity-0 transition-opacity group-hover/thinking:opacity-100 group-focus-within/thinking:opacity-100 [@media(hover:none)]:opacity-100";
+
 /** Stands in for the reply with the run's latest progress until the reply replaces it. */
-function ThinkingBubble({ chatId, taskId, title }: { chatId: string; taskId: string; title: string }) {
+function ThinkingBubble({
+  chatId,
+  taskId,
+  agentId,
+  agentName,
+  title,
+}: {
+  chatId: string;
+  taskId: string;
+  agentId: string;
+  agentName: string;
+  title: string;
+}) {
   const { t } = useT("im");
   const { data } = useTaskMessages(taskId, true);
+  const items = useMemo(() => buildTimeline(data ?? []), [data]);
   const { text, activity } = useMemo(() => runProgress(data), [data]);
+  const [progressOpen, setProgressOpen] = useState(false);
+  const [progressFromKeyboard, setProgressFromKeyboard] = useState(false);
+  const { data: issueTasks } = useQuery({ ...issueTasksOptions(chatId), enabled: progressOpen });
+  const task = issueTasks?.find((item) => item.id === taskId) ?? thinkingRun(chatId, taskId, agentId);
   const cancel = useCancelIssueRun(chatId);
   // The bubble stays until the server rewrites it, so a settled stop keeps the spinner.
   const stopping = cancel.isPending || cancel.isSuccess;
   const stopLabel = stopping ? t(($) => $.thread.stopping) : t(($) => $.thread.stop);
+  const progressLabel = t(($) => $.thread.view_progress);
   const activityLabel = !activity
     ? null
     : activity.label ||
@@ -605,19 +635,42 @@ function ThinkingBubble({ chatId, taskId, title }: { chatId: string; taskId: str
         <Button
           variant="ghost"
           size="icon-xs"
-          className={cn(
-            "shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/thinking:opacity-100 group-focus-within/thinking:opacity-100 [@media(hover:none)]:opacity-100",
-            stopping && "opacity-100!",
-          )}
+          className={cn(thinkingControlClass, "text-muted-foreground", progressOpen && "opacity-100!")}
+          aria-label={progressLabel}
+          title={progressLabel}
+          aria-haspopup="dialog"
+          aria-expanded={progressOpen}
+          onClick={(event) => {
+            setProgressFromKeyboard(event.detail === 0);
+            setProgressOpen(true);
+          }}
+        >
+          <Info />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          className={cn(thinkingControlClass, stopping ? "text-muted-foreground opacity-100!" : "text-destructive")}
           aria-label={stopLabel}
           title={stopLabel}
           disabled={stopping}
           aria-busy={cancel.isPending}
           onClick={() => cancel.mutate(taskId, { onError: () => toast.error(t(($) => $.thread.stop_failed)) })}
         >
-          {stopping ? <Loader2 className="animate-spin motion-reduce:animate-none" /> : <Square />}
+          {stopping ? <Loader2 className="animate-spin motion-reduce:animate-none" /> : <Square fill="currentColor" strokeWidth={0} />}
         </Button>
       </div>
+      {progressOpen && (
+        <AgentTranscriptDialog
+          open
+          onOpenChange={setProgressOpen}
+          task={task}
+          items={items}
+          agentName={agentName}
+          isLive
+          finalFocus={progressFromKeyboard}
+        />
+      )}
       {activityLabel && (
         <span className="flex max-w-full min-w-0 items-center gap-1 text-micro text-muted-foreground" aria-live="polite">
           {activity?.kind === "tool" ? (
@@ -632,6 +685,25 @@ function ThinkingBubble({ chatId, taskId, title }: { chatId: string; taskId: str
       )}
     </>
   );
+}
+
+/** Enough for the progress dialog before the issue's task list has loaded. */
+function thinkingRun(chatId: string, taskId: string, agentId: string): AgentTask {
+  return {
+    id: taskId,
+    agent_id: agentId,
+    issue_id: chatId,
+    runtime_id: "",
+    status: "running",
+    priority: 0,
+    dispatched_at: null,
+    started_at: null,
+    completed_at: null,
+    result: null,
+    error: null,
+    created_at: "",
+    kind: "comment",
+  };
 }
 
 function MessageLayout({

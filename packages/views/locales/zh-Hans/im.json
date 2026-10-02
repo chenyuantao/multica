@@ -67,6 +67,7 @@
     "activity_thinking": "正在思考",
     "stop": "停止",
     "stopping": "正在停止…",
+    "view_progress": "查看生成过程",
     "stop_failed": "无法停止回复",
     "copy": "复制",
     "copied": "已复制",
