@@ -265,15 +265,16 @@ func sameID(a, b pgtype.UUID) bool {
 }
 
 // PostGroupChatCancelledNotice records that an unfinished request was
-// cancelled. The content quotes the trigger message from that moment.
-func (s *TaskService) PostGroupChatCancelledNotice(ctx context.Context, issue db.Issue, triggerCommentID pgtype.UUID, trigger string) {
+// cancelled. The content quotes the trigger message and, when available, the
+// Jev request and response that decided the cancel.
+func (s *TaskService) PostGroupChatCancelledNotice(ctx context.Context, issue db.Issue, triggerCommentID pgtype.UUID, trigger string, exchange *groupchat.SupersedeExchange) {
 	created, err := s.Queries.CreateComment(ctx, db.CreateCommentParams{
 		ID:           dbid.NewV7(),
 		IssueID:      issue.ID,
 		WorkspaceID:  issue.WorkspaceID,
 		AuthorType:   "system",
 		AuthorID:     pgtype.UUID{Valid: true},
-		Content:      groupchat.CancelledNotice(trigger),
+		Content:      groupchat.CancelledNotice(trigger, exchange),
 		Type:         "system",
 		RefMessageID: triggerCommentID,
 	})

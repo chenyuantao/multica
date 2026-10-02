@@ -176,7 +176,7 @@ func (h *Handler) cancelSupersededGroupChatTask(ctx context.Context, issue db.Is
 		slog.Warn("group chat latest message failed to load", "comment_id", uuidToString(commentID), "error", err)
 		return false
 	}
-	supersede, err := groupchat.Supersedes(ctx, h.GroupChatDecider, prev.Content, latest.Content)
+	supersede, exchange, err := groupchat.Supersedes(ctx, h.GroupChatDecider, prev.Content, latest.Content)
 	if err != nil {
 		slog.Warn("group chat supersede judgment failed", "issue_id", uuidToString(issue.ID), "agent_id", uuidToString(agentID), "error", err)
 		return false
@@ -197,7 +197,7 @@ func (h *Handler) cancelSupersededGroupChatTask(ctx context.Context, issue db.Is
 		}
 		return false
 	}
-	h.TaskService.PostGroupChatCancelledNotice(ctx, issue, previous.TriggerCommentID, prev.Content)
+	h.TaskService.PostGroupChatCancelledNotice(ctx, issue, previous.TriggerCommentID, prev.Content, exchange)
 	if open {
 		h.removeGroupChatThinking(ctx, issue, previous.AgentID, placeholder.CommentID)
 	}

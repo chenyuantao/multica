@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/multica-ai/multica/server/pkg/typesafe"
 )
 
 const supersedeRunes = 2000
@@ -28,19 +30,28 @@ type SupersedeState struct {
 	Latest   string `json:"latest"`
 }
 
+// SupersedeExchange is the Jev call that decided to cancel: what was sent and
+// what came back. Stored on the cancellation notice so the thread can show it.
+type SupersedeExchange struct {
+	Request  map[string]any             `json:"request"`
+	Response map[string]typesafe.Answer `json:"response"`
+}
+
 // Supersedes reports whether the latest message supplements the unfinished
 // request, so that request should be cancelled. Only a confident "追加"
 // cancels. A new question, a low-confidence supplement, a disabled
-// evaluator, or any failure leaves the unfinished request running.
-func Supersedes(ctx context.Context, ev Evaluator, previous, latest string) (bool, error) {
+// evaluator, or any failure leaves the unfinished request running. When it
+// cancels, exchange is the Jev request and response from that call.
+func Supersedes(ctx context.Context, ev Evaluator, previous, latest string) (bool, *SupersedeExchange, error) {
 	if ev == nil || !ev.Enabled() {
-		return false, nil
+		return false, nil, nil
 	}
 	previous, latest = clipRunes(previous, supersedeRunes), clipRunes(latest, supersedeRunes)
 	if previous == "" || latest == "" {
-		return false, nil
+		return false, nil, nil
 	}
-	answers, err := ev.Evaluate(ctx, SupersedeState{Previous: previous, Latest: latest}, map[string]any{
+	state := SupersedeState{Previous: previous, Latest: latest}
+	questions := map[string]any{
 		"relation": map[string]any{
 			"type": "choice",
 			"instructions": "用户在上一个请求还没完成时又发了一条消息。默认不要取消上一个请求。" +
@@ -51,30 +62,42 @@ func Supersedes(ctx context.Context, ev Evaluator, previous, latest string) (boo
 				"新问题": "它自己就能回答，或者只是和上一件相关。上一个未完成的请求继续跑完。",
 			},
 		},
-	})
+	}
+	answers, err := ev.Evaluate(ctx, state, questions)
 	if err != nil {
-		return false, err
+		return false, nil, err
 	}
 	switch answers["relation"].Choice {
 	case "追加":
 		if answers["relation"].Confidence < supersedeConfidenceFloor {
-			return false, nil
+			return false, nil, nil
 		}
-		return true, nil
+		return true, &SupersedeExchange{
+			Request:  map[string]any{"state": state, "questions": questions},
+			Response: answers,
+		}, nil
 	case "新问题":
-		return false, nil
+		return false, nil, nil
 	default:
-		return false, fmt.Errorf("%w: relation answer %q", ErrUndecided, answers["relation"].Choice)
+		return false, nil, fmt.Errorf("%w: relation answer %q", ErrUndecided, answers["relation"].Choice)
 	}
 }
 
 // CancelledNotice is the system comment posted after an unfinished request
 // is actually cancelled. The thread renders the first line as an error and
-// the quoted trigger, captured here, centered on the second line.
-func CancelledNotice(trigger string) string {
-	raw, err := json.Marshal(struct {
-		Trigger string `json:"trigger"`
-	}{Trigger: oneLine(trigger, cancelledNoticeRunes)})
+// the quoted trigger, captured here, centered on the second line. When
+// exchange is set, a details control can open the Jev request and response.
+func CancelledNotice(trigger string, exchange *SupersedeExchange) string {
+	payload := struct {
+		Trigger  string                     `json:"trigger"`
+		Request  map[string]any             `json:"request,omitempty"`
+		Response map[string]typesafe.Answer `json:"response,omitempty"`
+	}{Trigger: oneLine(trigger, cancelledNoticeRunes)}
+	if exchange != nil {
+		payload.Request = exchange.Request
+		payload.Response = exchange.Response
+	}
+	raw, err := json.Marshal(payload)
 	if err != nil {
 		raw = []byte(`{"trigger":""}`)
 	}

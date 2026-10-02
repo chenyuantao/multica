@@ -99,7 +99,11 @@
     "history_image": "[画像]",
     "history_document": "[ファイル]",
     "history_record": "[チャット履歴]",
-    "cancelled_in_progress": "進行中のメッセージをキャンセルしました"
+    "cancelled_in_progress": "進行中のメッセージをキャンセルしました",
+    "cancelled_details": "詳細",
+    "cancelled_details_title": "キャンセル判断の詳細",
+    "cancelled_request": "リクエスト",
+    "cancelled_response": "レスポンス"
   },
   "composer": {
     "placeholder": "{{title}} にメッセージ — @ でエージェントを 1 つ指定",

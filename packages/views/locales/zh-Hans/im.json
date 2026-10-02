@@ -99,7 +99,11 @@
     "history_image": "[图片]",
     "history_document": "[文档]",
     "history_record": "[聊天记录]",
-    "cancelled_in_progress": "已取消一条进行中的消息"
+    "cancelled_in_progress": "已取消一条进行中的消息",
+    "cancelled_details": "详情",
+    "cancelled_details_title": "取消判断详情",
+    "cancelled_request": "入参",
+    "cancelled_response": "回包"
   },
   "composer": {
     "placeholder": "发消息到 {{title}} — 输入 @ 指定一个智能体",

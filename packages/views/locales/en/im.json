@@ -103,7 +103,11 @@
     "history_image": "[Image]",
     "history_document": "[Document]",
     "history_record": "[Chat History]",
-    "cancelled_in_progress": "A message in progress was cancelled"
+    "cancelled_in_progress": "A message in progress was cancelled",
+    "cancelled_details": "Details",
+    "cancelled_details_title": "Cancellation details",
+    "cancelled_request": "Request",
+    "cancelled_response": "Response"
   },
   "composer": {
     "placeholder": "Message {{title}} — @ to address one agent",

@@ -99,7 +99,11 @@
     "history_image": "[이미지]",
     "history_document": "[문서]",
     "history_record": "[대화 기록]",
-    "cancelled_in_progress": "진행 중인 메시지를 취소했습니다"
+    "cancelled_in_progress": "진행 중인 메시지를 취소했습니다",
+    "cancelled_details": "상세",
+    "cancelled_details_title": "취소 판단 상세",
+    "cancelled_request": "요청",
+    "cancelled_response": "응답"
   },
   "composer": {
     "placeholder": "{{title}}에 메시지 보내기 — @로 에이전트 하나 지정",

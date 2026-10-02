@@ -103,7 +103,11 @@
     "history_image": "[Image]",
     "history_document": "[Document]",
     "history_record": "[Historique]",
-    "cancelled_in_progress": "Un message en cours a été annulé"
+    "cancelled_in_progress": "Un message en cours a été annulé",
+    "cancelled_details": "Détails",
+    "cancelled_details_title": "Détails de l'annulation",
+    "cancelled_request": "Requête",
+    "cancelled_response": "Réponse"
   },
   "composer": {
     "placeholder": "Message à {{title}} — @ pour solliciter un agent",

@@ -186,7 +186,10 @@ describe("ChatThread cancelled notice", () => {
   beforeEach(() => {
     messages = [
       {
-        ...message("m-cancel", '```multica-cancelled\n{"trigger":"check the deploy"}\n```'),
+        ...message(
+          "m-cancel",
+          '```multica-cancelled\n{"trigger":"check the deploy","request":{"state":{"previous":"check the deploy","latest":"and include the logs"}},"response":{"relation":{"type":"choice","choice":"追加","confidence":0.91}}}\n```',
+        ),
         author_type: "system",
         author_id: "00000000-0000-0000-0000-000000000000",
         type: "system",
@@ -197,9 +200,21 @@ describe("ChatThread cancelled notice", () => {
 
   it("shows the cancellation as an error line with the trigger centered under it", () => {
     renderThread();
-    expect(screen.getByText("A message in progress was cancelled")).toHaveClass("text-destructive");
+    const status = screen.getByRole("status");
+    expect(status).toHaveTextContent("A message in progress was cancelled");
+    expect(status.querySelector(".text-destructive")).not.toBeNull();
     expect(screen.getByText("check the deploy")).toHaveClass("text-center");
     expect(screen.queryByText(/multica-cancelled/)).toBeNull();
+  });
+
+  it("opens the saved Jev request and response from Details", async () => {
+    renderThread();
+    fireEvent.click(screen.getByRole("button", { name: "Details" }));
+    expect(screen.getByRole("dialog", { name: "Cancellation details" })).toBeInTheDocument();
+    expect(screen.getByText("Request")).toBeInTheDocument();
+    expect(screen.getByText("Response")).toBeInTheDocument();
+    expect(screen.getByText('"previous"')).toBeInTheDocument();
+    expect(screen.getByText('"追加"')).toBeInTheDocument();
   });
 });
 

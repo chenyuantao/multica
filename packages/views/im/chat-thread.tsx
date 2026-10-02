@@ -35,6 +35,12 @@ import {
   AlertDialogTitle,
 } from "@multica/ui/components/ui/alert-dialog";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@multica/ui/components/ui/dialog";
+import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
@@ -52,7 +58,8 @@ import { useOpenAgentDetail } from "../modals/agent-detail";
 import { AppLink } from "../navigation";
 import { DragStrip } from "../platform";
 import { AskAIBadge } from "./ask-ai-badge";
-import { cancelledNoticeTrigger } from "./cancelled-notice";
+import { parseCancelledNotice, type CancelledNoticeData } from "./cancelled-notice";
+import { JsonViewer } from "../common/json-viewer";
 import { highlightedTextWithin } from "./ask-ai-context";
 import { ChatComposer, QuoteText, type ComposerQuote } from "./chat-composer";
 import {
@@ -199,7 +206,7 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAsk
       if (!m) return null;
       const text = isChatHistoryContent(m.content)
         ? t(($) => $.thread.history_footer)
-        : cancelledNoticeTrigger(m.content) !== null
+        : parseCancelledNotice(m.content)
           ? t(($) => $.thread.cancelled_in_progress)
           : plainTextPreview(m.content) || t(($) => $.thread.quote_attachment);
       return { id, name: getActorName(m.author_type, m.author_id), text };
@@ -685,18 +692,54 @@ function MessageMenu({ actions, ios, children }: { actions: MessageActions; ios?
 }
 
 /** One line under a bubble naming the message it quotes; `null` means that message is gone. */
-function CancelledNotice({ trigger }: { trigger: string }) {
+function CancelledNotice({ notice }: { notice: CancelledNoticeData }) {
   const { t } = useT("im");
+  const [open, setOpen] = useState(false);
+  const hasDetails = notice.request !== undefined || notice.response !== undefined;
   return (
     <div className="my-3.5 flex flex-col items-center gap-1 px-6" role="status">
-      <p className="flex items-center justify-center gap-1.5 text-center text-caption text-destructive">
-        <AlertTriangle className="size-3.5 shrink-0" aria-hidden />
-        {t(($) => $.thread.cancelled_in_progress)}
+      <p className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center text-caption text-destructive">
+        <span className="inline-flex items-center gap-1.5">
+          <AlertTriangle className="size-3.5 shrink-0" aria-hidden />
+          {t(($) => $.thread.cancelled_in_progress)}
+        </span>
+        {hasDetails ? (
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="text-caption text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+          >
+            {t(($) => $.thread.cancelled_details)}
+          </button>
+        ) : null}
       </p>
-      {trigger ? (
-        <p className="w-full truncate text-center text-caption text-muted-foreground" title={trigger}>
-          {trigger}
+      {notice.trigger ? (
+        <p className="w-full truncate text-center text-caption text-muted-foreground" title={notice.trigger}>
+          {notice.trigger}
         </p>
+      ) : null}
+      {hasDetails ? (
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogContent className="flex max-h-[min(80vh,640px)] flex-col gap-3 sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle>{t(($) => $.thread.cancelled_details_title)}</DialogTitle>
+            </DialogHeader>
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">
+              {notice.request !== undefined ? (
+                <section className="space-y-1.5">
+                  <h3 className="text-caption font-medium text-muted-foreground">{t(($) => $.thread.cancelled_request)}</h3>
+                  <JsonViewer value={notice.request} />
+                </section>
+              ) : null}
+              {notice.response !== undefined ? (
+                <section className="space-y-1.5">
+                  <h3 className="text-caption font-medium text-muted-foreground">{t(($) => $.thread.cancelled_response)}</h3>
+                  <JsonViewer value={notice.response} />
+                </section>
+              ) : null}
+            </div>
+          </DialogContent>
+        </Dialog>
       ) : null}
     </div>
   );
@@ -771,9 +814,9 @@ function MessageRow({
 }) {
   const time = formatClock(message.created_at);
 
-  const cancelledTrigger = cancelledNoticeTrigger(message.content);
-  if (cancelledTrigger !== null) {
-    return <CancelledNotice trigger={cancelledTrigger} />;
+  const cancelled = parseCancelledNotice(message.content);
+  if (cancelled) {
+    return <CancelledNotice notice={cancelled} />;
   }
 
   if (message.author_type === "system" || message.type === "status_change" || message.type === "system") {

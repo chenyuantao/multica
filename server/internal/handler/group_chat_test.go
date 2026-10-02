@@ -962,6 +962,9 @@ func assertCancelledNotice(t *testing.T, chatID, trigger string) {
 	if !strings.Contains(content, `"trigger":"`+trigger+`"`) {
 		t.Fatalf("cancellation notice = %q, want trigger %q", content, trigger)
 	}
+	if !strings.Contains(content, `"request"`) || !strings.Contains(content, `"response"`) || !strings.Contains(content, `"choice":"追加"`) {
+		t.Fatalf("cancellation notice missing Jev exchange: %q", content)
+	}
 }
 
 func TestGroupChatNewQuestionLeavesTheUnfinishedTask(t *testing.T) {
