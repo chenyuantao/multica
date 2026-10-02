@@ -98,7 +98,8 @@
     "history_title_rest": "{{first}}と…のチャット履歴",
     "history_image": "[画像]",
     "history_document": "[ファイル]",
-    "history_record": "[チャット履歴]"
+    "history_record": "[チャット履歴]",
+    "cancelled_in_progress": "進行中のメッセージをキャンセルしました"
   },
   "composer": {
     "placeholder": "{{title}} にメッセージ — @ でエージェントを 1 つ指定",

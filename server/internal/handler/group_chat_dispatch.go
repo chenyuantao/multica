@@ -184,9 +184,8 @@ func (h *Handler) cancelSupersededGroupChatTask(ctx context.Context, issue db.Is
 	if !supersede {
 		return false
 	}
-	// The superseded request leaves no trace in the chat: its thinking bubble
-	// is closed before the cancel so it is not rewritten as a cancellation
-	// notice, then removed.
+	// Close the thinking bubble before the cancel so task completion does not
+	// rewrite it, then replace that bubble with a cancellation notice.
 	placeholder, open := groupchat.OpenPlaceholder(previous.Context)
 	if open {
 		h.TaskService.CloseGroupChatPlaceholder(ctx, previous.ID, placeholder.CommentID)
@@ -198,6 +197,7 @@ func (h *Handler) cancelSupersededGroupChatTask(ctx context.Context, issue db.Is
 		}
 		return false
 	}
+	h.TaskService.PostGroupChatCancelledNotice(ctx, issue, previous.TriggerCommentID, prev.Content)
 	if open {
 		h.removeGroupChatThinking(ctx, issue, previous.AgentID, placeholder.CommentID)
 	}

@@ -264,6 +264,44 @@ func sameID(a, b pgtype.UUID) bool {
 	return a.Valid && b.Valid && util.UUIDToString(a) == util.UUIDToString(b)
 }
 
+// PostGroupChatCancelledNotice records that an unfinished request was
+// cancelled. The content quotes the trigger message from that moment.
+func (s *TaskService) PostGroupChatCancelledNotice(ctx context.Context, issue db.Issue, triggerCommentID pgtype.UUID, trigger string) {
+	created, err := s.Queries.CreateComment(ctx, db.CreateCommentParams{
+		ID:           dbid.NewV7(),
+		IssueID:      issue.ID,
+		WorkspaceID:  issue.WorkspaceID,
+		AuthorType:   "system",
+		AuthorID:     pgtype.UUID{Valid: true},
+		Content:      groupchat.CancelledNotice(trigger),
+		Type:         "system",
+		RefMessageID: triggerCommentID,
+	})
+	if err != nil {
+		slog.Warn("group chat cancellation notice was not posted", "issue_id", util.UUIDToString(issue.ID), "error", err)
+		return
+	}
+	s.publishGroupChatSystemComment(issue, created.Comment())
+}
+
+func (s *TaskService) publishGroupChatSystemComment(issue db.Issue, comment db.Comment) {
+	if s.Bus == nil {
+		return
+	}
+	fields := commentEventFields(comment)
+	fields["revision"] = comment.Revision
+	s.Bus.Publish(events.Event{
+		Type:        protocol.EventCommentCreated,
+		WorkspaceID: util.UUIDToString(issue.WorkspaceID),
+		ActorType:   "system",
+		Payload: map[string]any{
+			"comment":      fields,
+			"issue_title":  issue.Title,
+			"issue_status": issue.Status,
+		},
+	})
+}
+
 // CloseGroupChatPlaceholder marks the thinking bubble as filled so a later
 // comment from the same run is stored on its own.
 func (s *TaskService) CloseGroupChatPlaceholder(ctx context.Context, taskID pgtype.UUID, commentID string) {

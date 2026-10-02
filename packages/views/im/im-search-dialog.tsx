@@ -42,6 +42,7 @@ import { useT } from "../i18n";
 import { useNavigation } from "../navigation";
 import { HighlightText } from "../search/highlight-text";
 import { describeElement, elementLabel } from "./ask-ai-element";
+import { cancelledNoticeTrigger } from "./cancelled-notice";
 import { isChatHistoryContent } from "./chat-history";
 import { ChatAvatar } from "./chat-sidebar";
 import { ElementPicker } from "./element-picker";
@@ -213,7 +214,13 @@ export function ImSearchDialog({
     value: `chat:${chat.id}`,
     chat,
     title,
-    snippet: !snippet ? "" : isChatHistoryContent(snippet) ? t(($) => $.thread.history_footer) : plainTextPreview(snippet),
+    snippet: !snippet
+      ? ""
+      : cancelledNoticeTrigger(snippet) !== null
+        ? t(($) => $.thread.cancelled_in_progress)
+        : isChatHistoryContent(snippet)
+          ? t(($) => $.thread.history_footer)
+          : plainTextPreview(snippet),
   });
   const contactRow = (entry: DirectoryEntry): Row => ({
     kind: "contact",
@@ -550,7 +557,9 @@ function AskContextQuote({
     const raw = selection.text || selection.content;
     const text = isChatHistoryContent(raw)
       ? t(($) => $.thread.history_footer)
-      : plainTextPreview(raw) || t(($) => $.thread.quote_attachment);
+      : cancelledNoticeTrigger(raw) !== null
+        ? t(($) => $.thread.cancelled_in_progress)
+        : plainTextPreview(raw) || t(($) => $.thread.quote_attachment);
     lines.push({
       key: "selection",
       icon: Quote,

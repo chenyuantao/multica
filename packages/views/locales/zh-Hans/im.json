@@ -98,7 +98,8 @@
     "history_title_rest": "{{first}}和…的聊天记录",
     "history_image": "[图片]",
     "history_document": "[文档]",
-    "history_record": "[聊天记录]"
+    "history_record": "[聊天记录]",
+    "cancelled_in_progress": "已取消一条进行中的消息"
   },
   "composer": {
     "placeholder": "发消息到 {{title}} — 输入 @ 指定一个智能体",

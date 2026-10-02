@@ -182,6 +182,27 @@ describe("ChatThread pending messages", () => {
   });
 });
 
+describe("ChatThread cancelled notice", () => {
+  beforeEach(() => {
+    messages = [
+      {
+        ...message("m-cancel", '```multica-cancelled\n{"trigger":"check the deploy"}\n```'),
+        author_type: "system",
+        author_id: "00000000-0000-0000-0000-000000000000",
+        type: "system",
+      },
+    ];
+    vi.mocked(useQuery).mockImplementation(() => ({ data: messages, isError: false }) as never);
+  });
+
+  it("shows the cancellation as an error line with the trigger centered under it", () => {
+    renderThread();
+    expect(screen.getByText("A message in progress was cancelled")).toHaveClass("text-destructive");
+    expect(screen.getByText("check the deploy")).toHaveClass("text-center");
+    expect(screen.queryByText(/multica-cancelled/)).toBeNull();
+  });
+});
+
 describe("ChatThread agent author", () => {
   beforeEach(() => {
     vi.useFakeTimers();

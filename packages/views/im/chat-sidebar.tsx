@@ -11,6 +11,7 @@ import { ActorAvatar } from "../common/actor-avatar";
 import { useAppForeground } from "../common/use-app-foreground";
 import { useT } from "../i18n";
 import { chatDraftSummary, useChatDraft } from "./chat-draft";
+import { cancelledNoticeTrigger } from "./cancelled-notice";
 import { isChatHistoryContent } from "./chat-history";
 import { chatActivityAt, chatDisplayTitle, formatStamp, plainTextPreview } from "./im-utils";
 import { ImSidebarHeader, ImSidebarShell } from "./im-sidebar-shell";
@@ -207,9 +208,11 @@ function ChatListItem({
   const last = chat.last_message;
   const text = !last
     ? ""
-    : isChatHistoryContent(last.content)
-      ? t(($) => $.thread.history_footer)
-      : plainTextPreview(last.content);
+    : cancelledNoticeTrigger(last.content) !== null
+      ? t(($) => $.thread.cancelled_in_progress)
+      : isChatHistoryContent(last.content)
+        ? t(($) => $.thread.history_footer)
+        : plainTextPreview(last.content);
   const preview = !last
     ? t(($) => $.sidebar.no_messages)
     : last.author_type === "system" || directChatPeer(chat, userId)

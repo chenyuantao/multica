@@ -767,7 +767,7 @@ func (e *groupChatFilterEvaluator) Evaluate(_ context.Context, state any, questi
 	e.questions = questions
 	out := make(map[string]typesafe.Answer, len(questions))
 	for key := range questions {
-		out[key] = typesafe.Answer{Type: "choice", Choice: e.choice}
+		out[key] = typesafe.Answer{Type: "choice", Choice: e.choice, Confidence: 1}
 	}
 	return out, nil
 }
@@ -939,6 +939,7 @@ func TestGroupChatSupplementCancelsTheUnfinishedTask(t *testing.T) {
 		}
 	}
 	assertOnlyNewThinking(queued)
+	assertCancelledNotice(t, queued, "check the deploy")
 
 	running := newSupersedeChat(t, "supersede-running")
 	postSupersede(t, running, "check the deploy")
@@ -951,6 +952,16 @@ func TestGroupChatSupplementCancelsTheUnfinishedTask(t *testing.T) {
 		t.Fatalf("replacement of a started run did not force a fresh session")
 	}
 	assertOnlyNewThinking(running)
+	assertCancelledNotice(t, running, "check the deploy")
+}
+
+func assertCancelledNotice(t *testing.T, chatID, trigger string) {
+	t.Helper()
+	var content string
+	dbfx.QueryRow(t, `SELECT content FROM comment WHERE issue_id = $1 AND author_type = 'system' AND type = 'system'`, chatID).Scan(&content)
+	if !strings.Contains(content, `"trigger":"`+trigger+`"`) {
+		t.Fatalf("cancellation notice = %q, want trigger %q", content, trigger)
+	}
 }
 
 func TestGroupChatNewQuestionLeavesTheUnfinishedTask(t *testing.T) {

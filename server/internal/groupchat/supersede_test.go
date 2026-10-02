@@ -11,7 +11,7 @@ import (
 
 func TestSupersedes(t *testing.T) {
 	ev := &scripted{enabled: true, answers: map[string]typesafe.Answer{
-		"relation": {Type: "choice", Choice: "追加"},
+		"relation": {Type: "choice", Choice: "追加", Confidence: supersedeConfidenceFloor},
 	}}
 	got, err := Supersedes(context.Background(), ev, "check the deploy", "and include the logs")
 	if err != nil || !got || !ev.called {
@@ -20,6 +20,18 @@ func TestSupersedes(t *testing.T) {
 	state, ok := ev.state.(SupersedeState)
 	if !ok || state.Previous != "check the deploy" || state.Latest != "and include the logs" {
 		t.Fatalf("state = %#v", ev.state)
+	}
+	relation := ev.questions["relation"].(map[string]any)
+	instructions := relation["instructions"].(string)
+	criteria := relation["criteria"].(map[string]string)
+	if !strings.Contains(instructions, "拿不准就选「新问题」") || !strings.Contains(criteria["追加"], "不构成一个能单独回答的请求") {
+		t.Fatalf("supersede prompt is not conservative: %s %v", instructions, criteria)
+	}
+
+	ev.answers["relation"] = typesafe.Answer{Type: "choice", Choice: "追加", Confidence: supersedeConfidenceFloor - 0.01}
+	got, err = Supersedes(context.Background(), ev, "check the deploy", "and include the logs")
+	if err != nil || got {
+		t.Fatalf("low confidence = %v err %v", got, err)
 	}
 
 	ev.answers["relation"] = typesafe.Answer{Type: "choice", Choice: "新问题"}
@@ -65,5 +77,19 @@ func TestSupersedesClipsLongText(t *testing.T) {
 	state := ev.state.(SupersedeState)
 	if len([]rune(state.Previous)) != supersedeRunes {
 		t.Fatalf("previous runes = %d", len([]rune(state.Previous)))
+	}
+}
+
+func TestCancelledNoticeQuotesTheTriggerOnOneLine(t *testing.T) {
+	got := CancelledNotice("  check\nthe   deploy  ")
+	if !strings.HasPrefix(got, "```"+cancelledFence+"\n") || !strings.HasSuffix(got, "\n```") {
+		t.Fatalf("notice = %q", got)
+	}
+	if !strings.Contains(got, `"trigger":"check the deploy"`) {
+		t.Fatalf("trigger = %q", got)
+	}
+	long := CancelledNotice(strings.Repeat("甲", cancelledNoticeRunes+10))
+	if strings.Count(long, "甲") != cancelledNoticeRunes {
+		t.Fatalf("trigger runes = %d", strings.Count(long, "甲"))
 	}
 }

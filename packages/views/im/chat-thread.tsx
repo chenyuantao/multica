@@ -2,7 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Brain, Check, Copy, Forward, Info, ListChecks, Loader2, MoreHorizontal, PanelRight, Quote, RotateCw, Sparkles, Trash2 } from "lucide-react";
+import { AlertTriangle, Brain, Check, Copy, Forward, Info, ListChecks, Loader2, MoreHorizontal, PanelRight, Quote, RotateCw, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { configuredConversationStarters } from "@multica/core/agents";
 import { useTaskMessages } from "@multica/core/chat/queries";
@@ -52,6 +52,7 @@ import { useOpenAgentDetail } from "../modals/agent-detail";
 import { AppLink } from "../navigation";
 import { DragStrip } from "../platform";
 import { AskAIBadge } from "./ask-ai-badge";
+import { cancelledNoticeTrigger } from "./cancelled-notice";
 import { highlightedTextWithin } from "./ask-ai-context";
 import { ChatComposer, QuoteText, type ComposerQuote } from "./chat-composer";
 import {
@@ -198,7 +199,9 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAsk
       if (!m) return null;
       const text = isChatHistoryContent(m.content)
         ? t(($) => $.thread.history_footer)
-        : plainTextPreview(m.content) || t(($) => $.thread.quote_attachment);
+        : cancelledNoticeTrigger(m.content) !== null
+          ? t(($) => $.thread.cancelled_in_progress)
+          : plainTextPreview(m.content) || t(($) => $.thread.quote_attachment);
       return { id, name: getActorName(m.author_type, m.author_id), text };
     },
     [byId, getActorName, t],
@@ -682,6 +685,23 @@ function MessageMenu({ actions, ios, children }: { actions: MessageActions; ios?
 }
 
 /** One line under a bubble naming the message it quotes; `null` means that message is gone. */
+function CancelledNotice({ trigger }: { trigger: string }) {
+  const { t } = useT("im");
+  return (
+    <div className="my-3.5 flex flex-col items-center gap-1 px-6" role="status">
+      <p className="flex items-center justify-center gap-1.5 text-center text-caption text-destructive">
+        <AlertTriangle className="size-3.5 shrink-0" aria-hidden />
+        {t(($) => $.thread.cancelled_in_progress)}
+      </p>
+      {trigger ? (
+        <p className="w-full truncate text-center text-caption text-muted-foreground" title={trigger}>
+          {trigger}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function QuotedLine({ quote, onJump }: { quote: ComposerQuote | null; onJump: (id: string) => void }) {
   const { t } = useT("im");
   if (!quote) {
@@ -750,6 +770,11 @@ function MessageRow({
   selecting?: boolean;
 }) {
   const time = formatClock(message.created_at);
+
+  const cancelledTrigger = cancelledNoticeTrigger(message.content);
+  if (cancelledTrigger !== null) {
+    return <CancelledNotice trigger={cancelledTrigger} />;
+  }
 
   if (message.author_type === "system" || message.type === "status_change" || message.type === "system") {
     return <p className="my-3.5 text-center text-caption text-muted-foreground">{message.content}</p>;
