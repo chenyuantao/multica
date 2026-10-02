@@ -1077,14 +1077,12 @@ export const EMPTY_NOTIFICATION_PREFERENCE_RESPONSE: NotificationPreferenceRespo
 
 export const PushConfigResponseSchema = z.object({
   web_push_public_key: z.string().catch(""),
-  oppo_push_enabled: z.boolean().catch(false),
 }).loose();
 
 // Fail closed: an unreadable config must not offer a subscribe button that
 // cannot work.
 export const EMPTY_PUSH_CONFIG_RESPONSE: PushConfigResponse = {
   web_push_public_key: "",
-  oppo_push_enabled: false,
 };
 
 export const CreateFeedbackResponseSchema = z.object({

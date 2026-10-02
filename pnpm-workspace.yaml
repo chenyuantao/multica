@@ -1,8 +1,5 @@
 packages:
   - apps/*
-  # hap-toolkit shell. Leaving it under apps/* would make frozen installs and
-  # `turbo build` try to pack an rpk.
-  - "!apps/quickapp"
   - packages/*
 
 catalog:

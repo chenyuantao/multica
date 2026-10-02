@@ -23,12 +23,3 @@ export {
   toPushSubscriptionInput,
   type WebPushSupport,
 } from "./web-push";
-export {
-  isQuickAppShell,
-  postQuickAppMessage,
-  readStoredOppoRegId,
-  registerOppoPushSubscription,
-  storeOppoRegId,
-  subscribeQuickAppShell,
-  type QuickAppShellMessage,
-} from "./quickapp-bridge";

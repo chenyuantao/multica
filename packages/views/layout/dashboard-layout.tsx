@@ -9,7 +9,6 @@ import { DashboardGuard } from "./dashboard-guard";
 import { NavigationProgress } from "./navigation-progress";
 import { WorkspacePresencePrefetch } from "./workspace-presence-prefetch";
 import { GlobalShortcuts } from "./global-shortcuts";
-import { QuickAppOppoPushRegistration } from "./quickapp-oppo-push-registration";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -40,7 +39,6 @@ export function DashboardLayout({
     >
       <SidebarProvider className="h-svh bg-app-shell">
         <GlobalShortcuts />
-        <QuickAppOppoPushRegistration />
         <WorkspacePresencePrefetch />
         <AppSidebar searchSlot={searchSlot} rail={rail} />
         <SidebarInset className="relative overflow-hidden">
