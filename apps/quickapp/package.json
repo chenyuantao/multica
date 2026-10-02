@@ -1,0 +1,19 @@
+{
+  "name": "@multica/quickapp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "OPPO Quick App shell that loads Multica mobile web and owns service.push",
+  "scripts": {
+    "build": "hap build",
+    "release": "hap release",
+    "server": "hap server",
+    "watch": "hap watch"
+  },
+  "devDependencies": {
+    "@hap-toolkit/packager": "^2.0.4",
+    "hap-toolkit": "^1.9.14"
+  },
+  "browserslist": [
+    "chrome 65"
+  ]
+}

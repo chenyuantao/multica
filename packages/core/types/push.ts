@@ -1,8 +1,10 @@
-export type PushPlatform = "webpush" | "jpush";
+export type PushPlatform = "webpush" | "jpush" | "oppo";
 
 export interface PushConfigResponse {
   /** VAPID application server key. Empty when the server has no Web Push configured. */
   web_push_public_key: string;
+  /** True when this deployment can register OPPO Quick App devices. */
+  oppo_push_enabled: boolean;
 }
 
 export interface PushSubscriptionInput {

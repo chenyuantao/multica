@@ -627,6 +627,9 @@ func main() {
 	if cfg := push.WebPushConfigFromEnv(); cfg.Enabled() {
 		pushSenders[push.PlatformWebPush] = push.NewWebPushSender(cfg)
 	}
+	if cfg := push.OppoConfigFromEnv(); cfg.Enabled() {
+		pushSenders[push.PlatformOppo] = push.NewOppoSender(cfg)
+	}
 	if pushService := push.NewService(queries, presence, pushSenders, slog.Default()); pushService != nil {
 		pushService.Register(bus)
 		slog.Info("push: inbox notifications enabled", "platforms", len(pushSenders))

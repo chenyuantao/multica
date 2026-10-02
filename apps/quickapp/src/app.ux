@@ -1,0 +1,60 @@
+<script>
+  import push from '@service.push'
+  import storage from '@system.storage'
+  import { WEB_ORIGIN, START_PATH } from './config.js'
+
+  const REG_ID_KEY = 'oppo_reg_id'
+  const PENDING_PATH_KEY = 'pending_path'
+
+  export default {
+    data: {
+      webOrigin: WEB_ORIGIN,
+      startPath: START_PATH,
+      regId: ''
+    },
+    onCreate() {
+      this.subscribePush()
+      this.captureLaunchPath()
+    },
+    onShow(options) {
+      this.captureLaunchPath(options)
+    },
+    subscribePush() {
+      try {
+        if (!push || typeof push.subscribe !== 'function') {
+          console.warn('service.push unavailable (preview engines do not expose it)')
+          return
+        }
+        push.subscribe({
+          success: (data) => {
+            const regId = (data && data.regId) || ''
+            if (!regId) return
+            this.regId = regId
+            storage.set({ key: REG_ID_KEY, value: regId })
+            console.info('oppo push subscribed', regId)
+          },
+          fail: (data, code) => {
+            console.warn('oppo push subscribe failed', code, data)
+          }
+        })
+      } catch (err) {
+        console.warn('oppo push subscribe threw', err)
+      }
+    },
+    captureLaunchPath(options) {
+      const path = this.pathFromOptions(options) || this.pathFromOptions(this.$app?.$def)
+      if (!path) return
+      storage.set({ key: PENDING_PATH_KEY, value: path })
+    },
+    pathFromOptions(options) {
+      if (!options || typeof options !== 'object') return ''
+      const direct = options.path || options.url
+      if (typeof direct === 'string' && direct.startsWith('/')) return direct
+      // OPPO puts action_parameters onto the launch object as flat keys.
+      if (typeof options['path'] === 'string' && options['path'].startsWith('/')) {
+        return options['path']
+      }
+      return ''
+    }
+  }
+</script>

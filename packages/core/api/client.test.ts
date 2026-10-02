@@ -1003,7 +1003,10 @@ describe("ApiClient push config", () => {
     );
 
     const client = new ApiClient("https://api.example.test");
-    await expect(client.getPushConfig()).resolves.toEqual({ web_push_public_key: "" });
+    await expect(client.getPushConfig()).resolves.toEqual({
+      web_push_public_key: "",
+      oppo_push_enabled: false,
+    });
   });
 });
 

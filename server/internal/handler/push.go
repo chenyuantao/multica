@@ -21,10 +21,14 @@ const (
 type pushConfigResponse struct {
 	// Empty when this deployment has no VAPID key pair configured.
 	WebPushPublicKey string `json:"web_push_public_key"`
+	// True when MULTICA_OPPO_PUSH_* credentials are set for Quick App devices.
+	OppoPushEnabled bool `json:"oppo_push_enabled"`
 }
 
 func (h *Handler) GetPushConfig(w http.ResponseWriter, r *http.Request) {
-	resp := pushConfigResponse{}
+	resp := pushConfigResponse{
+		OppoPushEnabled: push.OppoConfigFromEnv().Enabled(),
+	}
 	if cfg := push.WebPushConfigFromEnv(); cfg.Enabled() {
 		resp.WebPushPublicKey = cfg.PublicKey
 	}
@@ -79,6 +83,18 @@ func (h *Handler) RegisterPushSubscription(w http.ResponseWriter, r *http.Reques
 			writeError(w, http.StatusBadRequest, "invalid subscription keys")
 			return
 		}
+	case push.PlatformOppo:
+		if !push.OppoConfigFromEnv().Enabled() {
+			writeError(w, http.StatusBadRequest, "oppo push is not configured on this server")
+			return
+		}
+		if err := push.ValidateOppoRegID(req.Token); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		// Quick App registrations have no Web Push encryption keys.
+		req.Keys.P256dh = ""
+		req.Keys.Auth = ""
 	default:
 		writeError(w, http.StatusBadRequest, "unsupported platform")
 		return
