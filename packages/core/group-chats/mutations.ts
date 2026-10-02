@@ -123,6 +123,49 @@ export function useRemoveGroupChatMember(wsId: string, chatId: string) {
   });
 }
 
+export interface ForwardChatHistoryResult {
+  sent: string[];
+  failed: string[];
+  /** Targets whose history card was posted but whose extra message was not. */
+  noteFailed: string[];
+}
+
+/** Posts one history card to each chat, then the optional note after it. */
+export function useForwardChatHistory(wsId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ targets, card, note }: { targets: string[]; card: string; note: string }): Promise<ForwardChatHistoryResult> => {
+      const extra = note.trim();
+      const sent: string[] = [];
+      const failed: string[] = [];
+      const noteFailed: string[] = [];
+      for (const chatId of targets) {
+        try {
+          await api.createComment(chatId, card);
+        } catch {
+          failed.push(chatId);
+          continue;
+        }
+        if (extra) {
+          try {
+            await api.createComment(chatId, extra);
+          } catch {
+            noteFailed.push(chatId);
+          }
+        }
+        sent.push(chatId);
+      }
+      if (sent.length === 0) throw new Error("forward failed");
+      return { sent, failed, noteFailed };
+    },
+    onSettled: (_data, _err, vars) => {
+      qc.invalidateQueries({ queryKey: groupChatKeys.list(wsId) });
+      if (!vars) return;
+      for (const id of vars.targets) qc.invalidateQueries({ queryKey: groupChatKeys.messages(wsId, id) });
+    },
+  });
+}
+
 export function useSendGroupChatMessage(wsId: string, chatId: string) {
   const qc = useQueryClient();
   return useMutation({

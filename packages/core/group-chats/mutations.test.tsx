@@ -11,7 +11,7 @@ import type { ApiClient } from "../api/client";
 import { inboxKeys } from "../inbox/queries";
 import { createQueryClient } from "../query-client";
 import type { GroupChat } from "../types";
-import { useAskAI, useMarkGroupChatRead, useSetGroupChatPinned } from "./mutations";
+import { useAskAI, useForwardChatHistory, useMarkGroupChatRead, useSetGroupChatPinned } from "./mutations";
 import { countUnreadGroupChatMessages, groupChatKeys } from "./queries";
 
 const WS = "ws-1";
@@ -123,6 +123,62 @@ describe("useSetGroupChatPinned", () => {
     act(() => result.current.mutate({ chatId: "a", pinned: true }));
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(pinnedOf("a")).toBe(false);
+  });
+});
+
+describe("useForwardChatHistory", () => {
+  function setup(createComment: ReturnType<typeof vi.fn>) {
+    const qc = createQueryClient();
+    setApiInstance({ createComment } as unknown as ApiClient);
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    );
+    return renderHook(() => useForwardChatHistory(WS), { wrapper });
+  }
+
+  it("posts the card and then the trimmed note to each chat", async () => {
+    const createComment = vi.fn(async (chatId: string, content: string) => ({ id: `${chatId}:${content}` }));
+    const { result } = setup(createComment);
+    let out: Awaited<ReturnType<typeof result.current.mutateAsync>> | undefined;
+    await act(async () => {
+      out = await result.current.mutateAsync({ targets: ["a", "b"], card: "card", note: " hi " });
+    });
+    expect(createComment.mock.calls.map((call) => [call[0], call[1]])).toEqual([
+      ["a", "card"],
+      ["a", "hi"],
+      ["b", "card"],
+      ["b", "hi"],
+    ]);
+    expect(out).toEqual({ sent: ["a", "b"], failed: [], noteFailed: [] });
+  });
+
+  it("skips a blank note", async () => {
+    const createComment = vi.fn(async () => ({ id: "m" }));
+    const { result } = setup(createComment);
+    await act(async () => {
+      await result.current.mutateAsync({ targets: ["a"], card: "card", note: "  " });
+    });
+    expect(createComment).toHaveBeenCalledTimes(1);
+  });
+
+  it("records a card that landed when its note failed, and a chat whose card did not", async () => {
+    const createComment = vi.fn(async (id: string, content: string) => {
+      if (id === "bad" || content === "note") throw new Error("no");
+      return { id: "m" };
+    });
+    const { result } = setup(createComment);
+    let out: Awaited<ReturnType<typeof result.current.mutateAsync>> | undefined;
+    await act(async () => {
+      out = await result.current.mutateAsync({ targets: ["ok", "bad"], card: "card", note: "note" });
+    });
+    expect(out).toEqual({ sent: ["ok"], failed: ["bad"], noteFailed: ["ok"] });
+  });
+
+  it("rejects when every card fails", async () => {
+    const { result } = setup(vi.fn(async () => Promise.reject(new Error("no"))));
+    await act(async () => {
+      await expect(result.current.mutateAsync({ targets: ["a"], card: "card", note: "" })).rejects.toThrow();
+    });
   });
 });
 

@@ -1,13 +1,15 @@
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, screen } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { useQuery } from "@tanstack/react-query";
 import type { Comment, GroupChat } from "@multica/core/types";
 import { renderWithI18n } from "../test/i18n";
+import { encodeChatHistory } from "./chat-history";
 import { ChatThread } from "./chat-thread";
 
 const sendMutateAsync = vi.fn();
+const forwardMutateAsync = vi.fn();
 const cancelRun = vi.hoisted(() => ({ mutate: vi.fn(), isPending: false, isSuccess: false }));
 const deleteMessage = vi.hoisted(() => ({ mutate: vi.fn(), isPending: false }));
 const copyText = vi.hoisted(() => vi.fn());
@@ -28,7 +30,9 @@ vi.mock("@tanstack/react-query", async () => {
 
 vi.mock("@multica/core/group-chats", async () => ({
   directChatPeer: (await vi.importActual<typeof import("@multica/core/group-chats")>("@multica/core/group-chats")).directChatPeer,
+  groupChatListOptions: () => ({ queryKey: ["group-chats", "list"] }),
   groupChatMessagesOptions: () => ({ queryKey: ["messages"] }),
+  useForwardChatHistory: () => ({ mutateAsync: forwardMutateAsync, isPending: false }),
   useSendGroupChatMessage: () => ({ mutateAsync: sendMutateAsync }),
   useDeleteGroupChatMessage: () => deleteMessage,
   useMarkGroupChatRead: () => ({ mutate: markRead }),
@@ -526,5 +530,118 @@ describe("ChatThread moderation and phone menu", () => {
       vi.useRealTimers();
     }
     expect(screen.queryByRole("menu")).toBeNull();
+  });
+});
+
+describe("ChatThread forward and multi-select", () => {
+  const other: GroupChat = { ...chat, id: "chat-2", title: "Other room" };
+
+  beforeEach(() => {
+    messages = [
+      { ...message("m-1", "Ship v2 on Friday"), author_id: "user-2" },
+      message("m-2", "sounds good"),
+    ];
+    sendMutateAsync.mockReset().mockReturnValue(new Promise(() => {}));
+    forwardMutateAsync.mockReset().mockResolvedValue({ sent: ["chat-2"], failed: [], noteFailed: [] });
+    vi.mocked(useQuery).mockImplementation(
+      ((opts: { queryKey?: readonly unknown[] }) => {
+        const key = opts?.queryKey?.[0];
+        if (key === "group-chats") return { data: [chat, other], isError: false, isLoading: false };
+        if (key === "messages") return { data: messages, isError: false };
+        return { data: [], isError: false };
+      }) as never,
+    );
+  });
+
+  async function openMenu(text: string) {
+    fireEvent.contextMenu(screen.getByText(text));
+    return screen.findByRole("menu");
+  }
+
+  it("offers forward and select, and refuses both on a thinking bubble", async () => {
+    const view = renderThread();
+    await openMenu("sounds good");
+    expect(screen.getByRole("menuitem", { name: "Forward" })).toBeEnabled();
+    expect(screen.getByRole("menuitem", { name: "Select" })).toBeEnabled();
+    view.unmount();
+
+    messages = [{ ...message("m-3", "思考中..."), author_type: "agent", author_id: "agent-1", source_task_id: "task-1" }];
+    renderThread();
+    fireEvent.contextMenu(screen.getByText("思考中..."));
+    const forward = await screen.findByRole("menuitem", { name: "Forward" });
+    const select = screen.getByRole("menuitem", { name: "Select" });
+    expect(forward).toHaveAttribute("aria-disabled", "true");
+    expect(select).toHaveAttribute("aria-disabled", "true");
+    fireEvent.click(forward);
+    expect(screen.queryByRole("heading", { name: "Forward to" })).toBeNull();
+  });
+
+  it("selects messages from the bar and leaves that mode on cancel", async () => {
+    renderThread();
+    await openMenu("sounds good");
+    fireEvent.click(screen.getByRole("menuitem", { name: "Select" }));
+    expect(screen.queryByRole("button", { name: "send" })).toBeNull();
+    expect(screen.getAllByRole("button", { pressed: true })).toHaveLength(1);
+
+    fireEvent.click(screen.getByText("sounds good"));
+    expect(screen.queryByRole("button", { pressed: true })).toBeNull();
+    expect(screen.getByRole("button", { name: "Forward" })).toBeDisabled();
+
+    fireEvent.click(screen.getByText("Ship v2 on Friday"));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByRole("button", { name: "send" })).toBeInTheDocument();
+  });
+
+  it("does not select a thinking bubble", async () => {
+    messages = [
+      message("m-1", "hello"),
+      { ...message("m-2", "思考中..."), author_type: "agent", author_id: "agent-1", source_task_id: "task-1" },
+    ];
+    renderThread();
+    await openMenu("hello");
+    fireEvent.click(screen.getByRole("menuitem", { name: "Select" }));
+    fireEvent.click(screen.getByText("思考中..."));
+    expect(screen.getAllByRole("button", { pressed: true })).toHaveLength(1);
+  });
+
+  it("forwards the chosen messages as a history card, with a note after it", async () => {
+    renderThread();
+    await openMenu("sounds good");
+    fireEvent.click(screen.getByRole("menuitem", { name: "Forward" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Other room/ }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Add a message" }), { target: { value: "see this" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+
+    await waitFor(() => expect(forwardMutateAsync).toHaveBeenCalled());
+    const arg = forwardMutateAsync.mock.calls[0]?.[0] as { targets: string[]; card: string; note: string };
+    expect(arg.targets).toEqual(["chat-2"]);
+    expect(arg.note).toBe("see this");
+    expect(arg.card).toContain("sounds good");
+    expect(arg.card).not.toContain("Ship v2");
+    await waitFor(() => expect(screen.queryByRole("heading", { name: "Forward to" })).toBeNull());
+  });
+
+  it("shows a history card summary and the full message in a dialog", async () => {
+    messages = [
+      message(
+        "m-1",
+        encodeChatHistory({
+          messages: [
+            {
+              author_name: "Ada",
+              content: "full body\n\n![shot](https://cdn.test/a.png)",
+              created_at: "2026-09-30T13:00:00Z",
+            },
+          ],
+        }),
+      ),
+    ];
+    renderThread();
+    expect(screen.getByRole("button", { name: /Chat History for Ada/ })).toHaveTextContent("[Image]");
+    expect(screen.queryByText(/cdn.test/)).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /Chat History for Ada/ }));
+    expect(await screen.findByRole("dialog")).toHaveTextContent("full body");
+    expect(screen.getByRole("dialog")).toHaveTextContent("https://cdn.test/a.png");
   });
 });

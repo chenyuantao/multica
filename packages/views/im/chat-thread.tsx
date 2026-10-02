@@ -2,14 +2,16 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Brain, Copy, Info, Loader2, MoreHorizontal, PanelRight, Quote, RotateCw, Sparkles, Square, Trash2 } from "lucide-react";
+import { Brain, Check, Copy, Forward, Info, ListChecks, Loader2, MoreHorizontal, PanelRight, Quote, RotateCw, Sparkles, Square, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { configuredConversationStarters } from "@multica/core/agents";
 import { useTaskMessages } from "@multica/core/chat/queries";
 import {
   directChatPeer,
+  groupChatListOptions,
   groupChatMessagesOptions,
   useDeleteGroupChatMessage,
+  useForwardChatHistory,
   useMarkGroupChatRead,
   useSendGroupChatMessage,
 } from "@multica/core/group-chats";
@@ -46,6 +48,16 @@ import { DragStrip } from "../platform";
 import { AskAIBadge } from "./ask-ai-badge";
 import { highlightedTextWithin } from "./ask-ai-context";
 import { ChatComposer, QuoteText, type ComposerQuote } from "./chat-composer";
+import {
+  CHAT_HISTORY_MAX_BYTES,
+  canForwardMessage,
+  encodeChatHistory,
+  historyContentOf,
+  isChatHistoryContent,
+  utf8Size,
+} from "./chat-history";
+import { ChatHistoryCard } from "./chat-history-card";
+import { ForwardDialog } from "./forward-dialog";
 import { MobileLevelHeader } from "./mobile-shell";
 import { useAgentClickActions, type AgentClickActions } from "./use-agent-click-actions";
 import {
@@ -86,6 +98,22 @@ interface ChatThreadProps {
 
 const EMPTY_COMMENTS: Comment[] = [];
 const EMPTY_AGENTS: Agent[] = [];
+const EMPTY_CHATS: GroupChat[] = [];
+
+function asGroupChats(data: unknown): GroupChat[] {
+  if (!Array.isArray(data)) return [];
+  return data.filter(
+    (item): item is GroupChat =>
+      !!item &&
+      typeof item === "object" &&
+      "id" in item &&
+      "title" in item &&
+      "members" in item &&
+      "pinned" in item &&
+      "is_direct" in item &&
+      "created_at" in item,
+  );
+}
 
 export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAskAI, mobileNav }: ChatThreadProps) {
   const { t } = useT("im");
@@ -93,10 +121,15 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAsk
   const { data = EMPTY_COMMENTS, isError } = useQuery(groupChatMessagesOptions(wsId, chat.id));
   const { data: agentList = EMPTY_AGENTS } = useQuery(agentListOptions(wsId));
   const send = useSendGroupChatMessage(wsId, chat.id);
+  const forward = useForwardChatHistory(wsId);
   const remove = useDeleteGroupChatMessage(wsId, chat.id);
   const [pending, setPending] = useState<PendingMessage[]>([]);
   const [quoteId, setQuoteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<Comment | null>(null);
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [forwardIds, setForwardIds] = useState<string[] | null>(null);
+  const chatList = useQuery({ ...groupChatListOptions(wsId), enabled: forwardIds !== null });
   const { role } = useCurrentMember(wsId);
   const isAdmin = role === "owner" || role === "admin";
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -109,6 +142,9 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAsk
   useEffect(() => {
     setPending([]);
     setQuoteId(null);
+    setSelecting(false);
+    setSelected(new Set());
+    setForwardIds(null);
   }, [chat.id]);
 
   // An open chat reads everything that lands in it while the app is in front.
@@ -143,7 +179,9 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAsk
     (id: string): ComposerQuote | null => {
       const m = byId.get(id);
       if (!m) return null;
-      const text = plainTextPreview(m.content) || t(($) => $.thread.quote_attachment);
+      const text = isChatHistoryContent(m.content)
+        ? t(($) => $.thread.history_footer)
+        : plainTextPreview(m.content) || t(($) => $.thread.quote_attachment);
       return { id, name: getActorName(m.author_type, m.author_id), text };
     },
     [byId, getActorName, t],
@@ -167,6 +205,16 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAsk
     return {
       onCopy: () => void copyMessage(m),
       onQuote: () => setQuoteId(m.id),
+      canForward: canForwardMessage(m),
+      onForward: () => {
+        if (!canForwardMessage(m)) return;
+        setForwardIds([m.id]);
+      },
+      onMultiSelect: () => {
+        if (!canForwardMessage(m)) return;
+        setSelecting(true);
+        setSelected(new Set([m.id]));
+      },
       onDelete: mine || isAdmin ? () => setDeleting(m) : undefined,
       onAskAI: onAskAI
         ? (text) =>
@@ -264,6 +312,51 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAsk
     queue(content, attachmentIds, refMessageId);
   };
 
+  const leaveSelect = () => {
+    setSelecting(false);
+    setSelected(new Set());
+  };
+
+  const toggleSelected = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const openForward = () => {
+    const ids = messages.filter((m) => selected.has(m.id) && canForwardMessage(m)).map((m) => m.id);
+    if (ids.length === 0) return;
+    setForwardIds(ids);
+  };
+
+  const confirmForward = async (targets: string[], note: string) => {
+    const chosen = messages.filter((m) => forwardIds?.includes(m.id) && canForwardMessage(m));
+    if (chosen.length === 0 || targets.length === 0) return null;
+    const card = encodeChatHistory({
+      messages: chosen.map((m) => ({
+        author_name: getActorName(m.author_type, m.author_id),
+        content: historyContentOf(m),
+        created_at: m.created_at,
+      })),
+    });
+    if (utf8Size(card) > CHAT_HISTORY_MAX_BYTES) {
+      toast.error(t(($) => $.thread.forward_too_large));
+      return null;
+    }
+    try {
+      const result = await forward.mutateAsync({ targets, card, note });
+      if (result.failed.length > 0) toast.error(t(($) => $.thread.forward_failed));
+      else if (result.noteFailed.length > 0) toast.error(t(($) => $.thread.forward_note_failed));
+      return result;
+    } catch {
+      toast.error(t(($) => $.thread.forward_failed));
+      return null;
+    }
+  };
+
   // A starter is sent as is and leaves the composer's draft and quote alone.
   const peerStarters =
     peer?.member_type === "agent"
@@ -337,20 +430,41 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAsk
                   {needsTimeSeparator(prev?.created_at, m.created_at) && (
                     <TimeSeparator iso={m.created_at} showDay={!prev || !isSameDay(new Date(prev.created_at), new Date(m.created_at))} />
                   )}
-                  <MessageRow
-                    message={m}
-                    mine={mine}
-                    authorName={getActorName(m.author_type, m.author_id)}
-                    onOpenProfile={mobileNav?.onOpenProfile}
-                    agentClicks={agentClicks}
-                    onPickConversationStarter={
-                      m.author_type === "agent" ? askAgentInGroup(m.author_id) : undefined
-                    }
-                    quote={m.ref_message_id ? quoteOf(m.ref_message_id) : undefined}
-                    onJumpToQuote={jumpTo}
-                    actions={actionsFor(m)}
-                    iosMenu={!!mobileNav}
-                  />
+                  {selecting && canForwardMessage(m) ? (
+                    <SelectableRow selected={selected.has(m.id)} onToggle={() => toggleSelected(m.id)}>
+                      <MessageRow
+                        message={m}
+                        mine={mine}
+                        authorName={getActorName(m.author_type, m.author_id)}
+                        onOpenProfile={mobileNav?.onOpenProfile}
+                        agentClicks={agentClicks}
+                        onPickConversationStarter={
+                          m.author_type === "agent" ? askAgentInGroup(m.author_id) : undefined
+                        }
+                        quote={m.ref_message_id ? quoteOf(m.ref_message_id) : undefined}
+                        onJumpToQuote={jumpTo}
+                        actions={actionsFor(m)}
+                        iosMenu={!!mobileNav}
+                        selecting
+                      />
+                    </SelectableRow>
+                  ) : (
+                    <MessageRow
+                      message={m}
+                      mine={mine}
+                      authorName={getActorName(m.author_type, m.author_id)}
+                      onOpenProfile={mobileNav?.onOpenProfile}
+                      agentClicks={agentClicks}
+                      onPickConversationStarter={
+                        m.author_type === "agent" ? askAgentInGroup(m.author_id) : undefined
+                      }
+                      quote={m.ref_message_id ? quoteOf(m.ref_message_id) : undefined}
+                      onJumpToQuote={jumpTo}
+                      actions={actionsFor(m)}
+                      iosMenu={!!mobileNav}
+                      selecting={selecting}
+                    />
+                  )}
                 </li>
               );
             })}
@@ -370,6 +484,17 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAsk
       </div>
 
       <div className="mx-auto w-full max-w-3xl">
+        {selecting ? (
+          <div className="flex gap-2 px-4 py-3">
+            <Button type="button" className="flex-1" disabled={selected.size === 0} onClick={openForward}>
+              {t(($) => $.thread.forward)}
+            </Button>
+            <Button type="button" variant="outline" className="flex-1" onClick={leaveSelect}>
+              {t(($) => $.thread.cancel)}
+            </Button>
+          </div>
+        ) : (
+          <>
         <ConversationStarterChips
           starters={peerStarters}
           onPick={(prompt) => queue(prompt, [])}
@@ -384,7 +509,26 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAsk
           quote={composerQuote}
           onCancelQuote={() => setQuoteId(null)}
         />
+          </>
+        )}
       </div>
+
+      <ForwardDialog
+        key={forwardIds?.join("\0") ?? "closed"}
+        open={forwardIds !== null}
+        chats={asGroupChats(chatList.data ?? EMPTY_CHATS)}
+        userId={userId}
+        loading={chatList.isLoading}
+        pending={forward.isPending}
+        onOpenChange={(open) => {
+          if (!open) setForwardIds(null);
+        }}
+        onConfirm={confirmForward}
+        onDone={() => {
+          setForwardIds(null);
+          leaveSelect();
+        }}
+      />
 
       <AlertDialog open={!!deleting} onOpenChange={(open) => !open && !remove.isPending && setDeleting(null)}>
         <AlertDialogContent>
@@ -411,6 +555,10 @@ interface MessageActions {
   onDelete?: () => void;
   /** Receives the text highlighted inside the message; empty for the whole message. */
   onAskAI?: (text: string) => void;
+  /** Thinking bubbles keep the entries visible and refuse them. */
+  canForward: boolean;
+  onForward: () => void;
+  onMultiSelect: () => void;
 }
 
 /**
@@ -423,12 +571,33 @@ function MessageMenu({ actions, ios, children }: { actions: MessageActions; ios?
   const { t } = useT("im");
   const highlightRef = useRef("");
   const onAskAI = actions.onAskAI;
-  const items = [
+  const items: {
+    key: string;
+    icon: typeof Copy;
+    label: string;
+    onClick: () => void;
+    destructive?: boolean;
+    disabled?: boolean;
+  }[] = [
     ...(onAskAI
       ? [{ key: "ask", icon: Sparkles, label: t(($) => $.search.ask_ai), onClick: () => onAskAI(highlightRef.current) }]
       : []),
     { key: "copy", icon: Copy, label: t(($) => $.thread.copy), onClick: actions.onCopy },
     { key: "quote", icon: Quote, label: t(($) => $.thread.quote), onClick: actions.onQuote },
+    {
+      key: "forward",
+      icon: Forward,
+      label: t(($) => $.thread.forward),
+      onClick: actions.onForward,
+      disabled: !actions.canForward,
+    },
+    {
+      key: "select",
+      icon: ListChecks,
+      label: t(($) => $.thread.select_messages),
+      onClick: actions.onMultiSelect,
+      disabled: !actions.canForward,
+    },
     ...(actions.onDelete
       ? [{ key: "delete", icon: Trash2, label: t(($) => $.thread.delete), onClick: actions.onDelete, destructive: true }]
       : []),
@@ -436,6 +605,7 @@ function MessageMenu({ actions, ios, children }: { actions: MessageActions; ios?
   return (
     <ContextMenu>
       <ContextMenuTrigger
+        render={<div />}
         onContextMenu={(e) => {
           highlightRef.current = highlightedTextWithin(e.currentTarget);
         }}
@@ -453,10 +623,11 @@ function MessageMenu({ actions, ios, children }: { actions: MessageActions; ios?
           ios && "min-w-56 divide-y divide-border/60 rounded-[14px] bg-surface-raised/85 p-0 backdrop-blur-xl",
         )}
       >
-        {items.map(({ key, icon: Icon, label, onClick, destructive }) => (
+        {items.map(({ key, icon: Icon, label, onClick, destructive, disabled }) => (
           <ContextMenuItem
             key={key}
             variant={destructive ? "destructive" : "default"}
+            disabled={disabled}
             onClick={onClick}
             className={cn(ios && "h-11 justify-between rounded-none px-4 text-body-lg [&_svg:not([class*='size-'])]:size-5")}
           >
@@ -520,6 +691,7 @@ function MessageRow({
   onJumpToQuote,
   actions,
   iosMenu,
+  selecting,
 }: {
   message: Comment;
   mine: boolean;
@@ -536,6 +708,8 @@ function MessageRow({
   actions: MessageActions;
   /** Phones: style the long-press menu after iOS. */
   iosMenu?: boolean;
+  /** Multi-select hides the menu; a click on the row toggles the message. */
+  selecting?: boolean;
 }) {
   const time = formatClock(message.created_at);
 
@@ -566,7 +740,16 @@ function MessageRow({
   );
 
   const thinkingTask = thinkingTaskId(message);
-  const bubble = (
+  const history = isChatHistoryContent(message.content);
+  const wrap = (node: React.ReactNode) =>
+    selecting ? node : (
+      <MessageMenu actions={actions} ios={iosMenu}>
+        {node}
+      </MessageMenu>
+    );
+  const bubble = history ? (
+    <ChatHistoryCard content={message.content} interactive={!selecting} />
+  ) : (
     <Bubble mine={mine} title={time}>
       <RichContent content={message.content} attachments={message.attachments} density="compact" />
     </Bubble>
@@ -581,14 +764,52 @@ function MessageRow({
           agentId={message.author_id}
           agentName={authorName ?? ""}
           title={time}
+          wrap={wrap}
         />
       ) : (
-        <MessageMenu actions={actions} ios={iosMenu}>
-          {bubble}
-        </MessageMenu>
+        wrap(bubble)
       )}
       {quote !== undefined && <QuotedLine quote={quote} onJump={onJumpToQuote} />}
     </MessageLayout>
+  );
+}
+
+function SelectableRow({
+  selected,
+  onToggle,
+  children,
+}: {
+  selected: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      aria-pressed={selected}
+      onClick={onToggle}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        onToggle();
+      }}
+      className={cn(
+        "flex cursor-pointer items-start gap-2 rounded-md",
+        selected ? "bg-accent hover:bg-accent" : "hover:bg-foreground/5",
+      )}
+    >
+      <span
+        aria-hidden
+        className={cn(
+          "mt-3 ml-1 flex size-4 shrink-0 items-center justify-center rounded-full border",
+          selected ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/40 bg-background",
+        )}
+      >
+        {selected && <Check className="size-3" />}
+      </span>
+      <div className="pointer-events-none min-w-0 flex-1">{children}</div>
+    </div>
   );
 }
 
@@ -602,12 +823,14 @@ function ThinkingBubble({
   agentId,
   agentName,
   title,
+  wrap,
 }: {
   chatId: string;
   taskId: string;
   agentId: string;
   agentName: string;
   title: string;
+  wrap: (node: React.ReactNode) => React.ReactNode;
 }) {
   const { t } = useT("im");
   const { data } = useTaskMessages(taskId, true);
@@ -629,9 +852,11 @@ function ThinkingBubble({
   return (
     <>
       <div className="group/thinking flex max-w-full min-w-0 items-center gap-1">
-        <Bubble title={title} className={cn(text && "opacity-70")}>
-          <RichContent content={text ?? THINKING_MESSAGE} density="compact" />
-        </Bubble>
+        {wrap(
+          <Bubble title={title} className={cn(text && "opacity-70")}>
+            <RichContent content={text ?? THINKING_MESSAGE} density="compact" />
+          </Bubble>,
+        )}
         <Button
           variant="ghost"
           size="icon-xs"

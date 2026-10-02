@@ -7,12 +7,14 @@ export {
 } from "./queries";
 export {
   type AskAIVariables,
+  type ForwardChatHistoryResult,
   useAskAI,
   useCreateGroupChat,
   useOpenDirectGroupChat,
   useUpdateGroupChat,
   useAddGroupChatMember,
   useRemoveGroupChatMember,
+  useForwardChatHistory,
   useSendGroupChatMessage,
   useMarkGroupChatRead,
   useSetGroupChatPinned,

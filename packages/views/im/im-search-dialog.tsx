@@ -42,6 +42,7 @@ import { useT } from "../i18n";
 import { useNavigation } from "../navigation";
 import { HighlightText } from "../search/highlight-text";
 import { describeElement, elementLabel } from "./ask-ai-element";
+import { isChatHistoryContent } from "./chat-history";
 import { ChatAvatar } from "./chat-sidebar";
 import { ElementPicker } from "./element-picker";
 import { chatActivityAt, chatDisplayTitle, formatStamp, plainTextPreview, sortChats } from "./im-utils";
@@ -203,7 +204,7 @@ export function ImSearchDialog({
     value: `chat:${chat.id}`,
     chat,
     title,
-    snippet: snippet ? plainTextPreview(snippet) : "",
+    snippet: !snippet ? "" : isChatHistoryContent(snippet) ? t(($) => $.thread.history_footer) : plainTextPreview(snippet),
   });
   const contactRow = (entry: DirectoryEntry): Row => ({
     kind: "contact",
@@ -511,7 +512,10 @@ function AskContextQuote({
   const { t } = useT("im");
   const lines: { key: string; icon: typeof FileText; text: string; onClear: () => void }[] = [];
   if (selection) {
-    const text = plainTextPreview(selection.text || selection.content) || t(($) => $.thread.quote_attachment);
+    const raw = selection.text || selection.content;
+    const text = isChatHistoryContent(raw)
+      ? t(($) => $.thread.history_footer)
+      : plainTextPreview(raw) || t(($) => $.thread.quote_attachment);
     lines.push({
       key: "selection",
       icon: Quote,

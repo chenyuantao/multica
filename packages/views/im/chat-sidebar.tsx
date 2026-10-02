@@ -10,6 +10,7 @@ import { cn } from "@multica/ui/lib/utils";
 import { ActorAvatar } from "../common/actor-avatar";
 import { useAppForeground } from "../common/use-app-foreground";
 import { useT } from "../i18n";
+import { isChatHistoryContent } from "./chat-history";
 import { chatActivityAt, chatDisplayTitle, formatStamp, plainTextPreview } from "./im-utils";
 import { ImSidebarHeader, ImSidebarShell } from "./im-sidebar-shell";
 import { UnreadBadge } from "./unread-badge";
@@ -199,7 +200,11 @@ function ChatListItem({
   const { t } = useT("im");
   const { getActorName } = useActorName();
   const last = chat.last_message;
-  const text = last ? plainTextPreview(last.content) : "";
+  const text = !last
+    ? ""
+    : isChatHistoryContent(last.content)
+      ? t(($) => $.thread.history_footer)
+      : plainTextPreview(last.content);
   const preview = !last
     ? t(($) => $.sidebar.no_messages)
     : last.author_type === "system" || directChatPeer(chat, userId)
