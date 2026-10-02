@@ -247,8 +247,8 @@
         "description": "Ouvrir ou fermer la fenêtre de discussion flottante. À l'ouverture, le champ de message reçoit le focus."
       },
       "findInIssue": {
-        "label": "Rechercher dans la tâche",
-        "description": "Rechercher dans la tâche ouverte."
+        "label": "Rechercher dans la page",
+        "description": "Rechercher dans la tâche ouverte ou le fil de discussion."
       },
       "openKnowledgeSearch": {
         "label": "Rechercher des discussions, contacts et notes",

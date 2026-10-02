@@ -246,8 +246,8 @@
         "description": "打开或关闭悬浮聊天窗，打开时自动聚焦输入框。"
       },
       "findInIssue": {
-        "label": "在任务中查找",
-        "description": "搜索当前打开的任务详情。"
+        "label": "在页面中查找",
+        "description": "搜索当前打开的任务详情或聊天消息。"
       },
       "openKnowledgeSearch": {
         "label": "搜索会话、联系人和笔记",

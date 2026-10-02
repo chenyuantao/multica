@@ -246,8 +246,8 @@
         "description": "フローティングチャットを開閉します。開いたときは入力欄にフォーカスします。"
       },
       "findInIssue": {
-        "label": "タスク内を検索",
-        "description": "開いているタスクの詳細を検索します。"
+        "label": "ページ内を検索",
+        "description": "開いているタスクの詳細またはチャットのメッセージを検索します。"
       },
       "openKnowledgeSearch": {
         "label": "チャット、連絡先、ノートを検索",

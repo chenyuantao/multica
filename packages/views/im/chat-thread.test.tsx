@@ -796,3 +796,57 @@ describe("ChatThread forward and multi-select", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 });
+
+describe("ChatThread message search", () => {
+  beforeEach(() => {
+    messages = [
+      message("m-1", "alpha release notes"),
+      message("m-2", "beta roadmap"),
+      message("m-3", "daily standup"),
+    ];
+    vi.mocked(useQuery).mockImplementation(() => ({ data: messages, isError: false }) as never);
+  });
+
+  it("opens from the header button left of the panel toggle", async () => {
+    renderThread();
+    const search = screen.getByRole("button", { name: /Search messages/ });
+    const panel = screen.getByRole("button", { name: "Toggle chat details" });
+    expect(search.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    fireEvent.click(search);
+    expect(await screen.findByRole("dialog")).toHaveTextContent("Search in this chat");
+    expect(screen.getByRole("textbox", { name: "Filter messages" })).toBeInTheDocument();
+  });
+
+  it("opens with Cmd/Ctrl+F and hides non-matching messages", async () => {
+    renderThread();
+    fireEvent.keyDown(document, { key: "f", metaKey: true });
+    const input = await screen.findByRole("textbox", { name: "Filter messages" });
+    fireEvent.change(input, { target: { value: "release" } });
+
+    expect(screen.getByText("alpha release notes")).toBeInTheDocument();
+    expect(screen.queryByText("beta roadmap")).toBeNull();
+    expect(screen.queryByText("daily standup")).toBeNull();
+    expect(screen.getByText("1 matching")).toBeInTheDocument();
+  });
+
+  it("keeps the filter after the dialog closes until the query is cleared", async () => {
+    renderThread();
+    fireEvent.click(screen.getByRole("button", { name: /Search messages/ }));
+    fireEvent.change(await screen.findByRole("textbox", { name: "Filter messages" }), {
+      target: { value: "roadmap" },
+    });
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(screen.getByText("beta roadmap")).toBeInTheDocument();
+    expect(screen.queryByText("alpha release notes")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /Search messages/ }));
+    fireEvent.change(await screen.findByRole("textbox", { name: "Filter messages" }), {
+      target: { value: "" },
+    });
+    expect(screen.getByText("alpha release notes")).toBeInTheDocument();
+    expect(screen.getByText("daily standup")).toBeInTheDocument();
+  });
+});

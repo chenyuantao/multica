@@ -247,8 +247,8 @@
         "description": "Open or close the floating chat window. Opening it focuses the message input."
       },
       "findInIssue": {
-        "label": "Find in issue",
-        "description": "Search within the open issue detail."
+        "label": "Find in page",
+        "description": "Search within the open issue detail or chat thread."
       },
       "openKnowledgeSearch": {
         "label": "Search chats, contacts, and notes",
