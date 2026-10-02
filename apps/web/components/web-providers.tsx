@@ -6,6 +6,7 @@ import { createBrowserCookieLocaleAdapter } from "@multica/core/i18n/browser";
 import type { LocaleResources, SupportedLocale } from "@multica/core/i18n";
 import { useWelcomeStore } from "@multica/core/onboarding";
 import packageJson from "../package.json";
+import { PwaOffline } from "@/components/pwa-offline";
 import { WebNavigationProvider } from "@/platform/navigation";
 import { WebScrollRestorationProvider } from "@/platform/scroll-restoration";
 import {
@@ -89,6 +90,7 @@ export function WebProviders({
       localeAdapter={localeAdapter}
       syncUserLocale={syncUserLocale}
     >
+      <PwaOffline />
       <WebNavigationProvider>
         <WebScrollRestorationProvider>{children}</WebScrollRestorationProvider>
       </WebNavigationProvider>

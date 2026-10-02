@@ -2,8 +2,9 @@
 
 // Browser side of Web Push: the service worker registration and the
 // PushManager subscription for this device. Pairs with apps/web/public/sw.js,
-// which renders the pushes; the server only delivers while no Multica client
-// is connected, so these never duplicate the in-page banners.
+// which renders the pushes and caches the /im, /member and /knowledge shell.
+// The server only delivers while no Multica client is connected, so these
+// never duplicate the in-page banners.
 
 import type { PushSubscriptionInput } from "../types/push";
 
