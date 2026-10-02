@@ -834,6 +834,8 @@
   "transcript": {
     "dialog_title": "Agent Execution Transcript",
     "status_running": "Running",
+    "stop": "Stop",
+    "stopping": "Stopping…",
     "status_completed": "Completed",
     "status_failed": "Failed",
     "filter": "Filter",

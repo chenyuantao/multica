@@ -221,16 +221,22 @@ function renderDialog(
     isLive?: boolean;
     locale?: SupportedLocale;
     agentName?: string;
+    onStop?: () => void;
+    stopping?: boolean;
+    presentation?: "dialog" | "page";
   } = {},
 ) {
   return renderWithI18n(
     <AgentTranscriptDialog
       open
       onOpenChange={vi.fn()}
+      presentation={options.presentation}
       task={options.task ?? baseTask}
       items={dialogItems}
       agentName={options.agentName ?? "Codex"}
       isLive={options.isLive}
+      onStop={options.onStop}
+      stopping={options.stopping}
     />,
     { locale: options.locale },
   );
@@ -249,6 +255,37 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+});
+
+describe("AgentTranscriptDialog stop", () => {
+  it("places stop beside the running status", () => {
+    const onStop = vi.fn();
+    renderDialog(items, { task: liveTask, isLive: true, onStop });
+    const running = screen.getByText("Running");
+    const stop = screen.getByRole("button", { name: "Stop" });
+    expect(running.compareDocumentPosition(stop) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(stop.querySelector("svg")).toHaveAttribute("fill", "currentColor");
+    fireEvent.click(stop);
+    expect(onStop).toHaveBeenCalledOnce();
+  });
+
+  it("keeps stop disabled once stopping", () => {
+    renderDialog(items, { task: liveTask, isLive: true, onStop: vi.fn(), stopping: true });
+    expect(screen.getByRole("button", { name: "Stopping…" })).toBeDisabled();
+  });
+
+  it("hides stop when the caller cannot stop the run", () => {
+    renderDialog(items, { task: liveTask, isLive: true });
+    expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
+  });
+
+  it("fills a page without a dialog or a close button", () => {
+    renderDialog(items, { presentation: "page", task: liveTask, isLive: true, agentName: "Codex", onStop: vi.fn() });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Stop" })).toBeInTheDocument();
+    expect(screen.getByText("Codex")).toBeInTheDocument();
+  });
 });
 
 describe("AgentTranscriptDialog", () => {

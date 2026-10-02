@@ -725,6 +725,8 @@
   "transcript": {
     "dialog_title": "에이전트 실행 트랜스크립트",
     "status_running": "실행 중",
+    "stop": "중지",
+    "stopping": "중지 중…",
     "status_completed": "완료됨",
     "status_failed": "실패함",
     "filter": "필터",

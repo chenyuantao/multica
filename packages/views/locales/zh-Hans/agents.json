@@ -819,6 +819,8 @@
   "transcript": {
     "dialog_title": "智能体执行记录",
     "status_running": "进行中",
+    "stop": "停止",
+    "stopping": "正在停止…",
     "status_completed": "已完成",
     "status_failed": "失败",
     "filter": "筛选",

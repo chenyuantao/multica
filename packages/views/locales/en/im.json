@@ -70,8 +70,6 @@
     "not_found": "This chat isn't available",
     "activity_tool": "Using a tool",
     "activity_thinking": "Thinking",
-    "stop": "Stop",
-    "stopping": "Stopping…",
     "view_progress": "View progress",
     "stop_failed": "Couldn't stop the reply",
     "copy": "Copy",

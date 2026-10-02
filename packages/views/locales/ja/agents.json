@@ -717,6 +717,8 @@
   "transcript": {
     "dialog_title": "エージェント実行トランスクリプト",
     "status_running": "実行中",
+    "stop": "停止",
+    "stopping": "停止中…",
     "status_completed": "完了",
     "status_failed": "失敗",
     "filter": "フィルター",

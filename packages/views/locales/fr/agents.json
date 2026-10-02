@@ -834,6 +834,8 @@
   "transcript": {
     "dialog_title": "Transcription d'exécution de l'agent",
     "status_running": "En cours",
+    "stop": "Arrêter",
+    "stopping": "Arrêt…",
     "status_completed": "Terminée",
     "status_failed": "En échec",
     "filter": "Filtrer",

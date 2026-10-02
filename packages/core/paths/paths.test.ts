@@ -17,6 +17,7 @@ describe("paths.workspace(slug)", () => {
     expect(ws.memberContact("agent", "a1")).toBe("/acme/member?contact=agent%3Aa1");
     expect(ws.imChat("c1")).toBe("/acme/im?chat=c1");
     expect(ws.imChatHistory("c1", "m1")).toBe("/acme/im?chat=c1&view=history&message=m1");
+    expect(ws.imChatProgress("c1", "t1")).toBe("/acme/im?chat=c1&view=progress&task=t1");
     expect(ws.imChatHistory("c1", "m1", "0.1")).toBe("/acme/im?chat=c1&view=history&message=m1&nest=0.1");
     expect(ws.imChatContact("c1", "member", "u1")).toBe("/acme/im?chat=c1&contact=member%3Au1");
     expect(ws.memberChat("c1")).toBe("/acme/member?chat=c1");

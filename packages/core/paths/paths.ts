@@ -67,6 +67,10 @@ function workspaceScoped(slug: string) {
       const base = `${ws}/im?chat=${encode(chatId)}&view=history&message=${encode(messageId)}`;
       return nest ? `${base}&nest=${encode(nest)}` : base;
     },
+    // Phone level for the run behind a thinking bubble. Desktop opens that
+    // log in a dialog; a phone pushes this page instead.
+    imChatProgress: (chatId: string, taskId: string) =>
+      `${ws}/im?chat=${encode(chatId)}&view=progress&task=${encode(taskId)}`,
     imChatSettings: (chatId: string) => `${ws}/im?chat=${encode(chatId)}&view=settings`,
     // Phone levels stacked on a chat: a profile opened from the thread, and
     // one opened from the chat settings.

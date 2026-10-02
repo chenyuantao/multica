@@ -12,6 +12,7 @@ import {
   XCircle,
   X,
   Loader2,
+  Square,
   Copy,
   Check,
   ChevronRight,
@@ -116,6 +117,11 @@ import "./task-transcript.css";
 interface AgentTranscriptDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /**
+   * `page` fills a phone level. The dialog is the desktop modal. The page
+   * owns the way back, so this surface drops its close control.
+   */
+  presentation?: "dialog" | "page";
   task: AgentTask;
   items: TimelineItem[];
   agentName: string;
@@ -130,6 +136,13 @@ interface AgentTranscriptDialogProps {
   finalFocus?: boolean;
   /** Loading/error content while the caller retrieves the transcript. */
   contentState?: React.ReactNode;
+  /**
+   * Stops the live run. Shown beside the running status so the control sits
+   * inside this dialog instead of next to the message that opened it.
+   */
+  onStop?: () => void;
+  /** True after stop was accepted, until the run leaves the thread. */
+  stopping?: boolean;
   /**
    * Optional content rendered between the header chips and the event list.
    * Used by autopilot run rows to surface the inbound webhook trigger
@@ -322,9 +335,39 @@ function useCopyFeedback() {
   return [copied, showCopied] as const;
 }
 
+function TranscriptFrame({
+  presentation,
+  open,
+  onOpenChange,
+  finalFocus,
+  children,
+}: {
+  presentation: "dialog" | "page";
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  finalFocus: boolean;
+  children: React.ReactNode;
+}) {
+  if (presentation === "page") {
+    return <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{children}</div>;
+  }
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        className="!max-w-5xl !w-[calc(100vw-4rem)] !max-h-[calc(100vh-4rem)] !h-[calc(100vh-4rem)] flex flex-col !p-0 !gap-0 overflow-hidden"
+        showCloseButton={false}
+        finalFocus={finalFocus}
+      >
+        {children}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function AgentTranscriptDialog({
   open,
   onOpenChange,
+  presentation = "dialog",
   task,
   items,
   agentName,
@@ -332,6 +375,8 @@ export function AgentTranscriptDialog({
   finalFocus = false,
   headerSlot,
   contentState,
+  onStop,
+  stopping = false,
 }: AgentTranscriptDialogProps) {
   const { t } = useT("agents");
   const locale = useLocale();
@@ -871,6 +916,26 @@ export function AgentTranscriptDialog({
     }
   })();
 
+  const stopLabel = stopping ? t(($) => $.transcript.stopping) : t(($) => $.transcript.stop);
+  const stopButton =
+    onStop && effectiveStatus === "running" ? (
+      <Button
+        type="button"
+        variant="destructive"
+        size="xs"
+        disabled={stopping}
+        aria-busy={stopping}
+        onClick={onStop}
+      >
+        {stopping ? (
+          <Loader2 className="animate-spin motion-reduce:animate-none" />
+        ) : (
+          <Square fill="currentColor" strokeWidth={0} />
+        )}
+        {stopLabel}
+      </Button>
+    ) : null;
+
   // Trigger source: one word answering "why does this run exist" — more useful
   // up front than the runtime/provider diagnostics, which live in the ⓘ popover.
   const triggerLabel = task.parent_task_id
@@ -929,13 +994,10 @@ export function AgentTranscriptDialog({
     !!usage;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="!max-w-5xl !w-[calc(100vw-4rem)] !max-h-[calc(100vh-4rem)] !h-[calc(100vh-4rem)] flex flex-col !p-0 !gap-0 overflow-hidden"
-        showCloseButton={false}
-        finalFocus={finalFocus}
-      >
-        <DialogTitle className="sr-only">{t(($) => $.transcript.dialog_title)}</DialogTitle>
+    <TranscriptFrame presentation={presentation} open={open} onOpenChange={onOpenChange} finalFocus={finalFocus}>
+        {presentation === "dialog" && (
+          <DialogTitle className="sr-only">{t(($) => $.transcript.dialog_title)}</DialogTitle>
+        )}
 
         {/* ── Header: outcome, identity, spend ─────────────────────────
             Everything a viewer needs BEFORE reading: how it ended, who ran
@@ -943,7 +1005,10 @@ export function AgentTranscriptDialog({
             stay in the ⓘ popover. */}
         <div className="border-b px-4 py-3 shrink-0">
           <div className="flex min-w-0 items-center gap-3">
-            {statusBadge}
+            <div className="flex shrink-0 items-center gap-1.5">
+              {statusBadge}
+              {stopButton}
+            </div>
             {/* Primary identity: the agent that ran this. It is the one
                 foreground entity — avatar + medium weight. */}
             <div className="flex min-w-0 items-center gap-2">
@@ -1171,15 +1236,17 @@ export function AgentTranscriptDialog({
                   </PopoverContent>
                 </Popover>
               )}
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={() => onOpenChange(false)}
-                aria-label={t(($) => $.transcript.close)}
-                className="text-muted-foreground"
-              >
-                <X className="h-4 w-4" />
-              </Button>
+              {presentation === "dialog" && (
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => onOpenChange(false)}
+                  aria-label={t(($) => $.transcript.close)}
+                  className="text-muted-foreground"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              )}
             </div>
           </div>
         </div>
@@ -1382,8 +1449,7 @@ export function AgentTranscriptDialog({
             />
           )}
         </div>
-      </DialogContent>
-    </Dialog>
+    </TranscriptFrame>
   );
 }
 

@@ -2,7 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Brain, Check, Copy, Forward, Info, ListChecks, Loader2, MoreHorizontal, PanelRight, Quote, RotateCw, Sparkles, Square, Trash2 } from "lucide-react";
+import { Brain, Check, Copy, Forward, Info, ListChecks, Loader2, MoreHorizontal, PanelRight, Quote, RotateCw, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { configuredConversationStarters } from "@multica/core/agents";
 import { useTaskMessages } from "@multica/core/chat/queries";
@@ -108,6 +108,8 @@ interface ChatThreadProps {
     onOpenProfile: (actorType: string, actorId: string) => void;
     /** Opens a forwarded history card as its own page. */
     onOpenHistory?: (messageId: string) => void;
+    /** Opens the thinking bubble's run as its own page. */
+    onOpenProgress?: (taskId: string) => void;
   };
 }
 
@@ -462,6 +464,7 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAsk
                         actions={actionsFor(m)}
                         iosMenu={!!mobileNav}
                         onOpenHistory={mobileNav?.onOpenHistory}
+                        onOpenProgress={mobileNav?.onOpenProgress}
                         selecting
                       />
                     </SelectableRow>
@@ -480,6 +483,7 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAsk
                       actions={actionsFor(m)}
                       iosMenu={!!mobileNav}
                       onOpenHistory={mobileNav?.onOpenHistory}
+                      onOpenProgress={mobileNav?.onOpenProgress}
                       selecting={selecting}
                     />
                   )}
@@ -720,6 +724,7 @@ function MessageRow({
   actions,
   iosMenu,
   onOpenHistory,
+  onOpenProgress,
   selecting,
 }: {
   message: Comment;
@@ -739,6 +744,8 @@ function MessageRow({
   iosMenu?: boolean;
   /** Phones open the card on its own page. */
   onOpenHistory?: (messageId: string) => void;
+  /** Phones open the run log as its own page instead of a dialog. */
+  onOpenProgress?: (taskId: string) => void;
   /** Multi-select hides the menu; a click on the row toggles the message. */
   selecting?: boolean;
 }) {
@@ -800,6 +807,7 @@ function MessageRow({
           agentName={authorName ?? ""}
           title={time}
           wrap={wrap}
+          onOpenProgress={onOpenProgress}
         />
       ) : (
         wrap(bubble)
@@ -859,6 +867,7 @@ function ThinkingBubble({
   agentName,
   title,
   wrap,
+  onOpenProgress,
 }: {
   chatId: string;
   taskId: string;
@@ -866,6 +875,8 @@ function ThinkingBubble({
   agentName: string;
   title: string;
   wrap: (node: React.ReactNode) => React.ReactNode;
+  /** Phones push the run onto its own page. Absent on desktop, which opens the dialog. */
+  onOpenProgress?: (taskId: string) => void;
 }) {
   const { t } = useT("im");
   const { data } = useTaskMessages(taskId, true);
@@ -878,7 +889,6 @@ function ThinkingBubble({
   const cancel = useCancelIssueRun(chatId);
   // The bubble stays until the server rewrites it, so a settled stop keeps the spinner.
   const stopping = cancel.isPending || cancel.isSuccess;
-  const stopLabel = stopping ? t(($) => $.thread.stopping) : t(($) => $.thread.stop);
   const progressLabel = t(($) => $.thread.view_progress);
   const activityLabel = !activity
     ? null
@@ -898,33 +908,21 @@ function ThinkingBubble({
           className={cn(thinkingControlClass, "text-muted-foreground", progressOpen && "opacity-100!")}
           aria-label={progressLabel}
           title={progressLabel}
-          aria-haspopup="dialog"
-          aria-expanded={progressOpen}
+          aria-haspopup={onOpenProgress ? undefined : "dialog"}
+          aria-expanded={onOpenProgress ? undefined : progressOpen}
           onClick={(event) => {
+            if (onOpenProgress) {
+              onOpenProgress(taskId);
+              return;
+            }
             setProgressFromKeyboard(event.detail === 0);
             setProgressOpen(true);
           }}
         >
           <Info />
         </Button>
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          className={cn(
-            thinkingControlClass,
-            // Ghost's hover:text-foreground would repaint the filled square black.
-            stopping ? "text-muted-foreground opacity-100!" : "text-destructive hover:text-destructive",
-          )}
-          aria-label={stopLabel}
-          title={stopLabel}
-          disabled={stopping}
-          aria-busy={cancel.isPending}
-          onClick={() => cancel.mutate(taskId, { onError: () => toast.error(t(($) => $.thread.stop_failed)) })}
-        >
-          {stopping ? <Loader2 className="animate-spin motion-reduce:animate-none" /> : <Square fill="currentColor" strokeWidth={0} />}
-        </Button>
       </div>
-      {progressOpen && (
+      {progressOpen && !onOpenProgress && (
         <AgentTranscriptDialog
           open
           onOpenChange={setProgressOpen}
@@ -933,6 +931,8 @@ function ThinkingBubble({
           agentName={agentName}
           isLive
           finalFocus={progressFromKeyboard}
+          stopping={stopping}
+          onStop={() => cancel.mutate(taskId, { onError: () => toast.error(t(($) => $.thread.stop_failed)) })}
         />
       )}
       {activityLabel && (

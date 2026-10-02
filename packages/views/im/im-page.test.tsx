@@ -107,7 +107,11 @@ vi.mock("./chat-thread", async () => {
       mobileNav,
     }: {
       chat: { id: string };
-      mobileNav?: { settingsHref: string; onOpenProfile: (type: string, id: string) => void };
+      mobileNav?: {
+        settingsHref: string;
+        onOpenProfile: (type: string, id: string) => void;
+        onOpenProgress?: (taskId: string) => void;
+      };
     }) => {
       const openNote = useOpenKnowledgeNote();
       return (
@@ -117,6 +121,9 @@ vi.mock("./chat-thread", async () => {
           </button>
           <button type="button" onClick={() => mobileNav?.onOpenProfile("member", "user-2")}>
             thread author
+          </button>
+          <button type="button" onClick={() => mobileNav?.onOpenProgress?.("task-1")}>
+            view progress
           </button>
           <a href={mobileNav?.settingsHref}>thread settings</a>
         </>
@@ -142,6 +149,9 @@ vi.mock("../modals/create-agent", () => ({
   CreateAgentModal: ({ presentation }: { presentation?: string }) => <p>{`create agent ${presentation}`}</p>,
 }));
 vi.mock("./im-search-dialog", () => ({ ImSearchDialog: () => null }));
+vi.mock("./chat-progress-view", () => ({
+  ChatProgressRoute: ({ taskId }: { taskId: string }) => <p>{`progress ${taskId}`}</p>,
+}));
 vi.mock("./contact-card", () => ({ ContactCard: ({ entry }: { entry: DirectoryEntry }) => <p>{`card ${entry.name}`}</p> }));
 vi.mock("../common/actor-avatar", () => ({ ActorAvatar: () => null }));
 vi.mock("../agents/components/agent-detail-page", () => ({
@@ -361,6 +371,19 @@ describe("ImPage chat levels on mobile", () => {
     expect(screen.getByText("agent agent-1 embedded")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Back to chat settings" }));
     expect(navigation.replace).toHaveBeenCalledWith("/acme/im?chat=c1&view=settings");
+  });
+
+  it("pushes a thinking run onto its own page", () => {
+    const navigation = renderPage("chats", "chat=c1");
+    fireEvent.click(screen.getByRole("button", { name: "view progress" }));
+    expect(navigation.push).toHaveBeenCalledWith("/acme/im?chat=c1&view=progress&task=task-1");
+  });
+
+  it("shows run progress as a level without the tab bar", () => {
+    renderPage("chats", "chat=c1&view=progress&task=task-1");
+    expect(screen.getByText("progress task-1")).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Sections" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("steps back through history when the level was pushed in-app", () => {

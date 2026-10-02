@@ -41,8 +41,27 @@ vi.mock("@multica/core/group-chats", async () => ({
 vi.mock("@multica/core/issues/mutations", () => ({ useCancelIssueRun: () => cancelRun }));
 vi.mock("@multica/core/chat/queries", () => ({ useTaskMessages: () => ({ data: [] }) }));
 vi.mock("../common/task-transcript/agent-transcript-dialog", () => ({
-  AgentTranscriptDialog: ({ open, agentName }: { open: boolean; agentName: string }) =>
-    open ? <div role="dialog">{agentName}</div> : null,
+  AgentTranscriptDialog: ({
+    open,
+    agentName,
+    onStop,
+    stopping,
+  }: {
+    open: boolean;
+    agentName: string;
+    onStop?: () => void;
+    stopping?: boolean;
+  }) =>
+    open ? (
+      <div role="dialog">
+        {agentName}
+        {onStop && (
+          <button type="button" disabled={stopping} onClick={onStop}>
+            {stopping ? "Stopping…" : "Stop"}
+          </button>
+        )}
+      </div>
+    ) : null,
 }));
 
 vi.mock("@multica/core/workspace/hooks", () => ({
@@ -328,14 +347,11 @@ describe("ChatThread thinking bubble", () => {
     renderThread();
   }
 
-  it("stops the run the bubble stands in for", () => {
+  it("stops the run from the progress dialog, not beside the message", () => {
     renderThinking();
-    const stop = screen.getByRole("button", { name: "Stop" });
-    expect(stop.className).toContain("text-destructive");
-    expect(stop.className).toContain("hover:text-destructive");
-    expect(stop.className).not.toContain("hover:text-foreground");
-    expect(stop.querySelector("svg")).toHaveAttribute("fill", "currentColor");
-    fireEvent.click(stop);
+    expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "View progress" }));
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
     expect(cancelRun.mutate).toHaveBeenCalledWith("task-1", expect.anything());
   });
 
@@ -345,15 +361,30 @@ describe("ChatThread thinking bubble", () => {
     expect(screen.getByRole("dialog")).toHaveTextContent("name-agent-1");
   });
 
-  it("shows the stop control without hover on touch screens", () => {
-    renderThinking();
-    expect(screen.getByRole("button", { name: "Stop" }).className).toContain("[@media(hover:none)]:opacity-100");
-  });
-
   it("keeps the control disabled once the stop was accepted", () => {
     cancelRun.isSuccess = true;
     renderThinking();
+    fireEvent.click(screen.getByRole("button", { name: "View progress" }));
     expect(screen.getByRole("button", { name: "Stopping…" })).toBeDisabled();
+  });
+
+  it("opens the run on its own page from a phone instead of a dialog", () => {
+    const onOpenProgress = vi.fn();
+    messages = [{ ...message("m-1", "思考中..."), author_type: "agent", author_id: "agent-1", source_task_id: "task-1" }];
+    vi.mocked(useQuery).mockImplementation(() => ({ data: messages, isError: false }) as never);
+    renderWithI18n(
+      <ChatThread
+        wsId="ws-1"
+        chat={chat}
+        userId="user-1"
+        panelOpen={false}
+        onTogglePanel={() => {}}
+        mobileNav={{ backHref: "/im", settingsHref: "/im/settings", onOpenProfile: () => {}, onOpenProgress }}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "View progress" }));
+    expect(onOpenProgress).toHaveBeenCalledWith("task-1");
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("offers no stop control on a finished reply", () => {

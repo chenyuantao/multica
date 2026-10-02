@@ -22,6 +22,7 @@ import { DocExcerptRevealProvider } from "./doc-excerpt-reveal";
 import { ChatDetailsPanel } from "./chat-details-panel";
 import { ChatSidePanel } from "./chat-side-panel";
 import { ChatHistoryRoute } from "./chat-history-view";
+import { ChatProgressRoute } from "./chat-progress-view";
 import { ChatSidebar } from "./chat-sidebar";
 import { ChatThread } from "./chat-thread";
 import { ContactCard } from "./contact-card";
@@ -52,9 +53,10 @@ const EMPTY_CHATS: GroupChat[] = [];
  * it owns its own sidebar, thread and details columns. The rail section is
  * route-driven: chats (`/im`) and contacts (`/member`). On phones each
  * section is a bottom tab whose list is the root, and the columns become
- * route-driven levels: thread (`?chat=`), settings (`&view=settings`), and a
- * profile (`&contact=type:id`) opened from either. On `/member` a profile is
- * one level, and a group (`?chat=`) opens its details before the thread.
+ * route-driven levels: thread (`?chat=`), settings (`&view=settings`), a
+ * run log (`&view=progress`), and a profile (`&contact=type:id`) opened
+ * from either. On `/member` a profile is one level, and a group (`?chat=`)
+ * opens its details before the thread.
  */
 export function ImPage({ view = "chats" }: { view?: ImView }) {
   const { t } = useT("im");
@@ -320,6 +322,10 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
           nest={navigation.searchParams.get("nest")}
         />
       );
+    } else if (navigation.searchParams.get("view") === "progress") {
+      level = (
+        <ChatProgressRoute chatId={requested.id} taskId={navigation.searchParams.get("task") ?? ""} />
+      );
     } else if (settingsOpen) {
       level = (
         <MobileLevel title={t(($) => $.thread.settings)} backHref={paths.imChat(requested.id)} backLabel={t(($) => $.panel.back)}>
@@ -358,6 +364,7 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
                 : paths.imChatSettings(requested.id),
               onOpenProfile: (type, id) => navigation.push(paths.imChatContact(requested.id, type, id)),
               onOpenHistory: (messageId) => navigation.push(paths.imChatHistory(requested.id, messageId)),
+              onOpenProgress: (taskId) => navigation.push(paths.imChatProgress(requested.id, taskId)),
             }}
           />
         </div>
