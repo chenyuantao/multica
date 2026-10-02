@@ -156,6 +156,9 @@ func FilterForAgent(ctx context.Context, ev Evaluator, agent Card, excerpts []Ex
 
 func filterContent(excerpt Excerpt) string {
 	text := strings.TrimSpace(excerpt.Text)
+	if excerpt.Focus != nil {
+		text = "关于文档 " + strings.TrimSpace(excerpt.Focus.Name) + "（" + strings.TrimSpace(excerpt.Focus.Path) + "）\n" + text
+	}
 	if excerpt.Ref == nil {
 		return text
 	}
@@ -183,6 +186,7 @@ func HideMessages(transcript *Transcript, hidden map[string]bool) {
 		excerpt.Text = HiddenMessageText
 		excerpt.Truncated = false
 		excerpt.Ref = nil
+		excerpt.Focus = nil
 		excerpt.Hidden = true
 	}
 }

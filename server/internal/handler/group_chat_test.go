@@ -491,6 +491,7 @@ func TestGroupChatQuotedMessageReachesAgentInFull(t *testing.T) {
 				`DELETE FROM agent_task_queue WHERE issue_id = $1`,
 				`DELETE FROM issue_member WHERE issue_id = $1`,
 				`DELETE FROM issue_subscriber WHERE issue_id = $1`,
+				`DELETE FROM comment_focus_note WHERE issue_id = $1`,
 				`DELETE FROM comment WHERE issue_id = $1`,
 				`DELETE FROM issue WHERE id = $1`,
 			} {
@@ -529,6 +530,27 @@ func TestGroupChatQuotedMessageReachesAgentInFull(t *testing.T) {
 	}
 	if got == nil || got.ID != quoted.ID || got.Text != "Ship the v2 importer on Friday" || got.Role != "member" {
 		t.Fatalf("quoted turn = %+v, want the full quoted message", got)
+	}
+
+	var focused CommentResponse
+	post(chat.ID, map[string]any{
+		"content":        "about this note",
+		"ref_message_id": quoted.ID,
+		"focus_note":     map[string]string{"name": "本周周报", "path": "notes/weekly.md"},
+	}).Want(http.StatusCreated).JSON(&focused)
+	var focusedTurn groupchat.Turn
+	foundFocus := false
+	for _, turn := range testHandler.groupChatTurns(ctx, issue, roster) {
+		if turn.ID == focused.ID {
+			focusedTurn = turn
+			foundFocus = true
+		}
+	}
+	if !foundFocus || focusedTurn.Ref == nil || focusedTurn.Ref.ID != quoted.ID {
+		t.Fatalf("focused turn = %+v, want the quote kept", focusedTurn)
+	}
+	if focusedTurn.Focus == nil || focusedTurn.Focus.Name != "本周周报" || focusedTurn.Focus.Path != "notes/weekly.md" {
+		t.Fatalf("focus = %+v, want the open note", focusedTurn.Focus)
 	}
 }
 

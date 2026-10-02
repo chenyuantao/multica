@@ -30,11 +30,13 @@ import { chatDisplayTitle, sortChats } from "./im-utils";
 import { NewChatDialog } from "./new-chat-dialog";
 import {
   closeKnowledgeNote,
-  EMPTY_KNOWLEDGE_NOTE_TABS,
+  knowledgeNoteTabsFor,
   KnowledgeNotesProvider,
   openKnowledgeNote,
+  updateKnowledgeNoteTabs,
   type KnowledgeNoteTab,
   type KnowledgeNoteTabs,
+  type KnowledgeNoteTabsByChat,
 } from "./knowledge-note-tabs";
 import { useAskAILauncher } from "./use-ask-ai-launcher";
 import { entryKey, useChatDirectory, type DirectoryEntry } from "./use-chat-directory";
@@ -61,7 +63,7 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
   const { getActorName } = useActorName();
   const { data = EMPTY_CHATS, isLoading, isError } = useQuery(groupChatListOptions(wsId));
   const [panelOpen, setPanelOpen] = useState(true);
-  const [noteTabs, setNoteTabs] = useState<KnowledgeNoteTabs>(EMPTY_KNOWLEDGE_NOTE_TABS);
+  const [noteTabsByChat, setNoteTabsByChat] = useState<KnowledgeNoteTabsByChat>({});
   const [newChatOpen, setNewChatOpen] = useState(false);
   const contactTarget = parseContactParam(navigation.searchParams.get("contact"));
   const directory = useChatDirectory(wsId);
@@ -80,6 +82,16 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
   const selected = requested ?? (requestedId || isMobile ? null : chats[0] ?? null);
   const memberChatId = view === "contacts" ? navigation.searchParams.get("chat") : null;
   const memberChat = memberChatId ? chats.find((c) => c.id === memberChatId) ?? null : null;
+  const sessionId = view === "chats" ? selected?.id ?? null : null;
+  const noteTabs = knowledgeNoteTabsFor(noteTabsByChat, sessionId);
+  const focusedNote = noteTabs.notes.find((note) => note.path === noteTabs.activePath) ?? null;
+  const patchNoteTabs = useCallback(
+    (update: (tabs: KnowledgeNoteTabs) => KnowledgeNoteTabs) => {
+      if (!sessionId) return;
+      setNoteTabsByChat((byChat) => updateKnowledgeNoteTabs(byChat, sessionId, update));
+    },
+    [sessionId],
+  );
 
   const select = (chatId: string) =>
     isMobile ? navigation.push(paths.imChat(chatId)) : navigation.replace(paths.imChat(chatId));
@@ -103,7 +115,7 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
   const launcher = useAskAILauncher(askPage);
   const openNote = useCallback(
     (note: KnowledgeNoteTab) => {
-      setNoteTabs((state) => openKnowledgeNote(state, note));
+      patchNoteTabs((state) => openKnowledgeNote(state, note));
       setPanelOpen(true);
       if (!isMobile || view !== "chats") return;
       const chatId = navigation.searchParams.get("chat");
@@ -111,7 +123,7 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
         navigation.push(paths.imChatSettings(chatId));
       }
     },
-    [isMobile, navigation, paths, view],
+    [isMobile, navigation, patchNoteTabs, paths, view],
   );
 
   const rail = <ImRail active={view} readingChatId={view === "chats" ? selected?.id : null} />;
@@ -246,9 +258,9 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
             userId={userId}
             notes={noteTabs.notes}
             activePath={noteTabs.activePath}
-            onSelectDetails={() => setNoteTabs((state) => ({ ...state, activePath: null }))}
-            onSelectNote={(path) => setNoteTabs((state) => ({ ...state, activePath: path }))}
-            onCloseNote={(path) => setNoteTabs((state) => closeKnowledgeNote(state, path))}
+            onSelectDetails={() => patchNoteTabs((state) => ({ ...state, activePath: null }))}
+            onSelectNote={(path) => patchNoteTabs((state) => ({ ...state, activePath: path }))}
+            onCloseNote={(path) => patchNoteTabs((state) => closeKnowledgeNote(state, path))}
             chrome="page"
             onOpenMember={(m) => navigation.push(paths.imChatSettingsContact(requested.id, m.member_type, m.member_id))}
           />
@@ -266,6 +278,7 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
             panelOpen={false}
             onTogglePanel={() => {}}
             onAskAI={launcher.show}
+            focusNote={focusedNote}
             mobileNav={{
               backHref: paths.im(),
               settingsHref: peer
@@ -355,6 +368,7 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
                 panelOpen={panelOpen}
                 onTogglePanel={() => setPanelOpen((v) => !v)}
                 onAskAI={launcher.show}
+                focusNote={focusedNote}
               />
               {panelOpen && (
                 <ChatSidePanel
@@ -363,9 +377,9 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
                   userId={userId}
                   notes={noteTabs.notes}
                   activePath={noteTabs.activePath}
-                  onSelectDetails={() => setNoteTabs((state) => ({ ...state, activePath: null }))}
-                  onSelectNote={(path) => setNoteTabs((state) => ({ ...state, activePath: path }))}
-                  onCloseNote={(path) => setNoteTabs((state) => closeKnowledgeNote(state, path))}
+                  onSelectDetails={() => patchNoteTabs((state) => ({ ...state, activePath: null }))}
+                  onSelectNote={(path) => patchNoteTabs((state) => ({ ...state, activePath: path }))}
+                  onCloseNote={(path) => patchNoteTabs((state) => closeKnowledgeNote(state, path))}
                 />
               )}
             </>

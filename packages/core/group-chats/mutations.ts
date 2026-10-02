@@ -4,6 +4,7 @@ import { attachmentMarkdown } from "../hooks/use-file-upload";
 import type {
   AskAIPage,
   Comment,
+  FocusNote,
   CreateGroupChatRequest,
   GroupChat,
   GroupChatMemberRef,
@@ -169,8 +170,17 @@ export function useForwardChatHistory(wsId: string) {
 export function useSendGroupChatMessage(wsId: string, chatId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ content, attachmentIds, refMessageId }: { content: string; attachmentIds?: string[]; refMessageId?: string }) =>
-      api.createComment(chatId, content, undefined, undefined, attachmentIds, undefined, undefined, refMessageId),
+    mutationFn: ({
+      content,
+      attachmentIds,
+      refMessageId,
+      focusNote,
+    }: {
+      content: string;
+      attachmentIds?: string[];
+      refMessageId?: string;
+      focusNote?: FocusNote;
+    }) => api.createComment(chatId, content, undefined, undefined, attachmentIds, undefined, undefined, refMessageId, undefined, focusNote),
     onSuccess: (comment) => {
       qc.setQueryData<Comment[]>(groupChatKeys.messages(wsId, chatId), (old) =>
         old && !old.some((c) => c.id === comment.id) ? [...old, comment] : old,

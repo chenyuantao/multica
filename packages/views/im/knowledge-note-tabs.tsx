@@ -16,6 +16,33 @@ export interface KnowledgeNoteTabs {
 
 export const EMPTY_KNOWLEDGE_NOTE_TABS: KnowledgeNoteTabs = { notes: [], activePath: null };
 
+/** In-memory sidebar tabs, one set per chat. Not persisted. */
+export type KnowledgeNoteTabsByChat = Readonly<Record<string, KnowledgeNoteTabs>>;
+
+/** The tabs open in this chat. A chat with no memory shows details only. */
+export function knowledgeNoteTabsFor(byChat: KnowledgeNoteTabsByChat, chatId: string | null): KnowledgeNoteTabs {
+  if (!chatId) return EMPTY_KNOWLEDGE_NOTE_TABS;
+  return byChat[chatId] ?? EMPTY_KNOWLEDGE_NOTE_TABS;
+}
+
+/** Updates one chat's tabs and leaves every other chat untouched. */
+export function updateKnowledgeNoteTabs(
+  byChat: KnowledgeNoteTabsByChat,
+  chatId: string,
+  update: (tabs: KnowledgeNoteTabs) => KnowledgeNoteTabs,
+): KnowledgeNoteTabsByChat {
+  const current = byChat[chatId] ?? EMPTY_KNOWLEDGE_NOTE_TABS;
+  const next = update(current);
+  if (next === current) return byChat;
+  if (next.notes.length === 0) {
+    if (byChat[chatId] == null) return byChat;
+    const rest = { ...byChat };
+    delete rest[chatId];
+    return rest;
+  }
+  return { ...byChat, [chatId]: next };
+}
+
 /** Opens a note as a sidebar tab, or focuses it when it is already open. */
 export function openKnowledgeNote(state: KnowledgeNoteTabs, note: KnowledgeNoteTab): KnowledgeNoteTabs {
   const notes = state.notes.some((item) => item.path === note.path)

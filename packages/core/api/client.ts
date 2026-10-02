@@ -495,6 +495,7 @@ import {
 import type {
   AskAIPage,
   AskAIRequest,
+  FocusNote,
   CreateGroupChatRequest,
   GroupChat,
   GroupChatMemberRef,
@@ -1679,6 +1680,7 @@ export class ApiClient {
     steerTaskIds?: string[],
     refMessageId?: string,
     askAI?: AskAIPage | null,
+    focusNote?: FocusNote | null,
   ): Promise<Comment> {
     return this.fetch(`/api/issues/${issueId}/comments`, {
       method: "POST",
@@ -1691,6 +1693,7 @@ export class ApiClient {
         ...(steerTaskIds?.length ? { steer_task_ids: steerTaskIds } : {}),
         ...(refMessageId ? { ref_message_id: refMessageId } : {}),
         ...(askAI ? { ask_ai: askAI } : {}),
+        ...(focusNote ? { focus_note: focusNote } : {}),
       }),
     });
   }

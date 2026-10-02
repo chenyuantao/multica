@@ -77,7 +77,7 @@ func SelectTranscript(turns []Turn, triggerIDs []string, maxRunes, perMessage in
 			// The record is context and stays complete, even when it is longer
 			// than one message's cap. It still spends budget, so older
 			// messages stop once it has been taken.
-			remaining -= overhead + length + refRunes(turn.Ref)
+			remaining -= overhead + length + refRunes(turn.Ref) + focusRunes(turn.Focus)
 			turn.Text = text
 			chosen[i] = Excerpt{Turn: turn, Index: i, Trigger: false}
 			return
@@ -91,8 +91,9 @@ func SelectTranscript(turns []Turn, triggerIDs []string, maxRunes, perMessage in
 			text = string([]rune(text)[:limit])
 			length = limit
 		}
-		// A quote is always shown whole, so it spends budget without being cut.
-		remaining -= overhead + length + refRunes(turn.Ref)
+		// A quote and the open note are always shown whole, so they spend budget
+		// without being cut.
+		remaining -= overhead + length + refRunes(turn.Ref) + focusRunes(turn.Focus)
 		turn.Text = text
 		chosen[i] = Excerpt{Turn: turn, Index: i, Trigger: triggers[turn.ID], Truncated: truncated}
 	}
@@ -137,11 +138,12 @@ func SelectTranscript(turns []Turn, triggerIDs []string, maxRunes, perMessage in
 // read cut-down or omitted messages. Message text is XML-escaped so it can
 // never close or forge a tag.
 func (t Transcript) Render(issueID, intro string) string {
-	var truncated, omitted, quoted, hidden, history bool
+	var truncated, omitted, quoted, focused, hidden, history bool
 	for _, e := range t.Excerpts {
 		truncated = truncated || e.Truncated
 		omitted = omitted || len(e.OmittedBefore) > 0
 		quoted = quoted || e.Ref != nil
+		focused = focused || e.Focus != nil
 		hidden = hidden || e.Hidden
 		history = history || e.History || (e.Ref != nil && e.Ref.History)
 	}
@@ -173,6 +175,9 @@ func (t Transcript) Render(issueID, intro string) string {
 	if quoted {
 		desc = append(desc, "A ref element inside a msg is the earlier message it quotes and replies to, in full.")
 	}
+	if focused {
+		desc = append(desc, `A ref with role="document" is the knowledge note open beside the chat when that message was sent. The message is about that note. path is the note's path and the text is its title.`)
+	}
 	if history {
 		desc = append(desc, `A msg or ref whose text starts with "[chat history]" is a forwarded record. The lines under that heading are the original messages in full, kept as context. That record is not a message this reply answers.`)
 	}
@@ -196,8 +201,14 @@ func (t Transcript) Render(issueID, intro string) string {
 		if e.Ref != nil {
 			fmt.Fprintf(&b, "\n<ref%s>%s</ref>\n", turnAttrs(*e.Ref), escapeText(strings.TrimSpace(e.Ref.Text)))
 		}
+		if e.Focus != nil {
+			if e.Ref == nil {
+				b.WriteString("\n")
+			}
+			fmt.Fprintf(&b, `<ref role="document" path="%s">%s</ref>`+"\n", escapeAttr(e.Focus.Path), escapeText(strings.TrimSpace(e.Focus.Name)))
+		}
 		b.WriteString(escapeText(e.Text))
-		if e.Ref != nil {
+		if e.Ref != nil || e.Focus != nil {
 			b.WriteString("\n")
 		}
 		b.WriteString("</msg>\n")
@@ -227,6 +238,13 @@ func refRunes(ref *Turn) int {
 		return 0
 	}
 	return utf8.RuneCountInString(ref.Text) + tagRunes(*ref)
+}
+
+func focusRunes(note *FocusNote) int {
+	if note == nil {
+		return 0
+	}
+	return utf8.RuneCountInString(note.Name) + utf8.RuneCountInString(note.Path) + 40
 }
 
 var (

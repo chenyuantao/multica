@@ -11,7 +11,7 @@ import type { ApiClient } from "../api/client";
 import { inboxKeys } from "../inbox/queries";
 import { createQueryClient } from "../query-client";
 import type { GroupChat } from "../types";
-import { useAskAI, useForwardChatHistory, useMarkGroupChatRead, useSetGroupChatPinned } from "./mutations";
+import { useAskAI, useForwardChatHistory, useMarkGroupChatRead, useSendGroupChatMessage, useSetGroupChatPinned } from "./mutations";
 import { countUnreadGroupChatMessages, groupChatKeys } from "./queries";
 
 const WS = "ws-1";
@@ -179,6 +179,33 @@ describe("useForwardChatHistory", () => {
     await act(async () => {
       await expect(result.current.mutateAsync({ targets: ["a"], card: "card", note: "" })).rejects.toThrow();
     });
+  });
+});
+
+describe("useSendGroupChatMessage", () => {
+  it("sends the focused note with the message", async () => {
+    const createComment = vi.fn(async () => ({ id: "m1" }));
+    setApiInstance({ createComment } as unknown as ApiClient);
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={createQueryClient()}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useSendGroupChatMessage(WS, "chat-1"), { wrapper });
+    const note = { name: "本周周报", path: "notes/weekly.md" };
+    await act(async () => {
+      await result.current.mutateAsync({ content: "why?", refMessageId: "m-1", focusNote: note });
+    });
+    expect(createComment).toHaveBeenCalledWith(
+      "chat-1",
+      "why?",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      "m-1",
+      undefined,
+      note,
+    );
   });
 });
 

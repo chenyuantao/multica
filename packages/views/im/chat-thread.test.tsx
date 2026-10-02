@@ -494,6 +494,28 @@ describe("ChatThread message menu", () => {
     expect(sendMutateAsync).toHaveBeenCalledWith({ content: "hello", attachmentIds: [], refMessageId: undefined });
   });
 
+  it("sends the focused document with the message, and keeps a quote beside it", async () => {
+    renderWithI18n(
+      <ChatThread
+        wsId="ws-1"
+        chat={chat}
+        userId="user-1"
+        panelOpen={false}
+        onTogglePanel={() => {}}
+        focusNote={{ name: "本周周报", path: "notes/weekly.md" }}
+      />,
+    );
+    await openMenu("sounds good");
+    fireEvent.click(screen.getByRole("menuitem", { name: "Quote" }));
+    fireEvent.click(screen.getByRole("button", { name: "send" }));
+    expect(sendMutateAsync).toHaveBeenCalledWith({
+      content: "hello",
+      attachmentIds: [],
+      refMessageId: "m-2",
+      focusNote: { name: "本周周报", path: "notes/weekly.md" },
+    });
+  });
+
   it("shows what a message quotes, or that the quoted one is gone", () => {
     messages = [
       ...messages,

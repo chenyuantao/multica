@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, screen } from "@testing-library/react";
 import type { GroupChat } from "@multica/core/types";
@@ -71,21 +72,44 @@ vi.mock("./use-group-chat-unread", () => ({ useGroupChatUnreadTotal: () => unrea
 vi.mock("./im-rail", () => ({ ImRail: () => null }));
 vi.mock("./chat-sidebar", () => ({
   ChatSidebar: ({ onSelect }: { onSelect: (id: string) => void }) => (
-    <button type="button" onClick={() => onSelect("c1")}>
-      select chat
-    </button>
+    <>
+      <button type="button" onClick={() => onSelect("c1")}>
+        select chat
+      </button>
+      <button type="button" onClick={() => onSelect("c2")}>
+        select second chat
+      </button>
+    </>
   ),
   ChatAvatar: () => null,
 }));
-vi.mock("./chat-thread", () => ({
-  ChatThread: ({ mobileNav }: { mobileNav?: { settingsHref: string; onOpenProfile: (type: string, id: string) => void } }) => (
-    <>
-      <button type="button" onClick={() => mobileNav?.onOpenProfile("member", "user-2")}>
-        thread author
-      </button>
-      <a href={mobileNav?.settingsHref}>thread settings</a>
-    </>
-  ),
+vi.mock("./chat-thread", async () => {
+  const { useOpenKnowledgeNote } = await import("./knowledge-note-tabs");
+  return {
+    ChatThread: ({
+      chat,
+      mobileNav,
+    }: {
+      chat: { id: string };
+      mobileNav?: { settingsHref: string; onOpenProfile: (type: string, id: string) => void };
+    }) => {
+      const openNote = useOpenKnowledgeNote();
+      return (
+        <>
+          <button type="button" onClick={() => openNote?.({ path: `${chat.id}.md`, name: chat.id })}>
+            open note
+          </button>
+          <button type="button" onClick={() => mobileNav?.onOpenProfile("member", "user-2")}>
+            thread author
+          </button>
+          <a href={mobileNav?.settingsHref}>thread settings</a>
+        </>
+      );
+    },
+  };
+});
+vi.mock("./knowledge-document", () => ({
+  KnowledgeDocument: () => null,
 }));
 vi.mock("./chat-details-panel", () => ({
   ChatDetailsPanel: ({ onOpenMember }: { onOpenMember?: (m: { member_type: string; member_id: string }) => void }) => (
@@ -330,5 +354,47 @@ describe("ImPage group details from contacts", () => {
     expect(screen.queryByRole("button", { name: "thread author" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open chat" })).toHaveAttribute("href", "/acme/im?chat=c1");
     expect(screen.getByRole("button", { name: /Launch/ })).toHaveAttribute("aria-current", "true");
+  });
+});
+
+describe("ImPage sidebar tabs per chat", () => {
+  it("remembers open note tabs separately for each conversation", () => {
+    isMobileRef.current = false;
+    const second = { ...chat, id: "c2", title: "Standup" } as GroupChat;
+    chatsRef.current = [chat, second];
+
+    function ChatSwitcher() {
+      const [search, setSearch] = useState("chat=c1");
+      const navigation: NavigationAdapter = {
+        push: (path) => setSearch(path.split("?")[1] ?? ""),
+        replace: (path) => setSearch(path.split("?")[1] ?? ""),
+        back: () => {},
+        pathname: "/acme/im",
+        searchParams: new URLSearchParams(search),
+        hash: "",
+        getShareableUrl: (path) => path,
+      };
+      return (
+        <NavigationProvider value={navigation}>
+          <ImPage />
+        </NavigationProvider>
+      );
+    }
+
+    renderWithI18n(<ChatSwitcher />);
+    fireEvent.click(screen.getByRole("button", { name: "open note" }));
+    expect(screen.getByRole("tab", { name: "c1" })).toHaveAttribute("aria-selected", "true");
+
+    fireEvent.click(screen.getByRole("button", { name: "select second chat" }));
+    expect(screen.queryByRole("tab", { name: "c1" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "open note" }));
+    expect(screen.getByRole("tab", { name: "c2" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "c1" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "select chat" }));
+    expect(screen.getByRole("tab", { name: "c1" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByRole("tab", { name: "c2" })).not.toBeInTheDocument();
   });
 });

@@ -384,7 +384,63 @@ func (h *Handler) groupChatTurns(ctx context.Context, issue db.Issue, roster []g
 		turns = append(turns, turn)
 	}
 	h.markGroupChatAttachments(ctx, issue, turns)
+	h.attachGroupChatFocusNotes(ctx, issue, turns)
 	return turns
+}
+
+// saveFocusNote stores the knowledge note open beside the chat when a person
+// sent the message. It runs before the message's agents are started, so their
+// claim finds it. A failure leaves the message without the note rather than
+// failing it.
+func (h *Handler) saveFocusNote(r *http.Request, comment db.Comment, note *groupchat.FocusNote) {
+	normalized, ok := note.Normalized()
+	if !ok {
+		return
+	}
+	if err := h.Queries.CreateCommentFocusNote(r.Context(), db.CreateCommentFocusNoteParams{
+		CommentID:   comment.ID,
+		IssueID:     comment.IssueID,
+		WorkspaceID: comment.WorkspaceID,
+		Name:        normalized.Name,
+		Path:        normalized.Path,
+	}); err != nil {
+		slog.Warn("focus note was not saved", append(logger.RequestAttrs(r), "error", err, "comment_id", uuidToString(comment.ID))...)
+	}
+}
+
+// attachGroupChatFocusNotes marks each message with the note that was open
+// when it was sent, so the transcript can quote that note beside any message
+// the person already quoted.
+func (h *Handler) attachGroupChatFocusNotes(ctx context.Context, issue db.Issue, turns []groupchat.Turn) {
+	ids := make([]pgtype.UUID, 0, len(turns))
+	for _, turn := range turns {
+		parsed, err := util.ParseUUID(turn.ID)
+		if err != nil {
+			continue
+		}
+		ids = append(ids, parsed)
+	}
+	if len(ids) == 0 {
+		return
+	}
+	rows, err := h.Queries.ListCommentFocusNotes(ctx, db.ListCommentFocusNotesParams{
+		WorkspaceID: issue.WorkspaceID, CommentIds: ids,
+	})
+	if err != nil {
+		slog.Warn("group chat focus notes failed", "issue_id", uuidToString(issue.ID), "error", err)
+		return
+	}
+	byID := make(map[string]groupchat.FocusNote, len(rows))
+	for _, row := range rows {
+		byID[uuidToString(row.CommentID)] = groupchat.FocusNote{Name: row.Name, Path: row.Path}
+	}
+	for i := range turns {
+		note, ok := byID[turns[i].ID]
+		if !ok {
+			continue
+		}
+		turns[i].Focus = &note
+	}
 }
 
 // markGroupChatAttachments flags messages that carry a file. The filter

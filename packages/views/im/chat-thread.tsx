@@ -20,7 +20,7 @@ import { issueTasksOptions } from "@multica/core/issues/queries";
 import { useCurrentMember } from "@multica/core/permissions";
 import { useActorName } from "@multica/core/workspace/hooks";
 import { agentListOptions } from "@multica/core/workspace/queries";
-import type { Agent, AgentTask, AskAISelection, Comment, GroupChat } from "@multica/core/types";
+import type { Agent, AgentTask, AskAISelection, Comment, FocusNote, GroupChat } from "@multica/core/types";
 import { copyText } from "@multica/ui/lib/clipboard";
 import { cn } from "@multica/ui/lib/utils";
 import { Button } from "@multica/ui/components/ui/button";
@@ -85,6 +85,7 @@ interface PendingMessage {
   content: string;
   attachmentIds: string[];
   refMessageId?: string;
+  focusNote?: FocusNote;
   status: "sending" | "failed";
   /** Message ids already in the thread when this was queued; the echo is a new id. */
   knownIds: Set<string>;
@@ -98,6 +99,8 @@ interface ChatThreadProps {
   onTogglePanel: () => void;
   /** Opens Ask AI from the header, or about one message from its menu. */
   onAskAI?: (selection?: AskAISelection) => void;
+  /** The knowledge note tab open beside the chat. Each send tells the agent the message is about it. */
+  focusNote?: FocusNote | null;
   /** Mobile stacked layout: back to the chat list, on to chat settings, and profiles as page levels. */
   mobileNav?: { backHref: string; settingsHref: string; onOpenProfile: (actorType: string, actorId: string) => void };
 }
@@ -121,7 +124,7 @@ function asGroupChats(data: unknown): GroupChat[] {
   );
 }
 
-export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAskAI, mobileNav }: ChatThreadProps) {
+export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAskAI, focusNote, mobileNav }: ChatThreadProps) {
   const { t } = useT("im");
   const { getActorName } = useActorName();
   const { data = EMPTY_COMMENTS, isError } = useQuery(groupChatMessagesOptions(wsId, chat.id));
@@ -282,10 +285,10 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAsk
   );
 
   const deliver = useCallback(
-    async (localId: string, content: string, attachmentIds: string[], refMessageId?: string) => {
+    async (localId: string, content: string, attachmentIds: string[], refMessageId?: string, note?: FocusNote) => {
       setPending((prev) => prev.map((p) => (p.localId === localId ? { ...p, status: "sending" } : p)));
       try {
-        await send.mutateAsync({ content, attachmentIds, refMessageId });
+        await send.mutateAsync({ content, attachmentIds, refMessageId, ...(note ? { focusNote: note } : {}) });
         setPending((prev) => prev.filter((p) => p.localId !== localId));
       } catch {
         setPending((prev) => prev.map((p) => (p.localId === localId ? { ...p, status: "failed" } : p)));
@@ -308,8 +311,9 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAsk
   const queue = (content: string, attachmentIds: string[], refMessageId?: string) => {
     const localId = `local-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const knownIds = new Set(messages.map((m) => m.id));
-    setPending((prev) => [...prev, { localId, content, attachmentIds, refMessageId, status: "sending", knownIds }]);
-    void deliver(localId, content, attachmentIds, refMessageId);
+    const note = focusNote?.name && focusNote.path ? { name: focusNote.name, path: focusNote.path } : undefined;
+    setPending((prev) => [...prev, { localId, content, attachmentIds, refMessageId, focusNote: note, status: "sending", knownIds }]);
+    void deliver(localId, content, attachmentIds, refMessageId, note);
   };
 
   const onSend = (content: string, attachmentIds: string[]) => {
@@ -481,7 +485,7 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAsk
                   userId={userId}
                   quote={p.refMessageId ? quoteOf(p.refMessageId) : undefined}
                   onJumpToQuote={jumpTo}
-                  onRetry={() => void deliver(p.localId, p.content, p.attachmentIds, p.refMessageId)}
+                  onRetry={() => void deliver(p.localId, p.content, p.attachmentIds, p.refMessageId, p.focusNote)}
                 />
               </li>
             ))}

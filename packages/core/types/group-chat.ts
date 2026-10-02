@@ -93,6 +93,12 @@ export interface AskAIPage {
   element?: AskAIElement;
 }
 
+/** The knowledge note open beside the chat when a message is sent. */
+export interface FocusNote {
+  name: string;
+  path: string;
+}
+
 export interface AskAIAttachment {
   name: string;
   content_type: string;

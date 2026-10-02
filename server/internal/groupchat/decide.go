@@ -83,6 +83,9 @@ type Turn struct {
 	History bool
 	// Ref is the message this one quotes, carried in full.
 	Ref *Turn
+	// Focus is the knowledge note open beside the chat when this message was
+	// sent. It is context for the message, not another chat message.
+	Focus *FocusNote
 }
 
 // Card is an agent the planner may choose. ID is not sent to the model.

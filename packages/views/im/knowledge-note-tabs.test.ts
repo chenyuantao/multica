@@ -1,7 +1,13 @@
 // @vitest-environment node
 
 import { describe, expect, it } from "vitest";
-import { closeKnowledgeNote, EMPTY_KNOWLEDGE_NOTE_TABS, openKnowledgeNote } from "./knowledge-note-tabs";
+import {
+  closeKnowledgeNote,
+  EMPTY_KNOWLEDGE_NOTE_TABS,
+  knowledgeNoteTabsFor,
+  openKnowledgeNote,
+  updateKnowledgeNoteTabs,
+} from "./knowledge-note-tabs";
 
 const weekly = { path: "Work/周报.md", name: "周报" };
 const plan = { path: "Work/计划.md", name: "计划" };
@@ -27,5 +33,23 @@ describe("knowledge note tabs", () => {
     expect(closed.notes).toEqual([plan]);
     expect(closed.activePath).toBe(plan.path);
     expect(closeKnowledgeNote(closed, plan.path)).toEqual(EMPTY_KNOWLEDGE_NOTE_TABS);
+  });
+});
+
+describe("knowledge note tabs per chat", () => {
+  it("keeps each chat's open tabs and the selected one", () => {
+    const launch = updateKnowledgeNoteTabs({}, "launch", (tabs) => openKnowledgeNote(tabs, weekly));
+    const both = updateKnowledgeNoteTabs(launch, "standup", (tabs) => openKnowledgeNote(tabs, plan));
+    const launchOnDetails = updateKnowledgeNoteTabs(both, "launch", (tabs) => ({ ...tabs, activePath: null }));
+
+    expect(knowledgeNoteTabsFor(launchOnDetails, "launch")).toEqual({ notes: [weekly], activePath: null });
+    expect(knowledgeNoteTabsFor(launchOnDetails, "standup")).toEqual({ notes: [plan], activePath: plan.path });
+    expect(knowledgeNoteTabsFor(launchOnDetails, "other")).toEqual(EMPTY_KNOWLEDGE_NOTE_TABS);
+    expect(knowledgeNoteTabsFor(launchOnDetails, null)).toEqual(EMPTY_KNOWLEDGE_NOTE_TABS);
+  });
+
+  it("drops a chat once its last note closes", () => {
+    const opened = updateKnowledgeNoteTabs({}, "launch", (tabs) => openKnowledgeNote(tabs, weekly));
+    expect(updateKnowledgeNoteTabs(opened, "launch", (tabs) => closeKnowledgeNote(tabs, weekly.path))).toEqual({});
   });
 });

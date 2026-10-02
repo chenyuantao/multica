@@ -1505,6 +1505,10 @@ type CreateCommentRequest struct {
 	// AskAI is the page a group chat message was asked from. The answering
 	// agent reads it with the message; it is never shown in the chat.
 	AskAI *groupchat.AskPage `json:"ask_ai"`
+	// FocusNote is the knowledge note open beside the chat when this message
+	// was sent. The answering agent reads it with the message; it is never
+	// shown in the chat.
+	FocusNote *groupchat.FocusNote `json:"focus_note"`
 }
 
 type CommentTriggerPreviewRequest struct {
@@ -2015,6 +2019,7 @@ func (h *Handler) CreateComment(w http.ResponseWriter, r *http.Request) {
 	comment := created.Comment()
 	if groupChat && authorType == "member" {
 		h.saveAskAIContext(r, comment, req.AskAI)
+		h.saveFocusNote(r, comment, req.FocusNote)
 	}
 
 	// Fetch linked attachments so the response includes them.
@@ -3968,6 +3973,12 @@ func (h *Handler) deleteComment(ctx context.Context, commentID, workspaceID pgty
 		if _, err := qtx.SettleDelegatedFailureRecoveryComment(ctx, target.ID); err != nil {
 			return out, err
 		}
+		if err := qtx.DeleteCommentFocusNotes(ctx, db.DeleteCommentFocusNotesParams{
+			WorkspaceID: target.WorkspaceID,
+			CommentIds:  []pgtype.UUID{target.ID},
+		}); err != nil {
+			return out, err
+		}
 		out.Tombstone = &tombstone
 	} else {
 		removed, err := qtx.DeleteLeafComment(ctx, db.DeleteLeafCommentParams{
@@ -3995,6 +4006,12 @@ func (h *Handler) deleteComment(ctx context.Context, commentID, workspaceID pgty
 			parentID = pruned.ParentID
 		}
 		if err := qtx.DeleteCommentAskContexts(ctx, db.DeleteCommentAskContextsParams{
+			WorkspaceID: target.WorkspaceID,
+			CommentIds:  out.RemovedIDs,
+		}); err != nil {
+			return out, err
+		}
+		if err := qtx.DeleteCommentFocusNotes(ctx, db.DeleteCommentFocusNotesParams{
 			WorkspaceID: target.WorkspaceID,
 			CommentIds:  out.RemovedIDs,
 		}); err != nil {
