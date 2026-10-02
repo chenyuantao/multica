@@ -20,9 +20,11 @@ interface KnowledgeDocumentProps {
   variant?: "pane" | "page";
   /** Shows the Ask AI entry in the pane header. */
   onAskAI?: () => void;
+  /** Sends the selected passage to the chat composer. The note itself is not changed. */
+  onAskSelection?: (text: string) => void;
 }
 
-export function KnowledgeDocument({ path, variant = "pane", onAskAI }: KnowledgeDocumentProps) {
+export function KnowledgeDocument({ path, variant = "pane", onAskAI, onAskSelection }: KnowledgeDocumentProps) {
   const { t } = useT("im");
   const { data: file, isPending, isError, error, refetch } = useQuery(docFileOptions(path));
   // Bumped to throw away local edits and remount on the latest server text.
@@ -46,6 +48,7 @@ export function KnowledgeDocument({ path, variant = "pane", onAskAI }: Knowledge
       file={file}
       variant={variant}
       onAskAI={onAskAI}
+      onAskSelection={onAskSelection}
       onReload={async () => {
         await refetch();
         setGeneration((g) => g + 1);
@@ -69,11 +72,13 @@ function NoteEditor({
   file,
   variant,
   onAskAI,
+  onAskSelection,
   onReload,
 }: {
   file: DocFile;
   variant: "pane" | "page";
   onAskAI?: () => void;
+  onAskSelection?: (text: string) => void;
   onReload: () => Promise<void>;
 }) {
   const { t } = useT("im");
@@ -201,6 +206,11 @@ function NoteEditor({
             debounceMs={800}
             disableMentions
             flushPendingOnUnmount
+            askSelection={
+              onAskSelection
+                ? { label: t(($) => $.search.ask_ai), onSelect: onAskSelection }
+                : undefined
+            }
             onUpdate={(markdown) => {
               pendingRef.current = markdown;
               void flush();

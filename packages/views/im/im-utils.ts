@@ -1,5 +1,6 @@
 import { directChatPeer } from "@multica/core/group-chats";
 import type { Comment, GroupChat, GroupChatMemberType, TaskMessagePayload } from "@multica/core/types";
+import { docExcerptPlain, encodeDocExcerpt, splitDocExcerpts } from "./doc-excerpt";
 import { buildSteps, isCallStep } from "../common/task-transcript/build-steps";
 import { buildTimeline } from "../common/task-transcript/build-timeline";
 import { redactSecrets } from "../common/task-transcript/redact";
@@ -52,7 +53,7 @@ export interface ComposerMention {
 
 /** One-line preview of a markdown message for the chat list. */
 export function plainTextPreview(markdown: string): string {
-  return markdown
+  return docExcerptPlain(markdown)
     .replace(/\[(@?[^\]]+)\]\(mention:\/\/[^)]+\)/g, "$1")
     .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
     .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
@@ -89,6 +90,28 @@ export function resolveComposerMentions(
     if (unique.size !== 1) return { ok: false, name };
   }
   return { ok: true, markdown: encodeMentions(text, picked) };
+}
+
+/**
+ * Encodes @mentions in the prose and leaves embedded note passages untouched,
+ * so a passage that itself contains @Name is not rewritten into a mention.
+ */
+export function resolveComposerBody(
+  text: string,
+  picked: ComposerMention[],
+  candidates: ComposerMention[],
+): { ok: true; markdown: string } | { ok: false; name: string } {
+  let markdown = "";
+  for (const part of splitDocExcerpts(text)) {
+    if (part.kind === "excerpt") {
+      markdown += encodeDocExcerpt(part.excerpt) ?? "";
+      continue;
+    }
+    const resolved = resolveComposerMentions(part.text, picked, candidates);
+    if (!resolved.ok) return resolved;
+    markdown += resolved.markdown;
+  }
+  return { ok: true, markdown };
 }
 
 export function encodeMentions(text: string, mentions: ComposerMention[]): string {

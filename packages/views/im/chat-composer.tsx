@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowUp, AtSign, FileText, Image as ImageIcon, Loader2, X } from "lucide-react";
 import type { Attachment } from "@multica/core/types";
 import { cn } from "@multica/ui/lib/utils";
@@ -11,7 +11,19 @@ import { FileDropOverlay, useEditorUpload, useFileDropZone } from "../editor";
 import { attachmentMarkdown } from "../editor/use-coordinated-uploads";
 import { useT } from "../i18n";
 import { getChatDraft, setChatDraft } from "./chat-draft";
-import { activeMentionQuery, resolveComposerMentions, type ComposerMention } from "./im-utils";
+import {
+  caretOffset,
+  deleteAdjacentChip,
+  insertComposerExcerpt,
+  insertComposerPaste,
+  insertComposerText,
+  renderComposer,
+  serializeComposer,
+  setComposerCaret,
+} from "./composer-dom";
+import type { DocExcerpt } from "./doc-excerpt";
+import { useRegisterDocExcerptInsert } from "./doc-excerpt-insert";
+import { activeMentionQuery, resolveComposerBody, type ComposerMention } from "./im-utils";
 
 interface ChatComposerProps {
   /** The chat's issue id; uploads are bound to it. */
@@ -54,7 +66,7 @@ const MAX_HEIGHT_PX = 180;
 export function ChatComposer({ chatId, chatTitle, candidates, onSend, quote, onCancelQuote }: ChatComposerProps) {
   const { t } = useT("im");
   const { t: tEditor } = useT("editor");
-  const ref = useRef<HTMLTextAreaElement>(null);
+  const ref = useRef<HTMLDivElement>(null);
   const { uploadWithToast } = useEditorUpload();
   const [files, setFiles] = useState<ComposerFile[]>([]);
   const uploading = files.some((f) => !f.attachment);
@@ -64,13 +76,23 @@ export function ChatComposer({ chatId, chatTitle, candidates, onSend, quote, onC
   const [highlight, setHighlight] = useState(0);
   const [dismissedAt, setDismissedAt] = useState<number | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
-  useLayoutEffect(() => {
-    setTextState(getChatDraft(chatId));
-  }, [chatId]);
-  const setText = (next: string) => {
+  const setText = useCallback((next: string) => {
     setTextState(next);
     setChatDraft(chatId, next);
-  };
+  }, [chatId]);
+  const sync = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    setText(serializeComposer(el));
+    setCaret(caretOffset(el));
+  }, [setText]);
+  useLayoutEffect(() => {
+    const draft = getChatDraft(chatId);
+    const el = ref.current;
+    if (el) renderComposer(el, draft);
+    setTextState(draft);
+    setCaret(draft.length);
+  }, [chatId]);
 
   const mention = activeMentionQuery(text, caret);
   const suggestions = useMemo(() => {
@@ -85,6 +107,14 @@ export function ChatComposer({ chatId, chatTitle, candidates, onSend, quote, onC
 
   useEffect(() => setHighlight(0), [mention?.query]);
 
+  const registerExcerpt = useRegisterDocExcerptInsert();
+  const insertExcerpt = useCallback((excerpt: DocExcerpt) => {
+    const el = ref.current;
+    if (!el || !insertComposerExcerpt(el, excerpt)) return;
+    sync();
+  }, [sync]);
+  useEffect(() => registerExcerpt(chatId, insertExcerpt), [registerExcerpt, chatId, insertExcerpt]);
+
   const quoteId = quote?.id;
   useEffect(() => {
     if (quoteId) ref.current?.focus();
@@ -97,36 +127,43 @@ export function ChatComposer({ chatId, chatTitle, candidates, onSend, quote, onC
     el.style.height = `${Math.min(el.scrollHeight, MAX_HEIGHT_PX)}px`;
   }, [text]);
 
-  const syncCaret = () => setCaret(ref.current?.selectionStart ?? 0);
+  const syncCaret = () => {
+    const el = ref.current;
+    if (el) setCaret(caretOffset(el));
+  };
 
   const insertMention = (m: ComposerMention) => {
     if (!mention) return;
     const token = `@${m.name} `;
     const next = text.slice(0, mention.start) + token + text.slice(caret);
     const nextCaret = mention.start + token.length;
+    const el = ref.current;
+    if (el) {
+      renderComposer(el, next);
+      setComposerCaret(el, nextCaret);
+      el.focus();
+    }
     setText(next);
     setPicked((prev) => [...prev, m]);
     setCaret(nextCaret);
-    requestAnimationFrame(() => {
-      ref.current?.focus();
-      ref.current?.setSelectionRange(nextCaret, nextCaret);
-    });
   };
 
   const startMention = () => {
     const el = ref.current;
-    const at = el?.selectionStart ?? text.length;
-    const needsSpace = at > 0 && !/\s/.test(text[at - 1] ?? "");
+    const current = el ? serializeComposer(el) : text;
+    const at = el ? caretOffset(el) : current.length;
+    const needsSpace = at > 0 && !/\s/.test(current[at - 1] ?? "");
     const insert = needsSpace ? " @" : "@";
-    const next = text.slice(0, at) + insert + text.slice(at);
+    const next = current.slice(0, at) + insert + current.slice(at);
+    const nextCaret = at + insert.length;
+    if (el) {
+      renderComposer(el, next);
+      setComposerCaret(el, nextCaret);
+      el.focus();
+    }
     setText(next);
     setDismissedAt(null);
-    const nextCaret = at + insert.length;
     setCaret(nextCaret);
-    requestAnimationFrame(() => {
-      el?.focus();
-      el?.setSelectionRange(nextCaret, nextCaret);
-    });
   };
 
   const addFiles = (list: File[]) => {
@@ -144,11 +181,33 @@ export function ChatComposer({ chatId, chatTitle, candidates, onSend, quote, onC
   };
   const { isDragOver, dropZoneProps } = useFileDropZone({ onDrop: addFiles });
 
-  const onPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+  const onPaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
     const pasted = Array.from(e.clipboardData.files);
-    if (pasted.length === 0) return;
+    if (pasted.length > 0) {
+      e.preventDefault();
+      addFiles(pasted);
+      return;
+    }
+    const el = ref.current;
+    if (!el) return;
     e.preventDefault();
-    addFiles(pasted);
+    insertComposerPaste(el, e.clipboardData.getData("text/html"), e.clipboardData.getData("text/plain"));
+    sync();
+  };
+
+  const onClipboard = (e: React.ClipboardEvent<HTMLDivElement>, cut: boolean) => {
+    const el = ref.current;
+    const sel = window.getSelection();
+    if (!el || !sel || sel.rangeCount === 0 || sel.isCollapsed || !el.contains(sel.anchorNode)) return;
+    const range = sel.getRangeAt(0);
+    const holder = document.createElement("div");
+    holder.appendChild(range.cloneContents());
+    e.clipboardData.setData("text/plain", serializeComposer(holder));
+    e.clipboardData.setData("text/html", holder.innerHTML);
+    e.preventDefault();
+    if (!cut) return;
+    range.deleteContents();
+    sync();
   };
 
   const ready = files.flatMap((f) => (f.attachment ? [f.attachment] : []));
@@ -159,7 +218,7 @@ export function ChatComposer({ chatId, chatTitle, candidates, onSend, quote, onC
     const body = text.trim();
     let markdown = "";
     if (body) {
-      const resolved = resolveComposerMentions(body, picked.filter((m) => body.includes(`@${m.name}`)), candidates);
+      const resolved = resolveComposerBody(body, picked.filter((m) => body.includes(`@${m.name}`)), candidates);
       if (!resolved.ok) {
         setNameError(resolved.name);
         return;
@@ -175,9 +234,10 @@ export function ChatComposer({ chatId, chatTitle, candidates, onSend, quote, onC
     setPicked([]);
     setCaret(0);
     setFiles([]);
+    if (ref.current) renderComposer(ref.current, "");
   };
 
-  const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.nativeEvent.isComposing) return;
     if (menuOpen) {
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
@@ -201,6 +261,19 @@ export function ChatComposer({ chatId, chatTitle, candidates, onSend, quote, onC
     if (e.key === "Escape" && quote) {
       e.preventDefault();
       onCancelQuote?.();
+      return;
+    }
+    if ((e.key === "Backspace" || e.key === "Delete") && ref.current && deleteAdjacentChip(ref.current, e.key)) {
+      e.preventDefault();
+      sync();
+      return;
+    }
+    if (e.key === "Enter" && e.shiftKey) {
+      e.preventDefault();
+      if (ref.current) {
+        insertComposerText(ref.current, "\n");
+        sync();
+      }
       return;
     }
     if (e.key === "Enter" && !e.shiftKey) {
@@ -313,21 +386,29 @@ export function ChatComposer({ chatId, chatTitle, candidates, onSend, quote, onC
           >
             <AtSign />
           </Button>
-          <textarea
-            ref={ref}
-            rows={1}
-            value={text}
-            onChange={(e) => {
-              setText(e.target.value);
-              setCaret(e.target.selectionStart);
-            }}
-            onSelect={syncCaret}
-            onKeyDown={onKeyDown}
-            onPaste={onPaste}
-            placeholder={t(($) => $.composer.placeholder, { title: chatTitle })}
-            aria-label={t(($) => $.composer.placeholder, { title: chatTitle })}
-            className="min-h-8 flex-1 resize-none bg-transparent py-1.5 text-body outline-none placeholder:text-muted-foreground"
-          />
+          <div className="relative min-h-8 flex-1">
+            {text.length === 0 && (
+              <span aria-hidden className="pointer-events-none absolute inset-x-0 top-1.5 truncate text-body text-muted-foreground">
+                {t(($) => $.composer.placeholder, { title: chatTitle })}
+              </span>
+            )}
+            <div
+              ref={ref}
+              role="textbox"
+              aria-multiline="true"
+              aria-label={t(($) => $.composer.placeholder, { title: chatTitle })}
+              contentEditable
+              suppressContentEditableWarning
+              onInput={sync}
+              onKeyUp={syncCaret}
+              onClick={syncCaret}
+              onKeyDown={onKeyDown}
+              onPaste={onPaste}
+              onCopy={(e) => onClipboard(e, false)}
+              onCut={(e) => onClipboard(e, true)}
+              className="max-h-[180px] min-h-8 w-full overflow-y-auto py-1.5 text-body break-words whitespace-pre-wrap outline-none"
+            />
+          </div>
           <Button
             size="icon-sm"
             className="shrink-0 rounded-full"

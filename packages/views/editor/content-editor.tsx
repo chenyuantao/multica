@@ -174,6 +174,11 @@ interface ContentEditorBaseProps {
   /** Additional non-editing action for the current text selection. */
   selectionAction?: { label: string; onSelect: () => boolean | void };
   /**
+   * Leading toolbar action for the current selection. Receives the selected
+   * text and does not change the document. Shown even inside a code block.
+   */
+  askSelection?: { label: string; onSelect: (text: string) => void };
+  /**
    * ID of the issue this editor belongs to. When set, the bubble menu exposes
    * a "Create sub-issue from selection" action that parents the new issue
    * under this ID and replaces the selection with a mention link.
@@ -372,6 +377,7 @@ const ContentEditor = forwardRef<ContentEditorRef, ContentEditorProps>(
       onUploadingChange,
       showBubbleMenu = true,
       selectionAction,
+      askSelection,
       currentIssueId,
       disableMentions = false,
       mentionMode = "default",
@@ -1009,7 +1015,7 @@ const ContentEditor = forwardRef<ContentEditorRef, ContentEditorProps>(
         >
           <EditorContent className="flex flex-1 flex-col" editor={editor} />
           {showBubbleMenu && (
-            <EditorBubbleMenu editor={editor} currentIssueId={currentIssueId} selectionAction={selectionAction} />
+            <EditorBubbleMenu editor={editor} currentIssueId={currentIssueId} selectionAction={selectionAction} askSelection={askSelection} />
           )}
           <LinkHoverCard {...hover} />
         </div>

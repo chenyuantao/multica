@@ -141,6 +141,34 @@ describe("EditorBubbleMenu accessibility", () => {
     if (codeBlock) expect(screen.queryByLabelText("Bold")).not.toBeInTheDocument();
   });
 
+  function showToolbar(editor: Editor) {
+    Object.defineProperty(editor, "isInitialized", { value: true });
+    const transaction = vi.mocked(editor.on).mock.calls.find(([event]) => event === "transaction")?.[1] as (() => void);
+    act(() => transaction());
+  }
+
+  it("puts Ask AI first and sends the selected text without editing it", () => {
+    const editor = createEditor();
+    const onSelect = vi.fn();
+    render(<EditorBubbleMenu editor={editor} askSelection={{ label: "Ask AI", onSelect }} />);
+    showToolbar(editor);
+    const buttons = screen.getAllByRole("button");
+    expect(buttons[0]).toHaveAccessibleName("Ask AI");
+    fireEvent.click(buttons[0]!);
+    expect(onSelect).toHaveBeenCalledWith("selected text");
+    expect(editor.commands.setTextSelection).toHaveBeenCalledWith(2);
+    expect(editor.chain().toggleBold).not.toHaveBeenCalled();
+  });
+
+  it("keeps Ask AI when the selection is inside a code block", () => {
+    formatState.codeBlock = true;
+    const editor = createEditor(true);
+    render(<EditorBubbleMenu editor={editor} askSelection={{ label: "Ask AI", onSelect: vi.fn() }} />);
+    showToolbar(editor);
+    expect(screen.getByRole("button", { name: "Ask AI" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Bold")).not.toBeInTheDocument();
+  });
+
   it("gives every icon-only formatting control an accessible name", () => {
     render(
       <EditorBubbleMenu editor={createEditor()} currentIssueId="issue-parent" />,

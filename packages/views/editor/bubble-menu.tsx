@@ -74,6 +74,7 @@ import {
   FilePlus,
   Loader2,
   MessageSquarePlus,
+  Sparkles,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -496,16 +497,20 @@ function EditorBubbleMenu({
   editor,
   currentIssueId,
   selectionAction,
+  askSelection,
 }: {
   editor: Editor;
   currentIssueId?: string;
   selectionAction?: { label: string; onSelect: () => boolean | void };
+  /** Leading action that sends the selected text somewhere else. The document stays unchanged. */
+  askSelection?: { label: string; onSelect: (text: string) => void };
 }) {
   const { t } = useT("editor");
   const [visible, setVisible] = useState(false);
   const [mode, setMode] = useState<"toolbar" | "link-edit">("toolbar");
   const floatingRef = useRef<HTMLDivElement>(null);
   const hasSelectionAction = !!selectionAction;
+  const hasAskSelection = !!askSelection;
 
   // Precise subscription to formatting state — only re-renders when these
   // values actually change, not on every transaction.
@@ -551,11 +556,11 @@ function EditorBubbleMenu({
   useEffect(() => {
     const onTransaction = () => {
       if (!editor.isInitialized) return;
-      setVisible(shouldShowBubbleMenu(editor, hasSelectionAction));
+      setVisible(shouldShowBubbleMenu(editor, hasSelectionAction || hasAskSelection));
     };
     editor.on("transaction", onTransaction);
     return () => { editor.off("transaction", onTransaction); };
-  }, [editor, hasSelectionAction]);
+  }, [editor, hasSelectionAction, hasAskSelection]);
 
   // Hide on blur — debounced to allow focus to settle (e.g. clicking menu)
   useEffect(() => {
@@ -639,7 +644,24 @@ function EditorBubbleMenu({
       ) : (
         <TooltipProvider delay={300}>
           <div className="bubble-menu">
+            {askSelection && (
+              <button
+                type="button"
+                className={`${toggleVariants({ size: "sm" })} w-auto gap-1 px-2`}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  const { from, to } = editor.state.selection;
+                  askSelection.onSelect(editor.state.doc.textBetween(from, to, "\n"));
+                  editor.commands.setTextSelection(to);
+                  setVisible(false);
+                }}
+              >
+                <Sparkles className="size-3.5" />
+                {askSelection.label}
+              </button>
+            )}
             {!fmt.codeBlock && <>
+            {askSelection && <Separator orientation="vertical" className="mx-0.5 h-5" />}
             <MarkButton editor={editor} mark="bold" icon={Bold} label={t(($) => $.bubble_menu.bold)} shortcut={createShortcutChord("B", { primary: true })} isActive={fmt.bold} />
             <MarkButton editor={editor} mark="italic" icon={Italic} label={t(($) => $.bubble_menu.italic)} shortcut={createShortcutChord("I", { primary: true })} isActive={fmt.italic} />
             <MarkButton editor={editor} mark="strike" icon={Strikethrough} label={t(($) => $.bubble_menu.strikethrough)} shortcut={createShortcutChord("S", { primary: true, shift: true })} isActive={fmt.strike} />

@@ -8,6 +8,7 @@ import type { GroupChat, GroupChatMember } from "@multica/core/types";
 import { cn } from "@multica/ui/lib/utils";
 import { useT } from "../i18n";
 import { ChatDetailsPanel } from "./chat-details-panel";
+import { useInsertDocExcerpt } from "./doc-excerpt-insert";
 import type { KnowledgeNoteTab } from "./knowledge-note-tabs";
 import { ColumnResizeHandle, useColumnWidth } from "./resizable-column";
 
@@ -47,6 +48,7 @@ export function ChatSidePanel({
   onOpenMember,
 }: ChatSidePanelProps) {
   const { t } = useT("im");
+  const insertExcerpt = useInsertDocExcerpt();
   const { getActorName } = useActorName();
   const { width, commit, options } = useColumnWidth("details", { defaultWidth: 320, min: 260, max: 480 });
   const active = notes.find((note) => note.path === activePath) ?? null;
@@ -90,7 +92,16 @@ export function ChatSidePanel({
               </div>
             }
           >
-            <KnowledgeDocument path={active.path} variant="page" />
+            <KnowledgeDocument
+              path={active.path}
+              variant="page"
+              onAskSelection={(text) => {
+                const passage = text.replaceAll("\u0000", "").trim();
+                if (!passage) return;
+                const name = active.name.trim() || active.path.split("/").pop() || active.path;
+                insertExcerpt(chat.id, { name, path: active.path, text: passage });
+              }}
+            />
           </Suspense>
         ) : (
           <ChatDetailsPanel wsId={wsId} chat={chat} userId={userId} variant="page" onOpenMember={onOpenMember} />

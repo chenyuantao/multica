@@ -87,6 +87,7 @@ Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
 });
 
 import mermaid from "mermaid";
+import { encodeDocExcerpt } from "../im/doc-excerpt";
 import { ReadonlyContent } from "./readonly-content";
 import { composeAnnotatedReply } from "@multica/core/drafts/reply-annotation";
 
@@ -849,5 +850,19 @@ describe("ReadonlyContent bare URL autolinking (MUL-4242)", () => {
       "https://example.com/x。",
     );
     expect(anchor?.textContent).toBe("看");
+  });
+});
+
+describe("ReadonlyContent document excerpts", () => {
+  it("renders an excerpt link as a quote chip instead of a link", () => {
+    const token = encodeDocExcerpt({
+      name: "本周周报",
+      path: "notes/weekly.md",
+      text: "周五发布",
+    });
+    const { container } = render(<ReadonlyContent content={`请改 ${token}`} />);
+
+    expect(container.querySelector("a")).toBeNull();
+    expect(container.querySelector("[data-doc-excerpt]")?.textContent).toBe("周五发布");
   });
 });

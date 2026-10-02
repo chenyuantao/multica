@@ -31,8 +31,23 @@ vi.mock("@multica/core/docs", () => ({
 }));
 
 vi.mock("../editor", () => ({
-  ContentEditor: ({ defaultValue, onUpdate }: { defaultValue: string; onUpdate: (md: string) => void }) => (
-    <textarea aria-label="body" defaultValue={defaultValue} onChange={(e) => onUpdate(e.target.value)} />
+  ContentEditor: ({
+    defaultValue,
+    onUpdate,
+    askSelection,
+  }: {
+    defaultValue: string;
+    onUpdate: (md: string) => void;
+    askSelection?: { label: string; onSelect: (text: string) => void };
+  }) => (
+    <>
+      <textarea aria-label="body" defaultValue={defaultValue} onChange={(e) => onUpdate(e.target.value)} />
+      {askSelection && (
+        <button type="button" onClick={() => askSelection.onSelect("周五发布")}>
+          {askSelection.label}
+        </button>
+      )}
+    </>
   ),
 }));
 
@@ -72,5 +87,15 @@ describe("KnowledgeDocument", () => {
     fireEvent.click(retry);
     await waitFor(() => expect(saveMutateAsync).toHaveBeenCalledTimes(2));
     expect(saveMutateAsync.mock.calls[1]?.[0]).toMatchObject({ content: "---\ntags: [q3]\n---\n\n# Changed\n" });
+  });
+
+  it("offers Ask AI for a selection only when the chat can take it", () => {
+    const onAskSelection = vi.fn();
+    const { rerender } = renderWithI18n(<KnowledgeDocument path={file.path} />);
+    expect(screen.queryByRole("button", { name: "Ask AI" })).toBeNull();
+
+    rerender(<KnowledgeDocument path={file.path} onAskSelection={onAskSelection} />);
+    fireEvent.click(screen.getByRole("button", { name: "Ask AI" }));
+    expect(onAskSelection).toHaveBeenCalledWith("周五发布");
   });
 });

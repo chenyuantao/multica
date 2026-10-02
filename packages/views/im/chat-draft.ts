@@ -2,6 +2,8 @@
 
 import { useSyncExternalStore } from "react";
 
+import { docExcerptPlain } from "./doc-excerpt";
+
 const STORAGE_KEY = "multica:im-chat-drafts";
 
 export type ChatDraftMap = Readonly<Record<string, string>>;
@@ -59,7 +61,7 @@ function publish(next: ChatDraftMap) {
 
 /** One-line preview. A whitespace-only draft stays stored but does not replace the last message. */
 export function chatDraftSummary(text: string): string {
-  return text.replace(/\s+/g, " ").trim();
+  return docExcerptPlain(text).replace(/\s+/g, " ").trim();
 }
 
 export function getChatDraftSnapshot(): ChatDraftMap {

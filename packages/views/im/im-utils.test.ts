@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { Comment, GroupChat, TaskMessagePayload } from "@multica/core/types";
+import { encodeDocExcerpt } from "./doc-excerpt";
 import {
   THINKING_MESSAGE,
   activeMentionQuery,
@@ -20,6 +21,11 @@ describe("plainTextPreview", () => {
     expect(plainTextPreview("**Hi** [@Dev](mention://agent/a-1), see [docs](https://x.test)\n\n> done")).toBe(
       "Hi @Dev, see docs done",
     );
+  });
+
+  it("shows an embedded passage instead of its link", () => {
+    const token = encodeDocExcerpt({ name: "本周周报", path: "notes/weekly.md", text: "周五发布" });
+    expect(plainTextPreview(`请改 ${token}`)).toBe("请改 周五发布");
   });
 });
 

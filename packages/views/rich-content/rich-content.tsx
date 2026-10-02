@@ -65,6 +65,8 @@ import {
   type WorkspaceEntityRef,
 } from "../editor/utils/link-handler";
 import { preprocessMarkdown } from "../editor/utils/preprocess";
+import { decodeDocExcerptPayload } from "../im/doc-excerpt";
+import { DocExcerptChip } from "../im/doc-excerpt-chip";
 import { highlightToHtml } from "../editor/utils/highlight-markdown";
 import { AttachmentDownloadProvider } from "../editor/attachment-download-context";
 import { Attachment as AttachmentRenderer } from "../editor/attachment";
@@ -214,6 +216,12 @@ function RichLink({ href, children }: { href?: string; children?: ReactNode }) {
   // (web), modified clicks are left to the browser — the only way to get a
   // real background tab.
   const desktopTabs = !!useOptionalNavigation()?.openInNewTab;
+
+  if (href?.startsWith("doc-excerpt://")) {
+    const excerpt = decodeDocExcerptPayload(href.slice("doc-excerpt://".length));
+    if (excerpt) return <DocExcerptChip excerpt={excerpt} />;
+    return <span>{children}</span>;
+  }
 
   if (href?.startsWith("slash://skill/")) {
     return <span className="slash-command">{children}</span>;

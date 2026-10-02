@@ -155,7 +155,7 @@ func FilterForAgent(ctx context.Context, ev Evaluator, agent Card, excerpts []Ex
 }
 
 func filterContent(excerpt Excerpt) string {
-	text := strings.TrimSpace(excerpt.Text)
+	text := strings.TrimSpace(readableExcerpts(excerpt.Text))
 	if excerpt.Focus != nil {
 		text = "关于文档 " + strings.TrimSpace(excerpt.Focus.Name) + "（" + strings.TrimSpace(excerpt.Focus.Path) + "）\n" + text
 	}
