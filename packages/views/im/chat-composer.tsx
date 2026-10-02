@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowUp, AtSign, FileText, Image as ImageIcon, Loader2, X } from "lucide-react";
 import type { Attachment } from "@multica/core/types";
 import { cn } from "@multica/ui/lib/utils";
@@ -10,6 +10,7 @@ import { ActorAvatar } from "../common/actor-avatar";
 import { FileDropOverlay, useEditorUpload, useFileDropZone } from "../editor";
 import { attachmentMarkdown } from "../editor/use-coordinated-uploads";
 import { useT } from "../i18n";
+import { getChatDraft, setChatDraft } from "./chat-draft";
 import { activeMentionQuery, resolveComposerMentions, type ComposerMention } from "./im-utils";
 
 interface ChatComposerProps {
@@ -57,12 +58,19 @@ export function ChatComposer({ chatId, chatTitle, candidates, onSend, quote, onC
   const { uploadWithToast } = useEditorUpload();
   const [files, setFiles] = useState<ComposerFile[]>([]);
   const uploading = files.some((f) => !f.attachment);
-  const [text, setText] = useState("");
+  const [text, setTextState] = useState("");
   const [caret, setCaret] = useState(0);
   const [picked, setPicked] = useState<ComposerMention[]>([]);
   const [highlight, setHighlight] = useState(0);
   const [dismissedAt, setDismissedAt] = useState<number | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
+  useLayoutEffect(() => {
+    setTextState(getChatDraft(chatId));
+  }, [chatId]);
+  const setText = (next: string) => {
+    setTextState(next);
+    setChatDraft(chatId, next);
+  };
 
   const mention = activeMentionQuery(text, caret);
   const suggestions = useMemo(() => {

@@ -55,6 +55,32 @@ func TestSelectTranscriptPrefersLatestRequestAndTriggersOverRecent(t *testing.T)
 	}
 }
 
+func TestSelectTranscriptKeepsChatHistoryWholeAndUntriggered(t *testing.T) {
+	record := ChatHistoryHeading + "\nAda (t): " + strings.Repeat("记", 8000)
+	turns := []Turn{
+		{ID: "card", Author: "Ada", Role: "member", Text: record, History: true},
+		turn("ask", "member", "what happened?"),
+	}
+	got := SelectTranscript(turns, []string{"card", "ask"}, 500, 6000)
+	if strings.Join(excerptIDs(got), ",") != "card,ask" {
+		t.Fatalf("got %s", strings.Join(excerptIDs(got), ","))
+	}
+	card := got.Excerpts[0]
+	if card.Truncated || card.Trigger || card.Text != record {
+		t.Fatalf("history card was cut or marked as the trigger: truncated=%v trigger=%v runes=%d", card.Truncated, card.Trigger, utf8.RuneCountInString(card.Text))
+	}
+	if !got.Excerpts[1].Trigger {
+		t.Fatal("the question should stay the trigger")
+	}
+	out := got.Render("issue-1", "")
+	if !strings.Contains(out, record) || strings.Contains(out, `id="card" time="" sender="Ada" role="member" trigger="true"`) {
+		t.Fatalf("transcript did not keep the record as context:\n%s", out)
+	}
+	if !strings.Contains(out, `trigger="true"`) || !strings.Contains(out, "forwarded record") {
+		t.Fatalf("question trigger or history note missing:\n%s", out)
+	}
+}
+
 func TestSelectTranscriptCapsOneMessage(t *testing.T) {
 	turns := []Turn{turn("m1", "member", "earlier question"), turn("a1", "agent", strings.Repeat("长", 10000))}
 	got := SelectTranscript(turns, nil, 24000, 6000)

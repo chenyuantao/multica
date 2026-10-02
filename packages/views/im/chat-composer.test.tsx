@@ -41,7 +41,10 @@ function pickFile(file: File) {
 }
 
 describe("ChatComposer attachments", () => {
-  beforeEach(() => uploadFile.mockReset());
+  beforeEach(() => {
+    localStorage.clear();
+    uploadFile.mockReset();
+  });
 
   it("sends an attachment on its own, bound to the chat", async () => {
     uploadFile.mockResolvedValue(attachment("att-1", "shot.png", "image/png"));
@@ -87,7 +90,42 @@ describe("ChatComposer attachments", () => {
   });
 });
 
+describe("ChatComposer drafts", () => {
+  beforeEach(() => localStorage.clear());
+
+  it("restores unsent text for the same chat and leaves other chats alone", () => {
+    const { rerender } = renderWithI18n(
+      <ChatComposer chatId="chat-1" chatTitle="Launch room" candidates={[]} onSend={vi.fn()} />,
+    );
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "hold this" } });
+
+    rerender(<ChatComposer chatId="chat-2" chatTitle="Other room" candidates={[]} onSend={vi.fn()} />);
+    expect(screen.getByRole("textbox")).toHaveValue("");
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "other" } });
+
+    rerender(<ChatComposer chatId="chat-1" chatTitle="Launch room" candidates={[]} onSend={vi.fn()} />);
+    expect(screen.getByRole("textbox")).toHaveValue("hold this");
+
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "" } });
+    rerender(<ChatComposer chatId="chat-2" chatTitle="Other room" candidates={[]} onSend={vi.fn()} />);
+    rerender(<ChatComposer chatId="chat-1" chatTitle="Launch room" candidates={[]} onSend={vi.fn()} />);
+    expect(screen.getByRole("textbox")).toHaveValue("");
+  });
+
+  it("clears the stored draft after the message is sent", () => {
+    const onSend = renderComposer();
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "please review" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    expect(onSend).toHaveBeenCalledWith("please review", []);
+
+    renderWithI18n(<ChatComposer chatId="chat-1" chatTitle="Launch room" candidates={[]} onSend={vi.fn()} />);
+    expect(screen.getAllByRole("textbox").at(-1)).toHaveValue("");
+  });
+});
+
 describe("ChatComposer quote", () => {
+  beforeEach(() => localStorage.clear());
+
   it("shows the quote on one line and cancels it with the button or Escape", () => {
     const onCancelQuote = vi.fn();
     renderWithI18n(

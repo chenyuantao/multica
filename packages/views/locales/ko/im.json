@@ -7,6 +7,7 @@
     "load_failed": "채팅을 불러오지 못했습니다",
     "no_messages": "아직 메시지가 없습니다",
     "preview": "{{name}}: {{text}}",
+    "draft": "[임시저장]",
     "chats": "그룹 채팅",
     "settings": "설정",
     "clear_search": "검색 지우기",
@@ -132,7 +133,10 @@
     "open_chat": "채팅 열기",
     "back": "채팅으로 돌아가기",
     "back_to_info": "채팅 상세로 돌아가기",
-    "back_to_settings": "채팅 설정으로 돌아가기"
+    "back_to_settings": "채팅 설정으로 돌아가기",
+    "info": "상세",
+    "tabs": "상세와 노트",
+    "close_note": "{{name}} 닫기"
   },
   "new_chat": {
     "title": "새 그룹 채팅",

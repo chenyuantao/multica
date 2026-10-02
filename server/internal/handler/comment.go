@@ -1918,7 +1918,7 @@ func (h *Handler) CreateComment(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if h.absorbGroupChatThinking(w, r, issue, authoringTask, req.Content, attachmentIDs, suppressAgentIDs, steerTaskIDs, authorType, authorID) {
+	if h.releaseGroupChatThinking(w, r, issue, authoringTask) {
 		return
 	}
 
@@ -2009,6 +2009,9 @@ func (h *Handler) CreateComment(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to create comment: "+err.Error())
 		return
 	}
+	// The reply is saved. Close the thinking bubble so task completion does
+	// not post the run output as a second message.
+	h.closeOpenGroupChatPlaceholder(r.Context(), issue, authoringTask)
 	comment := created.Comment()
 	if groupChat && authorType == "member" {
 		h.saveAskAIContext(r, comment, req.AskAI)

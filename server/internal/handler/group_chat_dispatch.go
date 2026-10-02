@@ -59,10 +59,11 @@ func (h *Handler) rejectAmbiguousGroupChatMention(w http.ResponseWriter, r *http
 // are planned only for parallel versus ordered delivery. A message that names
 // nobody is planned against the full history. When Jev gives no usable
 // answer, named agents speak in the order they were named and anything else
-// goes to the group's first agent. A message that is only attachments starts
-// nobody; it is read as context with the next message.
+// goes to the group's first agent. A message that is only attachments, or
+// only a forwarded chat record, starts nobody; it is read as context with
+// the next message.
 func (h *Handler) dispatchGroupChatReply(ctx context.Context, issue db.Issue, comment db.Comment) []CommentTriggerOutcome {
-	if h.isAttachmentOnlyComment(ctx, issue, comment) {
+	if h.isAttachmentOnlyComment(ctx, issue, comment) || groupchat.IsChatHistoryCard(comment.Content) {
 		return nil
 	}
 	roster, ok := h.groupChatRosterIfChat(ctx, issue)
@@ -353,7 +354,13 @@ func (h *Handler) groupChatTurns(ctx context.Context, issue db.Issue, roster []g
 		if c.CreatedAt.Valid {
 			when = c.CreatedAt.Time.UTC().Format(time.RFC3339)
 		}
-		return groupchat.Turn{ID: uuidToString(c.ID), Author: name, AuthorID: uuidToString(c.AuthorID), Role: c.AuthorType, Text: c.Content, Time: when}
+		text := c.Content
+		history := false
+		if expanded, ok := groupchat.ExpandChatHistory(c.Content); ok {
+			text = expanded
+			history = true
+		}
+		return groupchat.Turn{ID: uuidToString(c.ID), Author: name, AuthorID: uuidToString(c.AuthorID), Role: c.AuthorType, Text: text, Time: when, History: history}
 	}
 	byCommentID := make(map[string]db.Comment, len(comments))
 	for _, c := range comments {
@@ -548,9 +555,11 @@ func participantsOf(roster []groupChatPerson) []groupchat.Participant {
 	return out
 }
 
-// absorbGroupChatThinking writes the agent's finished reply into the bubble
-// that already says it is thinking. A second comment is not created.
-func (h *Handler) absorbGroupChatThinking(w http.ResponseWriter, r *http.Request, issue db.Issue, task *db.AgentTaskQueue, content string, attachmentIDs, suppressAgentIDs, steerTaskIDs []pgtype.UUID, authorType, authorID string) bool {
+// releaseGroupChatThinking removes the open "思考中..." bubble so the caller's
+// new comment is the reply. Rewriting the bubble keeps the original timestamp,
+// and unread counts move when a comment is created. True means this request
+// already failed and the response is written.
+func (h *Handler) releaseGroupChatThinking(w http.ResponseWriter, r *http.Request, issue db.Issue, task *db.AgentTaskQueue) bool {
 	if task == nil || !task.IssueID.Valid || uuidToString(task.IssueID) != uuidToString(issue.ID) {
 		return false
 	}
@@ -565,81 +574,37 @@ func (h *Handler) absorbGroupChatThinking(w http.ResponseWriter, r *http.Request
 	existing, err := h.Queries.GetComment(r.Context(), commentID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			h.TaskService.CloseGroupChatPlaceholder(r.Context(), task.ID, placeholder.CommentID)
 			return false
 		}
 		slog.Warn("group chat thinking comment could not be loaded", append(logger.RequestAttrs(r), "error", err, "comment_id", placeholder.CommentID)...)
-		writeError(w, http.StatusInternalServerError, "failed to update comment")
+		writeError(w, http.StatusInternalServerError, "failed to create comment")
 		return true
 	}
-	if existing.DeletedAt.Valid || uuidToString(existing.IssueID) != uuidToString(issue.ID) || uuidToString(existing.AuthorID) != uuidToString(task.AgentID) {
-		h.TaskService.CloseGroupChatPlaceholder(r.Context(), task.ID, placeholder.CommentID)
+	if existing.DeletedAt.Valid || uuidToString(existing.IssueID) != uuidToString(issue.ID) || uuidToString(existing.AuthorID) != uuidToString(task.AgentID) || existing.Content != groupchat.ThinkingMessage {
 		return false
 	}
-	updated, err := wakeupWrite(h, r, func(q *db.Queries) (db.UpdateCommentRow, error) {
-		return q.UpdateComment(r.Context(), db.UpdateCommentParams{
-			ID:                 existing.ID,
-			Content:            content,
-			SourceTaskID:       task.ID,
-			SuppressedAgentIds: suppressAgentIDs,
-		})
-	})
-	if err != nil {
-		slog.Warn("group chat reply did not replace the thinking comment", append(logger.RequestAttrs(r), "error", err, "comment_id", placeholder.CommentID)...)
-		writeError(w, http.StatusInternalServerError, "failed to update comment")
-		return true
+	h.removeGroupChatThinking(r.Context(), issue, task.AgentID, placeholder.CommentID)
+	after, err := h.Queries.GetComment(r.Context(), commentID)
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && (after.DeletedAt.Valid || after.Content != groupchat.ThinkingMessage)) {
+		return false
 	}
-	h.TaskService.CloseGroupChatPlaceholder(r.Context(), task.ID, placeholder.CommentID)
-	comment := updated.Comment()
-	if len(attachmentIDs) > 0 {
-		h.linkGroupChatReplyAttachments(r, issue, comment.ID, attachmentIDs)
-	}
-	groupedAtt := h.groupAttachments(r, []pgtype.UUID{comment.ID})
-	resp := commentToResponse(comment, nil, groupedAtt[uuidToString(comment.ID)])
-	resp.IssueRevision = updated.IssueRevision
-	h.publish(protocol.EventCommentUpdated, uuidToString(issue.WorkspaceID), authorType, authorID, map[string]any{
-		"comment":              resp,
-		"issue_revision":       updated.IssueRevision,
-		"issue_title":          issue.Title,
-		"issue_status":         issue.Status,
-		groupchat.PayloadReply: true,
-	})
-	var parentComment *db.Comment
-	if comment.ParentID.Valid {
-		if parent, err := h.Queries.GetComment(r.Context(), comment.ParentID); err == nil {
-			parentComment = &parent
-		}
-	}
-	originatorUserID := h.invokeOriginatorFromRequest(r, authorType, authorID)
-	resp.TriggerOutcomes = h.triggerTasksForComment(r.Context(), issue, comment, parentComment, authorType, authorID, originatorUserID, suppressAgentIDs, steerTaskIDs)
-	writeJSON(w, http.StatusCreated, resp)
+	slog.Warn("group chat thinking comment was not removed", append(logger.RequestAttrs(r), "error", err, "comment_id", placeholder.CommentID)...)
+	writeError(w, http.StatusInternalServerError, "failed to create comment")
 	return true
 }
 
-func (h *Handler) linkGroupChatReplyAttachments(r *http.Request, issue db.Issue, commentID pgtype.UUID, attachmentIDs []pgtype.UUID) {
-	tx, err := h.beginWakeupWrite(r.Context())
-	if err != nil {
-		slog.Warn("group chat reply attachments were not linked", "error", err)
+// closeOpenGroupChatPlaceholder marks the thinking bubble filled once the
+// reply comment has committed. A still-open bubble would be filled again from
+// the run output.
+func (h *Handler) closeOpenGroupChatPlaceholder(ctx context.Context, issue db.Issue, task *db.AgentTaskQueue) {
+	if task == nil || !task.IssueID.Valid || uuidToString(task.IssueID) != uuidToString(issue.ID) {
 		return
 	}
-	defer tx.Rollback(r.Context())
-	qtx := h.Queries.WithTx(tx)
-	missing, err := lockCommentAttachments(r.Context(), qtx, issue.WorkspaceID, issue.ID, attachmentIDs)
-	if err != nil || missing.Valid {
-		slog.Warn("group chat reply attachments were not linked", "error", err, "missing", missing.Valid)
+	placeholder, ok := groupchat.OpenPlaceholder(task.Context)
+	if !ok {
 		return
 	}
-	if err := qtx.LinkAttachmentsToComment(r.Context(), db.LinkAttachmentsToCommentParams{
-		CommentID: commentID,
-		IssueID:   issue.ID,
-		Column3:   attachmentIDs,
-	}); err != nil {
-		slog.Warn("group chat reply attachments were not linked", "error", err)
-		return
-	}
-	if err := tx.Commit(r.Context()); err != nil {
-		slog.Warn("group chat reply attachments were not linked", "error", err)
-	}
+	h.TaskService.CloseGroupChatPlaceholder(ctx, task.ID, placeholder.CommentID)
 }
 
 func trimRunes(s string, n int) string {

@@ -960,8 +960,9 @@ func registerNotificationListeners(bus *events.Bus, queries *db.Queries) {
 		if !ok {
 			return
 		}
-		// A group chat thinking bubble is not a message yet; the reply that
-		// fills it is notified on comment:updated below.
+		// A group chat thinking bubble is not a message yet. The reply is a
+		// new comment, notified on this event. A fill that still lands in
+		// the bubble is notified on comment:updated below.
 		if placeholder, _ := payload[groupchat.PayloadPlaceholder].(bool); placeholder {
 			return
 		}

@@ -7,6 +7,7 @@
     "load_failed": "群聊加载失败",
     "no_messages": "还没有消息",
     "preview": "{{name}}：{{text}}",
+    "draft": "[草稿]",
     "chats": "群聊",
     "settings": "设置",
     "clear_search": "清除搜索",
@@ -132,7 +133,10 @@
     "open_chat": "进入会话",
     "back": "返回群聊",
     "back_to_info": "返回群聊详情",
-    "back_to_settings": "返回群聊设置"
+    "back_to_settings": "返回群聊设置",
+    "info": "详情",
+    "tabs": "详情和笔记",
+    "close_note": "关闭 {{name}}"
   },
   "new_chat": {
     "title": "新建群聊",

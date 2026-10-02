@@ -332,6 +332,8 @@ describe("ChatThread thinking bubble", () => {
     renderThinking();
     const stop = screen.getByRole("button", { name: "Stop" });
     expect(stop.className).toContain("text-destructive");
+    expect(stop.className).toContain("hover:text-destructive");
+    expect(stop.className).not.toContain("hover:text-foreground");
     expect(stop.querySelector("svg")).toHaveAttribute("fill", "currentColor");
     fireEvent.click(stop);
     expect(cancelRun.mutate).toHaveBeenCalledWith("task-1", expect.anything());
@@ -379,6 +381,38 @@ describe("ChatThread message menu", () => {
     fireEvent.contextMenu(screen.getByText(text));
     return screen.findByRole("menu");
   }
+
+  function menuSequence(menu: HTMLElement) {
+    return [...menu.querySelectorAll("[role='menuitem'], [data-slot='context-menu-separator']")].map((node) =>
+      node.getAttribute("data-slot") === "context-menu-separator" ? "----" : node.textContent?.trim(),
+    );
+  }
+
+  it("orders actions as ask, copy, then forward, select, quote, then delete", async () => {
+    renderWithI18n(
+      <ChatThread wsId="ws-1" chat={chat} userId="user-1" panelOpen={false} onTogglePanel={() => {}} onAskAI={() => {}} />,
+    );
+    expect(menuSequence(await openMenu("sounds good"))).toEqual([
+      "Ask AI",
+      "Copy",
+      "----",
+      "Forward",
+      "Select",
+      "Quote",
+      "----",
+      "Delete",
+    ]);
+
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+    expect(menuSequence(await openMenu("Ship **v2** on Friday"))).toEqual([
+      "Ask AI",
+      "Copy",
+      "----",
+      "Forward",
+      "Select",
+      "Quote",
+    ]);
+  });
 
   it("copies the message source", async () => {
     renderThread();
@@ -637,7 +671,10 @@ describe("ChatThread forward and multi-select", () => {
       ),
     ];
     renderThread();
-    expect(screen.getByRole("button", { name: /Chat History for Ada/ })).toHaveTextContent("[Image]");
+    const card = screen.getByRole("button", { name: /Chat History for Ada/ });
+    expect(card).toHaveTextContent("[Image]");
+    expect(card.className).toContain("h-[156px]");
+    expect(card.className).toContain("w-[256px]");
     expect(screen.queryByText(/cdn.test/)).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: /Chat History for Ada/ }));

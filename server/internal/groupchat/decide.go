@@ -77,6 +77,10 @@ type Turn struct {
 	// Attachment means the message carries a file. Jev cannot judge that
 	// file, so the message is never hidden.
 	Attachment bool
+	// History means Text is a forwarded chat record expanded in full. It is
+	// context for a later message, not a request this run answers, and it is
+	// never hidden.
+	History bool
 	// Ref is the message this one quotes, carried in full.
 	Ref *Turn
 }
@@ -266,15 +270,17 @@ func ParseDispatch(raw []byte) (Dispatch, bool) {
 }
 
 // ThinkingMessage is the bubble posted the moment an agent is chosen to reply.
-// The finished text replaces it in place.
+// The finished text is a new message; the bubble is removed, so the reply has
+// its own timestamp and can mark the chat unread.
 const ThinkingMessage = "思考中..."
 
-// UnfinishedMessage replaces ThinkingMessage when the run ends without a reply.
+// UnfinishedMessage is the new message posted when the run ends without a reply.
 const UnfinishedMessage = "这次没有完成回复。"
 
 // Event payload flags. The thinking bubble is not a message yet, so its
-// comment:created must not notify anyone; the comment:updated that fills it
-// is the moment the reply lands and is notified like a new comment.
+// comment:created must not notify anyone. The reply is a later comment:created
+// without this flag. PayloadReply remains for a fill that still lands in the
+// bubble, which is notified like a new comment.
 const (
 	PayloadPlaceholder = "group_chat_placeholder"
 	PayloadReply       = "group_chat_reply"

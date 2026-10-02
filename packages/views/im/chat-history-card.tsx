@@ -38,24 +38,20 @@ export function ChatHistoryCard({ content, interactive = true }: { content: stri
     : names.length === 2
       ? t(($) => $.thread.history_title_pair, { first, second })
       : t(($) => $.thread.history_title_rest, { first });
-  const lines = historyPreviewLines(record.messages, labels);
+  const lines = historyPreviewLines(record.messages, labels, 12);
   const footer = t(($) => $.thread.history_footer);
+  const preview = lines.map((line) => t(($) => $.thread.quote_line, { name: line.name, text: line.text })).join("\n");
   const card = (
     <>
-      <span className="block truncate text-body font-medium text-foreground">{title}</span>
-      {lines.length > 0 && (
-        <span className="mt-1 block space-y-0.5">
-          {lines.map((line, index) => (
-            <span key={index} className="line-clamp-2 block text-caption text-muted-foreground">
-              {t(($) => $.thread.quote_line, { name: line.name, text: line.text })}
-            </span>
-          ))}
-        </span>
+      <span className="block shrink-0 truncate text-body font-medium text-foreground">{title}</span>
+      {preview && (
+        <span className="mt-1 line-clamp-5 min-h-0 text-caption break-all whitespace-pre-line text-muted-foreground">{preview}</span>
       )}
-      <span className="mt-2 block text-caption text-foreground/80">{footer}</span>
+      <span className="mt-auto block shrink-0 pt-1.5 text-caption text-foreground/80">{footer}</span>
     </>
   );
-  const frame = "block w-64 max-w-full rounded-md bg-muted px-3 py-2.5 text-left";
+  const frame =
+    "box-border flex h-[156px] w-[256px] shrink-0 flex-col overflow-hidden rounded-md bg-muted px-3 py-2.5 text-left";
 
   return (
     <>

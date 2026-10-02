@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type CSSProperties } from "react";
+import { useCallback, useMemo, useState, type CSSProperties } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { MessagesSquare, UsersRound } from "lucide-react";
 import { toast } from "sonner";
@@ -18,6 +18,7 @@ import { useT } from "../i18n";
 import { DragStrip } from "../platform";
 import { chatAskPage, contactAskPage, visibleMessageIds } from "./ask-ai-context";
 import { ChatDetailsPanel } from "./chat-details-panel";
+import { ChatSidePanel } from "./chat-side-panel";
 import { ChatSidebar } from "./chat-sidebar";
 import { ChatThread } from "./chat-thread";
 import { ContactCard } from "./contact-card";
@@ -27,6 +28,14 @@ import { ImSearchDialog } from "./im-search-dialog";
 import { MobileContactDetail, MobileLevel, MobileTabScreen, parseContactParam } from "./mobile-shell";
 import { chatDisplayTitle, sortChats } from "./im-utils";
 import { NewChatDialog } from "./new-chat-dialog";
+import {
+  closeKnowledgeNote,
+  EMPTY_KNOWLEDGE_NOTE_TABS,
+  KnowledgeNotesProvider,
+  openKnowledgeNote,
+  type KnowledgeNoteTab,
+  type KnowledgeNoteTabs,
+} from "./knowledge-note-tabs";
 import { useAskAILauncher } from "./use-ask-ai-launcher";
 import { entryKey, useChatDirectory, type DirectoryEntry } from "./use-chat-directory";
 
@@ -52,6 +61,7 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
   const { getActorName } = useActorName();
   const { data = EMPTY_CHATS, isLoading, isError } = useQuery(groupChatListOptions(wsId));
   const [panelOpen, setPanelOpen] = useState(true);
+  const [noteTabs, setNoteTabs] = useState<KnowledgeNoteTabs>(EMPTY_KNOWLEDGE_NOTE_TABS);
   const [newChatOpen, setNewChatOpen] = useState(false);
   const contactTarget = parseContactParam(navigation.searchParams.get("contact"));
   const directory = useChatDirectory(wsId);
@@ -91,6 +101,18 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
     return chatAskPage(selected, chatDisplayTitle(selected, userId, getActorName), messages, visibleMessageIds(), getActorName);
   };
   const launcher = useAskAILauncher(askPage);
+  const openNote = useCallback(
+    (note: KnowledgeNoteTab) => {
+      setNoteTabs((state) => openKnowledgeNote(state, note));
+      setPanelOpen(true);
+      if (!isMobile || view !== "chats") return;
+      const chatId = navigation.searchParams.get("chat");
+      if (chatId && navigation.searchParams.get("view") !== "settings") {
+        navigation.push(paths.imChatSettings(chatId));
+      }
+    },
+    [isMobile, navigation, paths, view],
+  );
 
   const rail = <ImRail active={view} readingChatId={view === "chats" ? selected?.id : null} />;
   const contactList = (className?: string) => (
@@ -171,10 +193,10 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
         contactLevel = <MobileTabScreen active="contacts">{contactList("min-w-0 flex-1 border-r-0")}</MobileTabScreen>;
       }
       return (
-        <>
+        <KnowledgeNotesProvider onOpen={openNote}>
           {contactLevel}
           {dialogs}
-        </>
+        </KnowledgeNotesProvider>
       );
     }
 
@@ -218,11 +240,16 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
     } else if (settingsOpen) {
       level = (
         <MobileLevel title={t(($) => $.thread.settings)} backHref={paths.imChat(requested.id)} backLabel={t(($) => $.panel.back)}>
-          <ChatDetailsPanel
+          <ChatSidePanel
             wsId={wsId}
             chat={requested}
             userId={userId}
-            variant="page"
+            notes={noteTabs.notes}
+            activePath={noteTabs.activePath}
+            onSelectDetails={() => setNoteTabs((state) => ({ ...state, activePath: null }))}
+            onSelectNote={(path) => setNoteTabs((state) => ({ ...state, activePath: path }))}
+            onCloseNote={(path) => setNoteTabs((state) => closeKnowledgeNote(state, path))}
+            chrome="page"
             onOpenMember={(m) => navigation.push(paths.imChatSettingsContact(requested.id, m.member_type, m.member_id))}
           />
         </MobileLevel>
@@ -252,99 +279,112 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
     }
 
     return (
-      <>
+      <KnowledgeNotesProvider onOpen={openNote}>
         {level}
         {dialogs}
-      </>
+      </KnowledgeNotesProvider>
     );
   }
 
   return (
-    <div className="flex h-svh w-full overflow-hidden bg-background text-foreground">
-      {rail}
-      {view === "contacts" ? (
-        contactList()
-      ) : (
-        <ChatSidebar
-          chats={chats}
-          isLoading={isLoading}
-          isError={isError}
-          selectedId={selected?.id ?? null}
-          userId={userId}
-          onSelect={select}
-          onNewChat={() => setNewChatOpen(true)}
-          onSetPinned={setChatPinned}
-        />
-      )}
-
-      <div className="relative flex min-w-0 flex-1">
+    <KnowledgeNotesProvider onOpen={openNote}>
+      <div className="flex h-svh w-full overflow-hidden bg-background text-foreground">
+        {rail}
         {view === "contacts" ? (
-          contact && !memberChat ? (
-            <ContactCard
-              key={contactKey}
-              wsId={wsId}
-              entry={contact}
-              chats={chats}
-              userId={userId}
-              onOpenChat={openMemberChat}
-              onAskAI={() => launcher.show()}
-            />
-          ) : memberChat ? (
-            <div className="flex min-w-0 flex-1 flex-col">
-              <header className="relative flex h-14 shrink-0 items-center justify-end border-b px-5">
-                <div className="absolute inset-0">
-                  <DragStrip />
+          contactList()
+        ) : (
+          <ChatSidebar
+            chats={chats}
+            isLoading={isLoading}
+            isError={isError}
+            selectedId={selected?.id ?? null}
+            userId={userId}
+            onSelect={select}
+            onNewChat={() => setNewChatOpen(true)}
+            onSetPinned={setChatPinned}
+          />
+        )}
+
+        <div className="relative flex min-w-0 flex-1">
+          {view === "contacts" ? (
+            contact && !memberChat ? (
+              <ContactCard
+                key={contactKey}
+                wsId={wsId}
+                entry={contact}
+                chats={chats}
+                userId={userId}
+                onOpenChat={openMemberChat}
+                onAskAI={() => launcher.show()}
+              />
+            ) : memberChat ? (
+              <div className="flex min-w-0 flex-1 flex-col">
+                <header className="relative flex h-14 shrink-0 items-center justify-end border-b px-5">
+                  <div className="absolute inset-0">
+                    <DragStrip />
+                  </div>
+                  <Button
+                    nativeButton={false}
+                    className="relative"
+                    style={{ WebkitAppRegion: "no-drag" } as CSSProperties}
+                    render={<AppLink href={paths.imChat(memberChat.id)} />}
+                  >
+                    {t(($) => $.panel.open_chat)}
+                  </Button>
+                </header>
+                <div className="mx-auto flex min-h-0 w-full max-w-lg flex-1 flex-col">
+                  <ChatDetailsPanel wsId={wsId} chat={memberChat} userId={userId} variant="page" />
                 </div>
-                <Button
-                  nativeButton={false}
-                  className="relative"
-                  style={{ WebkitAppRegion: "no-drag" } as CSSProperties}
-                  render={<AppLink href={paths.imChat(memberChat.id)} />}
-                >
-                  {t(($) => $.panel.open_chat)}
-                </Button>
-              </header>
-              <div className="mx-auto flex min-h-0 w-full max-w-lg flex-1 flex-col">
-                <ChatDetailsPanel wsId={wsId} chat={memberChat} userId={userId} variant="page" />
               </div>
-            </div>
+            ) : (
+              <div className="flex flex-1 flex-col">
+                <DragStrip />
+                <div className="flex flex-1 flex-col items-center justify-center gap-3 text-muted-foreground">
+                  <UsersRound className="size-8" />
+                  <p className="text-body">{t(($) => $.contacts.select)}</p>
+                </div>
+              </div>
+            )
+          ) : selected ? (
+            <>
+              <ChatThread
+                key={selected.id}
+                wsId={wsId}
+                chat={selected}
+                userId={userId}
+                panelOpen={panelOpen}
+                onTogglePanel={() => setPanelOpen((v) => !v)}
+                onAskAI={launcher.show}
+              />
+              {panelOpen && (
+                <ChatSidePanel
+                  wsId={wsId}
+                  chat={selected}
+                  userId={userId}
+                  notes={noteTabs.notes}
+                  activePath={noteTabs.activePath}
+                  onSelectDetails={() => setNoteTabs((state) => ({ ...state, activePath: null }))}
+                  onSelectNote={(path) => setNoteTabs((state) => ({ ...state, activePath: path }))}
+                  onCloseNote={(path) => setNoteTabs((state) => closeKnowledgeNote(state, path))}
+                />
+              )}
+            </>
           ) : (
             <div className="flex flex-1 flex-col">
               <DragStrip />
               <div className="flex flex-1 flex-col items-center justify-center gap-3 text-muted-foreground">
-                <UsersRound className="size-8" />
-                <p className="text-body">{t(($) => $.contacts.select)}</p>
+                <MessagesSquare className="size-8" />
+                <p className="text-body">{isLoading ? "" : t(($) => $.thread.select)}</p>
+                {!isLoading && chats.length === 0 && (
+                  <Button onClick={() => setNewChatOpen(true)}>{t(($) => $.sidebar.new_chat)}</Button>
+                )}
               </div>
             </div>
-          )
-        ) : selected ? (
-          <>
-            <ChatThread
-              key={selected.id}
-              wsId={wsId}
-              chat={selected}
-              userId={userId}
-              panelOpen={panelOpen}
-              onTogglePanel={() => setPanelOpen((v) => !v)}
-              onAskAI={launcher.show}
-            />
-            {panelOpen && <ChatDetailsPanel wsId={wsId} chat={selected} userId={userId} />}
-          </>
-        ) : (
-          <div className="flex flex-1 flex-col">
-            <DragStrip />
-            <div className="flex flex-1 flex-col items-center justify-center gap-3 text-muted-foreground">
-              <MessagesSquare className="size-8" />
-              <p className="text-body">{isLoading ? "" : t(($) => $.thread.select)}</p>
-              {!isLoading && chats.length === 0 && (
-                <Button onClick={() => setNewChatOpen(true)}>{t(($) => $.sidebar.new_chat)}</Button>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
 
-      {dialogs}
-    </div>
+        {dialogs}
+      </div>
+    </KnowledgeNotesProvider>
   );
 }

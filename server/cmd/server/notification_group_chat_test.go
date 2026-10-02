@@ -15,10 +15,11 @@ import (
 	"github.com/multica-ai/multica/server/pkg/protocol"
 )
 
-// An agent's group chat reply is posted as a thinking bubble and later filled
-// in place. The bubble must not notify, and the fill must, or a chat whose
-// only other speaker is an agent (a direct chat with it) never shows unread:
-// the bubble's notification is read while the user waits in the chat.
+// A group chat thinking bubble is not a message yet, so it must not notify.
+// The finished reply is a new comment and notifies through comment:created.
+// A fill that still lands in the bubble notifies on comment:updated, or a
+// chat whose only other speaker is an agent never shows unread: the bubble's
+// notification is read while the user waits in the chat.
 func TestNotification_GroupChatReplyNotifiesWhenFilled(t *testing.T) {
 	ctx := context.Background()
 	queries := db.New(testPool)

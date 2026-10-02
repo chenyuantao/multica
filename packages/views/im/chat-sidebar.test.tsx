@@ -3,7 +3,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, screen } from "@testing-library/react";
 import type { GroupChat } from "@multica/core/types";
+import type { Comment } from "@multica/core/types";
 import { renderWithI18n } from "../test/i18n";
+import { setChatDraft } from "./chat-draft";
 import { ChatSidebar } from "./chat-sidebar";
 
 const appForeground = vi.hoisted(() => ({ value: true }));
@@ -51,8 +53,28 @@ function renderSidebar(selectedId: string | null, chats = [chat("a", 3), chat("b
   return onSetPinned;
 }
 
+function message(content: string): Comment {
+  return {
+    id: "m1",
+    issue_id: "a",
+    author_type: "member",
+    author_id: "user-2",
+    content,
+    type: "comment",
+    parent_id: null,
+    reactions: [],
+    attachments: [],
+    created_at: "2026-09-28T00:00:00Z",
+    updated_at: "2026-09-28T00:00:00Z",
+    resolved_at: null,
+    resolved_by_type: null,
+    resolved_by_id: null,
+  };
+}
+
 describe("ChatSidebar unread badges", () => {
   beforeEach(() => {
+    localStorage.clear();
     appForeground.value = true;
   });
 
@@ -69,7 +91,31 @@ describe("ChatSidebar unread badges", () => {
   });
 });
 
+describe("ChatSidebar drafts", () => {
+  beforeEach(() => localStorage.clear());
+
+  it("replaces the last-message summary with a red draft label", () => {
+    setChatDraft("a", "not sent\nyet");
+    renderSidebar(null, [{ ...chat("a", 0), last_message: message("shipped it") }, chat("b", 0)]);
+
+    const row = screen.getByRole("button", { name: /Room a/ });
+    expect(row).toHaveTextContent("[Draft] not sent yet");
+    expect(row).not.toHaveTextContent("shipped it");
+    expect(screen.getByText("[Draft]")).toHaveClass("text-destructive");
+    expect(screen.getByRole("button", { name: /Room b/ })).toHaveTextContent("No messages yet");
+  });
+
+  it("keeps the last message when the draft is only whitespace", () => {
+    setChatDraft("a", "   \n");
+    renderSidebar(null, [chat("a", 0)]);
+    expect(screen.getByRole("button", { name: /Room a/ })).toHaveTextContent("No messages yet");
+    expect(screen.queryByText("[Draft]")).toBeNull();
+  });
+});
+
 describe("ChatSidebar pinning", () => {
+  beforeEach(() => localStorage.clear());
+
   it("pins a chat from its right-click menu", async () => {
     const onSetPinned = renderSidebar(null);
     fireEvent.contextMenu(screen.getByText("Room b"));

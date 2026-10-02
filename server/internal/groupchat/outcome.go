@@ -56,7 +56,7 @@ type RunOutcome struct {
 	CancelledByName string
 }
 
-// OutcomeMessage replaces ThinkingMessage when the run ends without a reply:
+// OutcomeMessage is posted when the run ends without a reply:
 // its recorded reason, else who cancelled it, else UnfinishedMessage. A failure
 // reason newer than this table keeps its raw code beside UnfinishedMessage.
 func OutcomeMessage(o RunOutcome) string {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Brain, Check, Copy, Forward, Info, ListChecks, Loader2, MoreHorizontal, PanelRight, Quote, RotateCw, Sparkles, Square, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -34,7 +34,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@multica/ui/components/ui/alert-dialog";
-import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@multica/ui/components/ui/context-menu";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@multica/ui/components/ui/context-menu";
 import { ConversationStarterChips } from "../chat/components/conversation-starter-list";
 import { AgentTranscriptDialog } from "../common/task-transcript/agent-transcript-dialog";
 import { buildTimeline } from "../common/task-transcript/build-timeline";
@@ -566,40 +572,47 @@ interface MessageActions {
  * screen. Phones get the iOS menu look: roomy rows, trailing icons, and the
  * pressed bubble lifted slightly while the menu is open. Text highlighted in
  * the message when the menu opens goes with Ask AI.
+ *
+ * Order: Ask AI, Copy | Forward, multi-select, Quote | Delete.
  */
 function MessageMenu({ actions, ios, children }: { actions: MessageActions; ios?: boolean; children: React.ReactNode }) {
   const { t } = useT("im");
   const highlightRef = useRef("");
   const onAskAI = actions.onAskAI;
-  const items: {
+  type MenuItem = {
     key: string;
     icon: typeof Copy;
     label: string;
     onClick: () => void;
     destructive?: boolean;
     disabled?: boolean;
-  }[] = [
-    ...(onAskAI
-      ? [{ key: "ask", icon: Sparkles, label: t(($) => $.search.ask_ai), onClick: () => onAskAI(highlightRef.current) }]
-      : []),
-    { key: "copy", icon: Copy, label: t(($) => $.thread.copy), onClick: actions.onCopy },
-    { key: "quote", icon: Quote, label: t(($) => $.thread.quote), onClick: actions.onQuote },
-    {
-      key: "forward",
-      icon: Forward,
-      label: t(($) => $.thread.forward),
-      onClick: actions.onForward,
-      disabled: !actions.canForward,
-    },
-    {
-      key: "select",
-      icon: ListChecks,
-      label: t(($) => $.thread.select_messages),
-      onClick: actions.onMultiSelect,
-      disabled: !actions.canForward,
-    },
+  };
+  const groups: MenuItem[][] = [
+    [
+      ...(onAskAI
+        ? [{ key: "ask", icon: Sparkles, label: t(($) => $.search.ask_ai), onClick: () => onAskAI(highlightRef.current) }]
+        : []),
+      { key: "copy", icon: Copy, label: t(($) => $.thread.copy), onClick: actions.onCopy },
+    ],
+    [
+      {
+        key: "forward",
+        icon: Forward,
+        label: t(($) => $.thread.forward),
+        onClick: actions.onForward,
+        disabled: !actions.canForward,
+      },
+      {
+        key: "select",
+        icon: ListChecks,
+        label: t(($) => $.thread.select_messages),
+        onClick: actions.onMultiSelect,
+        disabled: !actions.canForward,
+      },
+      { key: "quote", icon: Quote, label: t(($) => $.thread.quote), onClick: actions.onQuote },
+    ],
     ...(actions.onDelete
-      ? [{ key: "delete", icon: Trash2, label: t(($) => $.thread.delete), onClick: actions.onDelete, destructive: true }]
+      ? [[{ key: "delete", icon: Trash2, label: t(($) => $.thread.delete), onClick: actions.onDelete, destructive: true }]]
       : []),
   ];
   return (
@@ -619,30 +632,33 @@ function MessageMenu({ actions, ios, children }: { actions: MessageActions; ios?
         {children}
       </ContextMenuTrigger>
       <ContextMenuContent
-        className={cn(
-          ios && "min-w-56 divide-y divide-border/60 rounded-[14px] bg-surface-raised/85 p-0 backdrop-blur-xl",
-        )}
+        className={cn(ios && "min-w-56 rounded-[14px] bg-surface-raised/85 p-0 backdrop-blur-xl")}
       >
-        {items.map(({ key, icon: Icon, label, onClick, destructive, disabled }) => (
-          <ContextMenuItem
-            key={key}
-            variant={destructive ? "destructive" : "default"}
-            disabled={disabled}
-            onClick={onClick}
-            className={cn(ios && "h-11 justify-between rounded-none px-4 text-body-lg [&_svg:not([class*='size-'])]:size-5")}
-          >
-            {ios ? (
-              <>
-                {label}
-                <Icon />
-              </>
-            ) : (
-              <>
-                <Icon />
-                {label}
-              </>
-            )}
-          </ContextMenuItem>
+        {groups.map((group, index) => (
+          <Fragment key={group[0]!.key}>
+            {index > 0 && <ContextMenuSeparator className={cn(ios && "mx-0 my-0 bg-border/60")} />}
+            {group.map(({ key, icon: Icon, label, onClick, destructive, disabled }) => (
+              <ContextMenuItem
+                key={key}
+                variant={destructive ? "destructive" : "default"}
+                disabled={disabled}
+                onClick={onClick}
+                className={cn(ios && "h-11 justify-between rounded-none px-4 text-body-lg [&_svg:not([class*='size-'])]:size-5")}
+              >
+                {ios ? (
+                  <>
+                    {label}
+                    <Icon />
+                  </>
+                ) : (
+                  <>
+                    <Icon />
+                    {label}
+                  </>
+                )}
+              </ContextMenuItem>
+            ))}
+          </Fragment>
         ))}
       </ContextMenuContent>
     </ContextMenu>
@@ -875,7 +891,11 @@ function ThinkingBubble({
         <Button
           variant="ghost"
           size="icon-xs"
-          className={cn(thinkingControlClass, stopping ? "text-muted-foreground opacity-100!" : "text-destructive")}
+          className={cn(
+            thinkingControlClass,
+            // Ghost's hover:text-foreground would repaint the filled square black.
+            stopping ? "text-muted-foreground opacity-100!" : "text-destructive hover:text-destructive",
+          )}
           aria-label={stopLabel}
           title={stopLabel}
           disabled={stopping}

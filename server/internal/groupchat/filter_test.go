@@ -103,6 +103,39 @@ func TestFilterForAgentSkipsAttachmentMessages(t *testing.T) {
 	}
 }
 
+func TestRequiredVisibleKeepsForwardedHistory(t *testing.T) {
+	turns := []Turn{
+		{ID: "card", AuthorID: "u2", Role: "member", Text: "[chat history]\nAda: ship it", History: true},
+		speaker("ack", "a1", "ack"),
+		person("check", "u1", "please check"),
+	}
+	got := RequiredVisible(turns, []string{"check"})
+	if !got["card"] || !got["check"] || got["ack"] {
+		t.Fatalf("visible %+v", got)
+	}
+	record := turns[0]
+	excerpts := []Excerpt{{Turn: record, Index: 0}, {Turn: person("old", "u1", "old topic"), Index: 1}}
+	ev := &scripted{enabled: true, answers: map[string]typesafe.Answer{"m1": {Choice: "屏蔽"}}}
+	hidden, err := FilterForAgent(context.Background(), ev, Card{Name: "Ops"}, excerpts, got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hidden["card"] {
+		t.Fatalf("history was hidden: %+v", hidden)
+	}
+	if _, ok := ev.questions["m0"]; ok {
+		t.Fatal("a forwarded record was submitted to jev")
+	}
+	ask := person("ask", "u1", "explain")
+	ask.Ref = &record
+	quoted := Excerpt{Turn: ask, Index: 2}
+	transcript := Transcript{Excerpts: []Excerpt{excerpts[0], quoted}}
+	HideMessages(&transcript, map[string]bool{"card": true})
+	if transcript.Excerpts[0].Hidden || transcript.Excerpts[1].Ref == nil {
+		t.Fatalf("history or its quote was removed: %+v", transcript.Excerpts)
+	}
+}
+
 func TestFilterForAgentHidesOnlyWhatJevShields(t *testing.T) {
 	ev := &scripted{enabled: true, answers: map[string]typesafe.Answer{
 		"m0": {Choice: "屏蔽"},

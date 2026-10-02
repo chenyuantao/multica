@@ -7,6 +7,7 @@
     "load_failed": "Impossible de charger les discussions",
     "no_messages": "Aucun message pour l'instant",
     "preview": "{{name}} : {{text}}",
+    "draft": "[Brouillon]",
     "chats": "Discussions de groupe",
     "settings": "Paramètres",
     "clear_search": "Effacer la recherche",
@@ -136,7 +137,10 @@
     "open_chat": "Ouvrir la discussion",
     "back": "Retour à la discussion",
     "back_to_info": "Retour aux détails de la discussion",
-    "back_to_settings": "Retour aux paramètres de la discussion"
+    "back_to_settings": "Retour aux paramètres de la discussion",
+    "info": "Détails",
+    "tabs": "Détails et notes",
+    "close_note": "Fermer {{name}}"
   },
   "new_chat": {
     "title": "Nouvelle discussion de groupe",

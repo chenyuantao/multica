@@ -47,8 +47,11 @@ type Transcript struct {
 // SelectTranscript keeps the newest maxTranscriptMessages turns inside
 // maxRunes. Older turns are omitted. The budget is filled in priority
 // order: the latest message from a person, the messages that triggered
-// this run (newest first), then everything else newest first. Each message
-// is capped at perMessage runes. Excerpts come back in chronological order.
+// this run (newest first), then everything else newest first. A forwarded
+// chat record is not a request, so it is skipped while choosing that
+// latest message and is never marked as a trigger. It is kept whole when
+// it is included. Every other message is capped at perMessage runes.
+// Excerpts come back in chronological order.
 func SelectTranscript(turns []Turn, triggerIDs []string, maxRunes, perMessage int) Transcript {
 	triggers := make(map[string]bool, len(triggerIDs))
 	for _, id := range triggerIDs {
@@ -70,6 +73,15 @@ func SelectTranscript(turns []Turn, triggerIDs []string, maxRunes, perMessage in
 		text := strings.TrimSpace(turn.Text)
 		overhead := tagRunes(turn)
 		length := utf8.RuneCountInString(text)
+		if turn.History {
+			// The record is context and stays complete, even when it is longer
+			// than one message's cap. It still spends budget, so older
+			// messages stop once it has been taken.
+			remaining -= overhead + length + refRunes(turn.Ref)
+			turn.Text = text
+			chosen[i] = Excerpt{Turn: turn, Index: i, Trigger: false}
+			return
+		}
 		limit := min(perMessage, remaining-overhead)
 		truncated := length > limit
 		if truncated {
@@ -85,13 +97,13 @@ func SelectTranscript(turns []Turn, triggerIDs []string, maxRunes, perMessage in
 		chosen[i] = Excerpt{Turn: turn, Index: i, Trigger: triggers[turn.ID], Truncated: truncated}
 	}
 	for i := len(turns) - 1; i >= windowStart; i-- {
-		if turns[i].Role == "member" {
+		if turns[i].Role == "member" && !turns[i].History {
 			include(i)
 			break
 		}
 	}
 	for i := len(turns) - 1; i >= windowStart; i-- {
-		if triggers[turns[i].ID] {
+		if triggers[turns[i].ID] && !turns[i].History {
 			include(i)
 		}
 	}
@@ -125,12 +137,13 @@ func SelectTranscript(turns []Turn, triggerIDs []string, maxRunes, perMessage in
 // read cut-down or omitted messages. Message text is XML-escaped so it can
 // never close or forge a tag.
 func (t Transcript) Render(issueID, intro string) string {
-	var truncated, omitted, quoted, hidden bool
+	var truncated, omitted, quoted, hidden, history bool
 	for _, e := range t.Excerpts {
 		truncated = truncated || e.Truncated
 		omitted = omitted || len(e.OmittedBefore) > 0
 		quoted = quoted || e.Ref != nil
 		hidden = hidden || e.Hidden
+		history = history || e.History || (e.Ref != nil && e.Ref.History)
 	}
 	omitted = omitted || len(t.OmittedAfter) > 0
 
@@ -159,6 +172,9 @@ func (t Transcript) Render(issueID, intro string) string {
 	}
 	if quoted {
 		desc = append(desc, "A ref element inside a msg is the earlier message it quotes and replies to, in full.")
+	}
+	if history {
+		desc = append(desc, `A msg or ref whose text starts with "[chat history]" is a forwarded record. The lines under that heading are the original messages in full, kept as context. That record is not a message this reply answers.`)
 	}
 	if truncated {
 		desc = append(desc, fmt.Sprintf(`A msg with truncated="true" is cut short. Read it in full with `+"`multica issue comment list %s --thread ID --tail 0 --output json`.", issueID))

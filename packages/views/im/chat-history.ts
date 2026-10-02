@@ -134,13 +134,14 @@ export function summarizeMessageContent(content: string, labels: HistoryLabels):
 export function historyPreviewLines(
   messages: readonly ChatHistoryMessage[],
   labels: HistoryLabels,
+  limit = PREVIEW_LIMIT,
 ): { name: string; text: string }[] {
   const lines: { name: string; text: string }[] = [];
   for (const message of messages) {
     const text = summarizeMessageContent(message.content, labels);
     if (!text) continue;
     lines.push({ name: message.author_name, text });
-    if (lines.length >= PREVIEW_LIMIT) break;
+    if (lines.length >= limit) break;
   }
   return lines;
 }

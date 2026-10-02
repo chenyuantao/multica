@@ -7,6 +7,7 @@
     "load_failed": "チャットを読み込めませんでした",
     "no_messages": "まだメッセージはありません",
     "preview": "{{name}}: {{text}}",
+    "draft": "[下書き]",
     "chats": "グループチャット",
     "settings": "設定",
     "clear_search": "検索をクリア",
@@ -132,7 +133,10 @@
     "open_chat": "チャットを開く",
     "back": "チャットに戻る",
     "back_to_info": "チャット詳細に戻る",
-    "back_to_settings": "チャット設定に戻る"
+    "back_to_settings": "チャット設定に戻る",
+    "info": "詳細",
+    "tabs": "詳細とノート",
+    "close_note": "{{name}} を閉じる"
   },
   "new_chat": {
     "title": "新しいグループチャット",

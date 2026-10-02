@@ -71,11 +71,12 @@ func ProtectedBurst(turns []Turn, triggerIDs []string) map[string]bool {
 }
 
 // RequiredVisible is every message the filter must keep: the check burst,
-// and any message that carries an attachment. Jev is not asked about them.
+// any message that carries an attachment, and any forwarded chat record.
+// Jev is not asked about them.
 func RequiredVisible(turns []Turn, triggerIDs []string) map[string]bool {
 	out := ProtectedBurst(turns, triggerIDs)
 	for _, turn := range turns {
-		if !turn.Attachment || turn.ID == "" {
+		if turn.ID == "" || (!turn.Attachment && !turn.History) {
 			continue
 		}
 		if out == nil {
@@ -117,7 +118,7 @@ func FilterForAgent(ctx context.Context, ev Evaluator, agent Card, excerpts []Ex
 			Role:    excerpt.Role,
 			Content: filterContent(excerpt),
 		})
-		if excerpt.ID == "" || excerpt.Attachment || protected[excerpt.ID] {
+		if excerpt.ID == "" || excerpt.Attachment || excerpt.History || protected[excerpt.ID] {
 			continue
 		}
 		key := fmt.Sprintf("m%d", excerpt.Index)
@@ -173,10 +174,10 @@ func HideMessages(transcript *Transcript, hidden map[string]bool) {
 	}
 	for i := range transcript.Excerpts {
 		excerpt := &transcript.Excerpts[i]
-		if excerpt.Ref != nil && excerpt.Ref.ID != "" && !excerpt.Ref.Attachment && hidden[excerpt.Ref.ID] {
+		if excerpt.Ref != nil && excerpt.Ref.ID != "" && !excerpt.Ref.Attachment && !excerpt.Ref.History && hidden[excerpt.Ref.ID] {
 			excerpt.Ref = nil
 		}
-		if excerpt.ID == "" || excerpt.Attachment || !hidden[excerpt.ID] {
+		if excerpt.ID == "" || excerpt.Attachment || excerpt.History || !hidden[excerpt.ID] {
 			continue
 		}
 		excerpt.Text = HiddenMessageText

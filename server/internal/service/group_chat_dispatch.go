@@ -3,9 +3,11 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/multica-ai/multica/server/internal/events"
@@ -97,8 +99,9 @@ func groupChatPlaceholder(raw []byte) bool {
 	return strings.Contains(string(raw), "group_chat_placeholder")
 }
 
-// deliverGroupChatReply writes a run's final output into the thinking bubble
-// when the agent did not already replace it. It never inserts a second comment.
+// deliverGroupChatReply posts the run's final output as a new message when the
+// agent did not already reply, and removes the thinking bubble. A second
+// message is not created once that reply exists.
 func (s *TaskService) deliverGroupChatReply(ctx context.Context, task db.AgentTaskQueue, result []byte) {
 	fresh, err := s.Queries.GetAgentTask(ctx, task.ID)
 	if err != nil {
@@ -117,22 +120,94 @@ func (s *TaskService) deliverGroupChatReply(ctx context.Context, task db.AgentTa
 		return
 	}
 	existing, err := s.Queries.GetComment(ctx, commentID)
-	if err != nil || existing.Content != groupchat.ThinkingMessage || !sameID(existing.AuthorID, fresh.AgentID) {
+	if err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return
+		}
+		// The bubble was removed but the reply was not saved. Post the output
+		// unless this run already left a message of its own.
+		if s.agentCommentedSinceStart(ctx, fresh) {
+			s.CloseGroupChatPlaceholder(ctx, fresh.ID, placeholder.CommentID)
+			return
+		}
+		s.createAgentComment(ctx, fresh.IssueID, fresh.AgentID, body, "comment", fresh.TriggerCommentID, fresh.ID)
+		if s.agentCommentedSinceStart(ctx, fresh) {
+			s.CloseGroupChatPlaceholder(ctx, fresh.ID, placeholder.CommentID)
+		}
 		return
 	}
-	updated, err := s.Queries.UpdateComment(ctx, db.UpdateCommentParams{
-		ID:           existing.ID,
-		Content:      body,
-		SourceTaskID: existing.SourceTaskID,
+	if !sameID(existing.AuthorID, fresh.AgentID) {
+		return
+	}
+	if existing.Content != groupchat.ThinkingMessage {
+		s.CloseGroupChatPlaceholder(ctx, fresh.ID, placeholder.CommentID)
+		return
+	}
+	s.replaceGroupChatThinking(ctx, fresh, existing, body)
+}
+
+func (s *TaskService) agentCommentedSinceStart(ctx context.Context, task db.AgentTaskQueue) bool {
+	commented, err := s.Queries.HasAgentCommentedSince(ctx, db.HasAgentCommentedSinceParams{
+		IssueID:  task.IssueID,
+		AuthorID: task.AgentID,
+		Since:    task.StartedAt,
+	})
+	return err == nil && commented
+}
+
+// replaceGroupChatThinking removes the thinking bubble and inserts the finished
+// text as its own message. Unread counts follow that new comment.
+func (s *TaskService) replaceGroupChatThinking(ctx context.Context, task db.AgentTaskQueue, existing db.Comment, content string) bool {
+	if strings.TrimSpace(content) == "" {
+		return false
+	}
+	source := existing.SourceTaskID
+	if !source.Valid {
+		source = task.ID
+	}
+	var created db.CreateCommentRow
+	err := s.runInTx(ctx, func(q *db.Queries) error {
+		row, err := q.CreateComment(ctx, db.CreateCommentParams{
+			ID:           dbid.NewV7(),
+			IssueID:      existing.IssueID,
+			WorkspaceID:  existing.WorkspaceID,
+			AuthorType:   "agent",
+			AuthorID:     existing.AuthorID,
+			Content:      content,
+			Type:         "comment",
+			SourceTaskID: source,
+			RefMessageID: existing.RefMessageID,
+		})
+		if err != nil {
+			return err
+		}
+		if _, err := q.DeleteLeafComment(ctx, db.DeleteLeafCommentParams{
+			ID:          existing.ID,
+			WorkspaceID: existing.WorkspaceID,
+		}); err != nil {
+			return err
+		}
+		if _, err := q.TouchIssueForCommentDelete(ctx, db.TouchIssueForCommentDeleteParams{
+			IssueID:     existing.IssueID,
+			WorkspaceID: existing.WorkspaceID,
+		}); err != nil {
+			return err
+		}
+		created = row
+		return nil
 	})
 	if err != nil {
-		slog.Warn("group chat reply was not written into the thinking comment", "task_id", util.UUIDToString(task.ID), "error", err)
-		return
+		slog.Warn("group chat reply was not posted", "task_id", util.UUIDToString(task.ID), "error", err)
+		return false
 	}
-	s.CloseGroupChatPlaceholder(ctx, task.ID, placeholder.CommentID)
-	if issue, err := s.Queries.GetIssue(ctx, existing.IssueID); err == nil {
-		s.publishGroupChatComment(issue, updated.Comment(), protocol.EventCommentUpdated, groupchat.PayloadReply)
+	s.CloseGroupChatPlaceholder(ctx, task.ID, util.UUIDToString(existing.ID))
+	issue, err := s.Queries.GetIssue(ctx, existing.IssueID)
+	if err != nil {
+		return true
 	}
+	s.publishGroupChatCommentDeleted(issue, existing)
+	s.publishGroupChatComment(issue, created.Comment(), protocol.EventCommentCreated, "")
+	return true
 }
 
 func groupChatReplyBody(task db.AgentTaskQueue, result []byte) string {
@@ -147,7 +222,8 @@ func groupChatReplyBody(task db.AgentTaskQueue, result []byte) string {
 	return truncateFallbackCommentBody(redact.Text(body), maxSynthesizedFallbackCommentRunes)
 }
 
-// settleGroupChatThinking replaces a thinking bubble that the run never filled.
+// settleGroupChatThinking removes a thinking bubble the run never filled and
+// posts the outcome as a new message, so the chat can show unread.
 func (s *TaskService) settleGroupChatThinking(ctx context.Context, task db.AgentTaskQueue) {
 	if !strings.Contains(string(task.Context), "group_chat_placeholder") {
 		return
@@ -171,23 +247,15 @@ func (s *TaskService) settleGroupChatThinking(ctx context.Context, task db.Agent
 		return
 	}
 	if existing.Content == groupchat.ThinkingMessage && sameID(existing.AuthorID, fresh.AgentID) {
-		updated, err := s.Queries.UpdateComment(ctx, db.UpdateCommentParams{
-			ID: existing.ID,
-			Content: groupchat.OutcomeMessage(groupchat.RunOutcome{
-				Status:          fresh.Status,
-				FailureReason:   fresh.FailureReason.String,
-				CancelledByType: fresh.CancelledByType.String,
-				CancelledByName: fresh.CancelledByName.String,
-			}),
-			SourceTaskID: existing.SourceTaskID,
-		})
-		if err != nil {
-			slog.Warn("group chat thinking comment was not closed", "task_id", util.UUIDToString(task.ID), "error", err)
+		if s.replaceGroupChatThinking(ctx, fresh, existing, groupchat.OutcomeMessage(groupchat.RunOutcome{
+			Status:          fresh.Status,
+			FailureReason:   fresh.FailureReason.String,
+			CancelledByType: fresh.CancelledByType.String,
+			CancelledByName: fresh.CancelledByName.String,
+		})) {
 			return
 		}
-		if issue, err := s.Queries.GetIssue(ctx, existing.IssueID); err == nil {
-			s.publishGroupChatComment(issue, updated.Comment(), protocol.EventCommentUpdated, groupchat.PayloadReply)
-		}
+		slog.Warn("group chat thinking comment was not closed", "task_id", util.UUIDToString(task.ID))
 	}
 	s.storeGroupChatPlaceholder(ctx, task.ID, groupchat.Placeholder{CommentID: placeholder.CommentID, Open: false})
 }
@@ -218,25 +286,44 @@ func (s *TaskService) storeGroupChatPlaceholder(ctx context.Context, taskID pgty
 	}
 }
 
-// publishGroupChatComment broadcasts a thinking-bubble write. flag is
-// groupchat.PayloadPlaceholder when the bubble opens and
-// groupchat.PayloadReply when its final text lands.
+// publishGroupChatComment broadcasts a group-chat comment write. flag is
+// groupchat.PayloadPlaceholder when the thinking bubble opens. An empty flag
+// is a normal comment, which is what marks the chat unread.
 func (s *TaskService) publishGroupChatComment(issue db.Issue, comment db.Comment, eventType, flag string) {
 	if s.Bus == nil {
 		return
 	}
 	fields := commentEventFields(comment)
 	fields["revision"] = comment.Revision
+	payload := map[string]any{
+		"comment":      fields,
+		"issue_title":  issue.Title,
+		"issue_status": issue.Status,
+	}
+	if flag != "" {
+		payload[flag] = true
+	}
 	s.Bus.Publish(events.Event{
 		Type:        eventType,
 		WorkspaceID: util.UUIDToString(issue.WorkspaceID),
 		ActorType:   "agent",
 		ActorID:     util.UUIDToString(comment.AuthorID),
+		Payload:     payload,
+	})
+}
+
+func (s *TaskService) publishGroupChatCommentDeleted(issue db.Issue, comment db.Comment) {
+	if s.Bus == nil {
+		return
+	}
+	s.Bus.Publish(events.Event{
+		Type:        protocol.EventCommentDeleted,
+		WorkspaceID: util.UUIDToString(issue.WorkspaceID),
+		ActorType:   "agent",
+		ActorID:     util.UUIDToString(comment.AuthorID),
 		Payload: map[string]any{
-			"comment":      fields,
-			"issue_title":  issue.Title,
-			"issue_status": issue.Status,
-			flag:           true,
+			"comment_id": util.UUIDToString(comment.ID),
+			"issue_id":   util.UUIDToString(issue.ID),
 		},
 	})
 }

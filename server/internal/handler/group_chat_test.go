@@ -532,6 +532,103 @@ func TestGroupChatQuotedMessageReachesAgentInFull(t *testing.T) {
 	}
 }
 
+func TestGroupChatHistoryCardIsContextNotATrigger(t *testing.T) {
+	ctx := context.Background()
+	agentID := createHandlerTestAgent(t, "group-chat-history-agent", nil)
+
+	var chat GroupChatResponse
+	testutil.Call(t, testHandler.CreateGroupChat, groupChatRequestAs(t, testUserID, "POST", "/api/group-chats", map[string]any{
+		"title":   "History room",
+		"members": []map[string]string{{"member_type": "agent", "member_id": agentID}},
+	})).Want(http.StatusCreated).JSON(&chat)
+	t.Cleanup(func() {
+		for _, sql := range []string{
+			`DELETE FROM agent_task_queue WHERE issue_id = $1`,
+			`DELETE FROM issue_member WHERE issue_id = $1`,
+			`DELETE FROM issue_subscriber WHERE issue_id = $1`,
+			`DELETE FROM comment WHERE issue_id = $1`,
+			`DELETE FROM issue WHERE id = $1`,
+		} {
+			testPool.Exec(ctx, sql, chat.ID)
+		}
+	})
+	tasks := func() int {
+		return dbfx.Count(t, `SELECT count(*) FROM agent_task_queue WHERE issue_id = $1 AND agent_id = $2`, chat.ID, agentID)
+	}
+	post := func(body map[string]any) CommentResponse {
+		t.Helper()
+		var out CommentResponse
+		testutil.Call(t, testHandler.CreateComment, withURLParam(groupChatRequestAs(t, testUserID, "POST", "/api/issues/"+chat.ID+"/comments", body), "id", chat.ID)).Want(http.StatusCreated).JSON(&out)
+		return out
+	}
+
+	card := "```multica-chat-history\n" +
+		`{"messages":[{"author_name":"Ada","content":"ship <v2> on Friday","created_at":"2026-09-30T13:00:00Z"},{"author_name":"Bo","content":"ask [@Ada](mention:` + "\u200b" + `//agent/a1)","created_at":"2026-09-30T13:01:00Z"}]}` +
+		"\n```"
+	forwarded := post(map[string]any{"content": card})
+	if n := tasks(); n != 0 {
+		t.Fatalf("tasks after chat history card = %d, want 0", n)
+	}
+
+	question := post(map[string]any{"content": "what did Ada decide?", "ref_message_id": forwarded.ID})
+	if question.RefMessageID == nil || *question.RefMessageID != forwarded.ID {
+		t.Fatalf("ref_message_id = %v, want %s", question.RefMessageID, forwarded.ID)
+	}
+	if n := tasks(); n != 1 {
+		t.Fatalf("tasks after the question = %d, want 1", n)
+	}
+
+	issue, err := testHandler.Queries.GetIssue(ctx, parseUUID(chat.ID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var resp AgentTaskResponse
+	testHandler.attachGroupChatTranscript(ctx, &resp, issue, db.AgentTaskQueue{
+		AgentID:          parseUUID(agentID),
+		TriggerCommentID: parseUUID(question.ID),
+	})
+	xml := resp.GroupChatTranscript
+	record := "Ada (2026-09-30T13:00:00Z): ship &lt;v2&gt; on Friday\nBo (2026-09-30T13:01:00Z): ask [@Ada](mention://agent/a1)"
+	if strings.Count(xml, record) != 2 {
+		t.Fatalf("record should appear in the message and in the quote:\n%s", xml)
+	}
+	cardOpen := groupChatMsgOpen(xml, forwarded.ID)
+	if cardOpen == "" {
+		t.Fatalf("history card missing from the transcript:\n%s", xml)
+	}
+	if strings.Contains(cardOpen, `trigger="true"`) {
+		t.Fatalf("history card became the trigger:\n%s", cardOpen)
+	}
+	if !strings.Contains(xml, `id="`+question.ID+`"`) || !strings.Contains(xml, `trigger="true"`) || !strings.Contains(xml, "what did Ada decide?") {
+		t.Fatalf("question was not the trigger:\n%s", xml)
+	}
+	if strings.Contains(xml, "mention:\u200b//") {
+		t.Fatalf("shielded mention leaked into the transcript:\n%s", xml)
+	}
+}
+
+// groupChatMsgOpen is the opening tag of the msg whose id is the message
+// itself. A ref that quotes the same id is ignored.
+func groupChatMsgOpen(xml, id string) string {
+	token := ` id="` + id + `"`
+	for at := 0; at < len(xml); {
+		i := strings.Index(xml[at:], token)
+		if i < 0 {
+			return ""
+		}
+		i += at
+		start := strings.LastIndex(xml[:i], "<")
+		if start >= 0 && strings.HasPrefix(xml[start:], "<msg ") {
+			end := strings.Index(xml[start:], ">")
+			if end > 0 {
+				return xml[start : start+end]
+			}
+		}
+		at = i + len(token)
+	}
+	return ""
+}
+
 func TestGroupChatAttachmentOnlyMessageStartsNoAgent(t *testing.T) {
 	ctx := context.Background()
 	agentID := createHandlerTestAgent(t, "group-chat-attachment-agent", nil)
@@ -876,7 +973,7 @@ func TestGroupChatFinishedReplyIsNotSuperseded(t *testing.T) {
 	}
 }
 
-func newSupersedeChat(t *testing.T, agentName string) string {
+func newAgentChat(t *testing.T, agentName string) (string, string) {
 	t.Helper()
 	agentID := createHandlerTestAgent(t, agentName, nil)
 	var chat GroupChatResponse
@@ -896,7 +993,13 @@ func newSupersedeChat(t *testing.T, agentName string) string {
 			testPool.Exec(ctx, sql, chat.ID)
 		}
 	})
-	return chat.ID
+	return chat.ID, agentID
+}
+
+func newSupersedeChat(t *testing.T, agentName string) string {
+	t.Helper()
+	chatID, _ := newAgentChat(t, agentName)
+	return chatID
 }
 
 func postSupersede(t *testing.T, chatID, content string) {
@@ -948,8 +1051,11 @@ func TestGroupChatReplyQuotesTheTriggerMessage(t *testing.T) {
 	dbfx.QueryRow(t, `SELECT id::text FROM agent_task_queue WHERE issue_id = $1 AND trigger_comment_id = $2`, chat.ID, trigger.ID).Scan(&taskID)
 
 	reply := postGroupChatAsAgent(t, chat.ID, agentID, taskID, map[string]any{"content": "the deploy failed in the logs"})
-	if reply.ID != thinkingID || reply.RefMessageID == nil || *reply.RefMessageID != trigger.ID {
-		t.Fatalf("reply id=%s ref=%v, want the thinking comment quoting %s", reply.ID, reply.RefMessageID, trigger.ID)
+	if reply.ID == thinkingID || reply.RefMessageID == nil || *reply.RefMessageID != trigger.ID {
+		t.Fatalf("reply id=%s ref=%v, want a new comment quoting %s", reply.ID, reply.RefMessageID, trigger.ID)
+	}
+	if n := dbfx.Count(t, `SELECT count(*) FROM comment WHERE id = $1`, thinkingID); n != 0 {
+		t.Fatalf("thinking comment still exists")
 	}
 
 	follow := postGroupChatAsAgent(t, chat.ID, agentID, taskID, map[string]any{"content": "and the metrics look normal"})
@@ -961,6 +1067,54 @@ func TestGroupChatReplyQuotesTheTriggerMessage(t *testing.T) {
 	chosen := postGroupChatAsAgent(t, chat.ID, agentID, taskID, map[string]any{"content": "about that note", "ref_message_id": other})
 	if chosen.RefMessageID == nil || *chosen.RefMessageID != other {
 		t.Fatalf("explicit ref = %v, want %s", chosen.RefMessageID, other)
+	}
+}
+
+func TestGroupChatRunOutputReplacesThinkingWithANewMessage(t *testing.T) {
+	ctx := context.Background()
+	chatID, _ := newAgentChat(t, "reply-output-agent")
+	var trigger CommentResponse
+	testutil.Call(t, testHandler.CreateComment, withURLParam(groupChatRequestAs(t, testUserID, "POST", "/api/issues/"+chatID+"/comments", map[string]string{
+		"content": "check the logs",
+	}), "id", chatID)).Want(http.StatusCreated).JSON(&trigger)
+
+	var thinkingID, taskID string
+	dbfx.QueryRow(t, `SELECT id::text FROM comment WHERE issue_id = $1 AND content = $2`, chatID, groupchat.ThinkingMessage).Scan(&thinkingID)
+	dbfx.QueryRow(t, `SELECT id::text FROM agent_task_queue WHERE issue_id = $1 AND trigger_comment_id = $2`, chatID, trigger.ID).Scan(&taskID)
+	dbfx.Exec(t, `UPDATE agent_task_queue SET status = 'running', started_at = now() WHERE id = $1`, taskID)
+
+	if _, err := testHandler.TaskService.CompleteTask(ctx, parseUUID(taskID), completeResult(t, "the logs show a timeout"), "", "", "", false, "", ""); err != nil {
+		t.Fatalf("complete task: %v", err)
+	}
+	if n := dbfx.Count(t, `SELECT count(*) FROM comment WHERE id = $1`, thinkingID); n != 0 {
+		t.Fatalf("thinking comment still exists")
+	}
+	var replyID, refID string
+	dbfx.QueryRow(t, `SELECT id::text, ref_message_id::text FROM comment WHERE issue_id = $1 AND content = $2`, chatID, "the logs show a timeout").Scan(&replyID, &refID)
+	if replyID == "" || replyID == thinkingID || refID != trigger.ID {
+		t.Fatalf("reply id=%s ref=%s, want a new comment quoting %s", replyID, refID, trigger.ID)
+	}
+}
+
+func TestGroupChatCancelReplacesThinkingWithANewMessage(t *testing.T) {
+	chatID, _ := newAgentChat(t, "reply-cancel-agent")
+	var trigger CommentResponse
+	testutil.Call(t, testHandler.CreateComment, withURLParam(groupChatRequestAs(t, testUserID, "POST", "/api/issues/"+chatID+"/comments", map[string]string{
+		"content": "check the logs",
+	}), "id", chatID)).Want(http.StatusCreated).JSON(&trigger)
+
+	var thinkingID, taskID string
+	dbfx.QueryRow(t, `SELECT id::text FROM comment WHERE issue_id = $1 AND content = $2`, chatID, groupchat.ThinkingMessage).Scan(&thinkingID)
+	dbfx.QueryRow(t, `SELECT id::text FROM agent_task_queue WHERE issue_id = $1 AND trigger_comment_id = $2`, chatID, trigger.ID).Scan(&taskID)
+
+	if _, err := testHandler.TaskService.CancelTask(context.Background(), parseUUID(taskID)); err != nil {
+		t.Fatalf("cancel task: %v", err)
+	}
+	if n := dbfx.Count(t, `SELECT count(*) FROM comment WHERE id = $1`, thinkingID); n != 0 {
+		t.Fatalf("thinking comment still exists")
+	}
+	if n := dbfx.Count(t, `SELECT count(*) FROM comment WHERE issue_id = $1 AND author_type = 'agent' AND content <> $2`, chatID, groupchat.ThinkingMessage); n != 1 {
+		t.Fatalf("outcome messages = %d, want 1", n)
 	}
 }
 

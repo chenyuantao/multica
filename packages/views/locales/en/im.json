@@ -7,6 +7,7 @@
     "load_failed": "Couldn't load chats",
     "no_messages": "No messages yet",
     "preview": "{{name}}: {{text}}",
+    "draft": "[Draft]",
     "chats": "Group chats",
     "settings": "Settings",
     "clear_search": "Clear search",
@@ -136,7 +137,10 @@
     "open_chat": "Open chat",
     "back": "Back to chat",
     "back_to_info": "Back to chat details",
-    "back_to_settings": "Back to chat settings"
+    "back_to_settings": "Back to chat settings",
+    "info": "Details",
+    "tabs": "Chat details and notes",
+    "close_note": "Close {{name}}"
   },
   "new_chat": {
     "title": "New group chat",

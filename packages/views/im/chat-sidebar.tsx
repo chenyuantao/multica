@@ -10,6 +10,7 @@ import { cn } from "@multica/ui/lib/utils";
 import { ActorAvatar } from "../common/actor-avatar";
 import { useAppForeground } from "../common/use-app-foreground";
 import { useT } from "../i18n";
+import { chatDraftSummary, useChatDraft } from "./chat-draft";
 import { isChatHistoryContent } from "./chat-history";
 import { chatActivityAt, chatDisplayTitle, formatStamp, plainTextPreview } from "./im-utils";
 import { ImSidebarHeader, ImSidebarShell } from "./im-sidebar-shell";
@@ -199,6 +200,7 @@ function ChatListItem({
 }) {
   const { t } = useT("im");
   const { getActorName } = useActorName();
+  const draft = chatDraftSummary(useChatDraft(chat.id));
   const last = chat.last_message;
   const text = !last
     ? ""
@@ -241,7 +243,14 @@ function ChatListItem({
         </span>
         <span className="mt-[3px] flex items-center gap-2">
           <span className={cn("min-w-0 flex-1 truncate text-caption", unread > 0 ? "text-foreground" : "text-muted-foreground")}>
-            {preview}
+            {draft ? (
+              <>
+                <span className="text-destructive">{t(($) => $.sidebar.draft)}</span>
+                {` ${draft}`}
+              </>
+            ) : (
+              preview
+            )}
           </span>
           <UnreadBadge count={unread} label={t(($) => $.sidebar.unread, { count: unread })} />
         </span>
