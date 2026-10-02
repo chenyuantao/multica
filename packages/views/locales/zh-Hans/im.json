@@ -108,7 +108,16 @@
     "no_agents": "群聊里还没有智能体",
     "mention": "@ 一个智能体",
     "ambiguous": "有多名成员都叫 {{name}}",
-    "cancel_quote": "取消引用"
+    "cancel_quote": "取消引用",
+    "voice_hold": "按住说话",
+    "voice_listening": "语音输入模式",
+    "voice_release_send": "松手发送",
+    "voice_release_cancel": "松开取消",
+    "voice_release_edit": "松开编辑",
+    "voice_cancel": "取消",
+    "voice_edit": "编辑",
+    "voice_unavailable": "语音输入暂时不可用",
+    "voice_permission": "需要麦克风权限才能语音输入。"
   },
   "panel": {
     "resize": "调整面板宽度",

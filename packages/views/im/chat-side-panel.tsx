@@ -28,6 +28,8 @@ interface ChatSidePanelProps {
   /** `page` fills the screen; `aside` is the resizable column beside the thread. */
   chrome?: "aside" | "page";
   onOpenMember?: (member: GroupChatMember) => void;
+  /** The composer is on another screen, so the passage waited. Mobile uses this to show the chat. */
+  onReturnToComposer?: () => void;
 }
 
 /**
@@ -46,6 +48,7 @@ export function ChatSidePanel({
   onCloseNote,
   chrome = "aside",
   onOpenMember,
+  onReturnToComposer,
 }: ChatSidePanelProps) {
   const { t } = useT("im");
   const insertExcerpt = useInsertDocExcerpt();
@@ -99,12 +102,13 @@ export function ChatSidePanel({
                 const passage = text.replaceAll("\u0000", "").trim();
                 if (!passage) return;
                 const name = active.name.trim() || active.path.split("/").pop() || active.path;
-                insertExcerpt(chat.id, {
+                const placed = insertExcerpt(chat.id, {
                   name,
                   path: active.path,
                   text: passage,
                   ...(typeof from === "number" ? { from } : {}),
                 });
+                if (!placed) onReturnToComposer?.();
               }}
             />
           </Suspense>

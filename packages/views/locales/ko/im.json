@@ -108,7 +108,16 @@
     "no_agents": "이 채팅에 에이전트가 없습니다",
     "mention": "에이전트 멘션",
     "ambiguous": "{{name}}이라는 구성원이 둘 이상입니다",
-    "cancel_quote": "인용 취소"
+    "cancel_quote": "인용 취소",
+    "voice_hold": "길게 눌러 말하기",
+    "voice_listening": "음성 입력",
+    "voice_release_send": "손을 떼면 전송",
+    "voice_release_cancel": "손을 떼면 취소",
+    "voice_release_edit": "손을 떼면 편집",
+    "voice_cancel": "취소",
+    "voice_edit": "편집",
+    "voice_unavailable": "음성 입력을 사용할 수 없습니다",
+    "voice_permission": "메시지를 받아쓰려면 마이크를 허용하세요."
   },
   "panel": {
     "resize": "패널 너비 조정",

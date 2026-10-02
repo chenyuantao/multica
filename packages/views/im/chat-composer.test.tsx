@@ -11,7 +11,14 @@ import { DocExcerptRevealProvider } from "./doc-excerpt-reveal";
 
 const uploadFile = vi.hoisted(() => vi.fn());
 
-vi.mock("@multica/core/api", () => ({ api: { uploadFile } }));
+vi.mock("@multica/core/api", () => ({
+  api: { uploadFile },
+  getApi: () => ({
+    getToken: () => "token",
+    getBaseUrl: () => "http://api.test",
+    issueCliToken: vi.fn(),
+  }),
+}));
 vi.mock("../common/actor-avatar", () => ({ ActorAvatar: () => null }));
 
 function attachment(id: string, filename: string, contentType: string): Attachment {
@@ -230,5 +237,17 @@ describe("ChatComposer document excerpts", () => {
     fireEvent.click(screen.getByRole("button", { name: "ask" }));
     fireEvent.click(composerBox().querySelector("[data-doc-excerpt]")!);
     expect(onOpen).toHaveBeenCalledWith({ path: "notes/weekly.md", name: "本周周报" });
+  });
+
+  it("offers press-to-talk on a phone-width window and explains a blocked microphone", async () => {
+    const previous = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
+    const getUserMedia = vi.fn().mockRejectedValue(new DOMException("denied", "NotAllowedError"));
+    Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia } });
+    renderComposer();
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Hold to talk" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Allow microphone access to dictate a message.");
+    expect(screen.queryByRole("button", { name: "Send" })).toBeNull();
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: previous });
   });
 });

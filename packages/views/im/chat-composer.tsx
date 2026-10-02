@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { ArrowUp, AtSign, FileText, Image as ImageIcon, Loader2, X } from "lucide-react";
 import type { Attachment } from "@multica/core/types";
 import { cn } from "@multica/ui/lib/utils";
 import { Button } from "@multica/ui/components/ui/button";
+import { useIsMobile } from "@multica/ui/hooks/use-mobile";
 import { FileUploadButton } from "@multica/ui/components/common/file-upload-button";
 import { ActorAvatar } from "../common/actor-avatar";
 import { FileDropOverlay, useEditorUpload, useFileDropZone } from "../editor";
@@ -26,6 +27,7 @@ import type { DocExcerpt } from "./doc-excerpt";
 import { useRegisterDocExcerptInsert } from "./doc-excerpt-insert";
 import { useRevealDocExcerpt } from "./doc-excerpt-reveal";
 import { activeMentionQuery, resolveComposerBody, type ComposerMention } from "./im-utils";
+import { VoiceHoldButton } from "./voice-hold";
 
 interface ChatComposerProps {
   /** The chat's issue id; uploads are bound to it. */
@@ -65,9 +67,23 @@ interface ComposerFile {
 
 const MAX_HEIGHT_PX = 180;
 
+function useCoarsePointer() {
+  return useSyncExternalStore(
+    (onChange) => {
+      const query = window.matchMedia("(pointer: coarse)");
+      query.addEventListener("change", onChange);
+      return () => query.removeEventListener("change", onChange);
+    },
+    () => window.matchMedia("(pointer: coarse)").matches,
+    () => false,
+  );
+}
+
 export function ChatComposer({ chatId, chatTitle, candidates, onSend, quote, onCancelQuote }: ChatComposerProps) {
   const { t } = useT("im");
   const { t: tEditor } = useT("editor");
+  const isMobile = useIsMobile();
+  const coarsePointer = useCoarsePointer();
   const ref = useRef<HTMLDivElement>(null);
   const { uploadWithToast } = useEditorUpload();
   const [files, setFiles] = useState<ComposerFile[]>([]);
@@ -111,6 +127,7 @@ export function ChatComposer({ chatId, chatTitle, candidates, onSend, quote, onC
 
   const registerExcerpt = useRegisterDocExcerptInsert();
   const revealExcerpt = useRevealDocExcerpt();
+  const chipTap = useRef(false);
   const insertExcerpt = useCallback((excerpt: DocExcerpt) => {
     const el = ref.current;
     if (!el || !insertComposerExcerpt(el, excerpt)) return;
@@ -215,6 +232,15 @@ export function ChatComposer({ chatId, chatTitle, candidates, onSend, quote, onC
 
   const ready = files.flatMap((f) => (f.attachment ? [f.attachment] : []));
   const canSend = !uploading && (!!text.trim() || ready.length > 0);
+  const voiceReady = (isMobile || coarsePointer) && !text.trim() && files.length === 0 && !uploading;
+  const fillSpoken = useCallback((spoken: string) => {
+    const el = ref.current;
+    if (!el) return;
+    renderComposer(el, spoken);
+    setText(spoken);
+    setCaret(spoken.length);
+    el.focus();
+  }, [setText]);
 
   const send = () => {
     if (!canSend) return;
@@ -407,10 +433,18 @@ export function ChatComposer({ chatId, chatTitle, candidates, onSend, quote, onC
               onMouseDown={(e) => {
                 if (ref.current && excerptFromComposerEvent(ref.current, e.target)) e.preventDefault();
               }}
+              onPointerUp={(e) => {
+                const excerpt = ref.current ? excerptFromComposerEvent(ref.current, e.target) : null;
+                if (!excerpt || e.button > 0) return;
+                e.preventDefault();
+                chipTap.current = true;
+                revealExcerpt(excerpt);
+              }}
               onClick={(e) => {
                 const excerpt = ref.current ? excerptFromComposerEvent(ref.current, e.target) : null;
                 if (excerpt) {
-                  revealExcerpt(excerpt);
+                  if (!chipTap.current) revealExcerpt(excerpt);
+                  chipTap.current = false;
                   return;
                 }
                 syncCaret();
@@ -422,15 +456,22 @@ export function ChatComposer({ chatId, chatTitle, candidates, onSend, quote, onC
               className="max-h-[180px] min-h-8 w-full overflow-y-auto py-1.5 text-body break-words whitespace-pre-wrap outline-none"
             />
           </div>
-          <Button
-            size="icon-sm"
-            className="shrink-0 rounded-full"
-            onClick={send}
-            disabled={!canSend}
-            aria-label={uploading ? tEditor(($) => $.upload.in_progress) : t(($) => $.composer.send)}
-          >
-            <ArrowUp />
-          </Button>
+          {voiceReady ? (
+            <VoiceHoldButton
+              onSend={(spoken) => onSend(spoken, [])}
+              onEdit={fillSpoken}
+            />
+          ) : (
+            <Button
+              size="icon-sm"
+              className="shrink-0 rounded-full"
+              onClick={send}
+              disabled={!canSend}
+              aria-label={uploading ? tEditor(($) => $.upload.in_progress) : t(($) => $.composer.send)}
+            >
+              <ArrowUp />
+            </Button>
+          )}
         </div>
         {isDragOver && <FileDropOverlay />}
       </div>

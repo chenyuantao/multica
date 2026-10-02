@@ -263,6 +263,7 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
             onSelectDetails={() => patchNoteTabs((state) => ({ ...state, activePath: null }))}
             onSelectNote={(path) => patchNoteTabs((state) => ({ ...state, activePath: path }))}
             onCloseNote={(path) => patchNoteTabs((state) => closeKnowledgeNote(state, path))}
+            onReturnToComposer={() => navigation.push(paths.imChat(requested.id))}
             chrome="page"
             onOpenMember={(m) => navigation.push(paths.imChatSettingsContact(requested.id, m.member_type, m.member_id))}
           />

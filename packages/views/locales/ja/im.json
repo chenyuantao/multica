@@ -108,7 +108,16 @@
     "no_agents": "このチャットにエージェントはいません",
     "mention": "エージェントをメンション",
     "ambiguous": "{{name}} という名前のメンバーが複数います",
-    "cancel_quote": "引用を取り消す"
+    "cancel_quote": "引用を取り消す",
+    "voice_hold": "長押しで話す",
+    "voice_listening": "音声入力",
+    "voice_release_send": "離して送信",
+    "voice_release_cancel": "離してキャンセル",
+    "voice_release_edit": "離して編集",
+    "voice_cancel": "キャンセル",
+    "voice_edit": "編集",
+    "voice_unavailable": "音声入力は使えません",
+    "voice_permission": "メッセージを音声入力するにはマイクを許可してください。"
   },
   "panel": {
     "resize": "パネルの幅を調整",

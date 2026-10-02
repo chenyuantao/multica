@@ -17,7 +17,7 @@ interface PendingExcerpt {
 
 const MAX_PENDING = 20;
 
-const InsertContext = createContext<(chatId: string, excerpt: DocExcerpt) => void>(() => {});
+const InsertContext = createContext<(chatId: string, excerpt: DocExcerpt) => boolean>(() => false);
 const RegisterContext = createContext<(chatId: string, insert: Insert) => () => void>(() => () => {});
 
 /**
@@ -43,9 +43,10 @@ export function DocExcerptInsertProvider({ children }: { children: ReactNode }) 
   const insert = useCallback((chatId: string, excerpt: DocExcerpt) => {
     if (currentRef.current?.chatId === chatId) {
       currentRef.current.insert(excerpt);
-      return;
+      return true;
     }
     pendingRef.current = [...pendingRef.current, { chatId, excerpt }].slice(-MAX_PENDING);
+    return false;
   }, []);
 
   return (
@@ -55,7 +56,8 @@ export function DocExcerptInsertProvider({ children }: { children: ReactNode }) 
   );
 }
 
-export function useInsertDocExcerpt(): (chatId: string, excerpt: DocExcerpt) => void {
+/** True when the composer took the passage immediately. False when it is waiting for that chat's composer. */
+export function useInsertDocExcerpt(): (chatId: string, excerpt: DocExcerpt) => boolean {
   return use(InsertContext);
 }
 

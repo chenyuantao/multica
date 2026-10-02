@@ -112,7 +112,16 @@
     "no_agents": "Aucun agent dans cette discussion",
     "mention": "Mentionner un agent",
     "ambiguous": "Plusieurs membres s'appellent {{name}}",
-    "cancel_quote": "Annuler la citation"
+    "cancel_quote": "Annuler la citation",
+    "voice_hold": "Maintenir pour parler",
+    "voice_listening": "Saisie vocale",
+    "voice_release_send": "Relâcher pour envoyer",
+    "voice_release_cancel": "Relâcher pour annuler",
+    "voice_release_edit": "Relâcher pour modifier",
+    "voice_cancel": "Annuler",
+    "voice_edit": "Modifier",
+    "voice_unavailable": "La saisie vocale est indisponible",
+    "voice_permission": "Autorisez le micro pour dicter un message."
   },
   "panel": {
     "resize": "Redimensionner le panneau",

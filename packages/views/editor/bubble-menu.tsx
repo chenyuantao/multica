@@ -20,6 +20,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { createPortal } from "react-dom";
 import {
   computePosition,
   offset,
@@ -80,6 +81,23 @@ import {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/** A phone keeps the toolbar while text stays selected. Blur there is the system selection, not the user leaving. */
+export function shouldDismissBubbleMenu(input: {
+  destroyed: boolean;
+  focusInsideMenu: boolean;
+  editorFocused: boolean;
+  selectionEmpty: boolean;
+  coarsePointer: boolean;
+}): boolean {
+  if (input.destroyed || input.focusInsideMenu || input.editorFocused) return false;
+  if (input.coarsePointer && !input.selectionEmpty) return false;
+  return true;
+}
+
+function coarsePointer(): boolean {
+  return typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches;
+}
 
 function shouldShowBubbleMenu(editor: Editor, hasSelectionAction = false): boolean {
   if (!editor.isEditable) return false;
@@ -508,6 +526,8 @@ function EditorBubbleMenu({
   const { t } = useT("editor");
   const [visible, setVisible] = useState(false);
   const [mode, setMode] = useState<"toolbar" | "link-edit">("toolbar");
+  const [portaled, setPortaled] = useState(false);
+  useEffect(() => setPortaled(true), []);
   const floatingRef = useRef<HTMLDivElement>(null);
   const hasSelectionAction = !!selectionAction;
   const hasAskSelection = !!askSelection;
@@ -566,11 +586,15 @@ function EditorBubbleMenu({
   useEffect(() => {
     const onBlur = () => {
       setTimeout(() => {
-        if (editor.isDestroyed) return;
         const el = floatingRef.current;
-        if (el && el.contains(document.activeElement)) return;
-        if (editor.view.hasFocus()) return;
-        setVisible(false);
+        const dismiss = shouldDismissBubbleMenu({
+          destroyed: editor.isDestroyed,
+          focusInsideMenu: !!el && el.contains(document.activeElement),
+          editorFocused: !editor.isDestroyed && editor.view.hasFocus(),
+          selectionEmpty: editor.isDestroyed || editor.state.selection.empty,
+          coarsePointer: coarsePointer(),
+        });
+        if (dismiss) setVisible(false);
       }, 0);
     };
     editor.on("blur", onBlur);
@@ -606,6 +630,7 @@ function EditorBubbleMenu({
   useEffect(() => {
     if (!visible) return;
     const handle = (e: MouseEvent) => {
+      if (coarsePointer()) return;
       const target = e.target as HTMLElement;
       if (editor.view.dom.contains(target)) return;
       if (floatingRef.current?.contains(target)) return;
@@ -622,19 +647,35 @@ function EditorBubbleMenu({
     return () => { editor.off("selectionUpdate", handler); };
   }, [editor]);
 
+  const askLock = useRef(false);
+  const askCurrentSelection = () => {
+    if (!askSelection || askLock.current) return;
+    const { from, to } = editor.state.selection;
+    const text = editor.state.doc.textBetween(from, to, "\n");
+    if (!text.trim()) return;
+    askLock.current = true;
+    askSelection.onSelect(text, from);
+    editor.commands.setTextSelection(to);
+    setVisible(false);
+    queueMicrotask(() => {
+      askLock.current = false;
+    });
+  };
+
   // Refocus editor when Popover closes
   const handleMenuOpenChange = useCallback(
     (open: boolean) => { if (!open) editor.commands.focus(); },
     [editor],
   );
 
-  return (
+  const menu = (
     <div
       ref={floatingRef}
       style={{
         position: "fixed",
         zIndex: 50,
         width: "max-content",
+        maxWidth: "calc(100vw - 16px)",
         visibility: visible ? "visible" : "hidden",
       }}
       onMouseDown={(e) => e.preventDefault()}
@@ -643,18 +684,17 @@ function EditorBubbleMenu({
         <LinkEditBar editor={editor} onClose={() => { setMode("toolbar"); editor.commands.focus(); }} />
       ) : (
         <TooltipProvider delay={300}>
-          <div className="bubble-menu">
+          <div className="bubble-menu max-w-full overflow-x-auto">
             {askSelection && (
               <button
                 type="button"
-                className={`${toggleVariants({ size: "sm" })} w-auto gap-1 px-2`}
+                className={`${toggleVariants({ size: "sm" })} sticky left-0 z-[1] w-auto shrink-0 gap-1 bg-popover px-2`}
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
-                  const { from, to } = editor.state.selection;
-                  askSelection.onSelect(editor.state.doc.textBetween(from, to, "\n"), from);
-                  editor.commands.setTextSelection(to);
-                  setVisible(false);
+                onPointerUp={(e) => {
+                  if (e.pointerType === "mouse" && e.button !== 0) return;
+                  askCurrentSelection();
                 }}
+                onClick={askCurrentSelection}
               >
                 <Sparkles className="size-3.5" />
                 {askSelection.label}
@@ -749,6 +789,8 @@ function EditorBubbleMenu({
       )}
     </div>
   );
+  if (!portaled) return null;
+  return createPortal(menu, document.body);
 }
 
 export { EditorBubbleMenu };

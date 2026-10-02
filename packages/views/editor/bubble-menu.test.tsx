@@ -51,7 +51,7 @@ vi.mock("../i18n", async () => {
   };
 });
 
-import { EditorBubbleMenu } from "./bubble-menu";
+import { EditorBubbleMenu, shouldDismissBubbleMenu } from "./bubble-menu";
 
 function createEditor(codeBlock = false): Editor {
   const chain = {
@@ -206,5 +206,27 @@ describe("EditorBubbleMenu accessibility", () => {
     expect(
       screen.getByLabelText("Close link editor", { selector: "button" }),
     ).toBeInTheDocument();
+  });
+});
+
+describe("shouldDismissBubbleMenu", () => {
+  it("keeps the toolbar on a phone while the selection is still there", () => {
+    expect(shouldDismissBubbleMenu({
+      destroyed: false,
+      focusInsideMenu: false,
+      editorFocused: false,
+      selectionEmpty: false,
+      coarsePointer: true,
+    })).toBe(false);
+  });
+
+  it("hides the toolbar once the phone selection is gone", () => {
+    expect(shouldDismissBubbleMenu({
+      destroyed: false,
+      focusInsideMenu: false,
+      editorFocused: false,
+      selectionEmpty: true,
+      coarsePointer: true,
+    })).toBe(true);
   });
 });

@@ -112,7 +112,16 @@
     "no_agents": "No agents in this chat",
     "mention": "Mention an agent",
     "ambiguous": "More than one member is named {{name}}",
-    "cancel_quote": "Cancel quote"
+    "cancel_quote": "Cancel quote",
+    "voice_hold": "Hold to talk",
+    "voice_listening": "Voice input",
+    "voice_release_send": "Release to send",
+    "voice_release_cancel": "Release to cancel",
+    "voice_release_edit": "Release to edit",
+    "voice_cancel": "Cancel",
+    "voice_edit": "Edit",
+    "voice_unavailable": "Voice input is unavailable",
+    "voice_permission": "Allow microphone access to dictate a message."
   },
   "panel": {
     "resize": "Resize panel",
