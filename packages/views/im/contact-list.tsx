@@ -21,6 +21,8 @@ interface ContactListProps {
   onSelect: (entry: DirectoryEntry) => void;
   onOpenChat: (chatId: string) => void;
   onCreateAgent: () => void;
+  /** Phones open the shared search page instead of filtering this list. */
+  onOpenSearch?: () => void;
   className?: string;
 }
 
@@ -36,6 +38,7 @@ export function ContactList({
   onSelect,
   onOpenChat,
   onCreateAgent,
+  onOpenSearch,
   className,
 }: ContactListProps) {
   const { t } = useT("im");
@@ -77,7 +80,7 @@ export function ContactList({
 
   return (
     <ImSidebarShell className={className}>
-      <ImSidebarHeader query={query} onQueryChange={setQuery} searchLabel={t(($) => $.contacts.search)} title={t(($) => $.tabs.contacts)}>
+      <ImSidebarHeader query={query} onQueryChange={setQuery} searchLabel={t(($) => $.contacts.search)} title={t(($) => $.tabs.contacts)} onOpenSearch={onOpenSearch}>
         <button
           type="button"
           onClick={onCreateAgent}

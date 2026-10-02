@@ -24,9 +24,11 @@ interface NewNoteDialogProps {
   dir: string | null;
   onOpenChange: (open: boolean) => void;
   onCreated: (file: DocFile) => void;
+  /** `page` fills a phone level whose header carries the title. */
+  presentation?: "dialog" | "page";
 }
 
-export function NewNoteDialog({ dir, onOpenChange, onCreated }: NewNoteDialogProps) {
+export function NewNoteDialog({ dir, onOpenChange, onCreated, presentation = "dialog" }: NewNoteDialogProps) {
   const { t } = useT("im");
   const createNote = useCreateDocFile();
   const [name, setName] = useState("");
@@ -60,18 +62,10 @@ export function NewNoteDialog({ dir, onOpenChange, onCreated }: NewNoteDialogPro
     }
   };
 
-  return (
-    <Dialog open={dir !== null} onOpenChange={(next) => (next ? onOpenChange(true) : close())}>
-      <DialogContent className="sm:max-w-md">
-        <form onSubmit={submit} className="flex flex-col gap-4">
-          <DialogHeader>
-            <DialogTitle>{t(($) => $.knowledge.dialog.title)}</DialogTitle>
-            <DialogDescription className="break-all">
-              {t(($) => $.knowledge.dialog.location, {
-                dir: dir ? dir.replaceAll("/", " / ") : t(($) => $.knowledge.dialog.root),
-              })}
-            </DialogDescription>
-          </DialogHeader>
+  const location = t(($) => $.knowledge.dialog.location, {
+    dir: dir ? dir.replaceAll("/", " / ") : t(($) => $.knowledge.dialog.root),
+  });
+  const field = (
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="knowledge-new-note-name">{t(($) => $.knowledge.dialog.name_label)}</Label>
             <Input
@@ -92,13 +86,41 @@ export function NewNoteDialog({ dir, onOpenChange, onCreated }: NewNoteDialogPro
               </p>
             )}
           </div>
+  );
+  const submitButton = (
+    <Button type="submit" disabled={!name.trim() || createNote.isPending} aria-busy={createNote.isPending}>
+      {t(($) => $.knowledge.dialog.create)}
+    </Button>
+  );
+
+  if (presentation === "page") {
+    return (
+      <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
+          <p className="text-caption break-all text-muted-foreground">{location}</p>
+          {field}
+        </div>
+        <div className="flex shrink-0 justify-end border-t px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          {submitButton}
+        </div>
+      </form>
+    );
+  }
+
+  return (
+    <Dialog open={dir !== null} onOpenChange={(next) => (next ? onOpenChange(true) : close())}>
+      <DialogContent className="sm:max-w-md">
+        <form onSubmit={submit} className="flex flex-col gap-4">
+          <DialogHeader>
+            <DialogTitle>{t(($) => $.knowledge.dialog.title)}</DialogTitle>
+            <DialogDescription className="break-all">{location}</DialogDescription>
+          </DialogHeader>
+          {field}
           <DialogFooter>
             <DialogClose render={<Button type="button" variant="outline" />}>
               {t(($) => $.knowledge.dialog.cancel)}
             </DialogClose>
-            <Button type="submit" disabled={!name.trim() || createNote.isPending} aria-busy={createNote.isPending}>
-              {t(($) => $.knowledge.dialog.create)}
-            </Button>
+            {submitButton}
           </DialogFooter>
         </form>
       </DialogContent>

@@ -17,8 +17,9 @@ describe("workspace page coverage", () => {
   // `root` is the bare workspace home and is never rendered as its own nav
   // item; the parameterized detail routes are resources, not pages.
   // `im`, `member` and `knowledge` are full-window surfaces outside the
-  // dashboard shell.
-  const EXCLUDED_METHODS = new Set(["root", "im", "member", "knowledge"]);
+  // dashboard shell, along with their query-param levels.
+  const EXCLUDED_METHODS = new Set(["root"]);
+  const FULL_WINDOW_SEGMENTS = new Set(["im", "member", "knowledge"]);
   const KNOWN_SEGMENTS = new Set(
     (Object.keys(WORKSPACE_PAGES) as WorkspacePageKey[]).map(
       (k) => WORKSPACE_PAGES[k].segment,
@@ -32,7 +33,8 @@ describe("workspace page coverage", () => {
     for (const [method, fn] of Object.entries(ws)) {
       if (typeof fn !== "function" || fn.length !== 0) continue;
       if (EXCLUDED_METHODS.has(method)) continue;
-      const segment = fn().split("/").filter(Boolean)[1] ?? "";
+      const segment = fn().split("?")[0]!.split("/").filter(Boolean)[1] ?? "";
+      if (FULL_WINDOW_SEGMENTS.has(segment)) continue;
       if (!KNOWN_SEGMENTS.has(segment)) missing.push(`${method} → "${segment}"`);
     }
 

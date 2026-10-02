@@ -145,3 +145,25 @@ export function historyPreviewLines(
   }
   return lines;
 }
+
+/** `nest=0.2` is the third message inside the first nested card. A bad token is the root. */
+export function parseHistoryNest(value: string | null): number[] {
+  if (!value) return [];
+  const indexes: number[] = [];
+  for (const part of value.split(".")) {
+    if (!/^\d+$/.test(part)) return [];
+    indexes.push(Number(part));
+  }
+  return indexes;
+}
+
+/** Walks nested history cards. Missing or non-history steps return null. */
+export function historyAt(record: ChatHistoryRecord, indexes: readonly number[]): ChatHistoryRecord | null {
+  let current = record;
+  for (const index of indexes) {
+    const next = parseChatHistory(current.messages[index]?.content ?? "");
+    if (!next) return null;
+    current = next;
+  }
+  return current;
+}

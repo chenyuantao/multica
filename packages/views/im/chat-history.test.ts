@@ -4,10 +4,12 @@ import type { Comment } from "@multica/core/types";
 import {
   canForwardMessage,
   encodeChatHistory,
+  historyAt,
   historyAuthorNames,
   historyContentOf,
   historyPreviewLines,
   parseChatHistory,
+  parseHistoryNest,
   summarizeMessageContent,
   utf8Size,
   CHAT_HISTORY_MAX_BYTES,
@@ -106,5 +108,19 @@ describe("chat history snapshot", () => {
 
   it("ignores a comment that is not a history card", () => {
     expect(parseChatHistory("hello ```multica-chat-history\n{}\n```")).toBeNull();
+  });
+
+  it("walks a nest path into a nested card", () => {
+    const nested = encodeChatHistory({ messages: [{ author_name: "Bo", content: "inner", created_at: "2026-01-01T00:00:00Z" }] });
+    const root = encodeChatHistory({
+      messages: [
+        { author_name: "Ada", content: "outer", created_at: "2026-01-01T00:00:00Z" },
+        { author_name: "Ada", content: nested, created_at: "2026-01-01T00:00:00Z" },
+      ],
+    });
+    const record = parseChatHistory(root);
+    expect(record && historyAt(record, parseHistoryNest("1"))?.messages[0]?.content).toBe("inner");
+    expect(record && historyAt(record, parseHistoryNest("0"))).toBeNull();
+    expect(parseHistoryNest("1.x")).toEqual([]);
   });
 });

@@ -89,7 +89,8 @@ export function VoiceHoldButton({ onSend, onEdit }: VoiceHoldButtonProps) {
     readyRef.current = false;
     finishingRef.current = false;
     bufferRef.current = [];
-    zoneRef.current = "send";
+    // Widened so TS doesn't keep "send" across the awaits below.
+    zoneRef.current = "send" as VoiceZone;
     setZone("send");
     setPreview("");
     setError(null);

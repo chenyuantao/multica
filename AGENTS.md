@@ -103,6 +103,7 @@ Workspace-scoped queries filter by `workspace_id`; membership gates access and `
 ## Web/Desktop UI Rules
 
 - For Button and Dialog usage, read `packages/ui/docs/button.md` and `packages/ui/docs/dialog.md`. These component contracts also power UI Lab documentation.
+- On the phone layout of the web app, a desktop dialog that opens more of the current screen is a secondary page: its own URL, the existing back control, and no modal. Chat history and IM search already work this way. The native app keeps its own screens.
 
 - Prefer existing shadcn/Base UI primitives. Add components with `pnpm ui:add <component>`.
 - For `pnpm ui:add @reui/<name>`, decline overwrite prompts. Keep `REUI_LICENSE_KEY` in the environment, never in repo files. Adapt vendored primitives into `packages/ui/components/ui/` and compositions into `packages/views/`.

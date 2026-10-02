@@ -368,4 +368,32 @@ describe("ImSearchDialog", () => {
     fireEvent.keyDown(input, { key: "Enter" });
     expect(askMutate).toHaveBeenCalledWith({ query: "what failed?", page: null, files: [file] }, expect.anything());
   });
+
+  it("fills a phone page with the same switcher and no dialog", async () => {
+    const navigation: NavigationAdapter = {
+      push: vi.fn(),
+      replace: vi.fn(),
+      back: vi.fn(),
+      pathname: "/acme/im",
+      searchParams: new URLSearchParams(),
+      hash: "",
+      getShareableUrl: (path) => path,
+    };
+    renderWithI18n(
+      <NavigationProvider value={navigation}>
+        <ImSearchDialog
+          presentation="page"
+          open
+          page={null}
+          selection={null}
+          onOpenChange={vi.fn()}
+          onClearSelection={vi.fn()}
+        />
+      </NavigationProvider>,
+    );
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(await screen.findByRole("combobox")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "All" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Standup/ })).toBeInTheDocument();
+  });
 });

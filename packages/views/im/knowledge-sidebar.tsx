@@ -29,10 +29,12 @@ interface KnowledgeSidebarProps {
   onSelect: (path: string) => void;
   /** Opens note creation inside `dir` ("" is the vault root). */
   onCreate: (dir: string) => void;
+  /** Phones open the shared search page instead of filtering this list. */
+  onOpenSearch?: () => void;
   className?: string;
 }
 
-export function KnowledgeSidebar({ selectedPath, onSelect, onCreate, className }: KnowledgeSidebarProps) {
+export function KnowledgeSidebar({ selectedPath, onSelect, onCreate, onOpenSearch, className }: KnowledgeSidebarProps) {
   const { t } = useT("im");
   const [query, setQuery] = useState("");
   const q = useDebouncedValue(query.trim(), 250);
@@ -80,7 +82,7 @@ export function KnowledgeSidebar({ selectedPath, onSelect, onCreate, className }
 
   return (
     <ImSidebarShell className={className}>
-      <ImSidebarHeader query={query} onQueryChange={setQuery} searchLabel={t(($) => $.knowledge.search)} title={t(($) => $.tabs.knowledge)}>
+      <ImSidebarHeader query={query} onQueryChange={setQuery} searchLabel={t(($) => $.knowledge.search)} title={t(($) => $.tabs.knowledge)} onOpenSearch={onOpenSearch}>
         <button
           type="button"
           onClick={() => onCreate(createTarget)}

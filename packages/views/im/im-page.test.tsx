@@ -71,8 +71,24 @@ vi.mock("./use-chat-directory", async () => {
 vi.mock("./use-group-chat-unread", () => ({ useGroupChatUnreadTotal: () => unreadTotalRef.current }));
 vi.mock("./im-rail", () => ({ ImRail: () => null }));
 vi.mock("./chat-sidebar", () => ({
-  ChatSidebar: ({ onSelect }: { onSelect: (id: string) => void }) => (
+  ChatSidebar: ({
+    onSelect,
+    onOpenSearch,
+    onNewChat,
+  }: {
+    onSelect: (id: string) => void;
+    onOpenSearch?: () => void;
+    onNewChat: () => void;
+  }) => (
     <>
+      <button type="button" onClick={onNewChat}>
+        New chat
+      </button>
+      {onOpenSearch && (
+        <button type="button" onClick={onOpenSearch}>
+          Search
+        </button>
+      )}
       <button type="button" onClick={() => onSelect("c1")}>
         select chat
       </button>
@@ -118,7 +134,13 @@ vi.mock("./chat-details-panel", () => ({
     </button>
   ),
 }));
-vi.mock("./new-chat-dialog", () => ({ NewChatDialog: () => null }));
+vi.mock("./new-chat-dialog", () => ({
+  NewChatDialog: ({ presentation }: { presentation?: string }) =>
+    presentation === "page" ? <p>new chat form</p> : null,
+}));
+vi.mock("../modals/create-agent", () => ({
+  CreateAgentModal: ({ presentation }: { presentation?: string }) => <p>{`create agent ${presentation}`}</p>,
+}));
 vi.mock("./im-search-dialog", () => ({ ImSearchDialog: () => null }));
 vi.mock("./contact-card", () => ({ ContactCard: ({ entry }: { entry: DirectoryEntry }) => <p>{`card ${entry.name}`}</p> }));
 vi.mock("../common/actor-avatar", () => ({ ActorAvatar: () => null }));
@@ -189,6 +211,39 @@ describe("ImPage tab roots on mobile", () => {
     renderPage("chats", "chat=c1");
     expect(screen.queryByRole("navigation", { name: "Sections" })).not.toBeInTheDocument();
   });
+
+  it("opens one centered search into its own page", () => {
+    const navigation = renderPage("chats");
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    expect(navigation.push).toHaveBeenCalledWith("/acme/im?view=search");
+  });
+
+  it("shows search as a level without the tab bar", () => {
+    renderPage("chats", "view=search");
+    expect(screen.getByRole("heading", { name: "Search" })).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Sections" })).not.toBeInTheDocument();
+  });
+
+  it("uses the same search entry on contacts", () => {
+    const navigation = renderPage("contacts");
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    expect(navigation.push).toHaveBeenCalledWith("/acme/member?view=search");
+  });
+
+  it("pushes new chat as its own page", () => {
+    const navigation = renderPage("chats");
+    fireEvent.click(screen.getByRole("button", { name: "New chat" }));
+    expect(navigation.push).toHaveBeenCalledWith("/acme/im?view=new");
+  });
+
+  it("shows the new-chat form as a level with a way back", () => {
+    const navigation = renderPage("chats", "view=new");
+    expect(screen.getByRole("heading", { name: "New group chat" })).toBeInTheDocument();
+    expect(screen.getByText("new chat form")).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Sections" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Back to chats" }));
+    expect(navigation.replace).toHaveBeenCalledWith("/acme/im");
+  });
 });
 
 describe("ImPage contacts on desktop", () => {
@@ -206,6 +261,13 @@ describe("ImPage contacts on desktop", () => {
     renderPage("contacts", "contact=member:user-2");
     expect(screen.getByText("card Ada")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Ada/ })).toHaveAttribute("aria-current", "true");
+  });
+
+  it("keeps new agent in the modal", () => {
+    const navigation = renderPage("contacts");
+    fireEvent.click(screen.getByRole("button", { name: "New agent" }));
+    expect(mockModalOpen).toHaveBeenCalledWith("create-agent");
+    expect(navigation.push).not.toHaveBeenCalled();
   });
 });
 
@@ -245,12 +307,18 @@ describe("ImPage contacts on mobile", () => {
     expect(screen.queryByRole("button", { name: "Message" })).not.toBeInTheDocument();
   });
 
-  it("opens the create-agent modal from the contacts header without navigating", () => {
+  it("pushes new agent as its own page instead of the modal", () => {
     const navigation = renderPage("contacts");
     fireEvent.click(screen.getByRole("button", { name: "New agent" }));
 
-    expect(mockModalOpen).toHaveBeenCalledWith("create-agent");
-    expect(navigation.push).not.toHaveBeenCalled();
+    expect(navigation.push).toHaveBeenCalledWith("/acme/member?view=new-agent");
+    expect(mockModalOpen).not.toHaveBeenCalled();
+  });
+
+  it("shows the agent form as a level", () => {
+    renderPage("contacts", "view=new-agent");
+    expect(screen.getByText("create agent page")).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Sections" })).not.toBeInTheDocument();
   });
 });
 

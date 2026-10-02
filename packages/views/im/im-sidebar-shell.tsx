@@ -50,10 +50,13 @@ interface ImSidebarHeaderProps {
   searchLabel: string;
   /** The tab name phones show centered above the search field. */
   title: string;
+  /** Phones open the shared search page instead of filtering this list. */
+  onOpenSearch?: () => void;
   children?: React.ReactNode;
 }
 
-export function ImSidebarHeader({ query, onQueryChange, searchLabel, title, children }: ImSidebarHeaderProps) {
+export function ImSidebarHeader({ query, onQueryChange, searchLabel, title, onOpenSearch, children }: ImSidebarHeaderProps) {
+  const { t } = useT("im");
   const isMobile = useIsMobile();
 
   if (isMobile) {
@@ -65,7 +68,18 @@ export function ImSidebarHeader({ query, onQueryChange, searchLabel, title, chil
           <div className="flex justify-center">{children}</div>
         </div>
         <div className="px-3 pb-2">
-          <SearchField query={query} onQueryChange={onQueryChange} searchLabel={searchLabel} className="h-8" />
+          {onOpenSearch ? (
+            <button
+              type="button"
+              onClick={onOpenSearch}
+              className="flex h-8 w-full items-center justify-center gap-1.5 rounded-[7px] bg-background text-label text-muted-foreground"
+            >
+              <Search className="size-[15px] shrink-0" />
+              <span>{t(($) => $.sidebar.search)}</span>
+            </button>
+          ) : (
+            <SearchField query={query} onQueryChange={onQueryChange} searchLabel={searchLabel} className="h-8" />
+          )}
         </div>
       </div>
     );

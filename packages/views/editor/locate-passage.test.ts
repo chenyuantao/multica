@@ -15,7 +15,7 @@ const schema = new Schema({
   },
 });
 
-function docOf(...blocks: ReturnType<Schema["node"]>) {
+function docOf(...blocks: ReturnType<Schema["node"]>[]) {
   return schema.node("doc", null, blocks);
 }
 

@@ -7,8 +7,17 @@ describe("paths.workspace(slug)", () => {
   it("builds workspace paths with slug prefix", () => {
     expect(ws.root()).toBe("/acme");
     expect(ws.member()).toBe("/acme/member");
+    expect(ws.memberSearch()).toBe("/acme/member?view=search");
+    expect(ws.imSearch()).toBe("/acme/im?view=search");
+    expect(ws.knowledgeSearch()).toBe("/acme/knowledge?view=search");
+    expect(ws.imNewChat()).toBe("/acme/im?view=new");
+    expect(ws.memberNewAgent()).toBe("/acme/member?view=new-agent");
+    expect(ws.knowledgeNewNote("")).toBe("/acme/knowledge?view=new");
+    expect(ws.knowledgeNewNote("a/b")).toBe("/acme/knowledge?view=new&dir=a%2Fb");
     expect(ws.memberContact("agent", "a1")).toBe("/acme/member?contact=agent%3Aa1");
     expect(ws.imChat("c1")).toBe("/acme/im?chat=c1");
+    expect(ws.imChatHistory("c1", "m1")).toBe("/acme/im?chat=c1&view=history&message=m1");
+    expect(ws.imChatHistory("c1", "m1", "0.1")).toBe("/acme/im?chat=c1&view=history&message=m1&nest=0.1");
     expect(ws.imChatContact("c1", "member", "u1")).toBe("/acme/im?chat=c1&contact=member%3Au1");
     expect(ws.memberChat("c1")).toBe("/acme/member?chat=c1");
     expect(ws.memberChatContact("c1", "agent", "a1")).toBe("/acme/member?chat=c1&contact=agent%3Aa1");

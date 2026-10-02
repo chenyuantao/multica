@@ -1,8 +1,8 @@
 import { fireEvent, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Sidebar, SidebarProvider } from "@multica/ui/components/ui/sidebar";
 import { renderWithI18n } from "../test/i18n";
-import { ImSidebarShell } from "./im-sidebar-shell";
+import { ImSidebarHeader, ImSidebarShell } from "./im-sidebar-shell";
 
 describe("ImSidebarShell", () => {
   afterEach(() => localStorage.clear());
@@ -27,5 +27,26 @@ describe("ImSidebarShell", () => {
     expect(knowledge).toHaveStyle({ width: "316px" });
     expect(wrapper.style.getPropertyValue("--sidebar-width")).toBe("316px");
     expect(localStorage.getItem("sidebar_width")).toBe("316");
+  });
+
+  it("centers one Search label on a phone and opens the search page", () => {
+    const previous = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
+    const onOpenSearch = vi.fn();
+    renderWithI18n(
+      <ImSidebarHeader
+        query=""
+        onQueryChange={() => {}}
+        searchLabel="Search contacts"
+        title="Contacts"
+        onOpenSearch={onOpenSearch}
+      />,
+    );
+    const button = screen.getByRole("button", { name: "Search" });
+    expect(button.className).toContain("justify-center");
+    expect(screen.queryByRole("textbox")).toBeNull();
+    fireEvent.click(button);
+    expect(onOpenSearch).toHaveBeenCalledOnce();
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: previous });
   });
 });

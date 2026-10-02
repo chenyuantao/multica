@@ -21,6 +21,7 @@ import { DocExcerptInsertProvider } from "./doc-excerpt-insert";
 import { DocExcerptRevealProvider } from "./doc-excerpt-reveal";
 import { ChatDetailsPanel } from "./chat-details-panel";
 import { ChatSidePanel } from "./chat-side-panel";
+import { ChatHistoryRoute } from "./chat-history-view";
 import { ChatSidebar } from "./chat-sidebar";
 import { ChatThread } from "./chat-thread";
 import { ContactCard } from "./contact-card";
@@ -30,6 +31,7 @@ import { ImSearchDialog } from "./im-search-dialog";
 import { MobileContactDetail, MobileLevel, MobileTabScreen, parseContactParam } from "./mobile-shell";
 import { chatDisplayTitle, sortChats } from "./im-utils";
 import { NewChatDialog } from "./new-chat-dialog";
+import { CreateAgentModal } from "../modals/create-agent";
 import {
   closeKnowledgeNote,
   knowledgeNoteTabsFor,
@@ -56,6 +58,7 @@ const EMPTY_CHATS: GroupChat[] = [];
  */
 export function ImPage({ view = "chats" }: { view?: ImView }) {
   const { t } = useT("im");
+  const { t: tAgents } = useT("agents");
   const wsId = useWorkspaceId();
   const userId = useAuthStore((s) => s.user?.id ?? "");
   const navigation = useNavigation();
@@ -139,7 +142,10 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
       selectedChatId={memberChat?.id ?? null}
       onSelect={selectContact}
       onOpenChat={openMemberChat}
-      onCreateAgent={() => useModalStore.getState().open("create-agent")}
+      onCreateAgent={() =>
+        isMobile ? navigation.push(paths.memberNewAgent()) : useModalStore.getState().open("create-agent")
+      }
+      onOpenSearch={() => navigation.push(paths.memberSearch())}
       className={className}
     />
   );
@@ -162,6 +168,59 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
 
   if (isMobile) {
     const settingsOpen = navigation.searchParams.get("view") === "settings";
+    const searchOpen = navigation.searchParams.get("view") === "search";
+    if (searchOpen && !requestedId && !contactTarget && !memberChatId) {
+      const backHref = view === "contacts" ? paths.member() : paths.im();
+      return (
+        <MobileLevel
+          title={t(($) => $.search.title)}
+          backHref={backHref}
+          backLabel={view === "contacts" ? t(($) => $.contacts.back) : t(($) => $.thread.back)}
+        >
+          <ImSearchDialog
+            presentation="page"
+            open
+            page={null}
+            selection={null}
+            onOpenChange={() => {}}
+            onClearSelection={() => {}}
+            onOpenChat={(id) => navigation.replace(view === "chats" ? paths.imChat(id) : paths.memberChat(id))}
+            onOpenContact={(entry) => navigation.replace(paths.memberContact(entry.type, entry.id))}
+            onOpenNote={(path) => navigation.replace(paths.knowledgeFile(path))}
+          />
+        </MobileLevel>
+      );
+    }
+
+    const pageView = navigation.searchParams.get("view");
+    if (view === "chats" && pageView === "new" && !requestedId) {
+      return (
+        <MobileLevel title={t(($) => $.new_chat.title)} backHref={paths.im()} backLabel={t(($) => $.thread.back)}>
+          <NewChatDialog
+            presentation="page"
+            wsId={wsId}
+            open
+            onOpenChange={() => {}}
+            onCreated={(chat) => navigation.replace(paths.imChat(chat.id))}
+          />
+        </MobileLevel>
+      );
+    }
+    if (view === "contacts" && pageView === "new-agent" && !contactTarget && !memberChatId) {
+      return (
+        <MobileLevel
+          title={tAgents(($) => $.create_dialog.title_create)}
+          backHref={paths.member()}
+          backLabel={t(($) => $.contacts.back)}
+        >
+          <CreateAgentModal
+            presentation="page"
+            onClose={() => navigation.replace(paths.member())}
+            onCreated={(agent) => navigation.replace(paths.memberContact("agent", agent.id))}
+          />
+        </MobileLevel>
+      );
+    }
 
     if (view === "contacts") {
       let contactLevel: React.ReactNode;
@@ -225,8 +284,9 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
             selectedId={null}
             userId={userId}
             onSelect={select}
-            onNewChat={() => setNewChatOpen(true)}
+            onNewChat={() => navigation.push(paths.imNewChat())}
             onSetPinned={setChatPinned}
+            onOpenSearch={() => navigation.push(paths.imSearch())}
             iosMenu
             className="min-w-0 flex-1 border-r-0"
           />
@@ -250,6 +310,15 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
         />
       ) : (
         <MobileContactDetail contact={contactTarget} backHref={paths.imChat(requested.id)} backLabel={t(($) => $.panel.back)} />
+      );
+    } else if (navigation.searchParams.get("view") === "history") {
+      level = (
+        <ChatHistoryRoute
+          wsId={wsId}
+          chatId={requested.id}
+          messageId={navigation.searchParams.get("message") ?? ""}
+          nest={navigation.searchParams.get("nest")}
+        />
       );
     } else if (settingsOpen) {
       level = (
@@ -288,6 +357,7 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
                 ? paths.imChatContact(requested.id, peer.member_type, peer.member_id)
                 : paths.imChatSettings(requested.id),
               onOpenProfile: (type, id) => navigation.push(paths.imChatContact(requested.id, type, id)),
+              onOpenHistory: (messageId) => navigation.push(paths.imChatHistory(requested.id, messageId)),
             }}
           />
         </div>
@@ -324,6 +394,7 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
             onSelect={select}
             onNewChat={() => setNewChatOpen(true)}
             onSetPinned={setChatPinned}
+            onOpenSearch={() => navigation.push(paths.imSearch())}
           />
         )}
 

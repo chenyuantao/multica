@@ -1,6 +1,7 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
+import type { Agent } from "@multica/core/types";
 import { Button } from "@multica/ui/components/ui/button";
 import {
   Dialog,
@@ -19,33 +20,31 @@ import { useT } from "../i18n";
  * navigating to the new agent. The draft is not persisted — dismissing the
  * modal abandons it.
  */
-export function CreateAgentModal({ onClose }: { onClose: () => void }) {
+export function CreateAgentModal({
+  onClose,
+  onCreated,
+  presentation = "dialog",
+}: {
+  onClose: () => void;
+  /** Replaces closing once the agent exists. */
+  onCreated?: (agent: Agent) => void;
+  /** `page` fills a phone level whose header carries the title and the way back. */
+  presentation?: "dialog" | "page";
+}) {
   const { t } = useT("agents");
   const form = useCreateAgentForm();
   const submit = useCreateAgentSubmit({
     draft: form.draft,
     runtimeId: form.selectedRuntime?.id ?? null,
     squadId: null,
-    onComplete: onClose,
+    onComplete: (agent) => (onCreated ? onCreated(agent) : onClose()),
   });
 
   const canCreate =
     form.draft.name.trim().length > 0 && form.draftReady && !submit.creating;
 
-  return (
-    <Dialog
-      open
-      onOpenChange={(v) => {
-        if (!v && !submit.creating) onClose();
-      }}
-    >
-      <DialogContent className="flex h-[min(56rem,calc(100dvh-2rem))] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl">
-        <DialogHeader className="shrink-0 space-y-0 border-b py-3 pr-12 pl-5">
-          <DialogTitle className="text-title-sm font-semibold">
-            {t(($) => $.create_dialog.title_create)}
-          </DialogTitle>
-        </DialogHeader>
-
+  const body = (
+    <>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-6">
           <AgentConfigurationPanel
             draft={form.draft}
@@ -62,7 +61,7 @@ export function CreateAgentModal({ onClose }: { onClose: () => void }) {
           />
         </div>
 
-        <div className="flex shrink-0 items-center gap-2 border-t bg-background px-5 py-3">
+        <div className="flex shrink-0 items-center gap-2 border-t bg-background px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           {submit.formError && (
             <p
               role="alert"
@@ -71,16 +70,18 @@ export function CreateAgentModal({ onClose }: { onClose: () => void }) {
               {submit.formError}
             </p>
           )}
+          {presentation === "dialog" && (
+            <Button
+              variant="ghost"
+              className="ml-auto shrink-0"
+              onClick={onClose}
+              disabled={submit.creating}
+            >
+              {t(($) => $.create_dialog.cancel)}
+            </Button>
+          )}
           <Button
-            variant="ghost"
             className="ml-auto shrink-0"
-            onClick={onClose}
-            disabled={submit.creating}
-          >
-            {t(($) => $.create_dialog.cancel)}
-          </Button>
-          <Button
-            className="shrink-0"
             onClick={() => void submit.create()}
             disabled={!canCreate}
           >
@@ -90,6 +91,27 @@ export function CreateAgentModal({ onClose }: { onClose: () => void }) {
               : t(($) => $.create_dialog.create)}
           </Button>
         </div>
+    </>
+  );
+
+  if (presentation === "page") {
+    return <div className="flex min-h-0 flex-1 flex-col">{body}</div>;
+  }
+
+  return (
+    <Dialog
+      open
+      onOpenChange={(v) => {
+        if (!v && !submit.creating) onClose();
+      }}
+    >
+      <DialogContent className="flex h-[min(56rem,calc(100dvh-2rem))] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl">
+        <DialogHeader className="shrink-0 space-y-0 border-b py-3 pr-12 pl-5">
+          <DialogTitle className="text-title-sm font-semibold">
+            {t(($) => $.create_dialog.title_create)}
+          </DialogTitle>
+        </DialogHeader>
+        {body}
       </DialogContent>
     </Dialog>
   );

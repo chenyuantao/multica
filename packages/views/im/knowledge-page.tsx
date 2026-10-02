@@ -57,6 +57,41 @@ export function KnowledgePage() {
     </>
   );
 
+  if (isMobile && navigation.searchParams.get("view") === "search" && !selectedPath) {
+    return (
+      <MobileLevel title={t(($) => $.search.title)} backHref={paths.knowledge()} backLabel={t(($) => $.knowledge.back)}>
+        <ImSearchDialog
+          presentation="page"
+          open
+          page={null}
+          selection={null}
+          onOpenChange={() => {}}
+          onClearSelection={() => {}}
+          onOpenChat={(id) => navigation.replace(paths.imChat(id))}
+          onOpenContact={(entry) => navigation.replace(paths.memberContact(entry.type, entry.id))}
+          onOpenNote={(path) => navigation.replace(paths.knowledgeFile(path))}
+        />
+      </MobileLevel>
+    );
+  }
+
+  if (isMobile && navigation.searchParams.get("view") === "new" && !selectedPath) {
+    return (
+      <MobileLevel
+        title={t(($) => $.knowledge.dialog.title)}
+        backHref={paths.knowledge()}
+        backLabel={t(($) => $.knowledge.back)}
+      >
+        <NewNoteDialog
+          presentation="page"
+          dir={navigation.searchParams.get("dir") ?? ""}
+          onOpenChange={() => {}}
+          onCreated={(file) => navigation.replace(paths.knowledgeFile(file.path))}
+        />
+      </MobileLevel>
+    );
+  }
+
   if (isMobile) {
     return (
       <>
@@ -73,7 +108,8 @@ export function KnowledgePage() {
             <KnowledgeSidebar
               selectedPath={null}
               onSelect={select}
-              onCreate={setCreateDir}
+              onCreate={(dir) => navigation.push(paths.knowledgeNewNote(dir))}
+              onOpenSearch={() => navigation.push(paths.knowledgeSearch())}
               className="w-auto min-w-0 flex-1 border-r-0"
             />
           </MobileTabScreen>
@@ -86,7 +122,12 @@ export function KnowledgePage() {
   return (
     <div className="flex h-svh w-full overflow-hidden bg-background text-foreground">
       <ImRail active="knowledge" />
-      <KnowledgeSidebar selectedPath={selectedPath} onSelect={select} onCreate={setCreateDir} />
+      <KnowledgeSidebar
+        selectedPath={selectedPath}
+        onSelect={select}
+        onCreate={setCreateDir}
+        onOpenSearch={() => navigation.push(paths.knowledgeSearch())}
+      />
       <div className="relative flex min-w-0 flex-1">
         {selectedPath ? (
           <KnowledgeDocument key={selectedPath} path={selectedPath} onAskAI={() => launcher.show()} />

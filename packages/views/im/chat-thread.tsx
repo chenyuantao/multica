@@ -102,7 +102,13 @@ interface ChatThreadProps {
   /** The knowledge note tab open beside the chat. Each send tells the agent the message is about it. */
   focusNote?: FocusNote | null;
   /** Mobile stacked layout: back to the chat list, on to chat settings, and profiles as page levels. */
-  mobileNav?: { backHref: string; settingsHref: string; onOpenProfile: (actorType: string, actorId: string) => void };
+  mobileNav?: {
+    backHref: string;
+    settingsHref: string;
+    onOpenProfile: (actorType: string, actorId: string) => void;
+    /** Opens a forwarded history card as its own page. */
+    onOpenHistory?: (messageId: string) => void;
+  };
 }
 
 const EMPTY_COMMENTS: Comment[] = [];
@@ -455,6 +461,7 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAsk
                         onJumpToQuote={jumpTo}
                         actions={actionsFor(m)}
                         iosMenu={!!mobileNav}
+                        onOpenHistory={mobileNav?.onOpenHistory}
                         selecting
                       />
                     </SelectableRow>
@@ -472,6 +479,7 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAsk
                       onJumpToQuote={jumpTo}
                       actions={actionsFor(m)}
                       iosMenu={!!mobileNav}
+                      onOpenHistory={mobileNav?.onOpenHistory}
                       selecting={selecting}
                     />
                   )}
@@ -711,6 +719,7 @@ function MessageRow({
   onJumpToQuote,
   actions,
   iosMenu,
+  onOpenHistory,
   selecting,
 }: {
   message: Comment;
@@ -728,6 +737,8 @@ function MessageRow({
   actions: MessageActions;
   /** Phones: style the long-press menu after iOS. */
   iosMenu?: boolean;
+  /** Phones open the card on its own page. */
+  onOpenHistory?: (messageId: string) => void;
   /** Multi-select hides the menu; a click on the row toggles the message. */
   selecting?: boolean;
 }) {
@@ -768,7 +779,11 @@ function MessageRow({
       </MessageMenu>
     );
   const bubble = history ? (
-    <ChatHistoryCard content={message.content} interactive={!selecting} />
+    <ChatHistoryCard
+      content={message.content}
+      interactive={!selecting}
+      onOpen={onOpenHistory && !selecting ? () => onOpenHistory(message.id) : undefined}
+    />
   ) : (
     <Bubble mine={mine} title={time}>
       <RichContent content={message.content} attachments={message.attachments} density="compact" />

@@ -25,6 +25,8 @@ interface ChatSidebarProps {
   onSelect: (chatId: string) => void;
   onNewChat: () => void;
   onSetPinned: (chatId: string, pinned: boolean) => void;
+  /** Phones open the shared search page instead of filtering this list. */
+  onOpenSearch?: () => void;
   /** Phones get the iOS menu look on long press. */
   iosMenu?: boolean;
   className?: string;
@@ -39,6 +41,7 @@ export function ChatSidebar({
   onSelect,
   onNewChat,
   onSetPinned,
+  onOpenSearch,
   iosMenu,
   className,
 }: ChatSidebarProps) {
@@ -57,7 +60,7 @@ export function ChatSidebar({
 
   return (
     <ImSidebarShell className={className}>
-      <ImSidebarHeader query={query} onQueryChange={setQuery} searchLabel={t(($) => $.sidebar.search)} title={t(($) => $.tabs.chats)}>
+      <ImSidebarHeader query={query} onQueryChange={setQuery} searchLabel={t(($) => $.sidebar.search)} title={t(($) => $.tabs.chats)} onOpenSearch={onOpenSearch}>
         <button
           type="button"
           onClick={onNewChat}

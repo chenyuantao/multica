@@ -27,14 +27,16 @@ interface NewChatDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCreated: (chat: GroupChat) => void;
+  /** `page` fills a phone level whose header carries the title. */
+  presentation?: "dialog" | "page";
 }
 
-export function NewChatDialog({ wsId, open, onOpenChange, onCreated }: NewChatDialogProps) {
+export function NewChatDialog({ wsId, open, onOpenChange, onCreated, presentation = "dialog" }: NewChatDialogProps) {
   const { t } = useT("im");
   const userId = useAuthStore((s) => s.user?.id ?? "");
   const directory = useChatDirectory(wsId);
   const createChat = useCreateGroupChat(wsId);
-  const directChat = useStartDirectChat(wsId);
+  const directChat = useStartDirectChat(wsId, { replace: presentation === "page" });
   const [title, setTitle] = useState("");
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<Map<string, GroupChatMemberRef>>(() => new Map());
@@ -81,20 +83,8 @@ export function NewChatDialog({ wsId, open, onOpenChange, onCreated }: NewChatDi
     }
   };
 
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        if (!next) reset();
-        onOpenChange(next);
-      }}
-    >
-      <DialogContent className="sm:max-w-md">
-        <form onSubmit={submit} className="flex min-w-0 flex-col gap-4">
-          <DialogHeader>
-            <DialogTitle>{t(($) => $.new_chat.title)}</DialogTitle>
-            <DialogDescription>{t(($) => $.new_chat.description)}</DialogDescription>
-          </DialogHeader>
+  const fields = (
+    <>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="im-new-chat-title">{t(($) => $.new_chat.name_label)}</Label>
             <Input
@@ -118,13 +108,48 @@ export function NewChatDialog({ wsId, open, onOpenChange, onCreated }: NewChatDi
               onPick={(entry) => toggle(entry.type, entry.id)}
             />
           </div>
+    </>
+  );
+  const submitButton = (
+    <Button type="submit" disabled={(!directPeer && !title.trim()) || pending} aria-busy={pending}>
+      {directPeer ? t(($) => $.contacts.send_message) : t(($) => $.new_chat.create)}
+    </Button>
+  );
+
+  if (presentation === "page") {
+    return (
+      <form onSubmit={submit} className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
+          <p className="text-caption text-muted-foreground">{t(($) => $.new_chat.description)}</p>
+          {fields}
+        </div>
+        <div className="flex shrink-0 justify-end gap-2 border-t px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          {submitButton}
+        </div>
+      </form>
+    );
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) reset();
+        onOpenChange(next);
+      }}
+    >
+      <DialogContent className="sm:max-w-md">
+        <form onSubmit={submit} className="flex min-w-0 flex-col gap-4">
+          <DialogHeader>
+            <DialogTitle>{t(($) => $.new_chat.title)}</DialogTitle>
+            <DialogDescription>{t(($) => $.new_chat.description)}</DialogDescription>
+          </DialogHeader>
+          {fields}
           <DialogFooter>
             <DialogClose render={<Button type="button" variant="outline" />}>
               {t(($) => $.new_chat.cancel)}
             </DialogClose>
-            <Button type="submit" disabled={(!directPeer && !title.trim()) || pending} aria-busy={pending}>
-              {directPeer ? t(($) => $.contacts.send_message) : t(($) => $.new_chat.create)}
-            </Button>
+            {submitButton}
           </DialogFooter>
         </form>
       </DialogContent>

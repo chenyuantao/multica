@@ -84,6 +84,8 @@ interface ImSearchDialogProps extends AskAIDialogState {
   onOpenChat?: (chatId: string) => void;
   onOpenContact?: (entry: DirectoryEntry) => void;
   onOpenNote?: (path: string) => void;
+  /** `page` fills a phone level. The dialog is the desktop modal. */
+  presentation?: "dialog" | "page";
 }
 
 /**
@@ -94,6 +96,7 @@ interface ImSearchDialogProps extends AskAIDialogState {
  * the question, its files, the page and whatever was picked on it go to the
  * user's direct chat with it. The element picker hides the dialog until a
  * node is clicked. Attaching a file makes the dialog a question only.
+ * Phones mount the same switcher as `presentation="page"`.
  */
 export function ImSearchDialog({
   open,
@@ -104,6 +107,7 @@ export function ImSearchDialog({
   onOpenChat,
   onOpenContact,
   onOpenNote,
+  presentation = "dialog",
 }: ImSearchDialogProps) {
   const { t } = useT("im");
   const { t: tEditor } = useT("editor");
@@ -161,6 +165,11 @@ export function ImSearchDialog({
     setPicking(false);
     setElement(null);
   }, [open]);
+
+  useEffect(() => {
+    if (presentation !== "page" || !open) return;
+    inputRef.current?.focus();
+  }, [presentation, open]);
 
   const addFiles = (list: File[]) => {
     const fit = list.filter((file) => {
@@ -317,25 +326,18 @@ export function ImSearchDialog({
   const noteQuery = searching ? (noteSearch.data?.query ?? "") : "";
   const now = new Date();
 
-  return (
-    <Dialog open={open && !picking} onOpenChange={onOpenChange}>
-      {picking && <ElementPicker onPick={pick} onCancel={cancelPick} />}
-      <DialogContent
-        data-element-picker-ignore=""
-        className="top-[20%] translate-y-0 overflow-hidden rounded-xl! p-0 sm:max-w-xl!"
-        showCloseButton={false}
-        initialFocus={inputRef}
-      >
-        <DialogHeader className="sr-only">
-          <DialogTitle>{t(($) => $.search.title)}</DialogTitle>
-        </DialogHeader>
+  const command = (
         <CommandPrimitive
           {...dropZoneProps}
           shouldFilter={false}
           loop
           value={active}
           onValueChange={setActive}
-          className="relative flex size-full flex-col overflow-hidden rounded-xl bg-popover text-popover-foreground"
+          className={
+            presentation === "page"
+              ? "relative flex min-h-0 flex-1 flex-col overflow-hidden bg-background text-foreground"
+              : "relative flex size-full flex-col overflow-hidden rounded-xl bg-popover text-popover-foreground"
+          }
         >
           <AskContextQuote
             selection={selection}
@@ -374,7 +376,10 @@ export function ImSearchDialog({
               <SquareDashedMousePointer />
             </Button>
             <FileUploadButton multiple className="-mx-1 shrink-0" onSelect={(file) => addFiles([file])} />
-            <ShortcutKeycaps shortcut={createShortcutChord("Escape")} className="hidden shrink-0 sm:inline-flex" />
+            <ShortcutKeycaps
+              shortcut={createShortcutChord("Escape")}
+              className={presentation === "page" ? "hidden" : "hidden shrink-0 sm:inline-flex"}
+            />
           </div>
           {asking && (
             <ul className="flex flex-wrap gap-1.5 px-4 pb-2.5">
@@ -418,7 +423,13 @@ export function ImSearchDialog({
             </Tabs>
           )}
 
-          <CommandPrimitive.List className="max-h-[min(440px,55vh)] overflow-x-hidden overflow-y-auto">
+          <CommandPrimitive.List
+            className={
+              presentation === "page"
+                ? "min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
+                : "max-h-[min(440px,55vh)] overflow-x-hidden overflow-y-auto"
+            }
+          >
             <CommandPrimitive.Group className={asking ? "p-2" : "px-2 pt-2"}>
               <CommandPrimitive.Item value={ASK_VALUE} disabled={!canAsk} onSelect={ask} className={ITEM_CLASS}>
                 {askAI.isPending ? (
@@ -489,6 +500,30 @@ export function ImSearchDialog({
           </CommandPrimitive.List>
           {isDragOver && <FileDropOverlay />}
         </CommandPrimitive>
+  );
+
+  if (presentation === "page") {
+    return (
+      <div data-element-picker-ignore="" className="flex min-h-0 flex-1 flex-col">
+        <h2 className="sr-only">{t(($) => $.search.title)}</h2>
+        {picking ? <ElementPicker onPick={pick} onCancel={cancelPick} /> : command}
+      </div>
+    );
+  }
+
+  return (
+    <Dialog open={open && !picking} onOpenChange={onOpenChange}>
+      {picking && <ElementPicker onPick={pick} onCancel={cancelPick} />}
+      <DialogContent
+        data-element-picker-ignore=""
+        className="top-[20%] translate-y-0 overflow-hidden rounded-xl! p-0 sm:max-w-xl!"
+        showCloseButton={false}
+        initialFocus={inputRef}
+      >
+        <DialogHeader className="sr-only">
+          <DialogTitle>{t(($) => $.search.title)}</DialogTitle>
+        </DialogHeader>
+        {command}
       </DialogContent>
     </Dialog>
   );

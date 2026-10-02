@@ -57,7 +57,16 @@ function workspaceScoped(slug: string) {
     squadDetail: (id: string) => `${ws}/squads/${encode(id)}`,
     inbox: () => `${ws}/inbox`,
     im: () => `${ws}/im`,
+    // Phone search level. The desktop lists filter in place; a phone opens the
+    // shared switcher as its own page.
+    imSearch: () => `${ws}/im?view=search`,
+    imNewChat: () => `${ws}/im?view=new`,
     imChat: (chatId: string) => `${ws}/im?chat=${encode(chatId)}`,
+    // Phone level for one forwarded history card. `nest` walks cards inside it.
+    imChatHistory: (chatId: string, messageId: string, nest?: string) => {
+      const base = `${ws}/im?chat=${encode(chatId)}&view=history&message=${encode(messageId)}`;
+      return nest ? `${base}&nest=${encode(nest)}` : base;
+    },
     imChatSettings: (chatId: string) => `${ws}/im?chat=${encode(chatId)}&view=settings`,
     // Phone levels stacked on a chat: a profile opened from the thread, and
     // one opened from the chat settings.
@@ -66,6 +75,8 @@ function workspaceScoped(slug: string) {
     imChatSettingsContact: (chatId: string, actorType: string, actorId: string) =>
       `${ws}/im?chat=${encode(chatId)}&view=settings&contact=${encode(`${actorType}:${actorId}`)}`,
     member: () => `${ws}/member`,
+    memberSearch: () => `${ws}/member?view=search`,
+    memberNewAgent: () => `${ws}/member?view=new-agent`,
     memberContact: (actorType: string, actorId: string) =>
       `${ws}/member?contact=${encode(`${actorType}:${actorId}`)}`,
     // A group picked from the contacts list: details first, not the thread.
@@ -73,6 +84,10 @@ function workspaceScoped(slug: string) {
     memberChatContact: (chatId: string, actorType: string, actorId: string) =>
       `${ws}/member?chat=${encode(chatId)}&contact=${encode(`${actorType}:${actorId}`)}`,
     knowledge: () => `${ws}/knowledge`,
+    knowledgeSearch: () => `${ws}/knowledge?view=search`,
+    // "" is the vault root.
+    knowledgeNewNote: (dir: string) =>
+      dir ? `${ws}/knowledge?view=new&dir=${encode(dir)}` : `${ws}/knowledge?view=new`,
     knowledgeFile: (path: string) => `${ws}/knowledge?file=${encode(path)}`,
     chat: () => `${ws}/chat`,
     chatWithAgent: (agentId: string) =>

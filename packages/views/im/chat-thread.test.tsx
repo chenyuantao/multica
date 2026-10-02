@@ -703,4 +703,29 @@ describe("ChatThread forward and multi-select", () => {
     expect(await screen.findByRole("dialog")).toHaveTextContent("full body");
     expect(screen.getByRole("dialog")).toHaveTextContent("https://cdn.test/a.png");
   });
+
+  it("opens a history card through the phone page instead of a dialog", () => {
+    const onOpenHistory = vi.fn();
+    messages = [
+      message(
+        "m-1",
+        encodeChatHistory({
+          messages: [{ author_name: "Ada", content: "full body", created_at: "2026-09-30T13:00:00Z" }],
+        }),
+      ),
+    ];
+    renderWithI18n(
+      <ChatThread
+        wsId="ws-1"
+        chat={chat}
+        userId="user-1"
+        panelOpen={false}
+        onTogglePanel={() => {}}
+        mobileNav={{ backHref: "/im", settingsHref: "/im/settings", onOpenProfile: () => {}, onOpenHistory }}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Chat History for Ada/ }));
+    expect(onOpenHistory).toHaveBeenCalledWith("m-1");
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
 });
