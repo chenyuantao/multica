@@ -155,7 +155,7 @@ describe("EditorBubbleMenu accessibility", () => {
     const buttons = screen.getAllByRole("button");
     expect(buttons[0]).toHaveAccessibleName("Ask AI");
     fireEvent.click(buttons[0]!);
-    expect(onSelect).toHaveBeenCalledWith("selected text");
+    expect(onSelect).toHaveBeenCalledWith("selected text", 1);
     expect(editor.commands.setTextSelection).toHaveBeenCalledWith(2);
     expect(editor.chain().toggleBold).not.toHaveBeenCalled();
   });

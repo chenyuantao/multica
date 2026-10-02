@@ -503,7 +503,7 @@ function EditorBubbleMenu({
   currentIssueId?: string;
   selectionAction?: { label: string; onSelect: () => boolean | void };
   /** Leading action that sends the selected text somewhere else. The document stays unchanged. */
-  askSelection?: { label: string; onSelect: (text: string) => void };
+  askSelection?: { label: string; onSelect: (text: string, from?: number) => void };
 }) {
   const { t } = useT("editor");
   const [visible, setVisible] = useState(false);
@@ -651,7 +651,7 @@ function EditorBubbleMenu({
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => {
                   const { from, to } = editor.state.selection;
-                  askSelection.onSelect(editor.state.doc.textBetween(from, to, "\n"));
+                  askSelection.onSelect(editor.state.doc.textBetween(from, to, "\n"), from);
                   editor.commands.setTextSelection(to);
                   setVisible(false);
                 }}

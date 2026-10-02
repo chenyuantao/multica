@@ -3,6 +3,8 @@ export interface DocExcerpt {
   name: string;
   path: string;
   text: string;
+  /** Document position of the selection, so a later click can find this occurrence. */
+  from?: number;
 }
 
 const NAME_MAX = 200;
@@ -31,13 +33,60 @@ export function normalizeDocExcerpt(excerpt: DocExcerpt): DocExcerpt | null {
   const path = cleanMeta(excerpt.path, PATH_MAX);
   const text = clipRunes(excerpt.text.replaceAll("\u0000", "").trim(), TEXT_MAX);
   if (!name || !path || !text) return null;
-  return { name, path, text };
+  const from = passageOrigin(excerpt.from);
+  return from == null ? { name, path, text } : { name, path, text, from };
+}
+
+function passageOrigin(value: number | undefined): number | undefined {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : undefined;
 }
 
 /** One-line preview used as the markdown link label. `]` would break the link. */
 export function docExcerptLabel(excerpt: DocExcerpt): string {
   const label = clipRunes(excerpt.text.replace(/[[\]]/g, " ").replace(/\s+/g, " ").trim(), LABEL_MAX);
   return label || "…";
+}
+
+/** Visible chip text. The passage stays in the payload; the chip shows the document name. */
+export interface DocExcerptChipLabel {
+  name: string;
+  /** 1-based suffix when this name appears more than once. Absent when it is unique. */
+  index: number | null;
+}
+
+/**
+ * Names in document order. A name that appears once stays as itself. Repeats
+ * become name1, name2, in the order they occur.
+ */
+export function docExcerptChipLabels(names: string[]): DocExcerptChipLabel[] {
+  const total = new Map<string, number>();
+  for (const name of names) total.set(name, (total.get(name) ?? 0) + 1);
+  const seen = new Map<string, number>();
+  return names.map((name) => {
+    if ((total.get(name) ?? 0) < 2) return { name, index: null };
+    const index = (seen.get(name) ?? 0) + 1;
+    seen.set(name, index);
+    return { name, index };
+  });
+}
+
+/** Source offset of each excerpt link, so a renderer can label chips without counting during render. */
+export function docExcerptChipLabelIndex(markdown: string): ReadonlyMap<number, DocExcerptChipLabel> {
+  const pattern = new RegExp(TOKEN.source, "g");
+  const hits: { offset: number; name: string }[] = [];
+  for (const match of markdown.matchAll(pattern)) {
+    if (match.index == null) continue;
+    const excerpt = decodeDocExcerptPayload(match[2] ?? "");
+    if (!excerpt) continue;
+    hits.push({ offset: match.index, name: excerpt.name });
+  }
+  const labels = docExcerptChipLabels(hits.map((hit) => hit.name));
+  const index = new Map<number, DocExcerptChipLabel>();
+  hits.forEach((hit, i) => {
+    const label = labels[i];
+    if (label) index.set(hit.offset, label);
+  });
+  return index;
 }
 
 function bytesToBase64Url(bytes: Uint8Array): string {
@@ -76,7 +125,8 @@ export function decodeDocExcerptPayload(payload: string): DocExcerpt | null {
     if (typeof record.name !== "string" || typeof record.path !== "string" || typeof record.text !== "string") {
       return null;
     }
-    return normalizeDocExcerpt({ name: record.name, path: record.path, text: record.text });
+    const from = typeof record.from === "number" ? record.from : undefined;
+    return normalizeDocExcerpt({ name: record.name, path: record.path, text: record.text, from });
   } catch {
     return null;
   }

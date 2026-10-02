@@ -1,10 +1,11 @@
 import {
   decodeDocExcerptPayload,
+  docExcerptChipLabels,
   encodeDocExcerpt,
   splitDocExcerpts,
   type DocExcerpt,
 } from "./doc-excerpt";
-import { DOC_EXCERPT_ATTR, createExcerptChip } from "./doc-excerpt-chip";
+import { DOC_EXCERPT_ATTR, createExcerptChip, setExcerptChipLabel } from "./doc-excerpt-chip";
 
 /** Reads the editor as the markdown the message stores: prose plus excerpt links. */
 export function serializeComposer(root: Node): string {
@@ -41,6 +42,31 @@ export function serializeComposer(root: Node): string {
 export function renderComposer(root: HTMLElement, markdown: string): void {
   root.replaceChildren();
   for (const node of nodesFromMarkdown(markdown)) root.appendChild(node);
+  labelComposerExcerpts(root);
+}
+
+/** The excerpt under a click or pointer event, when it landed on a chip. */
+export function excerptFromComposerEvent(root: HTMLElement, target: EventTarget | null): DocExcerpt | null {
+  if (!(target instanceof Node) || !root.contains(target)) return null;
+  const el = target instanceof Element ? target : target.parentElement;
+  const chip = el?.closest(`[${DOC_EXCERPT_ATTR}]`);
+  if (!(chip instanceof HTMLElement) || !root.contains(chip)) return null;
+  return decodeDocExcerptPayload(chip.getAttribute(DOC_EXCERPT_ATTR) ?? "");
+}
+
+/** Chips show the document name. A repeated name gets a 1-based suffix, in order. */
+export function labelComposerExcerpts(root: HTMLElement): void {
+  const chips = [...root.querySelectorAll(`[${DOC_EXCERPT_ATTR}]`)].filter(
+    (node): node is HTMLElement => node instanceof HTMLElement,
+  );
+  const names = chips.map(
+    (chip) => decodeDocExcerptPayload(chip.getAttribute(DOC_EXCERPT_ATTR) ?? "")?.name ?? "",
+  );
+  const labels = docExcerptChipLabels(names);
+  chips.forEach((chip, i) => {
+    const label = labels[i];
+    if (label) setExcerptChipLabel(chip, label);
+  });
 }
 
 export function nodesFromMarkdown(markdown: string): Node[] {
@@ -145,6 +171,7 @@ function insertNodes(root: HTMLElement, nodes: Node[]) {
   for (const node of nodes) fragment.appendChild(node);
   const last = nodes[nodes.length - 1]!;
   range.insertNode(fragment);
+  labelComposerExcerpts(root);
   if (last.nodeType === Node.TEXT_NODE) placeCaret(last, last.textContent?.length ?? 0);
   else placeCaretAfter(last);
 }
@@ -178,6 +205,7 @@ export function deleteAdjacentChip(root: HTMLElement, key: "Backspace" | "Delete
   const before = target.previousSibling;
   const after = target.nextSibling;
   target.remove();
+  labelComposerExcerpts(root);
   if (key === "Backspace") {
     if (before) placeCaretAfter(before);
     else placeCaret(root, 0);

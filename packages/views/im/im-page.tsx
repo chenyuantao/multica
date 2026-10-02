@@ -18,6 +18,7 @@ import { useT } from "../i18n";
 import { DragStrip } from "../platform";
 import { chatAskPage, contactAskPage, visibleMessageIds } from "./ask-ai-context";
 import { DocExcerptInsertProvider } from "./doc-excerpt-insert";
+import { DocExcerptRevealProvider } from "./doc-excerpt-reveal";
 import { ChatDetailsPanel } from "./chat-details-panel";
 import { ChatSidePanel } from "./chat-side-panel";
 import { ChatSidebar } from "./chat-sidebar";
@@ -295,8 +296,10 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
     return (
       <KnowledgeNotesProvider onOpen={openNote}>
         <DocExcerptInsertProvider>
-          {level}
-          {dialogs}
+          <DocExcerptRevealProvider onOpen={openNote}>
+            {level}
+            {dialogs}
+          </DocExcerptRevealProvider>
         </DocExcerptInsertProvider>
       </KnowledgeNotesProvider>
     );
@@ -305,6 +308,7 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
   return (
     <KnowledgeNotesProvider onOpen={openNote}>
       <DocExcerptInsertProvider>
+      <DocExcerptRevealProvider onOpen={openNote}>
       <div className="flex h-svh w-full overflow-hidden bg-background text-foreground">
         {rail}
         {view === "contacts" ? (
@@ -403,6 +407,7 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
 
         {dialogs}
       </div>
+      </DocExcerptRevealProvider>
       </DocExcerptInsertProvider>
     </KnowledgeNotesProvider>
   );

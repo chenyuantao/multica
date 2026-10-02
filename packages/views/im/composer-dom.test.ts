@@ -69,4 +69,38 @@ describe("composer excerpts", () => {
     expect(serializeComposer(root)).toBe("请改  这里");
     expect(root.querySelector(`[${DOC_EXCERPT_ATTR}]`)).toBeNull();
   });
+
+  it("shows the document name, numbers repeats, and keeps the chip within 100px", () => {
+    const root = editor();
+    renderComposer(root, "请改 ");
+    root.focus();
+    const range = document.createRange();
+    range.selectNodeContents(root);
+    range.collapse(false);
+    const sel = window.getSelection()!;
+    sel.removeAllRanges();
+    sel.addRange(range);
+
+    insertComposerExcerpt(root, weekly);
+    insertComposerExcerpt(root, weekly);
+    insertComposerExcerpt(root, plan);
+    const chips = [...root.querySelectorAll(`[${DOC_EXCERPT_ATTR}]`)];
+    expect(chips.map((chip) => chip.textContent)).toEqual(["本周周报1", "本周周报2", "计划"]);
+    expect(chips[0]?.textContent).not.toContain("周五发布");
+    expect(chips[0]?.className).toContain("max-w-[100px]");
+    expect(chips[0]?.className).toContain("overflow-hidden");
+
+    const second = chips[1]!;
+    const after = second.nextSibling;
+    const caret = document.createRange();
+    caret.setStart(after!, 0);
+    caret.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(caret);
+    expect(deleteAdjacentChip(root, "Backspace")).toBe(true);
+    expect([...root.querySelectorAll(`[${DOC_EXCERPT_ATTR}]`)].map((chip) => chip.textContent)).toEqual([
+      "本周周报",
+      "计划",
+    ]);
+  });
 });

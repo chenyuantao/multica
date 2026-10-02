@@ -1,10 +1,16 @@
 // @vitest-environment jsdom
 
+import { forwardRef, useImperativeHandle, type Ref } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import type { DocFile } from "@multica/core/types";
 import { renderWithI18n } from "../test/i18n";
+import { DocExcerptRevealProvider, useRevealDocExcerpt } from "./doc-excerpt-reveal";
 import { KnowledgeDocument } from "./knowledge-document";
+
+const { selectPassage } = vi.hoisted(() => ({
+  selectPassage: vi.fn(() => "selected" as const),
+}));
 
 const saveMutateAsync = vi.fn();
 const file: DocFile = {
@@ -31,28 +37,37 @@ vi.mock("@multica/core/docs", () => ({
 }));
 
 vi.mock("../editor", () => ({
-  ContentEditor: ({
-    defaultValue,
-    onUpdate,
-    askSelection,
-  }: {
-    defaultValue: string;
-    onUpdate: (md: string) => void;
-    askSelection?: { label: string; onSelect: (text: string) => void };
-  }) => (
-    <>
-      <textarea aria-label="body" defaultValue={defaultValue} onChange={(e) => onUpdate(e.target.value)} />
-      {askSelection && (
-        <button type="button" onClick={() => askSelection.onSelect("周五发布")}>
-          {askSelection.label}
-        </button>
-      )}
-    </>
-  ),
+  ContentEditor: forwardRef(function MockEditor(
+    {
+      defaultValue,
+      onUpdate,
+      askSelection,
+    }: {
+      defaultValue: string;
+      onUpdate: (md: string) => void;
+      askSelection?: { label: string; onSelect: (text: string) => void };
+    },
+    ref: Ref<{ selectPassage: typeof selectPassage }>,
+  ) {
+    useImperativeHandle(ref, () => ({ selectPassage }));
+    return (
+      <>
+        <textarea aria-label="body" defaultValue={defaultValue} onChange={(e) => onUpdate(e.target.value)} />
+        {askSelection && (
+          <button type="button" onClick={() => askSelection.onSelect("周五发布")}>
+            {askSelection.label}
+          </button>
+        )}
+      </>
+    );
+  }),
 }));
 
 describe("KnowledgeDocument", () => {
-  beforeEach(() => saveMutateAsync.mockReset());
+  beforeEach(() => {
+    saveMutateAsync.mockReset();
+    selectPassage.mockClear();
+  });
 
   it("edits only the body and saves each change on the latest revision", async () => {
     saveMutateAsync
@@ -97,5 +112,27 @@ describe("KnowledgeDocument", () => {
     rerender(<KnowledgeDocument path={file.path} onAskSelection={onAskSelection} />);
     fireEvent.click(screen.getByRole("button", { name: "Ask AI" }));
     expect(onAskSelection).toHaveBeenCalledWith("周五发布");
+  });
+
+  it("selects the passage when a chip asks for this note", () => {
+    function Reveal() {
+      const reveal = useRevealDocExcerpt();
+      return (
+        <button
+          type="button"
+          onClick={() => reveal({ name: "plan", path: file.path, text: "周五发布", from: 8 })}
+        >
+          reveal
+        </button>
+      );
+    }
+    renderWithI18n(
+      <DocExcerptRevealProvider onOpen={() => {}}>
+        <KnowledgeDocument path={file.path} />
+        <Reveal />
+      </DocExcerptRevealProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "reveal" }));
+    expect(selectPassage).toHaveBeenCalledWith("周五发布", 8);
   });
 });

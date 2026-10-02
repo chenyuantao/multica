@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 import {
   decodeDocExcerptPayload,
+  docExcerptChipLabels,
   docExcerptPlain,
   encodeDocExcerpt,
   encodeDocExcerptPayload,
@@ -34,6 +35,19 @@ describe("doc excerpts", () => {
     const text = "字".repeat(5000);
     const excerpt = decodeDocExcerptPayload(encodeDocExcerptPayload({ name: "笔记", path: "a.md", text }) ?? "");
     expect(excerpt?.text).toHaveLength(4000);
+  });
+
+  it("keeps the selection origin and drops one that is not a position", () => {
+    const withFrom = { ...weekly, from: 12 };
+    expect(decodeDocExcerptPayload(encodeDocExcerptPayload(withFrom) ?? "")).toEqual(withFrom);
+    expect(decodeDocExcerptPayload(encodeDocExcerptPayload({ ...weekly, from: -1 }) ?? "")).toEqual(weekly);
+  });
+
+  it("numbers only the document names that repeat, in the order they appear", () => {
+    expect(docExcerptChipLabels(["周报", "计划", "周报", "周报", "计划"]).map((label) =>
+      label.index == null ? label.name : `${label.name}${label.index}`,
+    )).toEqual(["周报1", "计划1", "周报2", "周报3", "计划2"]);
+    expect(docExcerptChipLabels(["周报"])).toEqual([{ name: "周报", index: null }]);
   });
 
   it("does not turn an @ inside a passage into a mention", () => {

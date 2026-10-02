@@ -863,6 +863,20 @@ describe("ReadonlyContent document excerpts", () => {
     const { container } = render(<ReadonlyContent content={`请改 ${token}`} />);
 
     expect(container.querySelector("a")).toBeNull();
-    expect(container.querySelector("[data-doc-excerpt]")?.textContent).toBe("周五发布");
+    const chip = container.querySelector("[data-doc-excerpt]");
+    expect(chip?.textContent).toBe("本周周报");
+    expect(chip?.textContent).not.toContain("周五发布");
+    expect(chip?.className).toContain("max-w-[100px]");
+  });
+
+  it("numbers chips that share a document name", () => {
+    const token = encodeDocExcerpt({
+      name: "本周周报",
+      path: "notes/weekly.md",
+      text: "周五发布",
+    });
+    const { container } = render(<ReadonlyContent content={`${token} 和 ${token}`} />);
+    const chips = [...container.querySelectorAll("[data-doc-excerpt]")];
+    expect(chips.map((chip) => chip.textContent)).toEqual(["本周周报1", "本周周报2"]);
   });
 });

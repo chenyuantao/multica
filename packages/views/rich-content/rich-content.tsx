@@ -65,7 +65,7 @@ import {
   type WorkspaceEntityRef,
 } from "../editor/utils/link-handler";
 import { preprocessMarkdown } from "../editor/utils/preprocess";
-import { decodeDocExcerptPayload } from "../im/doc-excerpt";
+import { decodeDocExcerptPayload, docExcerptChipLabelIndex, type DocExcerptChipLabel } from "../im/doc-excerpt";
 import { DocExcerptChip } from "../im/doc-excerpt-chip";
 import { highlightToHtml } from "../editor/utils/highlight-markdown";
 import { AttachmentDownloadProvider } from "../editor/attachment-download-context";
@@ -98,6 +98,10 @@ export type RichContentPhase = "streaming" | "settled";
 
 const ClosedFenceContext = createContext<ReadonlyMap<number, ClosedFence>>(
   new Map<number, ClosedFence>(),
+);
+
+const ExcerptLabelContext = createContext<ReadonlyMap<number, DocExcerptChipLabel>>(
+  new Map<number, DocExcerptChipLabel>(),
 );
 
 /** The closed fence at this source offset, or undefined while it is still open. */
@@ -208,7 +212,16 @@ function unfurlableEntityLink(
   return entity;
 }
 
-function RichLink({ href, children }: { href?: string; children?: ReactNode }) {
+function RichLink({
+  href,
+  children,
+  node,
+}: {
+  href?: string;
+  children?: ReactNode;
+  node?: ExtraProps["node"];
+}) {
+  const excerptLabel = useContext(ExcerptLabelContext).get(nodeStartOffset(node) ?? -1);
   const slug = useWorkspaceSlug();
   const appOrigin = useAppOrigin();
   // Platform probe only: `openInNewTab` present means desktop, where native
@@ -219,7 +232,7 @@ function RichLink({ href, children }: { href?: string; children?: ReactNode }) {
 
   if (href?.startsWith("doc-excerpt://")) {
     const excerpt = decodeDocExcerptPayload(href.slice("doc-excerpt://".length));
-    if (excerpt) return <DocExcerptChip excerpt={excerpt} />;
+    if (excerpt) return <DocExcerptChip excerpt={excerpt} label={excerptLabel} />;
     return <span>{children}</span>;
   }
 
@@ -546,6 +559,7 @@ export const RichContent = memo(function RichContent({
   // with the hast node positions the `code`/`pre` renderers observe. Computing
   // it from the raw pre-preprocess text would mis-match every rewritten node.
   const closedFences = useMemo(() => computeClosedFences(processed), [processed]);
+  const excerptLabels = useMemo(() => docExcerptChipLabelIndex(processed), [processed]);
 
   const wrapperRef = useRef<HTMLDivElement>(null);
   const hover = useLinkHover(wrapperRef);
@@ -559,18 +573,20 @@ export const RichContent = memo(function RichContent({
   // code block (MUL-3621). A stable element reference lets React bail out.
   const markdown = useMemo(
     () => (
-      <ClosedFenceContext.Provider value={closedFences}>
-        <ReactMarkdown
-          remarkPlugins={REMARK_PLUGINS}
-          rehypePlugins={REHYPE_PLUGINS}
-          urlTransform={markdownUrlTransform}
-          components={COMPONENTS}
-        >
-          {processed}
-        </ReactMarkdown>
-      </ClosedFenceContext.Provider>
+      <ExcerptLabelContext.Provider value={excerptLabels}>
+        <ClosedFenceContext.Provider value={closedFences}>
+          <ReactMarkdown
+            remarkPlugins={REMARK_PLUGINS}
+            rehypePlugins={REHYPE_PLUGINS}
+            urlTransform={markdownUrlTransform}
+            components={COMPONENTS}
+          >
+            {processed}
+          </ReactMarkdown>
+        </ClosedFenceContext.Provider>
+      </ExcerptLabelContext.Provider>
     ),
-    [processed, closedFences],
+    [processed, closedFences, excerptLabels],
   );
 
   return (

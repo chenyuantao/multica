@@ -95,11 +95,16 @@ export function ChatSidePanel({
             <KnowledgeDocument
               path={active.path}
               variant="page"
-              onAskSelection={(text) => {
+              onAskSelection={(text, from) => {
                 const passage = text.replaceAll("\u0000", "").trim();
                 if (!passage) return;
                 const name = active.name.trim() || active.path.split("/").pop() || active.path;
-                insertExcerpt(chat.id, { name, path: active.path, text: passage });
+                insertExcerpt(chat.id, {
+                  name,
+                  path: active.path,
+                  text: passage,
+                  ...(typeof from === "number" ? { from } : {}),
+                });
               }}
             />
           </Suspense>

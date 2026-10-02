@@ -12,6 +12,7 @@ import { ContentEditor, type ContentEditorRef } from "../editor";
 import { useT } from "../i18n";
 import { DragStrip } from "../platform";
 import { AskAIBadge } from "./ask-ai-badge";
+import { useExcerptReveal } from "./doc-excerpt-reveal";
 import { joinFrontmatter, noteTitle, parentDir, splitFrontmatter } from "./knowledge-utils";
 
 interface KnowledgeDocumentProps {
@@ -21,7 +22,7 @@ interface KnowledgeDocumentProps {
   /** Shows the Ask AI entry in the pane header. */
   onAskAI?: () => void;
   /** Sends the selected passage to the chat composer. The note itself is not changed. */
-  onAskSelection?: (text: string) => void;
+  onAskSelection?: (text: string, from?: number) => void;
 }
 
 export function KnowledgeDocument({ path, variant = "pane", onAskAI, onAskSelection }: KnowledgeDocumentProps) {
@@ -78,7 +79,7 @@ function NoteEditor({
   file: DocFile;
   variant: "pane" | "page";
   onAskAI?: () => void;
-  onAskSelection?: (text: string) => void;
+  onAskSelection?: (text: string, from?: number) => void;
   onReload: () => Promise<void>;
 }) {
   const { t } = useT("im");
@@ -96,6 +97,26 @@ function NoteEditor({
   const discardedRef = useRef(false);
   const mountedRef = useRef(true);
   const [state, setState] = useState<SaveState>({ kind: "idle" });
+  const reveal = useExcerptReveal();
+
+  useEffect(() => {
+    if (!reveal || reveal.path !== file.path) return;
+    let stopped = false;
+    let tries = 0;
+    let timer = 0;
+    const tick = () => {
+      if (stopped) return;
+      const result = editorRef.current?.selectPassage(reveal.text, reveal.from) ?? "pending";
+      if (result !== "pending") return;
+      if (tries++ >= 20) return;
+      timer = window.setTimeout(tick, 50);
+    };
+    tick();
+    return () => {
+      stopped = true;
+      window.clearTimeout(timer);
+    };
+  }, [reveal, file.path]);
 
   useEffect(() => {
     mountedRef.current = true;

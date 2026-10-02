@@ -7,6 +7,7 @@ import { renderWithI18n } from "../test/i18n";
 import { ChatComposer } from "./chat-composer";
 import { encodeDocExcerpt } from "./doc-excerpt";
 import { DocExcerptInsertProvider, useInsertDocExcerpt } from "./doc-excerpt-insert";
+import { DocExcerptRevealProvider } from "./doc-excerpt-reveal";
 
 const uploadFile = vi.hoisted(() => vi.fn());
 
@@ -185,6 +186,8 @@ describe("ChatComposer document excerpts", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "ask" }));
     fireEvent.click(screen.getByRole("button", { name: "ask" }));
+    const chips = [...composerBox().querySelectorAll("[data-doc-excerpt]")];
+    expect(chips.map((chip) => chip.textContent)).toEqual(["本周周报1", "本周周报2"]);
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     const weekly = encodeDocExcerpt({ name: "本周周报", path: "notes/weekly.md", text: "周五发布" });
     expect(onSend).toHaveBeenCalledWith(`${weekly} ${weekly}`, []);
@@ -199,5 +202,33 @@ describe("ChatComposer document excerpts", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     expect(onSend).toHaveBeenLastCalledWith(`请看 ${weekly}`, []);
     expect(box.querySelector("[data-doc-excerpt]")).toBeNull();
+  });
+
+  it("opens the note when an excerpt chip is clicked", () => {
+    const onOpen = vi.fn();
+    function Harness() {
+      const insert = useInsertDocExcerpt();
+      return (
+        <>
+          <button
+            type="button"
+            onClick={() => insert("chat-1", { name: "本周周报", path: "notes/weekly.md", text: "周五发布", from: 4 })}
+          >
+            ask
+          </button>
+          <ChatComposer chatId="chat-1" chatTitle="Launch room" candidates={[]} onSend={vi.fn()} />
+        </>
+      );
+    }
+    renderWithI18n(
+      <DocExcerptRevealProvider onOpen={onOpen}>
+        <DocExcerptInsertProvider>
+          <Harness />
+        </DocExcerptInsertProvider>
+      </DocExcerptRevealProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "ask" }));
+    fireEvent.click(composerBox().querySelector("[data-doc-excerpt]")!);
+    expect(onOpen).toHaveBeenCalledWith({ path: "notes/weekly.md", name: "本周周报" });
   });
 });

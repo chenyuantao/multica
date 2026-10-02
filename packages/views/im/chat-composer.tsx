@@ -14,6 +14,7 @@ import { getChatDraft, setChatDraft } from "./chat-draft";
 import {
   caretOffset,
   deleteAdjacentChip,
+  excerptFromComposerEvent,
   insertComposerExcerpt,
   insertComposerPaste,
   insertComposerText,
@@ -23,6 +24,7 @@ import {
 } from "./composer-dom";
 import type { DocExcerpt } from "./doc-excerpt";
 import { useRegisterDocExcerptInsert } from "./doc-excerpt-insert";
+import { useRevealDocExcerpt } from "./doc-excerpt-reveal";
 import { activeMentionQuery, resolveComposerBody, type ComposerMention } from "./im-utils";
 
 interface ChatComposerProps {
@@ -108,6 +110,7 @@ export function ChatComposer({ chatId, chatTitle, candidates, onSend, quote, onC
   useEffect(() => setHighlight(0), [mention?.query]);
 
   const registerExcerpt = useRegisterDocExcerptInsert();
+  const revealExcerpt = useRevealDocExcerpt();
   const insertExcerpt = useCallback((excerpt: DocExcerpt) => {
     const el = ref.current;
     if (!el || !insertComposerExcerpt(el, excerpt)) return;
@@ -401,7 +404,17 @@ export function ChatComposer({ chatId, chatTitle, candidates, onSend, quote, onC
               suppressContentEditableWarning
               onInput={sync}
               onKeyUp={syncCaret}
-              onClick={syncCaret}
+              onMouseDown={(e) => {
+                if (ref.current && excerptFromComposerEvent(ref.current, e.target)) e.preventDefault();
+              }}
+              onClick={(e) => {
+                const excerpt = ref.current ? excerptFromComposerEvent(ref.current, e.target) : null;
+                if (excerpt) {
+                  revealExcerpt(excerpt);
+                  return;
+                }
+                syncCaret();
+              }}
               onKeyDown={onKeyDown}
               onPaste={onPaste}
               onCopy={(e) => onClipboard(e, false)}

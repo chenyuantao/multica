@@ -69,6 +69,7 @@ import { repairEmptyListItems } from "./utils/repair-list-items";
 import { resolveClickIntent, useAppOrigin } from "../navigation";
 import { openLink, isMentionHref } from "./utils/link-handler";
 import { EditorBubbleMenu } from "./bubble-menu";
+import { locatePassage } from "./locate-passage";
 import { posFromAnchor, type TextAnchor } from "./text-anchor";
 import { useLinkHover, LinkHoverCard } from "./link-hover-card";
 import { AttachmentDownloadProvider } from "./attachment-download-context";
@@ -177,7 +178,7 @@ interface ContentEditorBaseProps {
    * Leading toolbar action for the current selection. Receives the selected
    * text and does not change the document. Shown even inside a code block.
    */
-  askSelection?: { label: string; onSelect: (text: string) => void };
+  askSelection?: { label: string; onSelect: (text: string, from?: number) => void };
   /**
    * ID of the issue this editor belongs to. When set, the bubble menu exposes
    * a "Create sub-issue from selection" action that parents the new issue
@@ -278,6 +279,12 @@ interface ContentEditorRef {
    * long documents.
    */
   focusAtAnchor: (anchor: TextAnchor) => void;
+  /**
+   * Select the stored passage and scroll it into view. `pending` means the
+   * editor is not ready yet; `missing` means the words are no longer in the
+   * document. `from` breaks a tie when the same words occur more than once.
+   */
+  selectPassage: (text: string, from?: number) => "selected" | "missing" | "pending";
   /** Drop focus from the editor. Used by `useComposerSubmit`'s
    *  `afterAccepted: "blur"` on surfaces where a send ends the turn, so the
    *  composer stops reading as "still writing". */
@@ -941,6 +948,21 @@ const ContentEditor = forwardRef<ContentEditorRef, ContentEditorProps>(
           return;
         }
         editor.commands.focus(posFromAnchor(editor.state.doc, anchor));
+      },
+      selectPassage: (text: string, from?: number) => {
+        if (!editor || editor.isDestroyed) return "pending";
+        const range = locatePassage(editor.state.doc, text, from);
+        if (!range) return "missing";
+        const ok = editor.chain().focus().setTextSelection(range).scrollIntoView().run();
+        if (!ok) return "missing";
+        try {
+          const dom = editor.view.domAtPos(range.from);
+          const el = dom.node.nodeType === Node.ELEMENT_NODE ? (dom.node as HTMLElement) : dom.node.parentElement;
+          el?.scrollIntoView?.({ block: "center", inline: "nearest" });
+        } catch {
+          // The range is already selected. Scrolling the block is best-effort.
+        }
+        return "selected";
       },
       blur: () => {
         editor?.commands.blur();
