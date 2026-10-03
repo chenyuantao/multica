@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { DocNode, GroupChat, GroupChatSearchHit } from "@multica/core/types";
-import { countMatches, rankChats, rankContacts, rankNotes } from "./im-search-utils";
+import { countMatches, orderSearchSections, previewSearchRows, rankChats, rankContacts, rankNotes } from "./im-search-utils";
 import type { DirectoryEntry } from "./use-chat-directory";
 
 const chat = (id: string, title: string, lastAt: string): GroupChat =>
@@ -83,5 +83,23 @@ describe("rankNotes", () => {
       note("body-old.md", "content", 2, "2026-02-01T00:00:00Z"),
     ]);
     expect(rows.map((n) => n.path)).toEqual(["title.md", "body-many.md", "body-new.md", "body-old.md"]);
+  });
+});
+
+describe("orderSearchSections", () => {
+  it("keeps the requested section first and the others in their usual order", () => {
+    expect(orderSearchSections("chats")).toEqual(["chats", "contacts", "notes"]);
+    expect(orderSearchSections("contacts")).toEqual(["contacts", "chats", "notes"]);
+    expect(orderSearchSections("notes")).toEqual(["notes", "chats", "contacts"]);
+  });
+});
+
+describe("previewSearchRows", () => {
+  const rows = ["a", "b", "c", "d", "e"];
+
+  it("shows three rows and counts the rest until the section is expanded", () => {
+    expect(previewSearchRows(rows, false)).toEqual({ visible: ["a", "b", "c"], hidden: 2 });
+    expect(previewSearchRows(rows, true)).toEqual({ visible: rows, hidden: 0 });
+    expect(previewSearchRows(["a", "b"], false)).toEqual({ visible: ["a", "b"], hidden: 0 });
   });
 });

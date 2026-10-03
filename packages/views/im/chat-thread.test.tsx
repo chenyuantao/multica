@@ -2,7 +2,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import type { Comment, GroupChat } from "@multica/core/types";
 import { renderWithI18n } from "../test/i18n";
 import { encodeChatHistory } from "./chat-history";
@@ -25,13 +25,14 @@ vi.mock("@multica/ui/lib/clipboard", () => ({ copyText }));
 
 vi.mock("@tanstack/react-query", async () => {
   const actual = await vi.importActual<typeof import("@tanstack/react-query")>("@tanstack/react-query");
-  return { ...actual, useQuery: vi.fn() };
+  return { ...actual, useQuery: vi.fn(), useInfiniteQuery: vi.fn() };
 });
 
 vi.mock("@multica/core/group-chats", async () => ({
   directChatPeer: (await vi.importActual<typeof import("@multica/core/group-chats")>("@multica/core/group-chats")).directChatPeer,
   groupChatListOptions: () => ({ queryKey: ["group-chats", "list"] }),
   groupChatMessagesOptions: () => ({ queryKey: ["messages"] }),
+  groupChatMessagesPageOptions: () => ({ queryKey: ["messages-page"] }),
   useForwardChatHistory: () => ({ mutateAsync: forwardMutateAsync, isPending: false }),
   useSendGroupChatMessage: () => ({ mutateAsync: sendMutateAsync }),
   useDeleteGroupChatMessage: () => deleteMessage,
@@ -150,12 +151,30 @@ function message(id: string, content: string): Comment {
 }
 
 let messages: Comment[] = [];
+const fetchOlder = vi.fn();
 
 function renderThread() {
   return renderWithI18n(
     <ChatThread wsId="ws-1" chat={chat} userId="user-1" panelOpen={false} onTogglePanel={() => {}} />,
   );
 }
+
+beforeEach(() => {
+  fetchOlder.mockReset();
+  vi.mocked(useInfiniteQuery).mockImplementation(
+    () =>
+      ({
+        data: {
+          pages: [{ comments: messages, limit: 200, has_more: false, next_cursor: null }],
+          pageParams: [null],
+        },
+        isError: false,
+        hasNextPage: false,
+        isFetchingNextPage: false,
+        fetchNextPage: fetchOlder,
+      }) as never,
+  );
+});
 
 describe("ChatThread pending messages", () => {
   beforeEach(() => {
@@ -807,46 +826,97 @@ describe("ChatThread message search", () => {
     vi.mocked(useQuery).mockImplementation(() => ({ data: messages, isError: false }) as never);
   });
 
-  it("opens from the header button left of the panel toggle", async () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("opens a bar at the top of the thread instead of a dialog", () => {
     renderThread();
     const search = screen.getByRole("button", { name: /Search messages/ });
     const panel = screen.getByRole("button", { name: "Toggle chat details" });
     expect(search.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(search).toHaveAttribute("aria-pressed", "false");
 
     fireEvent.click(search);
-    expect(await screen.findByRole("dialog")).toHaveTextContent("Search in this chat");
-    expect(screen.getByRole("textbox", { name: "Filter messages" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    const input = screen.getByRole("textbox", { name: "Filter messages" });
+    expect(input).toBeInTheDocument();
+    expect(search).toHaveAttribute("aria-pressed", "true");
+    expect(input.compareDocumentPosition(screen.getByText("alpha release notes")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("opens with Cmd/Ctrl+F and hides non-matching messages", async () => {
+  it("filters 400ms after typing and restores everything when closed", () => {
+    vi.useFakeTimers();
     renderThread();
-    fireEvent.keyDown(document, { key: "f", metaKey: true });
-    const input = await screen.findByRole("textbox", { name: "Filter messages" });
-    fireEvent.change(input, { target: { value: "release" } });
+    fireEvent.click(screen.getByRole("button", { name: /Search messages/ }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Filter messages" }), {
+      target: { value: "release" },
+    });
 
+    expect(screen.getByText("beta roadmap")).toBeInTheDocument();
+    act(() => {
+      vi.advanceTimersByTime(400);
+    });
     expect(screen.getByText("alpha release notes")).toBeInTheDocument();
     expect(screen.queryByText("beta roadmap")).toBeNull();
     expect(screen.queryByText("daily standup")).toBeNull();
     expect(screen.getByText("1 matching")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Close search" }));
+    expect(screen.queryByRole("textbox", { name: "Filter messages" })).toBeNull();
+    expect(screen.getByRole("button", { name: /Search messages/ })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByText("beta roadmap")).toBeInTheDocument();
+    expect(screen.getByText("daily standup")).toBeInTheDocument();
   });
 
-  it("keeps the filter after the dialog closes until the query is cleared", async () => {
+  it("toggles the bar with the button and Cmd/Ctrl+F", () => {
     renderThread();
-    fireEvent.click(screen.getByRole("button", { name: /Search messages/ }));
-    fireEvent.change(await screen.findByRole("textbox", { name: "Filter messages" }), {
-      target: { value: "roadmap" },
-    });
-    fireEvent.keyDown(document, { key: "Escape" });
+    const search = screen.getByRole("button", { name: /Search messages/ });
+    fireEvent.keyDown(document, { key: "f", metaKey: true });
+    expect(screen.getByRole("textbox", { name: "Filter messages" })).toBeInTheDocument();
+    expect(search).toHaveAttribute("aria-pressed", "true");
 
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(screen.getByText("beta roadmap")).toBeInTheDocument();
-    expect(screen.queryByText("alpha release notes")).toBeNull();
+    fireEvent.keyDown(document, { key: "f", metaKey: true });
+    expect(screen.queryByRole("textbox", { name: "Filter messages" })).toBeNull();
+    expect(search).toHaveAttribute("aria-pressed", "false");
 
-    fireEvent.click(screen.getByRole("button", { name: /Search messages/ }));
-    fireEvent.change(await screen.findByRole("textbox", { name: "Filter messages" }), {
-      target: { value: "" },
-    });
-    expect(screen.getByText("alpha release notes")).toBeInTheDocument();
-    expect(screen.getByText("daily standup")).toBeInTheDocument();
+    fireEvent.click(search);
+    expect(screen.getByRole("textbox", { name: "Filter messages" })).toBeInTheDocument();
+    fireEvent.click(search);
+    expect(screen.queryByRole("textbox", { name: "Filter messages" })).toBeNull();
+  });
+});
+
+describe("ChatThread older messages", () => {
+  beforeEach(() => {
+    messages = [message("m-1", "alpha release notes"), message("m-2", "beta roadmap")];
+    vi.mocked(useQuery).mockImplementation(() => ({ data: messages, isError: false }) as never);
+    vi.mocked(useInfiniteQuery).mockImplementation(
+      () =>
+        ({
+          data: {
+            pages: [{ comments: messages, limit: 200, has_more: true, next_cursor: { created_at: "t", id: "m-1" } }],
+            pageParams: [null],
+          },
+          isError: false,
+          hasNextPage: true,
+          isFetchingNextPage: false,
+          fetchNextPage: fetchOlder,
+        }) as never,
+    );
+  });
+
+  it("loads the next older page when the thread is scrolled to the top", () => {
+    renderThread();
+    const scroller = screen.getByRole("list").parentElement as HTMLDivElement;
+    Object.defineProperty(scroller, "scrollHeight", { configurable: true, value: 800 });
+    Object.defineProperty(scroller, "clientHeight", { configurable: true, value: 400 });
+    scroller.scrollTop = 360;
+    fireEvent.scroll(scroller);
+    expect(fetchOlder).not.toHaveBeenCalled();
+
+    scroller.scrollTop = 0;
+    fireEvent.scroll(scroller);
+    expect(fetchOlder).toHaveBeenCalledTimes(1);
   });
 });

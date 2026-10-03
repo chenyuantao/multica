@@ -3,9 +3,9 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { BookOpen } from "lucide-react";
-import { docsKeys } from "@multica/core/docs";
+import { docsKeys, relocatedDocPath } from "@multica/core/docs";
 import { useWorkspacePaths } from "@multica/core/paths";
-import type { DocFile } from "@multica/core/types";
+import type { DocFile, DocMoveResult } from "@multica/core/types";
 import { useIsMobile } from "@multica/ui/hooks/use-mobile";
 import { useNavigation } from "../navigation";
 import { useT } from "../i18n";
@@ -35,6 +35,11 @@ export function KnowledgePage() {
 
   const select = (path: string) =>
     isMobile ? navigation.push(paths.knowledgeFile(path)) : navigation.replace(paths.knowledgeFile(path));
+  const onMoved = (result: DocMoveResult) => {
+    if (!selectedPath) return;
+    const next = relocatedDocPath(selectedPath, result.from, result.path);
+    if (next) navigation.replace(paths.knowledgeFile(next));
+  };
   const launcher = useAskAILauncher(() =>
     selectedPath ? noteAskPage(selectedPath, qc.getQueryData<DocFile>(docsKeys.file(selectedPath))) : null,
   );
@@ -110,6 +115,7 @@ export function KnowledgePage() {
               onSelect={select}
               onCreate={(dir) => navigation.push(paths.knowledgeNewNote(dir))}
               onOpenSearch={() => navigation.push(paths.knowledgeSearch())}
+              onMoved={onMoved}
               className="w-auto min-w-0 flex-1 border-r-0"
             />
           </MobileTabScreen>
@@ -127,6 +133,7 @@ export function KnowledgePage() {
         onSelect={select}
         onCreate={setCreateDir}
         onOpenSearch={() => navigation.push(paths.knowledgeSearch())}
+        onMoved={onMoved}
       />
       <div className="relative flex min-w-0 flex-1">
         {selectedPath ? (

@@ -24,6 +24,22 @@ SELECT * FROM (
 ) AS recent
 ORDER BY created_at ASC, id ASC;
 
+-- name: ListCommentsPageForIssue :many
+-- Newest page of comments on one issue, strictly older than the optional
+-- cursor. Callers pass limit+1 and drop the extra row to see whether an
+-- older page exists. The cursor is the oldest row kept on the previous
+-- page, so the next page continues without overlap. idx_comment_issue_keyset
+-- serves the keyset order.
+SELECT * FROM comment
+WHERE issue_id = $1
+  AND workspace_id = $2
+  AND (
+    sqlc.narg('before_created_at')::timestamptz IS NULL
+    OR (created_at, id) < (sqlc.narg('before_created_at')::timestamptz, sqlc.narg('before_id')::uuid)
+  )
+ORDER BY created_at DESC, id DESC
+LIMIT $3;
+
 -- name: ListCommentsByIDsForIssue :many
 -- The subset of @ids that exists within this issue and workspace.
 --

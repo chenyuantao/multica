@@ -8,8 +8,9 @@ import { cn } from "@multica/ui/lib/utils";
 import { ActorAvatar } from "../common/actor-avatar";
 import { useT } from "../i18n";
 import { ChatAvatar } from "./chat-sidebar";
+import { ImSidebarSearch } from "./im-sidebar-search";
 import { ImSidebarHeader, ImSidebarShell } from "./im-sidebar-shell";
-import { entryKey, matchesQuery, type DirectoryEntry } from "./use-chat-directory";
+import { entryKey, type DirectoryEntry } from "./use-chat-directory";
 
 interface ContactListProps {
   people: DirectoryEntry[];
@@ -42,9 +43,7 @@ export function ContactList({
   className,
 }: ContactListProps) {
   const { t } = useT("im");
-  const [query, setQuery] = useState("");
   const [closed, setClosed] = useState<ReadonlySet<Folder>>(() => new Set());
-  const q = query.trim().toLowerCase();
   const toggle = (folder: Folder) =>
     setClosed((prev) => {
       const next = new Set(prev);
@@ -53,11 +52,9 @@ export function ContactList({
       return next;
     });
 
-  const groups = chats.filter((c) => !directChatPeer(c, userId));
-  const visibleChats = q ? groups.filter((c) => c.title.toLowerCase().includes(q)) : groups;
-  const visiblePeople = people.filter((e) => matchesQuery(e, query));
-  const visibleAgents = agents.filter((e) => matchesQuery(e, query));
-  const empty = visibleChats.length + visiblePeople.length + visibleAgents.length === 0;
+  const visibleChats = chats.filter((c) => !directChatPeer(c, userId));
+  const visiblePeople = people;
+  const visibleAgents = agents;
 
   const entryRows = (entries: DirectoryEntry[]) =>
     entries.map((entry) => {
@@ -80,7 +77,11 @@ export function ContactList({
 
   return (
     <ImSidebarShell className={className}>
-      <ImSidebarHeader query={query} onQueryChange={setQuery} searchLabel={t(($) => $.contacts.search)} title={t(($) => $.tabs.contacts)} onOpenSearch={onOpenSearch}>
+      <ImSidebarHeader
+        title={t(($) => $.tabs.contacts)}
+        onOpenSearch={onOpenSearch}
+        desktopSearch={<ImSidebarSearch priority="contacts" onOpenContact={onSelect} />}
+      >
         <button
           type="button"
           onClick={onCreateAgent}
@@ -92,10 +93,6 @@ export function ContactList({
         </button>
       </ImSidebarHeader>
       <nav className="min-h-0 flex-1 overflow-y-auto pb-3" aria-label={t(($) => $.rail.contacts)}>
-        {empty && q ? (
-          <p className="px-3 py-8 text-center text-body text-muted-foreground">{t(($) => $.contacts.no_results)}</p>
-        ) : (
-          <>
             <FolderSection label={t(($) => $.contacts.chats)} count={visibleChats.length} open={!closed.has("chats")} onToggle={() => toggle("chats")}>
               {visibleChats.map((chat) => {
                 const selected = chat.id === selectedChatId;
@@ -120,8 +117,6 @@ export function ContactList({
             <FolderSection label={t(($) => $.contacts.agents)} count={visibleAgents.length} open={!closed.has("agents")} onToggle={() => toggle("agents")}>
               {entryRows(visibleAgents)}
             </FolderSection>
-          </>
-        )}
       </nav>
     </ImSidebarShell>
   );

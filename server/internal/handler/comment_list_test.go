@@ -1500,3 +1500,78 @@ func TestCreateCommentPreservesDirectParent(t *testing.T) {
 		t.Fatalf("reply-to-reply parent_id: want direct parent %s, got %v (root was %s)", reply.ID, nested.ParentID, root.ID)
 	}
 }
+
+func listCommentsPage(t *testing.T, issueID, query string) CommentPageResponse {
+	t.Helper()
+	w := httptest.NewRecorder()
+	path := "/api/issues/" + issueID + "/comments/page"
+	if query != "" {
+		path += "?" + query
+	}
+	r := newRequest("GET", path, nil)
+	r = withURLParam(r, "id", issueID)
+	testHandler.ListCommentsPage(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("list comments page: status %d: %s", w.Code, w.Body.String())
+	}
+	var resp CommentPageResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode comment page: %v", err)
+	}
+	return resp
+}
+
+func TestListCommentsPage_ScrollsOlderByCursor(t *testing.T) {
+	if testHandler == nil || testPool == nil {
+		t.Skip("database not available")
+	}
+	fx := newCommentListFixture(t)
+
+	first := listCommentsPage(t, fx.IssueID, "limit=3")
+	eqIDs(t, ids(first.Comments), []string{fx.Root2, fx.R2a, fx.R2b}, "newest page")
+	if !first.HasMore || first.NextCursor == nil || first.NextCursor.ID != fx.Root2 {
+		t.Fatalf("newest page cursor: has_more=%v cursor=%+v", first.HasMore, first.NextCursor)
+	}
+
+	older := url.Values{}
+	older.Set("limit", "3")
+	older.Set("before_created_at", first.NextCursor.CreatedAt)
+	older.Set("before_id", first.NextCursor.ID)
+	second := listCommentsPage(t, fx.IssueID, older.Encode())
+	eqIDs(t, ids(second.Comments), []string{fx.R1a, fx.R1b, fx.R1b1}, "older page")
+	if !second.HasMore || second.NextCursor == nil || second.NextCursor.ID != fx.R1a {
+		t.Fatalf("older page cursor: has_more=%v cursor=%+v", second.HasMore, second.NextCursor)
+	}
+
+	oldest := url.Values{}
+	oldest.Set("limit", "3")
+	oldest.Set("before_created_at", second.NextCursor.CreatedAt)
+	oldest.Set("before_id", second.NextCursor.ID)
+	third := listCommentsPage(t, fx.IssueID, oldest.Encode())
+	eqIDs(t, ids(third.Comments), []string{fx.Root1}, "oldest page")
+	if third.HasMore || third.NextCursor != nil {
+		t.Fatalf("oldest page should stop: has_more=%v cursor=%+v", third.HasMore, third.NextCursor)
+	}
+
+	// The unpaged list is untouched: opening a chat page must not change what
+	// issue timelines still receive.
+	_, all := listComments(t, fx.IssueID, "")
+	eqIDs(t, ids(all), []string{fx.Root1, fx.R1a, fx.R1b, fx.R1b1, fx.Root2, fx.R2a, fx.R2b}, "unpaged list")
+}
+
+func TestListCommentsPage_RejectsBadLimitAndCursor(t *testing.T) {
+	if testHandler == nil || testPool == nil {
+		t.Skip("database not available")
+	}
+	fx := newCommentListFixture(t)
+
+	for _, query := range []string{"limit=0", "limit=201", "before_id=" + fx.Root1} {
+		w := httptest.NewRecorder()
+		r := newRequest("GET", "/api/issues/"+fx.IssueID+"/comments/page?"+query, nil)
+		r = withURLParam(r, "id", fx.IssueID)
+		testHandler.ListCommentsPage(w, r)
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("%s: status %d, want 400", query, w.Code)
+		}
+	}
+}

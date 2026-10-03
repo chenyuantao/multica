@@ -268,6 +268,16 @@ export function ChatComposer({ chatId, chatTitle, candidates, onSend, quote, onC
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.nativeEvent.isComposing) return;
+    // Plain Enter sends. Shift/Cmd/Ctrl/Alt+Enter insert a newline, including
+    // while the mention menu is open — only an unmodified Enter confirms a mention.
+    if (e.key === "Enter" && (e.shiftKey || e.metaKey || e.ctrlKey || e.altKey)) {
+      e.preventDefault();
+      if (ref.current) {
+        insertComposerText(ref.current, "\n");
+        sync();
+      }
+      return;
+    }
     if (menuOpen) {
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
         e.preventDefault();
@@ -297,15 +307,7 @@ export function ChatComposer({ chatId, chatTitle, candidates, onSend, quote, onC
       sync();
       return;
     }
-    if (e.key === "Enter" && e.shiftKey) {
-      e.preventDefault();
-      if (ref.current) {
-        insertComposerText(ref.current, "\n");
-        sync();
-      }
-      return;
-    }
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === "Enter") {
       e.preventDefault();
       send();
     }

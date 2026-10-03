@@ -106,6 +106,44 @@ func TestDocsHTTPCreate(t *testing.T) {
 	}
 }
 
+func TestDocsHTTPMove(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "归档"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "笔记.md"), []byte("正文"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(obsidianvault.EnvVaultPath, root)
+	h := &Handler{}
+
+	w := httptest.NewRecorder()
+	h.PostDocsMove(w, httptest.NewRequest(http.MethodPost, "/api/docs/move", strings.NewReader(`{"path":"笔记.md","dest":"归档"}`)))
+	if w.Code != http.StatusOK {
+		t.Fatalf("move status = %d body = %s", w.Code, w.Body.String())
+	}
+	var moved obsidianvault.MoveResult
+	if err := json.Unmarshal(w.Body.Bytes(), &moved); err != nil {
+		t.Fatal(err)
+	}
+	if moved.From != "笔记.md" || moved.Path != "归档/笔记.md" || moved.Type != obsidianvault.TypeFile {
+		t.Fatalf("moved = %#v", moved)
+	}
+
+	intoSelf := httptest.NewRecorder()
+	h.PostDocsMove(intoSelf, httptest.NewRequest(http.MethodPost, "/api/docs/move", strings.NewReader(`{"path":"归档","dest":"归档"}`)))
+	if intoSelf.Code != http.StatusBadRequest {
+		t.Fatalf("into self status = %d body = %s", intoSelf.Code, intoSelf.Body.String())
+	}
+	var body map[string]string
+	if err := json.Unmarshal(intoSelf.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body["code"] != "docs_invalid_move" {
+		t.Fatalf("into self body = %#v", body)
+	}
+}
+
 func TestDocsHTTPContentEdit(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "note.md"), []byte("hello"), 0o644); err != nil {

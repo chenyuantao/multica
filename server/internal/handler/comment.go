@@ -709,6 +709,124 @@ func (h *Handler) ListComments(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
+// commentPageMaxLimit is the largest page the chat timeline reads at once.
+// The session UI asks for 200. A larger limit is rejected so this path stays
+// a page, not the full 2000-comment list.
+const commentPageMaxLimit = 200
+
+// CommentCursorResponse is the oldest comment kept on a page. The next
+// request passes it back and receives comments strictly older than it.
+type CommentCursorResponse struct {
+	CreatedAt string `json:"created_at"`
+	ID        string `json:"id"`
+}
+
+// CommentPageResponse is one cursor page of a chat timeline, oldest first.
+// next_cursor is null when this page already holds the oldest comments.
+type CommentPageResponse struct {
+	Comments   []CommentResponse      `json:"comments"`
+	Limit      int                    `json:"limit"`
+	HasMore    bool                   `json:"has_more"`
+	NextCursor *CommentCursorResponse `json:"next_cursor"`
+}
+
+func parseCommentPageParams(r *http.Request) (int, pgtype.Timestamptz, pgtype.UUID, error) {
+	limit := commentPageMaxLimit
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 || n > commentPageMaxLimit {
+			return 0, pgtype.Timestamptz{}, pgtype.UUID{}, errors.New("invalid limit")
+		}
+		limit = n
+	}
+
+	rawBefore := r.URL.Query().Get("before_created_at")
+	rawBeforeID := r.URL.Query().Get("before_id")
+	if rawBefore == "" && rawBeforeID == "" {
+		return limit, pgtype.Timestamptz{}, pgtype.UUID{}, nil
+	}
+	if rawBefore == "" || rawBeforeID == "" {
+		return 0, pgtype.Timestamptz{}, pgtype.UUID{}, errors.New("invalid cursor")
+	}
+	beforeTime, err := time.Parse(time.RFC3339Nano, rawBefore)
+	if err != nil {
+		beforeTime, err = time.Parse(time.RFC3339, rawBefore)
+		if err != nil {
+			return 0, pgtype.Timestamptz{}, pgtype.UUID{}, errors.New("invalid cursor")
+		}
+	}
+	beforeID, err := util.ParseUUID(rawBeforeID)
+	if err != nil {
+		return 0, pgtype.Timestamptz{}, pgtype.UUID{}, errors.New("invalid cursor")
+	}
+	return limit, pgtype.Timestamptz{Time: beforeTime, Valid: true}, beforeID, nil
+}
+
+// ListCommentsPage returns one page of a chat timeline. The first request
+// (no cursor) is the newest comments. before_created_at + before_id, taken
+// from next_cursor, continue strictly older. The body stays a page object
+// so the unpaged GET /comments array is unchanged.
+func (h *Handler) ListCommentsPage(w http.ResponseWriter, r *http.Request) {
+	issueID := chi.URLParam(r, "id")
+	issue, ok := h.loadIssueForUser(w, r, issueID)
+	if !ok {
+		return
+	}
+
+	limit, beforeAt, beforeID, err := parseCommentPageParams(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	rows, err := h.Queries.ListCommentsPageForIssue(r.Context(), db.ListCommentsPageForIssueParams{
+		IssueID:         issue.ID,
+		WorkspaceID:     issue.WorkspaceID,
+		Limit:           int32(limit + 1),
+		BeforeCreatedAt: beforeAt,
+		BeforeID:        beforeID,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list comments")
+		return
+	}
+
+	hasMore := len(rows) > limit
+	if hasMore {
+		rows = rows[:limit]
+	}
+	var nextCursor *CommentCursorResponse
+	if hasMore && len(rows) > 0 {
+		oldest := rows[len(rows)-1]
+		nextCursor = &CommentCursorResponse{
+			CreatedAt: oldest.CreatedAt.Time.UTC().Format(time.RFC3339Nano),
+			ID:        uuidToString(oldest.ID),
+		}
+	}
+	for i, j := 0, len(rows)-1; i < j; i, j = i+1, j-1 {
+		rows[i], rows[j] = rows[j], rows[i]
+	}
+
+	commentIDs := make([]pgtype.UUID, len(rows))
+	for i, c := range rows {
+		commentIDs[i] = c.ID
+	}
+	grouped := h.groupReactions(r, commentIDs)
+	groupedAtt := h.groupAttachments(r, commentIDs)
+	resp := make([]CommentResponse, len(rows))
+	for i, c := range rows {
+		cid := uuidToString(c.ID)
+		resp[i] = commentToResponse(c, grouped[cid], groupedAtt[cid])
+	}
+
+	writeJSON(w, http.StatusOK, CommentPageResponse{
+		Comments:   resp,
+		Limit:      limit,
+		HasMore:    hasMore,
+		NextCursor: nextCursor,
+	})
+}
+
 // fetchCommentsArgs bundles the parsed query params so fetchCommentsForList
 // stays readable. Sentinel errors below let the caller turn DB-layer outcomes
 // into the right HTTP status without leaking SQL details.

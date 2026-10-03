@@ -1,8 +1,10 @@
 export {
   countUnreadGroupChatMessages,
+  GROUP_CHAT_MESSAGE_PAGE_SIZE,
   groupChatKeys,
   groupChatListOptions,
   groupChatMessagesOptions,
+  groupChatMessagesPageOptions,
   groupChatSearchOptions,
 } from "./queries";
 export {

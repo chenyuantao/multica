@@ -1,6 +1,6 @@
 "use client";
 
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect, useRef } from "react";
 import { X, Loader2 } from "lucide-react";
 import { directChatPeer } from "@multica/core/group-chats";
 import { useActorName } from "@multica/core/workspace/hooks";
@@ -8,6 +8,7 @@ import type { GroupChat, GroupChatMember } from "@multica/core/types";
 import { cn } from "@multica/ui/lib/utils";
 import { useT } from "../i18n";
 import { ChatDetailsPanel } from "./chat-details-panel";
+import { CHAT_PANEL_WIDTH } from "./chat-panel-width";
 import { useInsertDocExcerpt } from "./doc-excerpt-insert";
 import type { KnowledgeNoteTab } from "./knowledge-note-tabs";
 import { ColumnResizeHandle, useColumnWidth } from "./resizable-column";
@@ -53,7 +54,18 @@ export function ChatSidePanel({
   const { t } = useT("im");
   const insertExcerpt = useInsertDocExcerpt();
   const { getActorName } = useActorName();
-  const { width, commit, options } = useColumnWidth("details", { defaultWidth: 320, min: 260, max: 480 });
+  const { width, commit, options } = useColumnWidth("details", CHAT_PANEL_WIDTH);
+  const expandedFor = useRef<string | null>(null);
+  // Opening a document uses the full column. A later drag stays until the next open.
+  useEffect(() => {
+    if (chrome === "page" || !activePath) {
+      expandedFor.current = null;
+      return;
+    }
+    if (expandedFor.current === activePath) return;
+    expandedFor.current = activePath;
+    commit(CHAT_PANEL_WIDTH.max);
+  }, [activePath, chrome, commit]);
   const active = notes.find((note) => note.path === activePath) ?? null;
   const peer = directChatPeer(chat, userId);
   const detailsLabel = peer ? getActorName(peer.member_type, peer.member_id) : chat.title || t(($) => $.panel.info);

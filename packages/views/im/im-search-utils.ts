@@ -4,6 +4,27 @@ import type { DirectoryEntry } from "./use-chat-directory";
 
 export type SearchScope = "all" | "chats" | "contacts" | "notes";
 
+export type SearchSection = Exclude<SearchScope, "all">;
+
+/** Rows kept visible in a grouped result before "view all" expands the rest. */
+export const SEARCH_SECTION_PREVIEW = 3;
+
+const SEARCH_SECTIONS: SearchSection[] = ["chats", "contacts", "notes"];
+
+/** `priority` first, then the other sections in the usual chats → contacts → notes order. */
+export function orderSearchSections(priority: SearchSection): SearchSection[] {
+  return [priority, ...SEARCH_SECTIONS.filter((section) => section !== priority)];
+}
+
+/** Grouped search shows a short preview; expanding a section reveals every row it has. */
+export function previewSearchRows<T>(rows: readonly T[], expanded: boolean): { visible: T[]; hidden: number } {
+  if (expanded || rows.length <= SEARCH_SECTION_PREVIEW) return { visible: [...rows], hidden: 0 };
+  return {
+    visible: rows.slice(0, SEARCH_SECTION_PREVIEW),
+    hidden: rows.length - SEARCH_SECTION_PREVIEW,
+  };
+}
+
 /** Case-insensitive, non-overlapping occurrences of `query` in `text`. */
 export function countMatches(text: string, query: string): number {
   const q = query.toLowerCase();

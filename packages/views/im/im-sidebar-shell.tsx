@@ -1,6 +1,6 @@
 "use client";
 
-import { Search, X } from "lucide-react";
+import { Search } from "lucide-react";
 import { useIsMobile } from "@multica/ui/hooks/use-mobile";
 import {
   SIDEBAR_WIDTH_DEFAULT,
@@ -45,17 +45,16 @@ export function ImSidebarShell({ className, children }: ImSidebarShellProps) {
 }
 
 interface ImSidebarHeaderProps {
-  query: string;
-  onQueryChange: (query: string) => void;
-  searchLabel: string;
   /** The tab name phones show centered above the search field. */
   title: string;
-  /** Phones open the shared search page instead of filtering this list. */
+  /** Phones open the shared search page. */
   onOpenSearch?: () => void;
+  /** Desktop field. Focusing it opens the shared search dropdown. */
+  desktopSearch?: React.ReactNode;
   children?: React.ReactNode;
 }
 
-export function ImSidebarHeader({ query, onQueryChange, searchLabel, title, onOpenSearch, children }: ImSidebarHeaderProps) {
+export function ImSidebarHeader({ title, onOpenSearch, desktopSearch, children }: ImSidebarHeaderProps) {
   const { t } = useT("im");
   const isMobile = useIsMobile();
 
@@ -67,8 +66,8 @@ export function ImSidebarHeader({ query, onQueryChange, searchLabel, title, onOp
           <h1 className="truncate text-center text-body-lg font-semibold">{title}</h1>
           <div className="flex justify-center">{children}</div>
         </div>
-        <div className="px-3 pb-2">
-          {onOpenSearch ? (
+        {onOpenSearch && (
+          <div className="px-3 pb-2">
             <button
               type="button"
               onClick={onOpenSearch}
@@ -77,10 +76,8 @@ export function ImSidebarHeader({ query, onQueryChange, searchLabel, title, onOp
               <Search className="size-[15px] shrink-0" />
               <span>{t(($) => $.sidebar.search)}</span>
             </button>
-          ) : (
-            <SearchField query={query} onQueryChange={onQueryChange} searchLabel={searchLabel} className="h-8" />
-          )}
-        </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -94,45 +91,9 @@ export function ImSidebarHeader({ query, onQueryChange, searchLabel, title, onOp
         className="relative flex min-w-0 flex-1 items-center gap-2"
         style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
       >
-        <SearchField query={query} onQueryChange={onQueryChange} searchLabel={searchLabel} className="h-7" />
+        {desktopSearch}
         {children}
       </div>
     </div>
-  );
-}
-
-function SearchField({
-  query,
-  onQueryChange,
-  searchLabel,
-  className,
-}: Pick<ImSidebarHeaderProps, "query" | "onQueryChange" | "searchLabel"> & { className?: string }) {
-  const { t } = useT("im");
-  return (
-    <label
-      className={cn(
-        "flex min-w-0 flex-1 items-center gap-1.5 rounded-[7px] border border-transparent bg-background px-2 text-muted-foreground transition-colors focus-within:border-ring",
-        className,
-      )}
-    >
-      <Search className="size-[15px] shrink-0" />
-      <input
-        value={query}
-        onChange={(e) => onQueryChange(e.target.value)}
-        placeholder={searchLabel}
-        aria-label={searchLabel}
-        className="min-w-0 flex-1 bg-transparent text-label text-foreground outline-none placeholder:text-muted-foreground"
-      />
-      {query && (
-        <button
-          type="button"
-          onClick={() => onQueryChange("")}
-          aria-label={t(($) => $.sidebar.clear_search)}
-          className="flex shrink-0 rounded-sm hover:text-foreground"
-        >
-          <X className="size-[13px]" />
-        </button>
-      )}
-    </label>
   );
 }

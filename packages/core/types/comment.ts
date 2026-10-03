@@ -5,6 +5,19 @@ export type CommentType = "comment" | "status_change" | "progress_update" | "sys
 // author_id; render paths should branch on author_type rather than the UUID.
 export type CommentAuthorType = "member" | "agent" | "system";
 
+export interface CommentCursor {
+  created_at: string;
+  id: string;
+}
+
+/** One cursor page of a chat timeline. `next_cursor` is null on the oldest page. */
+export interface CommentPage {
+  comments: Comment[];
+  limit: number;
+  has_more: boolean;
+  next_cursor?: CommentCursor | null;
+}
+
 export interface Reaction {
   id: string;
   comment_id: string;

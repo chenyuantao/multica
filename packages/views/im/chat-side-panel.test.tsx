@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, screen } from "@testing-library/react";
 import type { GroupChat } from "@multica/core/types";
 import { renderWithI18n } from "../test/i18n";
@@ -50,6 +50,8 @@ function renderPanel(notes: { path: string; name: string }[] = [], activePath: s
 }
 
 describe("ChatSidePanel", () => {
+  afterEach(() => localStorage.clear());
+
   it("hides the tab bar while only the details are open", () => {
     renderPanel();
     expect(screen.getByText("group details")).toBeInTheDocument();
@@ -71,5 +73,59 @@ describe("ChatSidePanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Close 周报" }));
     expect(onCloseNote).toHaveBeenCalledWith(weekly.path);
     expect(screen.queryByRole("button", { name: "Close Launch" })).toBeNull();
+  });
+
+  it("caps the details column at 520px", () => {
+    renderPanel();
+    const handle = screen.getByRole("separator", { name: "Resize panel" });
+    expect(handle).toHaveAttribute("aria-valuemax", "520");
+    expect(handle).toHaveAttribute("aria-valuenow", "320");
+  });
+
+  it("widens to 520px when a document opens", () => {
+    renderPanel([weekly], weekly.path);
+    const handle = screen.getByRole("separator", { name: "Resize panel" });
+    expect(handle).toHaveAttribute("aria-valuenow", "520");
+    expect(handle.parentElement).toHaveStyle({ width: "520px" });
+    expect(localStorage.getItem("multica:im-column-width:details")).toBe("520");
+  });
+
+  it("keeps a manual width until another document opens", () => {
+    const props = {
+      wsId: "ws-1",
+      chat,
+      userId: "user-1",
+      notes: [weekly, plan],
+      onSelectDetails: vi.fn(),
+      onSelectNote: vi.fn(),
+      onCloseNote: vi.fn(),
+    };
+    const view = renderWithI18n(<ChatSidePanel {...props} activePath={weekly.path} />);
+    const handle = () => screen.getByRole("separator", { name: "Resize panel" });
+    fireEvent.keyDown(handle(), { key: "ArrowRight" });
+    expect(handle()).toHaveAttribute("aria-valuenow", "504");
+
+    view.rerender(<ChatSidePanel {...props} activePath={weekly.path} />);
+    expect(handle()).toHaveAttribute("aria-valuenow", "504");
+
+    view.rerender(<ChatSidePanel {...props} activePath={plan.path} />);
+    expect(handle()).toHaveAttribute("aria-valuenow", "520");
+  });
+
+  it("leaves the stored width alone when a document opens full screen", () => {
+    renderWithI18n(
+      <ChatSidePanel
+        wsId="ws-1"
+        chat={chat}
+        userId="user-1"
+        notes={[weekly]}
+        activePath={weekly.path}
+        onSelectDetails={vi.fn()}
+        onSelectNote={vi.fn()}
+        onCloseNote={vi.fn()}
+        chrome="page"
+      />,
+    );
+    expect(localStorage.getItem("multica:im-column-width:details")).toBeNull();
   });
 });

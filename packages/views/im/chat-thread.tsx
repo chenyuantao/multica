@@ -1,15 +1,15 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Brain, Check, Copy, Forward, Info, ListChecks, Loader2, MoreHorizontal, PanelRight, Quote, RotateCw, Search, Sparkles, Trash2 } from "lucide-react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { AlertTriangle, Brain, Check, Copy, Forward, Info, ListChecks, Loader2, MoreHorizontal, PanelRight, Quote, RotateCw, Search, Sparkles, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { configuredConversationStarters } from "@multica/core/agents";
 import { useTaskMessages } from "@multica/core/chat/queries";
 import {
   directChatPeer,
   groupChatListOptions,
-  groupChatMessagesOptions,
+  groupChatMessagesPageOptions,
   useDeleteGroupChatMessage,
   useForwardChatHistory,
   useMarkGroupChatRead,
@@ -126,6 +126,7 @@ interface ChatThreadProps {
 }
 
 const EMPTY_COMMENTS: Comment[] = [];
+const MESSAGE_SEARCH_DEBOUNCE_MS = 400;
 const EMPTY_AGENTS: Agent[] = [];
 const EMPTY_CHATS: GroupChat[] = [];
 
@@ -147,7 +148,13 @@ function asGroupChats(data: unknown): GroupChat[] {
 export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAskAI, focusNote, mobileNav }: ChatThreadProps) {
   const { t } = useT("im");
   const { getActorName } = useActorName();
-  const { data = EMPTY_COMMENTS, isError } = useQuery(groupChatMessagesOptions(wsId, chat.id));
+  const {
+    data: messagePages,
+    isError,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery(groupChatMessagesPageOptions(wsId, chat.id));
   const { data: agentList = EMPTY_AGENTS } = useQuery(agentListOptions(wsId));
   const send = useSendGroupChatMessage(wsId, chat.id);
   const forward = useForwardChatHistory(wsId);
@@ -160,10 +167,14 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAsk
   const [forwardIds, setForwardIds] = useState<string[] | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [appliedQuery, setAppliedQuery] = useState("");
   const chatList = useQuery({ ...groupChatListOptions(wsId), enabled: forwardIds !== null });
   const { role } = useCurrentMember(wsId);
   const isAdmin = role === "owner" || role === "admin";
   const scrollRef = useRef<HTMLDivElement>(null);
+  const stickToBottomRef = useRef(true);
+  const olderAnchorRef = useRef<{ height: number; top: number } | null>(null);
+  const seenChatRef = useRef(chat.id);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const openAgentDetail = useOpenAgentDetail();
   const agentClicks = useAgentClickActions(
@@ -179,18 +190,33 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAsk
     setForwardIds(null);
     setSearchOpen(false);
     setSearchQuery("");
+    setAppliedQuery("");
   }, [chat.id]);
 
-  const openSearch = useCallback(() => {
-    setSearchOpen(true);
-    requestAnimationFrame(() => {
-      const input = searchInputRef.current;
-      if (input) {
-        input.focus();
-        input.select();
-      }
-    });
+  const closeSearch = useCallback(() => {
+    setSearchOpen(false);
+    setSearchQuery("");
+    setAppliedQuery("");
   }, []);
+
+  const toggleSearch = useCallback(() => {
+    if (searchOpen) closeSearch();
+    else setSearchOpen(true);
+  }, [closeSearch, searchOpen]);
+
+  useEffect(() => {
+    if (!searchOpen) return;
+    const id = setTimeout(() => setAppliedQuery(searchQuery.trim()), MESSAGE_SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(id);
+  }, [searchOpen, searchQuery]);
+
+  useEffect(() => {
+    if (!searchOpen) return;
+    const input = searchInputRef.current;
+    if (!input) return;
+    input.focus();
+    input.select();
+  }, [searchOpen]);
 
   // Same Mod+F chord as issue find (`findInIssue`); only this mounted thread intercepts it.
   useEffect(() => {
@@ -198,11 +224,11 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAsk
       if (e.defaultPrevented || e.repeat || isImeComposing(e)) return;
       if (!shortcutMatchesEvent(getShortcut("findInIssue"), e)) return;
       e.preventDefault();
-      openSearch();
+      toggleSearch();
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [openSearch]);
+  }, [toggleSearch]);
 
   // An open chat reads everything that lands in it while the app is in front.
   // Messages that arrive while it is backgrounded stay unread until the user
@@ -222,20 +248,25 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAsk
     return () => clearTimeout(timer);
   }, [foreground, unread, readKey, markRead]);
 
+  const loaded = useMemo(
+    () => messagePages?.pages.slice().reverse().flatMap((page) => page.comments) ?? EMPTY_COMMENTS,
+    [messagePages],
+  );
   const messages = useMemo(
     () =>
-      data
+      loaded
         .filter((c) => !c.deleted_at)
         .sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id)),
-    [data],
+    [loaded],
   );
-  const byId = useMemo(() => new Map(messages.map((m) => [m.id, m])), [messages]);
+  const rawById = useMemo(() => new Map(loaded.map((m) => [m.id, m])), [loaded]);
 
-  /** The quoted message as one line; null once it has been deleted. */
+  /** The quoted message as one line. Undefined until that message is loaded; null once it is deleted. */
   const quoteOf = useCallback(
-    (id: string): ComposerQuote | null => {
-      const m = byId.get(id);
-      if (!m) return null;
+    (id: string): ComposerQuote | null | undefined => {
+      const m = rawById.get(id);
+      if (!m) return hasNextPage ? undefined : null;
+      if (m.deleted_at) return null;
       const text = isChatHistoryContent(m.content)
         ? t(($) => $.thread.history_footer)
         : parseCancelledNotice(m.content)
@@ -243,9 +274,9 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAsk
           : plainTextPreview(m.content) || t(($) => $.thread.quote_attachment);
       return { id, name: getActorName(m.author_type, m.author_id), text };
     },
-    [byId, getActorName, t],
+    [rawById, getActorName, hasNextPage, t],
   );
-  const composerQuote = quoteId ? quoteOf(quoteId) : null;
+  const composerQuote = (quoteId ? quoteOf(quoteId) : null) ?? null;
 
   const jumpTo = useCallback((id: string) => {
     scrollRef.current?.querySelector(`[data-message-id="${id}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -319,7 +350,7 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAsk
     });
   }, [pending, messages, userId]);
 
-  const searchNeedle = searchQuery.trim();
+  const searchNeedle = searchOpen ? appliedQuery : "";
   const filtering = searchNeedle.length > 0;
   const filteredMessages = useMemo(
     () => (filtering ? messages.filter((m) => messageMatchesSearch(m.content, searchNeedle)) : messages),
@@ -337,23 +368,57 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAsk
 
   const searchButton = (
     <Button
-      variant={filtering ? "secondary" : "ghost"}
+      variant={searchOpen ? "secondary" : "ghost"}
       size="icon-sm"
       className="relative"
       style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-      onClick={openSearch}
+      onClick={toggleSearch}
       aria-label={searchButtonLabel}
       title={searchButtonLabel}
-      aria-pressed={filtering || searchOpen}
+      aria-pressed={searchOpen}
     >
       <Search />
     </Button>
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [messages.length, pending.length, chat.id]);
+    if (!el) return;
+    if (seenChatRef.current !== chat.id) {
+      seenChatRef.current = chat.id;
+      olderAnchorRef.current = null;
+      stickToBottomRef.current = true;
+    }
+    const anchor = olderAnchorRef.current;
+    if (anchor) {
+      if (isFetchingNextPage) return;
+      olderAnchorRef.current = null;
+      el.scrollTop = anchor.top + (el.scrollHeight - anchor.height);
+      return;
+    }
+    if (stickToBottomRef.current) el.scrollTop = el.scrollHeight;
+  }, [messages.length, pending.length, chat.id, isFetchingNextPage]);
+
+  const loadOlder = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el || !hasNextPage || isFetchingNextPage || olderAnchorRef.current) return;
+    if (el.clientHeight === 0) return;
+    if (el.scrollHeight > el.clientHeight + 1 && el.scrollTop > 48) return;
+    olderAnchorRef.current = { height: el.scrollHeight, top: el.scrollTop };
+    void fetchNextPage();
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
+
+  const onScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    if (el.scrollTop <= 48) loadOlder();
+  }, [loadOlder]);
+
+  useEffect(() => {
+    if (searchOpen) return;
+    loadOlder();
+  }, [loadOlder, messages.length, searchOpen]);
 
   const people = chat.members.filter((m) => m.member_type === "member");
   const agents = chat.members.filter((m) => m.member_type === "agent");
@@ -510,7 +575,59 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAsk
         </header>
       )}
 
-      <div ref={scrollRef} className={cn("min-h-0 flex-1 overflow-y-auto pt-3.5 pb-1.5", mobileNav ? "px-3" : "px-6")}>
+      {searchOpen ? (
+        <div
+          role="search"
+          aria-label={t(($) => $.thread.search_title)}
+          className={cn(
+            "flex shrink-0 items-center gap-2 border-b bg-background py-2",
+            mobileNav ? "px-3" : "px-5",
+          )}
+        >
+          <Search className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+          <Input
+            ref={searchInputRef}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key !== "Escape" || isImeComposing(e)) return;
+              e.preventDefault();
+              closeSearch();
+            }}
+            placeholder={t(($) => $.thread.search_placeholder)}
+            aria-label={t(($) => $.thread.search_placeholder)}
+            className="h-8"
+            style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+          />
+          {filtering && !searchEmpty ? (
+            <p className="shrink-0 text-caption text-muted-foreground">
+              {t(($) => $.thread.search_count, {
+                count: filteredMessages.length + filteredPending.length,
+              })}
+            </p>
+          ) : null}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="shrink-0"
+            style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+            onClick={closeSearch}
+            aria-label={t(($) => $.thread.search_close)}
+          >
+            <X />
+          </Button>
+        </div>
+      ) : null}
+
+      <div
+        ref={scrollRef}
+        onScroll={onScroll}
+        className={cn("min-h-0 flex-1 overflow-y-auto pt-3.5 pb-1.5", mobileNav ? "px-3" : "px-6")}
+      >
+        {isFetchingNextPage ? (
+          <p className="py-2 text-center text-caption text-muted-foreground">{t(($) => $.thread.loading_earlier)}</p>
+        ) : null}
         {isError ? (
           <p className="py-10 text-center text-body text-muted-foreground">{t(($) => $.thread.load_failed)}</p>
         ) : messages.length === 0 && visiblePending.length === 0 ? (
@@ -613,31 +730,6 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAsk
           </>
         )}
       </div>
-
-      <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
-        <DialogContent className="gap-3 sm:max-w-md" showCloseButton>
-          <DialogHeader>
-            <DialogTitle>{t(($) => $.thread.search_title)}</DialogTitle>
-          </DialogHeader>
-          <Input
-            ref={searchInputRef}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t(($) => $.thread.search_placeholder)}
-            aria-label={t(($) => $.thread.search_placeholder)}
-            autoFocus
-          />
-          {filtering ? (
-            <p className="text-caption text-muted-foreground">
-              {searchEmpty
-                ? t(($) => $.thread.search_no_results)
-                : t(($) => $.thread.search_count, {
-                    count: filteredMessages.length + filteredPending.length,
-                  })}
-            </p>
-          ) : null}
-        </DialogContent>
-      </Dialog>
 
       <ForwardDialog
         key={forwardIds?.join("\0") ?? "closed"}

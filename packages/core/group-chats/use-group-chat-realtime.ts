@@ -17,7 +17,10 @@ export function useGroupChatRealtime(wsId: string) {
   const refreshChat = useCallback(
     (issueId: string | undefined) => {
       qc.invalidateQueries({ queryKey: groupChatKeys.list(wsId) });
-      if (issueId) qc.invalidateQueries({ queryKey: groupChatKeys.messages(wsId, issueId) });
+      if (issueId) {
+        qc.invalidateQueries({ queryKey: groupChatKeys.messages(wsId, issueId) });
+        qc.invalidateQueries({ queryKey: groupChatKeys.messagesPage(wsId, issueId) });
+      }
     },
     [qc, wsId],
   );

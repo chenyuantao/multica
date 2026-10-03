@@ -91,6 +91,23 @@ describe("ApiClient docs", () => {
     expect(await new ApiClient("https://api.example.test").getDocsTree()).toEqual([]);
   });
 
+  it("moves a note into a directory and refuses a move result without paths", async () => {
+    const fetchMock = respond({ from: "a.md", path: "库/a.md", name: "a.md", type: "file" });
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new ApiClient("https://api.example.test");
+    await expect(client.moveDoc({ path: "a.md", dest: "库" })).resolves.toEqual({
+      from: "a.md",
+      path: "库/a.md",
+      name: "a.md",
+      type: "file",
+    });
+    expect(fetchMock.mock.calls[0]?.[1]?.method).toBe("POST");
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ path: "a.md", dest: "库" });
+
+    vi.stubGlobal("fetch", respond({ path: "库/a.md" }));
+    await expect(client.moveDoc({ path: "a.md", dest: "库" })).rejects.toThrow(/invalid document response/i);
+  });
+
   it("saves as a mergeable overwrite and refuses a file without a revision", async () => {
     const fetchMock = respond({ path: "a.md", content: "x" });
     vi.stubGlobal("fetch", fetchMock);

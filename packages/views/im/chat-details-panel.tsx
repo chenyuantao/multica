@@ -1,13 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { CircleMinus, HardDrive, Pencil, UserPlus } from "lucide-react";
+import { HardDrive, Minus, Pencil, Plus, Search } from "lucide-react";
 import { directChatPeer, useRemoveGroupChatMember, useUpdateGroupChat } from "@multica/core/group-chats";
 import { runtimeDisplayName, runtimeListOptions } from "@multica/core/runtimes";
 import { useActorName } from "@multica/core/workspace/hooks";
-import type { Agent, AgentRuntime, GroupChat, GroupChatMember } from "@multica/core/types";
+import type { AgentRuntime, GroupChat, GroupChatMember } from "@multica/core/types";
 import { cn } from "@multica/ui/lib/utils";
 import { Button } from "@multica/ui/components/ui/button";
 import { Input } from "@multica/ui/components/ui/input";
@@ -16,7 +16,9 @@ import { ContentEditor } from "../editor";
 import { useT } from "../i18n";
 import { useOpenAgentDetail } from "../modals/agent-detail";
 import { AddMemberDialog } from "./add-member-dialog";
+import { CHAT_PANEL_WIDTH } from "./chat-panel-width";
 import { ColumnResizeHandle, useColumnWidth } from "./resizable-column";
+import { ChatDocumentsSection } from "./chat-documents-section";
 import { ContactProfile } from "./contact-card";
 import { useAgentClickActions } from "./use-agent-click-actions";
 import { entryKey, useChatDirectory } from "./use-chat-directory";
@@ -35,6 +37,17 @@ type Availability = "online" | "unstable" | "offline";
 
 const EMPTY_RUNTIMES: AgentRuntime[] = [];
 
+/**
+ * Minimum slot for one avatar. Columns are `floor(width / 48)`, then the row
+ * splits that width evenly — a 200px row holds four avatars.
+ */
+export const ROSTER_CELL_PX = 48;
+
+export function rosterColumnCount(width: number, cellPx = ROSTER_CELL_PX): number {
+  if (!Number.isFinite(width) || width < cellPx) return 1;
+  return Math.floor(width / cellPx);
+}
+
 export function ChatDetailsPanel({ wsId, chat, userId, variant = "aside", onOpenMember }: ChatDetailsPanelProps) {
   const { t } = useT("im");
   const { getActorName } = useActorName();
@@ -43,11 +56,9 @@ export function ChatDetailsPanel({ wsId, chat, userId, variant = "aside", onOpen
   const { data: runtimes = EMPTY_RUNTIMES } = useQuery(runtimeListOptions(wsId));
   const removeMember = useRemoveGroupChatMember(wsId, chat.id);
   const openAgentDetail = useOpenAgentDetail();
-  const [addOpen, setAddOpen] = useState(false);
-  const { width, commit, options } = useColumnWidth("details", { defaultWidth: 320, min: 260, max: 480 });
+  const { width, commit, options } = useColumnWidth("details", CHAT_PANEL_WIDTH);
 
   const isCreator = chat.creator_type === "member" && chat.creator_id === userId;
-  const people = chat.members.filter((m) => m.member_type === "member");
   const agentMembers = chat.members.filter((m) => m.member_type === "agent");
   const agentClicks = useAgentClickActions(wsId, (agentId) => {
     const member = agentMembers.find((m) => m.member_id === agentId);
@@ -105,9 +116,23 @@ export function ChatDetailsPanel({ wsId, chat, userId, variant = "aside", onOpen
         }
         userId={userId}
       />
+      <ChatDocumentsSection wsId={wsId} chat={chat} />
     </aside>
   ) : (
     <aside className={asideClass}>
+      <MemberRoster
+        wsId={wsId}
+        chat={chat}
+        userId={userId}
+        isCreator={isCreator}
+        canRemove={canRemove}
+        onRemove={(m) => void remove(m)}
+        removeDisabled={removeMember.isPending}
+        onOpenMember={onOpenMember}
+        onOpenAgent={(id) => agentClicks.open(id)}
+        onChatAgent={(id) => agentClicks.chat(id)}
+      />
+
       <PanelSection title={t(($) => $.panel.name)}>
         <ChatNameRow wsId={wsId} chat={chat} />
       </PanelSection>
@@ -116,55 +141,7 @@ export function ChatDetailsPanel({ wsId, chat, userId, variant = "aside", onOpen
         <ChatAnnouncement wsId={wsId} chat={chat} />
       </PanelSection>
 
-      <PanelSection title={t(($) => $.panel.agents)}>
-        {agentMembers.length === 0 ? (
-          <p className="px-3 py-3 text-label text-muted-foreground">{t(($) => $.panel.no_agents)}</p>
-        ) : (
-          agentMembers.map((m) => (
-            <MemberRow
-              key={m.member_id}
-              member={m}
-              name={getActorName("agent", m.member_id)}
-              detail={agentDetail(agentsById.get(m.member_id), runtimesById)}
-              onOpen={() => agentClicks.open(m.member_id)}
-              onDoubleOpen={() => agentClicks.chat(m.member_id)}
-              removable={canRemove(m)}
-              removeLabel={t(($) => $.panel.remove, { name: getActorName("agent", m.member_id) })}
-              onRemove={() => void remove(m)}
-              disabled={removeMember.isPending}
-            />
-          ))
-        )}
-      </PanelSection>
-
-      <PanelSection title={t(($) => $.panel.people)}>
-        {people.map((m) => (
-          <MemberRow
-            key={m.member_id}
-            member={m}
-            name={getActorName("member", m.member_id)}
-            detail={[
-              m.member_id === chat.creator_id ? t(($) => $.panel.creator) : null,
-              m.member_id === userId ? t(($) => $.panel.you) : null,
-            ].filter(Boolean).join(" · ")}
-            onOpen={onOpenMember && (() => onOpenMember(m))}
-            removable={canRemove(m)}
-            removeLabel={t(($) => $.panel.remove, { name: getActorName("member", m.member_id) })}
-            onRemove={() => void remove(m)}
-            disabled={removeMember.isPending}
-          />
-        ))}
-      </PanelSection>
-
-      {isCreator && (
-        <div>
-          <Button variant="secondary" size="sm" onClick={() => setAddOpen(true)}>
-            <UserPlus />
-            {t(($) => $.panel.add_member)}
-          </Button>
-          <AddMemberDialog wsId={wsId} chat={chat} open={addOpen} onOpenChange={setAddOpen} />
-        </div>
-      )}
+      <ChatDocumentsSection wsId={wsId} chat={chat} />
 
       {runs.length > 0 && (
         <PanelSection title={t(($) => $.panel.runs)}>
@@ -290,12 +267,6 @@ function ChatNameRow({ wsId, chat }: { wsId: string; chat: GroupChat }) {
   );
 }
 
-function agentDetail(agent: Agent | undefined, runtimesById: Map<string, AgentRuntime>): string {
-  if (!agent) return "";
-  const runtime = agent.runtime_id ? runtimesById.get(agent.runtime_id) : undefined;
-  return runtime ? runtimeDisplayName(runtime) : agent.description;
-}
-
 function PanelSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="flex flex-col gap-1.5">
@@ -305,59 +276,253 @@ function PanelSection({ title, children }: { title: string; children: React.Reac
   );
 }
 
-function MemberRow({
+function useRosterColumns(cellPx: number) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [columns, setColumns] = useState(1);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const apply = (width: number) => {
+      const next = rosterColumnCount(width, cellPx);
+      setColumns((current) => (current === next ? current : next));
+    };
+    apply(el.clientWidth);
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver((entries) => {
+      apply(entries[0]?.contentRect.width ?? 0);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [cellPx]);
+
+  return { ref, columns };
+}
+
+function MemberRoster({
+  wsId,
+  chat,
+  userId,
+  isCreator,
+  canRemove,
+  onRemove,
+  removeDisabled,
+  onOpenMember,
+  onOpenAgent,
+  onChatAgent,
+}: {
+  wsId: string;
+  chat: GroupChat;
+  userId: string;
+  isCreator: boolean;
+  canRemove: (member: GroupChatMember) => boolean;
+  onRemove: (member: GroupChatMember) => void;
+  removeDisabled: boolean;
+  onOpenMember?: (member: GroupChatMember) => void;
+  onOpenAgent: (agentId: string) => void;
+  onChatAgent: (agentId: string) => void;
+}) {
+  const { t } = useT("im");
+  const { getActorName } = useActorName();
+  const [query, setQuery] = useState("");
+  const [addOpen, setAddOpen] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const { ref, columns } = useRosterColumns(ROSTER_CELL_PX);
+  const filtering = query.trim().length > 0;
+  const hasRemovable = chat.members.some(canRemove);
+  const visible = chat.members.filter((member) => {
+    const q = query.trim().toLowerCase();
+    if (!q) return true;
+    return getActorName(member.member_type, member.member_id).toLowerCase().includes(q);
+  });
+
+  useEffect(() => {
+    if (!hasRemovable) setRemoving(false);
+  }, [hasRemovable]);
+
+  const removeMode = removing && !filtering;
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="relative">
+        <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={t(($) => $.panel.search)}
+          aria-label={t(($) => $.panel.search)}
+          className="rounded-full bg-background pl-8"
+        />
+      </div>
+      {filtering && visible.length === 0 ? (
+        <p className="px-1 py-3 text-center text-caption text-muted-foreground">{t(($) => $.panel.no_matches)}</p>
+      ) : (
+        <div
+          ref={ref}
+          role="group"
+          aria-label={t(($) => $.panel.roster)}
+          className="grid min-w-0 gap-y-3"
+          style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
+        >
+          {visible.map((member) => {
+            const name = getActorName(member.member_type, member.member_id);
+            const detail = [
+              member.member_type === "member" && member.member_id === chat.creator_id ? t(($) => $.panel.creator) : null,
+              member.member_id === userId ? t(($) => $.panel.you) : null,
+            ]
+              .filter(Boolean)
+              .join(" · ");
+            return (
+              <MemberTile
+                key={`${member.member_type}:${member.member_id}`}
+                member={member}
+                name={name}
+                detail={detail}
+                removing={removeMode && canRemove(member)}
+                removeLabel={t(($) => $.panel.remove, { name })}
+                removeDisabled={removeDisabled}
+                onRemove={() => onRemove(member)}
+                onOpen={
+                  member.member_type === "agent"
+                    ? () => onOpenAgent(member.member_id)
+                    : onOpenMember
+                      ? () => onOpenMember(member)
+                      : undefined
+                }
+                onDoubleOpen={member.member_type === "agent" ? () => onChatAgent(member.member_id) : undefined}
+              />
+            );
+          })}
+          {isCreator && !filtering && (
+            <RosterAction label={t(($) => $.panel.add)} ariaLabel={t(($) => $.panel.add_member)} onClick={() => setAddOpen(true)}>
+              <Plus className="size-5" />
+            </RosterAction>
+          )}
+          {isCreator && !filtering && hasRemovable && (
+            <RosterAction
+              label={t(($) => $.panel.remove_members)}
+              pressed={removeMode}
+              onClick={() => setRemoving((current) => !current)}
+            >
+              <Minus className="size-5" />
+            </RosterAction>
+          )}
+        </div>
+      )}
+      {isCreator && <AddMemberDialog wsId={wsId} chat={chat} open={addOpen} onOpenChange={setAddOpen} />}
+    </div>
+  );
+}
+
+function MemberTile({
   member,
   name,
   detail,
+  removing,
+  removeLabel,
+  removeDisabled,
+  onRemove,
   onOpen,
   onDoubleOpen,
-  removable,
-  removeLabel,
-  onRemove,
-  disabled,
 }: {
   member: GroupChatMember;
   name: string;
   detail: string;
-  onOpen?: () => void;
-  /** Agents only: goes to the direct chat instead of the profile. */
-  onDoubleOpen?: () => void;
-  removable: boolean;
+  removing: boolean;
   removeLabel: string;
+  removeDisabled: boolean;
   onRemove: () => void;
-  disabled: boolean;
+  onOpen?: () => void;
+  onDoubleOpen?: () => void;
 }) {
-  const label = (
-    <>
-      <span className="block truncate text-body font-medium group-hover:underline">{name}</span>
-      {detail && <span className="block truncate text-caption text-muted-foreground">{detail}</span>}
-    </>
+  const activate = () => {
+    if (removing) {
+      onRemove();
+      return;
+    }
+    onOpen?.();
+  };
+  const interactive = removing || !!onOpen;
+  const caption = (
+    <span className="w-full truncate text-center text-caption text-muted-foreground">{name}</span>
   );
+
   return (
-    <div className="flex items-center gap-3 px-3 py-2">
-      <span className="flex" onDoubleClick={onDoubleOpen}>
-        <ActorAvatar actorType={member.member_type} actorId={member.member_id} size="lg" enableHoverCard showStatusDot onOpenProfile={onOpen} />
+    <div className="flex min-w-0 flex-col items-center gap-1" title={detail ? `${name} · ${detail}` : name}>
+      <span className="relative inline-flex" onDoubleClick={removing ? undefined : onDoubleOpen}>
+        <ActorAvatar
+          actorType={member.member_type}
+          actorId={member.member_id}
+          size={ROSTER_CELL_PX}
+          enableHoverCard
+          showStatusDot={member.member_type === "agent"}
+          onOpenProfile={interactive ? activate : undefined}
+        />
+        {removing && (
+          <button
+            type="button"
+            aria-label={removeLabel}
+            disabled={removeDisabled}
+            onClick={(event) => {
+              event.stopPropagation();
+              onRemove();
+            }}
+            className="absolute -top-1 -left-1 z-10 flex size-4 items-center justify-center rounded-full bg-destructive text-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-50"
+          >
+            <Minus className="size-3" />
+          </button>
+        )}
       </span>
-      {onOpen ? (
+      {interactive ? (
         <button
           type="button"
-          onClick={onOpen}
-          onDoubleClick={onDoubleOpen}
+          onClick={activate}
+          onDoubleClick={removing ? undefined : onDoubleOpen}
           className={cn(
-            "group min-w-0 flex-1 rounded-sm text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
-            onDoubleOpen && "select-none",
+            "w-full min-w-0 rounded-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+            onDoubleOpen && !removing && "select-none",
           )}
         >
-          {label}
+          {caption}
         </button>
       ) : (
-        <span className="min-w-0 flex-1">{label}</span>
-      )}
-      {removable && (
-        <Button variant="ghost" size="icon-xs" onClick={onRemove} disabled={disabled} aria-label={removeLabel}>
-          <CircleMinus className="text-muted-foreground" />
-        </Button>
+        caption
       )}
     </div>
+  );
+}
+
+function RosterAction({
+  label,
+  ariaLabel,
+  pressed,
+  onClick,
+  children,
+}: {
+  label: string;
+  ariaLabel?: string;
+  pressed?: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={ariaLabel}
+      aria-pressed={pressed}
+      onClick={onClick}
+      className="flex min-w-0 flex-col items-center gap-1 rounded-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+    >
+      <span
+        className={cn(
+          "flex items-center justify-center rounded-avatar border border-dashed text-muted-foreground",
+          pressed ? "border-foreground bg-background text-foreground" : "border-border",
+        )}
+        style={{ width: ROSTER_CELL_PX, height: ROSTER_CELL_PX }}
+      >
+        {children}
+      </span>
+      <span className="w-full truncate text-center text-caption text-muted-foreground">{label}</span>
+    </button>
   );
 }

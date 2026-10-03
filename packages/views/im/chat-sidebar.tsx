@@ -1,6 +1,5 @@
 "use client";
 
-import { useMemo, useState } from "react";
 import { CirclePlus, Pin, PinOff } from "lucide-react";
 import { directChatPeer } from "@multica/core/group-chats";
 import type { GroupChat } from "@multica/core/types";
@@ -14,6 +13,7 @@ import { chatDraftSummary, useChatDraft } from "./chat-draft";
 import { cancelledNoticeTrigger } from "./cancelled-notice";
 import { isChatHistoryContent } from "./chat-history";
 import { chatActivityAt, chatDisplayTitle, formatStamp, plainTextPreview } from "./im-utils";
+import { ImSidebarSearch } from "./im-sidebar-search";
 import { ImSidebarHeader, ImSidebarShell } from "./im-sidebar-shell";
 import { UnreadBadge } from "./unread-badge";
 
@@ -51,17 +51,14 @@ export function ChatSidebar({
   // its badge would only flash; in the background it stays visible.
   const foreground = useAppForeground();
   const readingId = foreground ? selectedId : null;
-  const { getActorName } = useActorName();
-  const [query, setQuery] = useState("");
-  const q = query.trim().toLowerCase();
-  const visible = useMemo(
-    () => (q ? chats.filter((c) => chatDisplayTitle(c, userId, getActorName).toLowerCase().includes(q)) : chats),
-    [chats, q, userId, getActorName],
-  );
 
   return (
     <ImSidebarShell className={className}>
-      <ImSidebarHeader query={query} onQueryChange={setQuery} searchLabel={t(($) => $.sidebar.search)} title={t(($) => $.tabs.chats)} onOpenSearch={onOpenSearch}>
+      <ImSidebarHeader
+        title={t(($) => $.tabs.chats)}
+        onOpenSearch={onOpenSearch}
+        desktopSearch={<ImSidebarSearch priority="chats" onOpenChat={onSelect} />}
+      >
         <button
           type="button"
           onClick={onNewChat}
@@ -76,13 +73,11 @@ export function ChatSidebar({
       <nav className="min-h-0 flex-1 overflow-y-auto pt-1 pb-3" aria-label={t(($) => $.sidebar.chats)}>
         {isError ? (
           <p className="px-3 py-8 text-center text-body text-muted-foreground">{t(($) => $.sidebar.load_failed)}</p>
-        ) : !isLoading && visible.length === 0 ? (
-          <p className="px-3 py-8 text-center text-body text-muted-foreground">
-            {q ? t(($) => $.sidebar.no_results) : t(($) => $.sidebar.empty)}
-          </p>
+        ) : !isLoading && chats.length === 0 ? (
+          <p className="px-3 py-8 text-center text-body text-muted-foreground">{t(($) => $.sidebar.empty)}</p>
         ) : (
           <ul className="flex flex-col">
-            {visible.map((chat) => (
+            {chats.map((chat) => (
               <li key={chat.id} className="border-b border-foreground/5 last:border-b-0">
                 <ChatListMenu pinned={chat.pinned} ios={iosMenu} onSetPinned={(pinned) => onSetPinned(chat.id, pinned)}>
                   <ChatListItem

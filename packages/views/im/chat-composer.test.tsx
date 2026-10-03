@@ -143,6 +143,30 @@ describe("ChatComposer drafts", () => {
   });
 });
 
+describe("ChatComposer enter", () => {
+  beforeEach(() => localStorage.clear());
+
+  it.each([
+    ["Shift", { shiftKey: true }],
+    ["Cmd", { metaKey: true }],
+    ["Ctrl", { ctrlKey: true }],
+    ["Alt", { altKey: true }],
+  ] as const)("%s+Enter inserts a newline and does not send", (_label, modifiers) => {
+    const onSend = renderComposer();
+    setComposerText("hello");
+    fireEvent.keyDown(composerBox(), { key: "Enter", ...modifiers });
+    expect(onSend).not.toHaveBeenCalled();
+    expect(composerBox().textContent).toBe("hello\n");
+  });
+
+  it("sends on Enter alone", () => {
+    const onSend = renderComposer();
+    setComposerText("hello");
+    fireEvent.keyDown(composerBox(), { key: "Enter" });
+    expect(onSend).toHaveBeenCalledWith("hello", []);
+  });
+});
+
 describe("ChatComposer quote", () => {
   beforeEach(() => localStorage.clear());
 

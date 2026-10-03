@@ -1156,6 +1156,79 @@ func (q *Queries) ListCommentsForIssue(ctx context.Context, arg ListCommentsForI
 	return items, nil
 }
 
+const listCommentsPageForIssue = `-- name: ListCommentsPageForIssue :many
+SELECT id, issue_id, author_type, author_id, content, type, created_at, updated_at, parent_id, workspace_id, resolved_at, resolved_by_type, resolved_by_id, source_task_id, quick_action_id, via_plugin_id, revision, recovery_settled_at, deleted_at, suppressed_agent_ids, ref_message_id FROM comment
+WHERE issue_id = $1
+  AND workspace_id = $2
+  AND (
+    $4::timestamptz IS NULL
+    OR (created_at, id) < ($4::timestamptz, $5::uuid)
+  )
+ORDER BY created_at DESC, id DESC
+LIMIT $3
+`
+
+type ListCommentsPageForIssueParams struct {
+	IssueID         pgtype.UUID        `json:"issue_id"`
+	WorkspaceID     pgtype.UUID        `json:"workspace_id"`
+	Limit           int32              `json:"limit"`
+	BeforeCreatedAt pgtype.Timestamptz `json:"before_created_at"`
+	BeforeID        pgtype.UUID        `json:"before_id"`
+}
+
+// Newest page of comments on one issue, strictly older than the optional
+// cursor. Callers pass limit+1 and drop the extra row to see whether an
+// older page exists. The cursor is the oldest row kept on the previous
+// page, so the next page continues without overlap. idx_comment_issue_keyset
+// serves the keyset order.
+func (q *Queries) ListCommentsPageForIssue(ctx context.Context, arg ListCommentsPageForIssueParams) ([]Comment, error) {
+	rows, err := q.db.Query(ctx, listCommentsPageForIssue,
+		arg.IssueID,
+		arg.WorkspaceID,
+		arg.Limit,
+		arg.BeforeCreatedAt,
+		arg.BeforeID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Comment{}
+	for rows.Next() {
+		var i Comment
+		if err := rows.Scan(
+			&i.ID,
+			&i.IssueID,
+			&i.AuthorType,
+			&i.AuthorID,
+			&i.Content,
+			&i.Type,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.ParentID,
+			&i.WorkspaceID,
+			&i.ResolvedAt,
+			&i.ResolvedByType,
+			&i.ResolvedByID,
+			&i.SourceTaskID,
+			&i.QuickActionID,
+			&i.ViaPluginID,
+			&i.Revision,
+			&i.RecoverySettledAt,
+			&i.DeletedAt,
+			&i.SuppressedAgentIds,
+			&i.RefMessageID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listCommentsSinceForIssue = `-- name: ListCommentsSinceForIssue :many
 SELECT id, issue_id, author_type, author_id, content, type, created_at, updated_at, parent_id, workspace_id, resolved_at, resolved_by_type, resolved_by_id, source_task_id, quick_action_id, via_plugin_id, revision, recovery_settled_at, deleted_at, suppressed_agent_ids, ref_message_id FROM comment
 WHERE issue_id = $1 AND workspace_id = $2 AND created_at > $3

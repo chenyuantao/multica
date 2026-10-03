@@ -34,13 +34,7 @@ describe("ImSidebarShell", () => {
     Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
     const onOpenSearch = vi.fn();
     renderWithI18n(
-      <ImSidebarHeader
-        query=""
-        onQueryChange={() => {}}
-        searchLabel="Search contacts"
-        title="Contacts"
-        onOpenSearch={onOpenSearch}
-      />,
+      <ImSidebarHeader title="Contacts" onOpenSearch={onOpenSearch} />,
     );
     const button = screen.getByRole("button", { name: "Search" });
     expect(button.className).toContain("justify-center");

@@ -35,6 +35,7 @@ import type {
   CreateWorkspaceSubscriptionPortalResponse,
   CronPreviewResponse,
   DingTalkInstallation,
+  DocMoveResult,
   DocNode,
   ListDingTalkInstallationsResponse,
   ListDingTalkGroupsResponse,
@@ -1122,6 +1123,16 @@ export const CommentSchema = z.object({
 
 export const CommentsListSchema = z.array(CommentSchema);
 
+export const CommentPageSchema = z.object({
+  comments: z.array(CommentSchema).default([]),
+  limit: z.number().default(200),
+  has_more: z.boolean().default(false),
+  next_cursor: z.object({
+    created_at: z.string(),
+    id: z.string(),
+  }).loose().nullable().optional(),
+}).loose();
+
 // Degraded placeholder for a comment response that failed schema validation.
 // The empty id is the caller's signal that nothing usable came back — the run
 // UI treats it as "could not read the result" rather than a successful run.
@@ -1213,6 +1224,13 @@ export const DocSearchResultSchema = z.object({
   query: z.string().default(""),
   nodes: z.array(DocNodeSchema).default([]),
   truncated: z.boolean().default(false).catch(false),
+}).loose();
+
+export const DocMoveResultSchema: z.ZodType<DocMoveResult> = z.object({
+  from: z.string(),
+  path: z.string(),
+  name: z.string().default("").catch(""),
+  type: z.enum(["dir", "file"]),
 }).loose();
 
 export const DocFileSchema = z.object({

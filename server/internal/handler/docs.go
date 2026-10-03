@@ -29,6 +29,11 @@ type docsVersionRequest struct {
 	Version int    `json:"version"`
 }
 
+type docsMoveRequest struct {
+	Path string `json:"path"`
+	Dest string `json:"dest"`
+}
+
 // PostDocsTree returns the Obsidian vault as a nested directory tree.
 // Only markdown files are included, and directories with no markdown left
 // after that filter are omitted.
@@ -159,6 +164,25 @@ func (h *Handler) PatchDocsFileContent(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
+// PostDocsMove places a markdown file or directory into another directory.
+// Dest is the destination directory; an empty dest is the vault root.
+func (h *Handler) PostDocsMove(w http.ResponseWriter, r *http.Request) {
+	var req docsMoveRequest
+	if !decodeDocsBody(w, r, &req) {
+		return
+	}
+	root, ok := requireDocsVault(w)
+	if !ok {
+		return
+	}
+	result, err := obsidianvault.Move(r.Context(), root, req.Path, req.Dest)
+	if err != nil {
+		writeDocsVaultError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
 // PostDocsFile creates a markdown note inside an existing vault directory.
 func (h *Handler) PostDocsFile(w http.ResponseWriter, r *http.Request) {
 	var req docsCreateRequest
@@ -260,6 +284,8 @@ func writeDocsVaultError(w http.ResponseWriter, r *http.Request, err error) {
 		writeErrorCode(w, http.StatusConflict, "docs_exists", "document already exists")
 	case errors.Is(err, obsidianvault.ErrNotDir):
 		writeErrorCode(w, http.StatusBadRequest, "docs_not_directory", "path is not a directory")
+	case errors.Is(err, obsidianvault.ErrInvalidMove):
+		writeErrorCode(w, http.StatusBadRequest, "docs_invalid_move", "cannot move a folder into itself")
 	case errors.Is(err, obsidianvault.ErrQueryRequired):
 		writeErrorCode(w, http.StatusBadRequest, "docs_query_required", "search query is required")
 	case errors.Is(err, obsidianvault.ErrQueryTooLong):

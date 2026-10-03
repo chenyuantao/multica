@@ -35,6 +35,7 @@ const noteHits = [
 const people: DirectoryEntry[] = [{ type: "member", id: "u2", name: "Ada", detail: "roadmap owner" }];
 const agents: DirectoryEntry[] = [{ type: "agent", id: "a1", name: "Roadmapper", detail: "" }];
 const docsErrorRef = vi.hoisted(() => ({ current: false }));
+const listChatsRef = vi.hoisted(() => ({ current: null as GroupChat[] | null }));
 const askMutate = vi.hoisted(() => vi.fn());
 
 vi.mock("@multica/core/docs", () => ({
@@ -54,7 +55,9 @@ vi.mock("@tanstack/react-query", async () => {
     ...actual,
     useQuery: vi.fn(({ queryKey }: { queryKey: string[] }) => {
       const [root, kind, q] = queryKey;
-      if (root === "group-chats") return kind === "list" ? ok(chats) : ok(q ? { query: q, hits: chatHits } : undefined);
+      if (root === "group-chats") {
+        return kind === "list" ? ok(listChatsRef.current ?? chats) : ok(q ? { query: q, hits: chatHits } : undefined);
+      }
       if (kind === "tree") return ok(tree);
       if (!q) return ok(undefined);
       if (docsErrorRef.current) return { ...ok(undefined), isError: true, error: new Error("unconfigured") };
@@ -142,6 +145,7 @@ describe("ImSearchDialog", () => {
   beforeEach(() => {
     configureShortcutPlatform("macos");
     docsErrorRef.current = false;
+    listChatsRef.current = null;
     askMutate.mockReset();
   });
   afterEach(() => configureShortcutPlatform(null));
@@ -172,6 +176,23 @@ describe("ImSearchDialog", () => {
     fireEvent.keyDown(input, { key: "Enter" });
     expect(navigation.push).toHaveBeenCalledWith("/acme/im?chat=c-new");
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
+  it("previews three rows in each section and expands that section in place", async () => {
+    listChatsRef.current = [1, 2, 3, 4, 5].map((n) => chat(`room-${n}`, `Room ${n}`, `2026-0${n}-01T00:00:00Z`));
+    renderDialog();
+    pressOpen();
+    await search("room");
+
+    const chatOptions = () => optionTexts(screen.getByRole("group", { name: "Chats" }));
+    expect(chatOptions().filter((text) => text?.startsWith("Room"))).toHaveLength(3);
+    expect(screen.getByRole("option", { name: "View all (5)" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Notes" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("option", { name: "View all (5)" }));
+    expect(chatOptions().filter((text) => text?.startsWith("Room"))).toHaveLength(5);
+    expect(screen.queryByRole("option", { name: "View all (5)" })).toBeNull();
+    expect(screen.getByRole("tab", { name: "All" })).toHaveAttribute("aria-selected", "true");
   });
 
   it("searches one kind from its tab and hands the pick to the page", async () => {

@@ -938,6 +938,15 @@ describe("ApiClient schema fallback", () => {
     });
   });
 
+  describe("listCommentsPage", () => {
+    it("falls back to an empty page when the response is malformed", async () => {
+      stubFetchJson({ comments: "nope" });
+      const client = new ApiClient("https://api.example.test");
+      const page = await client.listCommentsPage("issue-1", { limit: 200 });
+      expect(page).toEqual({ comments: [], limit: 200, has_more: false, next_cursor: null });
+    });
+  });
+
   describe("previewCommentTriggers", () => {
     it("returns an empty agent list when the response is malformed", async () => {
       stubFetchJson({ agents: "not-an-array" });

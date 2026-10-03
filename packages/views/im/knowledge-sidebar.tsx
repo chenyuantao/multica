@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type DragEvent } from "react";
 import type { TFunction } from "i18next";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronRight, CirclePlus, FileText, Folder, MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import { errorCode } from "@multica/core/api";
-import { docsSearchOptions, docsTreeOptions } from "@multica/core/docs";
-import type { DocNode } from "@multica/core/types";
+import { docsTreeOptions, useMoveDoc } from "@multica/core/docs";
+import type { DocMoveResult, DocNode } from "@multica/core/types";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,10 +16,11 @@ import {
 } from "@multica/ui/components/ui/dropdown-menu";
 import { copyText } from "@multica/ui/lib/clipboard";
 import { cn } from "@multica/ui/lib/utils";
-import { useDebouncedValue } from "../common/use-debounced-value";
 import { useT } from "../i18n";
 import { formatStamp } from "./im-utils";
+import { ImSidebarSearch } from "./im-sidebar-search";
 import { ImSidebarHeader, ImSidebarShell } from "./im-sidebar-shell";
+import { canDrop, dropDirectory, FOLDER_EXPAND_DELAY_MS, springOpenFolder, type DragNode } from "./knowledge-drag";
 import { ancestorDirs, parentDir } from "./knowledge-utils";
 
 const EMPTY_NODES: DocNode[] = [];
@@ -31,16 +32,14 @@ interface KnowledgeSidebarProps {
   onCreate: (dir: string) => void;
   /** Phones open the shared search page instead of filtering this list. */
   onOpenSearch?: () => void;
+  /** A note or folder finished moving. `path` is its new location. */
+  onMoved?: (result: DocMoveResult) => void;
   className?: string;
 }
 
-export function KnowledgeSidebar({ selectedPath, onSelect, onCreate, onOpenSearch, className }: KnowledgeSidebarProps) {
+export function KnowledgeSidebar({ selectedPath, onSelect, onCreate, onOpenSearch, onMoved, className }: KnowledgeSidebarProps) {
   const { t } = useT("im");
-  const [query, setQuery] = useState("");
-  const q = useDebouncedValue(query.trim(), 250);
-  const searching = q.length > 0;
   const tree = useQuery(docsTreeOptions());
-  const search = useQuery(docsSearchOptions(q));
   const [toggled, setToggled] = useState<ReadonlyMap<string, boolean>>(() => new Map());
   const [revealedPath, setRevealedPath] = useState(selectedPath);
   const navRef = useRef<HTMLElement>(null);
@@ -58,14 +57,13 @@ export function KnowledgeSidebar({ selectedPath, onSelect, onCreate, onOpenSearc
     }
   }
 
-  const nodes = (searching ? search.data?.nodes : tree.data) ?? EMPTY_NODES;
-  const active = searching ? search : tree;
+  const nodes = tree.data ?? EMPTY_NODES;
   // Top-level folders and the open note's folders start expanded; a click
-  // overrides either way. Search results are always fully expanded.
+  // overrides either way.
   const selectedDirs = new Set(selectedPath ? ancestorDirs(selectedPath) : []);
 
   // Runs after every render so the scroll lands once the tree has loaded.
-  const scrollKey = selectedPath && `${searching ? "search" : "tree"}:${selectedPath}`;
+  const scrollKey = selectedPath && `tree:${selectedPath}`;
   useEffect(() => {
     if (!scrollKey || scrolledTo.current === scrollKey) return;
     const row = navRef.current?.querySelector('[aria-current="page"]');
@@ -74,15 +72,129 @@ export function KnowledgeSidebar({ selectedPath, onSelect, onCreate, onOpenSearc
     row.scrollIntoView({ block: "nearest" });
   });
   const isOpen = (node: DocNode, depth: number) =>
-    searching || (toggled.get(node.path) ?? (depth === 0 || selectedDirs.has(node.path)));
+    toggled.get(node.path) ?? (depth === 0 || selectedDirs.has(node.path));
   const toggle = (path: string, open: boolean) =>
     setToggled((prev) => new Map(prev).set(path, !open));
+
+  const move = useMoveDoc();
+  const draggingRef = useRef<DragNode | null>(null);
+  const [draggingPath, setDraggingPath] = useState<string | null>(null);
+  const [hoverPath, setHoverPath] = useState<string | null>(null);
+  const [dropDest, setDropDest] = useState<string | null>(null);
+  const expandTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const expandPath = useRef<string | null>(null);
+
+  const clearExpand = () => {
+    if (expandTimer.current != null) {
+      clearTimeout(expandTimer.current);
+      expandTimer.current = null;
+    }
+    expandPath.current = null;
+  };
+
+  useEffect(() => () => {
+    if (expandTimer.current != null) clearTimeout(expandTimer.current);
+  }, []);
+
+  const scheduleExpand = (path: string) => {
+    if (expandPath.current === path) return;
+    clearExpand();
+    expandPath.current = path;
+    expandTimer.current = setTimeout(() => {
+      expandTimer.current = null;
+      expandPath.current = null;
+      setToggled((prev) => new Map(prev).set(path, true));
+    }, FOLDER_EXPAND_DELAY_MS);
+  };
+
+  const finishDrag = () => {
+    draggingRef.current = null;
+    setDraggingPath(null);
+    setHoverPath(null);
+    setDropDest(null);
+    clearExpand();
+  };
+
+  const runMove = async (path: string, dest: string) => {
+    try {
+      const result = await move.mutateAsync({ path, dest });
+      onMoved?.(result);
+    } catch (err) {
+      toast.error(moveErrorText(err, t));
+    }
+  };
+
+  const onNodeDragStart = (node: DocNode, event: DragEvent) => {
+    if ((event.target as HTMLElement).closest("[data-no-drag]")) {
+      event.preventDefault();
+      return;
+    }
+    draggingRef.current = { path: node.path, type: node.type };
+    event.dataTransfer.setData("text/plain", node.path);
+    event.dataTransfer.effectAllowed = "move";
+    requestAnimationFrame(() => setDraggingPath(node.path));
+  };
+
+  const onNodeDragOver = (node: DocNode, open: boolean, event: DragEvent) => {
+    const item = draggingRef.current;
+    if (!item) return;
+    event.stopPropagation();
+    const dest = dropDirectory(item, node);
+    if (dest !== null) {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+    }
+    setHoverPath((prev) => (prev === node.path ? prev : node.path));
+    setDropDest((prev) => (prev === dest ? prev : dest));
+    const folder = springOpenFolder(item, node, open);
+    if (folder) scheduleExpand(folder);
+    else clearExpand();
+  };
+
+  const onNodeDrop = (node: DocNode, event: DragEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const item = draggingRef.current;
+    const dest = item ? dropDirectory(item, node) : null;
+    finishDrag();
+    if (!item || dest === null) return;
+    void runMove(item.path, dest);
+  };
+
+  const onNavDragOver = (event: DragEvent) => {
+    const item = draggingRef.current;
+    if (!item) return;
+    if ((event.target as HTMLElement).closest("[data-path]")) return;
+    const dest = canDrop(item, "") ? "" : null;
+    if (dest !== null) {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+    }
+    setHoverPath((prev) => (prev === "" ? prev : ""));
+    setDropDest((prev) => (prev === dest ? prev : dest));
+    clearExpand();
+  };
+
+  const onNavDrop = (event: DragEvent) => {
+    const item = draggingRef.current;
+    if (!item) return;
+    if ((event.target as HTMLElement).closest("[data-path]")) return;
+    event.preventDefault();
+    const dest = canDrop(item, "") ? "" : null;
+    finishDrag();
+    if (dest === null) return;
+    void runMove(item.path, dest);
+  };
 
   const createTarget = selectedPath ? parentDir(selectedPath) : "";
 
   return (
     <ImSidebarShell className={className}>
-      <ImSidebarHeader query={query} onQueryChange={setQuery} searchLabel={t(($) => $.knowledge.search)} title={t(($) => $.tabs.knowledge)} onOpenSearch={onOpenSearch}>
+      <ImSidebarHeader
+        title={t(($) => $.tabs.knowledge)}
+        onOpenSearch={onOpenSearch}
+        desktopSearch={<ImSidebarSearch priority="notes" onOpenNote={onSelect} />}
+      >
         <button
           type="button"
           onClick={() => onCreate(createTarget)}
@@ -96,13 +208,18 @@ export function KnowledgeSidebar({ selectedPath, onSelect, onCreate, onOpenSearc
 
       <nav
         ref={navRef}
-        className="min-h-0 flex-1 overflow-y-auto px-2 pb-3"
+        className={cn(
+          "min-h-0 flex-1 overflow-y-auto px-2 pb-3",
+          hoverPath === "" && dropDest === "" && "ring-2 ring-inset ring-brand",
+        )}
         aria-label={t(($) => $.rail.knowledge)}
+        onDragOver={onNavDragOver}
+        onDrop={onNavDrop}
       >
-        {active.isError ? (
-          <SidebarNotice>{loadErrorText(active.error, t)}</SidebarNotice>
-        ) : active.isPending && (searching || !tree.data) ? null : nodes.length === 0 ? (
-          <SidebarNotice>{searching ? t(($) => $.knowledge.no_results) : t(($) => $.knowledge.empty)}</SidebarNotice>
+        {tree.isError ? (
+          <SidebarNotice>{loadErrorText(tree.error, t)}</SidebarNotice>
+        ) : tree.isPending && !tree.data ? null : nodes.length === 0 ? (
+          <SidebarNotice>{t(($) => $.knowledge.empty)}</SidebarNotice>
         ) : (
           // Top padding lives here, not on the scroller, so pinned folders sit
           // flush with its edge instead of leaving a see-through gap above.
@@ -118,13 +235,17 @@ export function KnowledgeSidebar({ selectedPath, onSelect, onCreate, onOpenSearc
                   onToggle={toggle}
                   onSelect={onSelect}
                   onCreate={onCreate}
+                  draggingPath={draggingPath}
+                  hoverPath={hoverPath}
+                  dropDest={dropDest}
+                  onNodeDragStart={onNodeDragStart}
+                  onNodeDragEnd={finishDrag}
+                  onNodeDragOver={onNodeDragOver}
+                  onNodeDrop={onNodeDrop}
                 />
               </li>
             ))}
           </ul>
-        )}
-        {searching && search.data?.truncated && (
-          <p className="px-3 pt-2 text-caption text-muted-foreground">{t(($) => $.knowledge.truncated)}</p>
         )}
       </nav>
     </ImSidebarShell>
@@ -132,6 +253,17 @@ export function KnowledgeSidebar({ selectedPath, onSelect, onCreate, onOpenSearc
 }
 
 type Translate = TFunction<"im">;
+
+export function moveErrorText(error: unknown, t: Translate): string {
+  switch (errorCode(error)) {
+    case "docs_exists":
+      return t(($) => $.knowledge.move_exists);
+    case "docs_invalid_move":
+      return t(($) => $.knowledge.move_invalid);
+    default:
+      return t(($) => $.knowledge.move_failed);
+  }
+}
 
 export function loadErrorText(error: unknown, t: Translate): string {
   switch (errorCode(error)) {
@@ -158,6 +290,13 @@ interface TreeNodeProps {
   onToggle: (path: string, open: boolean) => void;
   onSelect: (path: string) => void;
   onCreate: (dir: string) => void;
+  draggingPath: string | null;
+  hoverPath: string | null;
+  dropDest: string | null;
+  onNodeDragStart: (node: DocNode, event: DragEvent) => void;
+  onNodeDragEnd: () => void;
+  onNodeDragOver: (node: DocNode, open: boolean, event: DragEvent) => void;
+  onNodeDrop: (node: DocNode, event: DragEvent) => void;
 }
 
 /** Matches `h-8` on rows; pinned folders stack by this step per depth. */
@@ -166,15 +305,46 @@ const ROW_HEIGHT = 32;
 const rowClass =
   "group/row flex h-8 w-full min-w-0 items-center gap-1.5 rounded-md pr-1 pl-2 text-left transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset";
 
+function dragRowClass(node: DocNode, draggingPath: string | null, hoverPath: string | null, dropDest: string | null) {
+  return cn(
+    "cursor-grab",
+    draggingPath === node.path && "opacity-40",
+    hoverPath === node.path && dropDest !== null && "ring-2 ring-inset ring-brand",
+  );
+}
+
 function TreeNode(props: TreeNodeProps) {
-  const { node, depth, isOpen, selectedPath, selectedDirs, onToggle, onSelect, onCreate } = props;
+  const {
+    node,
+    depth,
+    isOpen,
+    selectedPath,
+    selectedDirs,
+    onToggle,
+    onSelect,
+    onCreate,
+    draggingPath,
+    hoverPath,
+    dropDest,
+    onNodeDragStart,
+    onNodeDragEnd,
+    onNodeDragOver,
+    onNodeDrop,
+  } = props;
   const { t } = useT("im");
+  const dragClass = dragRowClass(node, draggingPath, hoverPath, dropDest);
 
   if (node.type === "file") {
     const selected = node.path === selectedPath;
     return (
       <div
-        className={cn(rowClass, "relative", selected ? "bg-brand/12 hover:bg-brand/12" : "hover:bg-foreground/5")}
+        data-path={node.path}
+        draggable
+        onDragStart={(event) => onNodeDragStart(node, event)}
+        onDragEnd={onNodeDragEnd}
+        onDragOver={(event) => onNodeDragOver(node, false, event)}
+        onDrop={(event) => onNodeDrop(node, event)}
+        className={cn(rowClass, "relative", dragClass, selected ? "bg-brand/12 hover:bg-brand/12" : "hover:bg-foreground/5")}
         // Keeps a revealed note clear of the pinned folders above it.
         style={{ scrollMarginTop: depth * ROW_HEIGHT }}
       >
@@ -216,7 +386,15 @@ function TreeNode(props: TreeNodeProps) {
         className={cn(pinned && "sticky z-10 bg-sidebar")}
         style={pinned ? { top: depth * ROW_HEIGHT } : undefined}
       >
-        <div className={cn(rowClass, "relative hover:bg-foreground/5")}>
+        <div
+          data-path={node.path}
+          draggable
+          onDragStart={(event) => onNodeDragStart(node, event)}
+          onDragEnd={onNodeDragEnd}
+          onDragOver={(event) => onNodeDragOver(node, open, event)}
+          onDrop={(event) => onNodeDrop(node, event)}
+          className={cn(rowClass, "relative hover:bg-foreground/5", dragClass)}
+        >
           <button
             type="button"
             onClick={() => onToggle(node.path, open)}
@@ -270,6 +448,7 @@ function RowMenu({ label, items }: { label: string; items: { label: string; onSe
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
+        data-no-drag
         aria-label={label}
         title={label}
         className="relative z-10 flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity group-hover/row:opacity-100 group-focus-within/row:opacity-100 hover:bg-foreground/5 hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none data-[popup-open]:opacity-100"

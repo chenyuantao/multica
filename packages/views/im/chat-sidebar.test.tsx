@@ -12,6 +12,9 @@ const appForeground = vi.hoisted(() => ({ value: true }));
 
 vi.mock("../common/use-app-foreground", () => ({ useAppForeground: () => appForeground.value }));
 vi.mock("../common/actor-avatar", () => ({ ActorAvatar: () => null }));
+vi.mock("./im-sidebar-search", () => ({
+  ImSidebarSearch: () => <input aria-label="Search" />,
+}));
 vi.mock("@multica/core/workspace/hooks", () => ({
   useActorName: () => ({ getActorName: (_type: string, id: string) => `name-${id}` }),
 }));

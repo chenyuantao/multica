@@ -54,6 +54,7 @@ import type {
   InboxWorkspaceUnread,
   IssueSubscriber,
   Comment,
+  CommentPage,
   CommentTriggerPreview,
   IssueTriggerPreview,
   IssueTriggerPreviewParams,
@@ -270,6 +271,7 @@ import {
   IssueDuplicatesResponseSchema,
   ChildIssueProgressResponseSchema,
   CommentsListSchema,
+  CommentPageSchema,
   CommentTriggerPreviewSchema,
   IssueTriggerPreviewSchema,
   CloudRuntimeNodeListSchema,
@@ -489,6 +491,7 @@ import {
   GroupChatSearchResultSchema,
   AskAIResponseSchema,
   DocFileSchema,
+  DocMoveResultSchema,
   DocSearchResultSchema,
   DocTreeSchema,
 } from "./schemas";
@@ -506,8 +509,10 @@ import type {
 import type {
   CreateDocFileRequest,
   DocFile,
+  DocMoveResult,
   DocNode,
   DocSearchResult,
+  MoveDocRequest,
   SaveDocFileRequest,
 } from "../types/docs";
 
@@ -1668,6 +1673,26 @@ export class ApiClient {
     return parseWithFallback(raw, CommentsListSchema, [], {
       endpoint: "GET /api/issues/:id/comments",
     });
+  }
+
+  /** One page of a chat timeline. `before` is the previous page's oldest comment. */
+  async listCommentsPage(
+    issueId: string,
+    params: { before?: { created_at: string; id: string } | null; limit?: number } = {},
+  ): Promise<CommentPage> {
+    const limit = params.limit ?? 200;
+    const query = new URLSearchParams({ limit: String(limit) });
+    if (params.before) {
+      query.set("before_created_at", params.before.created_at);
+      query.set("before_id", params.before.id);
+    }
+    const raw = await this.fetch<unknown>(`/api/issues/${issueId}/comments/page?${query.toString()}`);
+    return parseWithFallback(
+      raw,
+      CommentPageSchema,
+      { comments: [], limit, has_more: false, next_cursor: null },
+      { endpoint: "GET /api/issues/:id/comments/page" },
+    );
   }
 
   async createComment(
@@ -4703,6 +4728,19 @@ export class ApiClient {
       body: JSON.stringify(data),
     });
     return this.requireDocFile(raw, "POST /api/docs/files");
+  }
+
+  /** Moves a note or folder into dest. An empty dest is the vault root. */
+  async moveDoc(data: MoveDocRequest): Promise<DocMoveResult> {
+    const raw = await this.fetch<unknown>("/api/docs/move", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+    const moved = parseWithFallback<DocMoveResult | null>(raw, DocMoveResultSchema, null, {
+      endpoint: "POST /api/docs/move",
+    });
+    if (!moved) throw new Error("Invalid document response");
+    return moved;
   }
 
   /** Replaces the note, merging with a concurrent change when they don't overlap. */

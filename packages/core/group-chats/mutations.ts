@@ -1,9 +1,10 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, type InfiniteData, type QueryClient } from "@tanstack/react-query";
 import { api } from "../api";
 import { attachmentMarkdown } from "../hooks/use-file-upload";
 import type {
   AskAIPage,
   Comment,
+  CommentPage,
   FocusNote,
   CreateGroupChatRequest,
   GroupChat,
@@ -17,6 +18,27 @@ import { groupChatKeys } from "./queries";
 function upsertChat(list: GroupChat[] | undefined, chat: GroupChat): GroupChat[] {
   const rest = (list ?? []).filter((c) => c.id !== chat.id);
   return [chat, ...rest];
+}
+
+function refreshChatMessages(qc: QueryClient, wsId: string, chatId: string) {
+  qc.invalidateQueries({ queryKey: groupChatKeys.messages(wsId, chatId) });
+  qc.invalidateQueries({ queryKey: groupChatKeys.messagesPage(wsId, chatId) });
+}
+
+/** The first page is the newest window, chronological, so a new message goes on its end. */
+function appendChatMessage(old: InfiniteData<CommentPage> | undefined, comment: Comment) {
+  if (!old?.pages.length) return old;
+  const [latest, ...older] = old.pages;
+  if (latest.comments.some((c) => c.id === comment.id)) return old;
+  return { ...old, pages: [{ ...latest, comments: [...latest.comments, comment] }, ...older] };
+}
+
+function dropChatMessage(old: InfiniteData<CommentPage> | undefined, messageId: string) {
+  if (!old) return old;
+  return {
+    ...old,
+    pages: old.pages.map((page) => ({ ...page, comments: page.comments.filter((c) => c.id !== messageId) })),
+  };
 }
 
 export function useCreateGroupChat(wsId: string) {
@@ -73,10 +95,13 @@ export function useAskAI(wsId: string) {
       qc.setQueryData<Comment[]>(groupChatKeys.messages(wsId, chat.id), (old) =>
         old && !old.some((c) => c.id === message.id) ? [...old, message] : old,
       );
+      qc.setQueryData<InfiniteData<CommentPage>>(groupChatKeys.messagesPage(wsId, chat.id), (old) =>
+        appendChatMessage(old, message),
+      );
     },
     onSettled: (result) => {
       qc.invalidateQueries({ queryKey: groupChatKeys.list(wsId) });
-      if (result) qc.invalidateQueries({ queryKey: groupChatKeys.messages(wsId, result.chat.id) });
+      if (result) refreshChatMessages(qc, wsId, result.chat.id);
     },
   });
 }
@@ -162,7 +187,7 @@ export function useForwardChatHistory(wsId: string) {
     onSettled: (_data, _err, vars) => {
       qc.invalidateQueries({ queryKey: groupChatKeys.list(wsId) });
       if (!vars) return;
-      for (const id of vars.targets) qc.invalidateQueries({ queryKey: groupChatKeys.messages(wsId, id) });
+      for (const id of vars.targets) refreshChatMessages(qc, wsId, id);
     },
   });
 }
@@ -185,9 +210,12 @@ export function useSendGroupChatMessage(wsId: string, chatId: string) {
       qc.setQueryData<Comment[]>(groupChatKeys.messages(wsId, chatId), (old) =>
         old && !old.some((c) => c.id === comment.id) ? [...old, comment] : old,
       );
+      qc.setQueryData<InfiniteData<CommentPage>>(groupChatKeys.messagesPage(wsId, chatId), (old) =>
+        appendChatMessage(old, comment),
+      );
     },
     onSettled: () => {
-      qc.invalidateQueries({ queryKey: groupChatKeys.messages(wsId, chatId) });
+      refreshChatMessages(qc, wsId, chatId);
       qc.invalidateQueries({ queryKey: groupChatKeys.list(wsId) });
     },
   });
@@ -245,9 +273,12 @@ export function useDeleteGroupChatMessage(wsId: string, chatId: string) {
     mutationFn: (messageId: string) => api.deleteComment(messageId),
     onSuccess: (_, messageId) => {
       qc.setQueryData<Comment[]>(groupChatKeys.messages(wsId, chatId), (old) => old?.filter((c) => c.id !== messageId));
+      qc.setQueryData<InfiniteData<CommentPage>>(groupChatKeys.messagesPage(wsId, chatId), (old) =>
+        dropChatMessage(old, messageId),
+      );
     },
     onSettled: () => {
-      qc.invalidateQueries({ queryKey: groupChatKeys.messages(wsId, chatId) });
+      refreshChatMessages(qc, wsId, chatId);
       qc.invalidateQueries({ queryKey: groupChatKeys.list(wsId) });
     },
   });

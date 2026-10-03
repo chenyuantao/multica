@@ -149,6 +149,9 @@ vi.mock("../modals/create-agent", () => ({
   CreateAgentModal: ({ presentation }: { presentation?: string }) => <p>{`create agent ${presentation}`}</p>,
 }));
 vi.mock("./im-search-dialog", () => ({ ImSearchDialog: () => null }));
+vi.mock("./im-sidebar-search", () => ({
+  ImSidebarSearch: () => <input aria-label="Search" />,
+}));
 vi.mock("./chat-progress-view", () => ({
   ChatProgressRoute: ({ taskId }: { taskId: string }) => <p>{`progress ${taskId}`}</p>,
 }));

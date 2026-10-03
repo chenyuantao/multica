@@ -44,3 +44,16 @@ export interface CreateDocFileRequest {
   path: string;
   content: string;
 }
+
+/** Move a note or folder into `dest`. An empty dest is the vault root. */
+export interface MoveDocRequest {
+  path: string;
+  dest: string;
+}
+
+export interface DocMoveResult {
+  from: string;
+  path: string;
+  name: string;
+  type: DocNodeType;
+}

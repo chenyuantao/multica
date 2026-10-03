@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Command as CommandPrimitive } from "cmdk";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
   FileText,
   Image as ImageIcon,
@@ -17,12 +16,10 @@ import { toast } from "sonner";
 import { ApiError } from "@multica/core/api";
 import { useAuthStore } from "@multica/core/auth";
 import { MAX_FILE_SIZE } from "@multica/core/constants/upload";
-import { docsSearchOptions, docsTreeOptions } from "@multica/core/docs";
-import { groupChatListOptions, groupChatSearchOptions, useAskAI } from "@multica/core/group-chats";
+import { useAskAI } from "@multica/core/group-chats";
 import { useWorkspaceId } from "@multica/core/hooks";
 import { useWorkspacePaths } from "@multica/core/paths";
-import type { AskAIElement, AskAIPage, AskAISelection, DocNode, GroupChat } from "@multica/core/types";
-import { useActorName } from "@multica/core/workspace/hooks";
+import type { AskAIElement, AskAIPage, AskAISelection } from "@multica/core/types";
 import {
   createShortcutChord,
   getShortcut,
@@ -34,51 +31,25 @@ import { FileUploadButton } from "@multica/ui/components/common/file-upload-butt
 import { Button } from "@multica/ui/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@multica/ui/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger } from "@multica/ui/components/ui/tabs";
-import { ActorAvatar } from "../common/actor-avatar";
 import { ShortcutKeycaps } from "../common/shortcut-keycaps";
-import { useDebouncedValue } from "../common/use-debounced-value";
 import { FileDropOverlay, useFileDropZone } from "../editor";
 import { useT } from "../i18n";
 import { useNavigation } from "../navigation";
-import { HighlightText } from "../search/highlight-text";
 import { describeElement, elementLabel } from "./ask-ai-element";
 import { cancelledNoticeTrigger } from "./cancelled-notice";
 import { isChatHistoryContent } from "./chat-history";
-import { ChatAvatar } from "./chat-sidebar";
 import { ElementPicker } from "./element-picker";
-import { chatActivityAt, chatDisplayTitle, formatStamp, plainTextPreview, sortChats } from "./im-utils";
-import { rankChats, rankContacts, rankNotes, type SearchScope } from "./im-search-utils";
+import { plainTextPreview } from "./im-utils";
+import { SEARCH_ITEM_CLASS, SearchResultGroups, SearchResultNotice } from "./im-search-results";
+import type { SearchScope, SearchSection } from "./im-search-utils";
 import { loadErrorText } from "./knowledge-sidebar";
-import { flattenFiles, noteTitle, parentDir, recentFiles } from "./knowledge-utils";
 import type { AskAIDialogState } from "./use-ask-ai-launcher";
-import { entryKey, useChatDirectory, type DirectoryEntry } from "./use-chat-directory";
+import { useImSearchGroups, type SearchRow } from "./use-im-search-groups";
+import type { DirectoryEntry } from "./use-chat-directory";
 
-/** Rows per group on the All tab; the rest sit behind the group's "show all" row. */
-const ALL_GROUP_LIMIT = 5;
-const SCOPE_LIMIT = 50;
-const RECENT_LIMIT = 20;
 const ASK_VALUE = "ask-ai";
 const SCOPES: SearchScope[] = ["all", "chats", "contacts", "notes"];
-const EMPTY_CHATS: GroupChat[] = [];
-const EMPTY_NODES: DocNode[] = [];
-
-const GROUP_CLASS =
-  "p-2 [&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-caption [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground";
-const ITEM_CLASS =
-  "flex cursor-default items-center gap-2.5 rounded-lg px-3 py-2 text-body outline-none select-none data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 data-selected:bg-accent";
-
-type Row =
-  | { kind: "chat"; value: string; chat: GroupChat; title: string; snippet: string }
-  | { kind: "contact"; value: string; entry: DirectoryEntry }
-  | { kind: "note"; value: string; node: DocNode };
-
-interface Group {
-  scope: Exclude<SearchScope, "all">;
-  heading?: string;
-  rows: Row[];
-  /** Rows left out by the All tab's per-group limit. */
-  hidden: number;
-}
+const ALL_SECTIONS: SearchSection[] = ["chats", "contacts", "notes"];
 
 interface ImSearchDialogProps extends AskAIDialogState {
   /** Opens a chat from the current page; defaults to navigating to it. */
@@ -92,8 +63,9 @@ interface ImSearchDialogProps extends AskAIDialogState {
 /**
  * Quick switcher across chats, contacts and knowledge notes, opened with the
  * `openKnowledgeSearch` shortcut (Mod+O) or an Ask AI entry on the IM
- * surfaces. The All tab shows one group per kind; the other tabs search a
- * single kind. The first row always asks AI: the server picks an agent and
+ * surfaces. The All tab shows one group per kind, three rows at a time until
+ * "view all" expands that group; the other tabs search a single kind. The
+ * first row always asks AI: the server picks an agent and
  * the question, its files, the page and whatever was picked on it go to the
  * user's direct chat with it. The element picker hides the dialog until a
  * node is clicked. Attaching a file makes the dialog a question only.
@@ -116,24 +88,30 @@ export function ImSearchDialog({
   const paths = useWorkspacePaths();
   const wsId = useWorkspaceId();
   const userId = useAuthStore((s) => s.user?.id ?? "");
-  const { getActorName } = useActorName();
-  const directory = useChatDirectory(wsId);
   const askAI = useAskAI(wsId);
   const inputRef = useRef<HTMLInputElement>(null);
   const [scope, setScope] = useState<SearchScope>("all");
   const [query, setQuery] = useState("");
+  const [expanded, setExpanded] = useState<ReadonlySet<SearchSection>>(() => new Set());
   const [files, setFiles] = useState<File[]>([]);
   const [active, setActive] = useState("");
   const [picking, setPicking] = useState(false);
   /** Picking started from the shortcut with the dialog closed; cancelling closes it again. */
   const [pickOnly, setPickOnly] = useState(false);
   const [element, setElement] = useState<AskAIElement | null>(null);
-  const trimmed = query.trim();
-  const q = useDebouncedValue(trimmed, 200);
   const asking = files.length > 0;
-  const searching = trimmed.length > 0 && !asking;
-  const canAsk = (trimmed.length > 0 || asking) && !askAI.isPending;
-  const wants = (kind: Exclude<SearchScope, "all">) => !asking && (scope === "all" || scope === kind);
+  const canAsk = (query.trim().length > 0 || asking) && !askAI.isPending;
+  const sections = scope === "all" ? ALL_SECTIONS : [scope];
+  const results = useImSearchGroups({
+    open,
+    query,
+    sections,
+    priority: "chats",
+    preview: scope === "all",
+    expanded,
+    suspended: asking,
+  });
+  const { trimmed, searching, groups, stale, fetching, sectionError, highlight, noteQuery, noteTruncated } = results;
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -162,10 +140,18 @@ export function ImSearchDialog({
     if (open) return;
     setQuery("");
     setScope("all");
+    setExpanded(new Set());
     setFiles([]);
     setPicking(false);
     setElement(null);
   }, [open]);
+
+  const [expandedFor, setExpandedFor] = useState(`${scope}\n${query}`);
+  const expandedKey = `${scope}\n${query}`;
+  if (expandedFor !== expandedKey) {
+    setExpandedFor(expandedKey);
+    setExpanded(new Set());
+  }
 
   useEffect(() => {
     if (presentation !== "page" || !open) return;
@@ -184,89 +170,9 @@ export function ImSearchDialog({
   };
   const { isDragOver, dropZoneProps } = useFileDropZone({ onDrop: addFiles });
 
-  const chatList = useQuery({ ...groupChatListOptions(wsId), enabled: open && !asking });
-  const tree = useQuery({ ...docsTreeOptions(), enabled: open && !searching && wants("notes") });
-  // Previous hits stay painted while the next keyword is in flight so the
-  // list does not strobe on every keystroke.
-  const chatSearch = useQuery({
-    ...groupChatSearchOptions(wsId, q),
-    enabled: open && q.length > 0 && wants("chats"),
-    placeholderData: keepPreviousData,
-  });
-  const noteSearch = useQuery({
-    ...docsSearchOptions(q),
-    enabled: open && q.length > 0 && wants("notes"),
-    placeholderData: keepPreviousData,
-  });
-
-  const chats = chatList.data ?? EMPTY_CHATS;
-  const titleOf = (chat: GroupChat) => chatDisplayTitle(chat, userId, getActorName);
-  const limit = scope === "all" ? ALL_GROUP_LIMIT : searching ? SCOPE_LIMIT : RECENT_LIMIT;
-  const group = (kind: Group["scope"], rows: Row[], heading?: string): Group => ({
-    scope: kind,
-    // With one kind of hits on screen its heading only repeats the tab.
-    heading: scope === "all" || !searching ? heading : undefined,
-    rows: rows.slice(0, limit),
-    hidden: scope === "all" ? Math.max(0, rows.length - limit) : 0,
-  });
-  const chatRow = (chat: GroupChat, title: string, snippet: string): Row => ({
-    kind: "chat",
-    value: `chat:${chat.id}`,
-    chat,
-    title,
-    snippet: !snippet
-      ? ""
-      : cancelledNoticeTrigger(snippet) !== null
-        ? t(($) => $.thread.cancelled_in_progress)
-        : isChatHistoryContent(snippet)
-          ? t(($) => $.thread.history_footer)
-          : plainTextPreview(snippet),
-  });
-  const contactRow = (entry: DirectoryEntry): Row => ({
-    kind: "contact",
-    value: `contact:${entryKey(entry.type, entry.id)}`,
-    entry,
-  });
-  const noteRow = (node: DocNode): Row => ({ kind: "note", value: `note:${node.path}`, node });
-
-  // Only the All tab hides a failing kind; a single-kind tab reports it.
-  const groups: Group[] = [];
-  if (searching) {
-    if (wants("chats") && (scope === "chats" || !chatSearch.isError)) {
-      const ranked = rankChats(chats, chatSearch.data?.hits ?? [], q, titleOf);
-      groups.push(group("chats", ranked.map((r) => chatRow(r.chat, r.title, r.snippet)), t(($) => $.search.chats)));
-    }
-    if (wants("contacts")) {
-      const ranked = rankContacts([...directory.people, ...directory.agents], q);
-      groups.push(group("contacts", ranked.map((r) => contactRow(r.entry)), t(($) => $.search.contacts)));
-    }
-    if (wants("notes") && !noteSearch.isError) {
-      const ranked = rankNotes(flattenFiles(noteSearch.data?.nodes ?? EMPTY_NODES));
-      groups.push(group("notes", ranked.map(noteRow), t(($) => $.search.notes)));
-    }
-  } else {
-    if (wants("chats")) {
-      const recent = sortChats(chats).map((chat) => chatRow(chat, titleOf(chat), ""));
-      groups.push(group("chats", recent, t(($) => $.search.recent_chats)));
-    }
-    if (!asking && scope === "contacts") {
-      groups.push(group("contacts", [...directory.people, ...directory.agents].map(contactRow)));
-    }
-    if (wants("notes") && !tree.isError) {
-      const recent = recentFiles(tree.data ?? EMPTY_NODES, RECENT_LIMIT).map(noteRow);
-      groups.push(group("notes", recent, t(($) => $.search.recent_notes)));
-    }
-  }
-  const visible = groups.filter((g) => g.rows.length > 0);
-
   // Rows answering an earlier keyword must not be actionable, or Enter would
   // jump to a result the user has already typed past.
-  const pending = [...(wants("chats") ? [chatSearch] : []), ...(wants("notes") ? [noteSearch] : [])];
-  const stale = searching && (q !== trimmed || pending.some((x) => x.isPlaceholderData));
-  const fetching = pending.some((x) => x.isFetching) || chatList.isFetching || (!searching && tree.isFetching);
-  const error =
-    scope === "chats" ? (searching ? chatSearch : chatList) : scope === "notes" ? (searching ? noteSearch : tree) : null;
-  const rowsKey = visible.flatMap((g) => g.rows.map((r) => r.value)).join("\n");
+  const rowsKey = groups.flatMap((group) => group.rows.map((row) => row.value)).join("\n");
 
   const askFirst = searching || asking;
   useEffect(() => {
@@ -314,7 +220,7 @@ export function ImSearchDialog({
     );
   };
 
-  const choose = (row: Row) => {
+  const choose = (row: SearchRow) => {
     onOpenChange(false);
     if (row.kind === "chat") {
       if (onOpenChat) onOpenChat(row.chat.id);
@@ -329,9 +235,7 @@ export function ImSearchDialog({
     }
   };
 
-  const highlight = searching ? q : "";
-  const noteQuery = searching ? (noteSearch.data?.query ?? "") : "";
-  const now = new Date();
+  const expand = (section: SearchSection) => setExpanded((prev) => new Set(prev).add(section));
 
   const command = (
         <CommandPrimitive
@@ -438,7 +342,7 @@ export function ImSearchDialog({
             }
           >
             <CommandPrimitive.Group className={asking ? "p-2" : "px-2 pt-2"}>
-              <CommandPrimitive.Item value={ASK_VALUE} disabled={!canAsk} onSelect={ask} className={ITEM_CLASS}>
+              <CommandPrimitive.Item value={ASK_VALUE} disabled={!canAsk} onSelect={ask} className={SEARCH_ITEM_CLASS}>
                 {askAI.isPending ? (
                   <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" />
                 ) : (
@@ -454,54 +358,28 @@ export function ImSearchDialog({
                 )}
               </CommandPrimitive.Item>
             </CommandPrimitive.Group>
-            {asking ? null : error?.isError ? (
-              <Notice>{scope === "notes" ? loadErrorText(error.error, t) : t(($) => $.search.load_failed)}</Notice>
-            ) : visible.length > 0 ? (
-              visible.map((g) => (
-                <CommandPrimitive.Group key={g.scope} heading={g.heading} className={GROUP_CLASS}>
-                  {g.rows.map((row) => (
-                    <CommandPrimitive.Item
-                      key={row.value}
-                      value={row.value}
-                      disabled={stale}
-                      onSelect={() => choose(row)}
-                      title={row.kind === "note" ? row.node.path : undefined}
-                      className={ITEM_CLASS}
-                    >
-                      {row.kind === "chat" ? (
-                        <ChatResult
-                          row={row}
-                          userId={userId}
-                          query={highlight}
-                          stamp={formatStamp(chatActivityAt(row.chat), now, (time) => t(($) => $.thread.yesterday, { time }))}
-                        />
-                      ) : row.kind === "contact" ? (
-                        <ContactResult entry={row.entry} userId={userId} query={highlight} />
-                      ) : (
-                        <NoteResult node={row.node} query={noteQuery} />
-                      )}
-                    </CommandPrimitive.Item>
-                  ))}
-                  {g.hidden > 0 && (
-                    <CommandPrimitive.Item
-                      value={`more:${g.scope}`}
-                      disabled={stale}
-                      onSelect={() => changeScope(g.scope)}
-                      className={`${ITEM_CLASS} text-caption text-muted-foreground`}
-                    >
-                      {t(($) => $.search.show_all, { total: g.rows.length + g.hidden })}
-                    </CommandPrimitive.Item>
-                  )}
-                </CommandPrimitive.Group>
-              ))
+            {asking ? null : sectionError ? (
+              <SearchResultNotice>
+                {sectionError.section === "notes" ? loadErrorText(sectionError.error, t) : t(($) => $.search.load_failed)}
+              </SearchResultNotice>
+            ) : groups.length > 0 ? (
+              <SearchResultGroups
+                groups={groups}
+                stale={stale}
+                highlight={highlight}
+                noteQuery={noteQuery}
+                userId={userId}
+                onChoose={choose}
+                onExpand={expand}
+              />
             ) : fetching || stale ? (
               <div className="flex items-center justify-center py-10">
                 <Loader2 className="size-5 animate-spin text-muted-foreground" />
               </div>
             ) : (
-              <Notice>{searching ? t(($) => $.search.no_results) : t(($) => $.search.empty)}</Notice>
+              <SearchResultNotice>{searching ? t(($) => $.search.no_results) : t(($) => $.search.empty)}</SearchResultNotice>
             )}
-            {searching && !stale && wants("notes") && noteSearch.data?.truncated && (
+            {noteTruncated && (
               <p className="px-5 pb-3 text-caption text-muted-foreground">{t(($) => $.knowledge.truncated)}</p>
             )}
           </CommandPrimitive.List>
@@ -598,83 +476,5 @@ function AskContextQuote({
         );
       })}
     </ul>
-  );
-}
-
-function Notice({ children }: { children: React.ReactNode }) {
-  return <p className="py-10 text-center text-body text-muted-foreground">{children}</p>;
-}
-
-function ChatResult({
-  row,
-  userId,
-  query,
-  stamp,
-}: {
-  row: Extract<Row, { kind: "chat" }>;
-  userId: string;
-  query: string;
-  stamp: string;
-}) {
-  return (
-    <>
-      <ChatAvatar chat={row.chat} userId={userId} />
-      <span className="min-w-0 flex-1">
-        <span className="flex items-baseline gap-2">
-          <span className="min-w-0 flex-1 truncate">
-            <HighlightText text={row.title} query={query} />
-          </span>
-          <span className="shrink-0 text-micro text-muted-foreground tabular-nums">{stamp}</span>
-        </span>
-        {row.snippet && (
-          <span className="block truncate text-caption text-muted-foreground">
-            <HighlightText text={row.snippet} query={query} />
-          </span>
-        )}
-      </span>
-    </>
-  );
-}
-
-function ContactResult({ entry, userId, query }: { entry: DirectoryEntry; userId: string; query: string }) {
-  const { t } = useT("im");
-  const self = entry.type === "member" && entry.id === userId;
-  return (
-    <>
-      <ActorAvatar actorType={entry.type} actorId={entry.id} size="xl" profileLink={false} showStatusDot />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate">
-          <HighlightText text={entry.name} query={query} />
-        </span>
-        {(self || entry.detail) && (
-          <span className="block truncate text-caption text-muted-foreground">
-            {self ? t(($) => $.contacts.you) : <HighlightText text={entry.detail} query={query} />}
-          </span>
-        )}
-      </span>
-      <span className="shrink-0 text-caption text-muted-foreground">
-        {entry.type === "agent" ? t(($) => $.contacts.agent) : t(($) => $.contacts.person)}
-      </span>
-    </>
-  );
-}
-
-function NoteResult({ node, query }: { node: DocNode; query: string }) {
-  const dir = parentDir(node.path);
-  return (
-    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-      <span className="flex min-w-0 items-center gap-2.5">
-        <FileText className="size-4 shrink-0 text-muted-foreground" strokeWidth={1.7} />
-        <span className="min-w-0 flex-1 truncate">
-          <HighlightText text={noteTitle(node.name)} query={query} />
-        </span>
-        {dir && <span className="max-w-[40%] shrink-0 truncate text-caption text-muted-foreground">{dir}</span>}
-      </span>
-      {node.snippet && (
-        <span className="truncate pl-[26px] text-caption text-muted-foreground">
-          <HighlightText text={node.snippet} query={query} />
-        </span>
-      )}
-    </span>
   );
 }

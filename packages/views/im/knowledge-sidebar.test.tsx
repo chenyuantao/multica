@@ -1,9 +1,13 @@
 // @vitest-environment jsdom
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen } from "@testing-library/react";
 import type { DocNode } from "@multica/core/types";
 import { renderWithI18n } from "../test/i18n";
+vi.mock("./im-sidebar-search", () => ({
+  ImSidebarSearch: () => <input aria-label="Search" />,
+}));
+
 import { KnowledgeSidebar } from "./knowledge-sidebar";
 
 const node = (path: string, children?: DocNode[]): DocNode => ({
@@ -24,9 +28,12 @@ const tree = [
 ];
 let searchNodes: DocNode[] = [];
 
+const { moveDoc } = vi.hoisted(() => ({ moveDoc: vi.fn() }));
+
 vi.mock("@multica/core/docs", () => ({
   docsTreeOptions: () => ({ queryKey: ["docs", "tree"] }),
   docsSearchOptions: (q: string) => ({ queryKey: ["docs", "search", q] }),
+  useMoveDoc: () => ({ mutateAsync: moveDoc }),
 }));
 
 vi.mock("@tanstack/react-query", async () => {
@@ -47,8 +54,17 @@ describe("KnowledgeSidebar", () => {
   const onSelect = vi.fn();
   const onCreate = vi.fn();
   beforeEach(() => {
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: false,
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    })) as unknown as typeof window.matchMedia;
     onSelect.mockReset();
     onCreate.mockReset();
+    moveDoc.mockReset();
+    moveDoc.mockResolvedValue({ from: "readme.md", path: "Strategy/readme.md", name: "readme.md", type: "file" });
     searchNodes = [];
     // jsdom has no layout, so scrollIntoView isn't defined at all.
     Element.prototype.scrollIntoView = vi.fn();
@@ -96,11 +112,77 @@ describe("KnowledgeSidebar", () => {
     }
   });
 
-  it("shows server search hits fully expanded", async () => {
-    searchNodes = [node("Deep", [node("Deep/Inner", [node("Deep/Inner/hit.md")])])];
+  function row(name: RegExp) {
+    const button = screen.getByRole("button", { name });
+    const el = button.parentElement;
+    if (!el) throw new Error(`row missing for ${name}`);
+    return el;
+  }
+
+  function dragTransfer(): DataTransfer {
+    const data = new Map<string, string>();
+    return {
+      dropEffect: "none",
+      effectAllowed: "all",
+      files: [] as unknown as FileList,
+      items: [] as unknown as DataTransferItemList,
+      types: ["text/plain"],
+      setData: (format: string, value: string) => {
+        data.set(format, value);
+      },
+      getData: (format: string) => data.get(format) ?? "",
+      clearData: () => data.clear(),
+      setDragImage: () => {},
+    } as DataTransfer;
+  }
+
+  it("moves a note into the folder it is dropped on", () => {
     renderWithI18n(<KnowledgeSidebar selectedPath={null} onSelect={onSelect} onCreate={onCreate} />);
-    fireEvent.change(screen.getByRole("textbox", { name: "Search notes" }), { target: { value: "hit" } });
-    await waitFor(() => expect(screen.getByText("hit.md")).toBeInTheDocument());
-    expect(screen.queryByText("readme.md")).toBeNull();
+    const transfer = dragTransfer();
+    fireEvent.dragStart(row(/^readme\.md/), { dataTransfer: transfer });
+    fireEvent.dragOver(row(/^Strategy/), { dataTransfer: transfer });
+    fireEvent.drop(row(/^Strategy/), { dataTransfer: transfer });
+    expect(moveDoc).toHaveBeenCalledWith({ path: "readme.md", dest: "Strategy" });
+  });
+
+  it("expands a collapsed folder after the pointer rests on it for 200ms", () => {
+    renderWithI18n(<KnowledgeSidebar selectedPath={null} onSelect={onSelect} onCreate={onCreate} />);
+    const folder = screen.getByRole("button", { name: /^2025/ });
+    expect(folder).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("plan.md")).toBeNull();
+
+    vi.useFakeTimers();
+    try {
+      const transfer = dragTransfer();
+      fireEvent.dragStart(row(/^readme\.md/), { dataTransfer: transfer });
+      fireEvent.dragOver(row(/^2025/), { dataTransfer: transfer });
+      act(() => {
+        vi.advanceTimersByTime(199);
+      });
+      expect(folder).toHaveAttribute("aria-expanded", "false");
+      act(() => {
+        vi.advanceTimersByTime(1);
+      });
+      expect(folder).toHaveAttribute("aria-expanded", "true");
+      expect(screen.getByText("plan.md")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not expand a folder when the pointer rests on a note", () => {
+    renderWithI18n(<KnowledgeSidebar selectedPath={null} onSelect={onSelect} onCreate={onCreate} />);
+    vi.useFakeTimers();
+    try {
+      const transfer = dragTransfer();
+      fireEvent.dragStart(row(/^readme\.md/), { dataTransfer: transfer });
+      fireEvent.dragOver(row(/^budget\.md/), { dataTransfer: transfer });
+      act(() => {
+        vi.advanceTimersByTime(200);
+      });
+      expect(screen.getByRole("button", { name: /^2025/ })).toHaveAttribute("aria-expanded", "false");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
