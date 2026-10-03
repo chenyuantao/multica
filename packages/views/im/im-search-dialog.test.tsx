@@ -156,6 +156,7 @@ describe("ImSearchDialog", () => {
 
     pressOpen();
     expect(optionTexts(await screen.findByRole("group", { name: "Recent chats" }))[0]).toContain("Standup");
+    expect(screen.getByRole("group", { name: "Contacts" })).toBeInTheDocument();
     expect(optionTexts(screen.getByRole("group", { name: "Recently modified notes" }))).toEqual(["readme", "planStrategy"]);
   });
 

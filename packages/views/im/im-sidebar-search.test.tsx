@@ -119,8 +119,7 @@ describe("ImSidebarSearch", () => {
     expect(screen.queryByRole("listbox")).toBeNull();
 
     fireEvent.focus(input);
-    expect(await screen.findByRole("group", { name: "Recently modified notes" })).toBeInTheDocument();
-    expect(headings()[0]).toBe("Recently modified notes");
+    expect(headings()).toEqual(["Recently modified notes", "Recent chats", "Contacts"]);
     expect(screen.queryByRole("option", { name: /Ask AI/ })).toBeNull();
     expect(screen.queryByRole("tab")).toBeNull();
 
@@ -128,8 +127,16 @@ describe("ImSidebarSearch", () => {
     expect(headings()).toEqual(["Notes", "Chats", "Contacts"]);
   });
 
+  it("shows chats, contacts, and notes when search opens on the message page", () => {
+    renderSearch("chats");
+    fireEvent.focus(screen.getByRole("combobox", { name: "Search" }));
+    expect(headings()).toEqual(["Recent chats", "Contacts", "Recently modified notes"]);
+  });
+
   it("leads with contacts from the member page", async () => {
     renderSearch("contacts");
+    fireEvent.focus(screen.getByRole("combobox", { name: "Search" }));
+    expect(headings()).toEqual(["Contacts", "Recent chats", "Recently modified notes"]);
     await typeQuery("r");
     expect(headings()).toEqual(["Contacts", "Chats", "Notes"]);
   });

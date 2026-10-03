@@ -152,9 +152,10 @@ export function useImSearchGroups({
     if (section === "chats") {
       const recent = sortChats(chats).map((chat) => chatRow(chat, titleOf(chat), ""));
       groups.push(present("chats", recent, t(($) => $.search.recent_chats)));
-    } else if (section === "contacts" && (!preview || priority === "contacts")) {
-      // The contacts tab lists the directory with no heading. A grouped search
-      // only shows it before a query when contacts are the section to lead with.
+    } else if (section === "contacts") {
+      // The contacts tab lists the directory with no heading. Grouped search
+      // shows it before a query on every page, so chats, contacts, and notes
+      // all appear whether the field was opened from messages, members, or knowledge.
       const heading = preview ? labels.contacts : undefined;
       groups.push(present("contacts", [...directory.people, ...directory.agents].map(contactRow), heading));
     } else if (section === "notes" && !tree.isError) {
