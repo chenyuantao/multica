@@ -424,7 +424,7 @@ export function ChatComposer({ chatId, chatTitle, candidates, onSend, quote, onC
           </Button>
           <div className="relative min-h-8 flex-1">
             {text.length === 0 && (
-              <span aria-hidden className="pointer-events-none absolute inset-x-0 top-1.5 truncate text-body text-muted-foreground">
+              <span aria-hidden className="pointer-events-none absolute inset-x-0 top-1.5 truncate text-body text-muted-foreground select-none">
                 {voiceReady
                   ? t(($) => $.composer.voice_hold)
                   : t(($) => $.composer.placeholder, { title: chatTitle })}
@@ -435,7 +435,7 @@ export function ChatComposer({ chatId, chatTitle, candidates, onSend, quote, onC
               role="textbox"
               aria-multiline="true"
               aria-label={t(($) => $.composer.placeholder, { title: chatTitle })}
-              contentEditable
+              contentEditable={!voice.capturing}
               suppressContentEditableWarning
               onInput={sync}
               onKeyUp={syncCaret}

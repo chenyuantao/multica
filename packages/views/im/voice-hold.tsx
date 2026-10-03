@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent, type PointerEvent, type ReactNode, type TouchEvent } from "react";
 import { createPortal } from "react-dom";
 import { getApi } from "@multica/core/api";
+import { cn } from "@multica/ui/lib/utils";
 import { useT } from "../i18n";
 import { voiceZone, type VoiceZone } from "./voice-zone";
 import { SpeechSession, capturePCM16, resolveSpeechToken, speechRealtimeURL } from "./voice-speech";
@@ -29,12 +30,15 @@ interface VoiceHoldHandlers {
   onPointerUp: (event: PointerEvent<HTMLElement>) => boolean;
   onPointerCancel: () => void;
   onContextMenu: (event: MouseEvent<HTMLElement>) => void;
+  /** Finger is down on an empty field, so the editor must not accept a selection. */
+  capturing: boolean;
   overlay: ReactNode;
 }
 
 export function useVoiceHold({ enabled, onSend, onEdit }: VoiceHoldOptions): VoiceHoldHandlers {
   const { t } = useT("im");
   const [holding, setHolding] = useState(false);
+  const [capturing, setCapturing] = useState(false);
   const [zone, setZone] = useState<VoiceZone>("send");
   const [preview, setPreview] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -51,6 +55,7 @@ export function useVoiceHold({ enabled, onSend, onEdit }: VoiceHoldOptions): Voi
   const onEditRef = useRef(onEdit);
   const enabledRef = useRef(enabled);
   const pressRef = useRef<{ timer: ReturnType<typeof setTimeout>; x: number; y: number } | null>(null);
+  const lockedRef = useRef<HTMLElement | null>(null);
   const shieldRef = useRef<(() => void) | null>(null);
   const releaseRef = useRef<() => void>(() => {});
   onSendRef.current = onSend;
@@ -61,6 +66,25 @@ export function useVoiceHold({ enabled, onSend, onEdit }: VoiceHoldOptions): Voi
     const press = pressRef.current;
     pressRef.current = null;
     if (press) clearTimeout(press.timer);
+  }, []);
+
+  const unlockField = useCallback((focus: boolean) => {
+    const target = lockedRef.current;
+    lockedRef.current = null;
+    if (target) {
+      target.contentEditable = "true";
+      if (focus) target.focus();
+    }
+    setCapturing(false);
+  }, []);
+
+  const lockField = useCallback((target: HTMLElement) => {
+    lockedRef.current = target;
+    // iOS still selects inside a contentEditable on long-press when
+    // user-select is none. Take editing away until the finger lifts.
+    target.contentEditable = "false";
+    window.getSelection()?.removeAllRanges();
+    setCapturing(true);
   }, []);
 
   const stopMic = useCallback(async () => {
@@ -88,6 +112,7 @@ export function useVoiceHold({ enabled, onSend, onEdit }: VoiceHoldOptions): Voi
     activeRef.current = false;
     setHolding(false);
     setPreview("");
+    unlockField(false);
     await stopMic();
     if (!session) {
       finishingRef.current = false;
@@ -108,7 +133,7 @@ export function useVoiceHold({ enabled, onSend, onEdit }: VoiceHoldOptions): Voi
     } finally {
       finishingRef.current = false;
     }
-  }, [fail, stopMic]);
+  }, [fail, stopMic, unlockField]);
 
   const begin = useCallback(async () => {
     if (activeRef.current) return;
@@ -158,12 +183,13 @@ export function useVoiceHold({ enabled, onSend, onEdit }: VoiceHoldOptions): Voi
         session.cancel();
         sessionRef.current = null;
         readyRef.current = false;
-        activeRef.current = false;
-        setHolding(false);
-        await stopMic();
-        return;
-      }
-      if (releasedRef.current) void finish(gen);
+      activeRef.current = false;
+      setHolding(false);
+      unlockField(false);
+      await stopMic();
+      return;
+    }
+    if (releasedRef.current) void finish(gen);
     } catch (err) {
       if (gen !== genRef.current) return;
       sessionRef.current?.cancel();
@@ -171,10 +197,11 @@ export function useVoiceHold({ enabled, onSend, onEdit }: VoiceHoldOptions): Voi
       readyRef.current = false;
       activeRef.current = false;
       setHolding(false);
+      unlockField(false);
       await stopMic();
       fail(err);
     }
-  }, [fail, finish, stopMic]);
+  }, [fail, finish, stopMic, unlockField]);
 
   useEffect(() => () => {
     genRef.current += 1;
@@ -182,6 +209,11 @@ export function useVoiceHold({ enabled, onSend, onEdit }: VoiceHoldOptions): Voi
     const press = pressRef.current;
     pressRef.current = null;
     if (press) clearTimeout(press.timer);
+    const target = lockedRef.current;
+    lockedRef.current = null;
+    if (target) target.contentEditable = "true";
+    document.documentElement.style.removeProperty("user-select");
+    document.documentElement.style.removeProperty("-webkit-user-select");
     sessionRef.current?.cancel();
     void stopMicRef.current?.();
   }, []);
@@ -200,8 +232,9 @@ export function useVoiceHold({ enabled, onSend, onEdit }: VoiceHoldOptions): Voi
     activeRef.current = false;
     setHolding(false);
     setPreview("");
+    unlockField(false);
     void stopMic();
-  }, [stopMic]);
+  }, [stopMic, unlockField]);
 
   const release = useCallback(() => {
     releasedRef.current = true;
@@ -219,12 +252,23 @@ export function useVoiceHold({ enabled, onSend, onEdit }: VoiceHoldOptions): Voi
     let ended = false;
     let removed = false;
     let remove = () => {};
+    const root = document.documentElement;
+    root.style.setProperty("user-select", "none");
+    root.style.setProperty("-webkit-user-select", "none");
+    const onSelection = () => {
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount > 0 && !sel.isCollapsed) sel.removeAllRanges();
+    };
+    document.addEventListener("selectionchange", onSelection);
     const disarm = () => {
       if (removed) return;
       removed = true;
       if (dropTimer) clearTimeout(dropTimer);
       dropTimer = null;
       remove();
+      document.removeEventListener("selectionchange", onSelection);
+      root.style.removeProperty("user-select");
+      root.style.removeProperty("-webkit-user-select");
       if (shieldRef.current === disarm) shieldRef.current = null;
     };
     const pointOf = (event: Event) => {
@@ -243,7 +287,7 @@ export function useVoiceHold({ enabled, onSend, onEdit }: VoiceHoldOptions): Voi
       ended = true;
       if (pressRef.current) {
         clearPress();
-        if (!cancel) target.focus();
+        unlockField(!cancel);
       } else if (activeRef.current) {
         if (cancel) {
           zoneRef.current = "cancel";
@@ -296,6 +340,8 @@ export function useVoiceHold({ enabled, onSend, onEdit }: VoiceHoldOptions): Voi
       "click",
       "auxclick",
       "contextmenu",
+      "selectstart",
+      "dragstart",
     ];
     for (const type of types) {
       window.addEventListener(type, onEvent, { capture: true, passive: false });
@@ -304,20 +350,24 @@ export function useVoiceHold({ enabled, onSend, onEdit }: VoiceHoldOptions): Voi
       for (const type of types) window.removeEventListener(type, onEvent, { capture: true });
     };
     shieldRef.current = disarm;
-  }, [clearPress]);
+  }, [clearPress, unlockField]);
 
   const onPointerDown = useCallback((event: PointerEvent<HTMLElement>) => {
     if (!enabledRef.current || event.button > 0 || pressRef.current || activeRef.current) return;
     event.preventDefault();
     const target = event.currentTarget;
     const pointerId = event.pointerId;
+    lockField(target);
     armShield(target);
     pressRef.current = {
       x: event.clientX,
       y: event.clientY,
       timer: setTimeout(() => {
         pressRef.current = null;
-        if (!enabledRef.current) return;
+        if (!enabledRef.current) {
+          unlockField(false);
+          return;
+        }
         if (document.activeElement === target) target.blur();
         try {
           target.setPointerCapture(pointerId);
@@ -327,7 +377,7 @@ export function useVoiceHold({ enabled, onSend, onEdit }: VoiceHoldOptions): Voi
         void begin();
       }, VOICE_LONG_PRESS_MS),
     };
-  }, [armShield, begin]);
+  }, [armShield, begin, lockField, unlockField]);
 
   const onTouchStart = useCallback((event: TouchEvent<HTMLElement>) => {
     if (!enabledRef.current || pressRef.current || activeRef.current) return;
@@ -335,18 +385,22 @@ export function useVoiceHold({ enabled, onSend, onEdit }: VoiceHoldOptions): Voi
     if (!touch) return;
     event.preventDefault();
     const target = event.currentTarget;
+    lockField(target);
     armShield(target);
     pressRef.current = {
       x: touch.clientX,
       y: touch.clientY,
       timer: setTimeout(() => {
         pressRef.current = null;
-        if (!enabledRef.current) return;
+        if (!enabledRef.current) {
+          unlockField(false);
+          return;
+        }
         if (document.activeElement === target) target.blur();
         void begin();
       }, VOICE_LONG_PRESS_MS),
     };
-  }, [armShield, begin]);
+  }, [armShield, begin, lockField, unlockField]);
 
   const onPointerMove = useCallback((event: PointerEvent<HTMLElement>) => {
     if (!activeRef.current) return;
@@ -358,23 +412,25 @@ export function useVoiceHold({ enabled, onSend, onEdit }: VoiceHoldOptions): Voi
   const onPointerUp = useCallback((_event: PointerEvent<HTMLElement>) => {
     if (pressRef.current) {
       clearPress();
+      unlockField(true);
       return false;
     }
     if (!activeRef.current) return false;
     release();
     return true;
-  }, [clearPress, release]);
+  }, [clearPress, release, unlockField]);
 
   const onPointerCancel = useCallback(() => {
     if (pressRef.current) {
       clearPress();
+      unlockField(false);
       return;
     }
     if (!activeRef.current) return;
     zoneRef.current = "cancel";
     setZone("cancel");
     release();
-  }, [clearPress, release]);
+  }, [clearPress, release, unlockField]);
 
   const onContextMenu = useCallback((event: MouseEvent<HTMLElement>) => {
     if (enabledRef.current || activeRef.current) event.preventDefault();
@@ -403,14 +459,14 @@ export function useVoiceHold({ enabled, onSend, onEdit }: VoiceHoldOptions): Voi
               {preview || t(($) => $.composer.voice_listening)}
             </p>
           </div>
-          <div className="grid grid-cols-3 items-end px-6 pb-10 text-center text-sm">
-            <span className={zone === "cancel" ? "font-medium text-red-400" : "text-white/70"}>
+          <div className="grid grid-cols-3 items-end gap-3 px-4 pb-10">
+            <VoiceZoneBlock active={zone === "cancel"} tone="danger">
               {t(($) => $.composer.voice_cancel)}
-            </span>
-            <span className="text-white/70">{hint}</span>
-            <span className={zone === "edit" ? "font-medium text-white" : "text-white/70"}>
+            </VoiceZoneBlock>
+            <span className="pb-4 text-center text-sm text-white/80">{hint}</span>
+            <VoiceZoneBlock active={zone === "edit"} tone="neutral">
               {t(($) => $.composer.voice_edit)}
-            </span>
+            </VoiceZoneBlock>
           </div>
         </div>,
         document.body,
@@ -424,5 +480,21 @@ export function useVoiceHold({ enabled, onSend, onEdit }: VoiceHoldOptions): Voi
     </>
   );
 
-  return { onPointerDown, onTouchStart, onPointerMove, onPointerUp, onPointerCancel, onContextMenu, overlay };
+  return { onPointerDown, onTouchStart, onPointerMove, onPointerUp, onPointerCancel, onContextMenu, capturing, overlay };
+}
+
+function VoiceZoneBlock({ active, tone, children }: { active: boolean; tone: "danger" | "neutral"; children: ReactNode }) {
+  return (
+    <span
+      data-active={active ? "true" : "false"}
+      className={cn(
+        "flex h-14 items-center justify-center rounded-2xl text-body transition-[transform,background-color,color]",
+        active && tone === "danger" && "scale-105 bg-red-500 font-medium text-white",
+        active && tone === "neutral" && "scale-105 bg-white font-medium text-black",
+        !active && "bg-white/15 text-white/60",
+      )}
+    >
+      {children}
+    </span>
+  );
 }

@@ -351,6 +351,49 @@ describe("ChatComposer voice", () => {
     }
   });
 
+  it("blocks text selection while the finger is down and restores the field after a tap", () => {
+    renderComposer();
+    const box = composerBox();
+    fireEvent.pointerDown(box, { button: 0, clientX: 20, clientY: 40, pointerId: 1 });
+    expect(box).toHaveAttribute("contenteditable", "false");
+    expect(document.documentElement.style.userSelect).toBe("none");
+    const select = new Event("selectstart", { bubbles: true, cancelable: true });
+    window.dispatchEvent(select);
+    expect(select.defaultPrevented).toBe(true);
+
+    fireEvent.pointerUp(box, { button: 0, clientX: 20, clientY: 40, pointerId: 1 });
+    expect(box).toHaveAttribute("contenteditable", "true");
+    expect(box).toHaveFocus();
+  });
+
+  it("fills the cancel and edit blocks while the finger is in those zones", async () => {
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia: vi.fn().mockReturnValue(new Promise(() => {})) },
+    });
+    const previousHeight = window.innerHeight;
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 800 });
+    try {
+      renderComposer();
+      fireEvent.pointerDown(composerBox(), { button: 0, clientX: 180, clientY: 40, pointerId: 1 });
+      expect(await screen.findByRole("dialog", { name: "Release to send" })).toBeInTheDocument();
+      expect(screen.getByText("Cancel")).toHaveAttribute("data-active", "false");
+      expect(screen.getByText("Edit")).toHaveAttribute("data-active", "false");
+
+      fireEvent.pointerMove(window, { clientX: 20, clientY: 700, pointerId: 1 });
+      expect(screen.getByText("Cancel")).toHaveAttribute("data-active", "true");
+      expect(screen.getByText("Cancel").className).toContain("bg-red-500");
+      expect(screen.getByText("Edit")).toHaveAttribute("data-active", "false");
+
+      fireEvent.pointerMove(window, { clientX: 320, clientY: 700, pointerId: 1 });
+      expect(screen.getByText("Edit")).toHaveAttribute("data-active", "true");
+      expect(screen.getByText("Edit").className).toContain("bg-white");
+      expect(screen.getByText("Cancel")).toHaveAttribute("data-active", "false");
+    } finally {
+      Object.defineProperty(window, "innerHeight", { configurable: true, value: previousHeight });
+    }
+  });
+
   it("covers the screen with a dark scrim while holding", async () => {
     Object.defineProperty(navigator, "mediaDevices", {
       configurable: true,
