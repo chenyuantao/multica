@@ -26,9 +26,12 @@ function refreshChatMessages(qc: QueryClient, wsId: string, chatId: string) {
 }
 
 /** The first page is the newest window, chronological, so a new message goes on its end. */
-function appendChatMessage(old: InfiniteData<CommentPage> | undefined, comment: Comment) {
-  if (!old?.pages.length) return old;
-  const [latest, ...older] = old.pages;
+function appendChatMessage(
+  old: InfiniteData<CommentPage> | undefined,
+  comment: Comment,
+): InfiniteData<CommentPage> | undefined {
+  const [latest, ...older] = old?.pages ?? [];
+  if (!old || !latest) return old;
   if (latest.comments.some((c) => c.id === comment.id)) return old;
   return { ...old, pages: [{ ...latest, comments: [...latest.comments, comment] }, ...older] };
 }
