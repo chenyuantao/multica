@@ -38,14 +38,17 @@ type Availability = "online" | "unstable" | "offline";
 const EMPTY_RUNTIMES: AgentRuntime[] = [];
 
 /**
- * Minimum slot for one avatar. Columns are `floor(width / 48)`, then the row
- * splits that width evenly — a 200px row holds four avatars.
+ * Avatar slot, plus the margin kept between slots. Column count is how many
+ * `cell + gap` pairs fit, so neighboring avatars never touch: a 200px row
+ * holds three 48px avatars with 16px between them.
  */
 export const ROSTER_CELL_PX = 48;
+export const ROSTER_GAP_PX = 16;
 
-export function rosterColumnCount(width: number, cellPx = ROSTER_CELL_PX): number {
-  if (!Number.isFinite(width) || width < cellPx) return 1;
-  return Math.floor(width / cellPx);
+export function rosterColumnCount(width: number, cellPx = ROSTER_CELL_PX, gapPx = ROSTER_GAP_PX): number {
+  if (!Number.isFinite(width) || width < cellPx || cellPx <= 0) return 1;
+  const gap = Number.isFinite(gapPx) && gapPx > 0 ? gapPx : 0;
+  return Math.max(1, Math.floor((width + gap) / (cellPx + gap)));
 }
 
 export function ChatDetailsPanel({ wsId, chat, userId, variant = "aside", onOpenMember }: ChatDetailsPanelProps) {
@@ -276,7 +279,7 @@ function PanelSection({ title, children }: { title: string; children: React.Reac
   );
 }
 
-function useRosterColumns(cellPx: number) {
+function useRosterColumns(cellPx: number, gapPx: number) {
   const ref = useRef<HTMLDivElement>(null);
   const [columns, setColumns] = useState(1);
 
@@ -284,7 +287,7 @@ function useRosterColumns(cellPx: number) {
     const el = ref.current;
     if (!el) return;
     const apply = (width: number) => {
-      const next = rosterColumnCount(width, cellPx);
+      const next = rosterColumnCount(width, cellPx, gapPx);
       setColumns((current) => (current === next ? current : next));
     };
     apply(el.clientWidth);
@@ -294,7 +297,7 @@ function useRosterColumns(cellPx: number) {
     });
     observer.observe(el);
     return () => observer.disconnect();
-  }, [cellPx]);
+  }, [cellPx, gapPx]);
 
   return { ref, columns };
 }
@@ -327,7 +330,7 @@ function MemberRoster({
   const [query, setQuery] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [removing, setRemoving] = useState(false);
-  const { ref, columns } = useRosterColumns(ROSTER_CELL_PX);
+  const { ref, columns } = useRosterColumns(ROSTER_CELL_PX, ROSTER_GAP_PX);
   const filtering = query.trim().length > 0;
   const hasRemovable = chat.members.some(canRemove);
   const visible = chat.members.filter((member) => {
@@ -361,8 +364,12 @@ function MemberRoster({
           ref={ref}
           role="group"
           aria-label={t(($) => $.panel.roster)}
-          className="grid min-w-0 gap-y-3"
-          style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
+          className="grid min-w-0 justify-start"
+          style={{
+            gridTemplateColumns: `repeat(${columns}, ${ROSTER_CELL_PX}px)`,
+            columnGap: ROSTER_GAP_PX,
+            rowGap: ROSTER_GAP_PX,
+          }}
         >
           {visible.map((member) => {
             const name = getActorName(member.member_type, member.member_id);
@@ -443,13 +450,14 @@ function MemberTile({
     onOpen?.();
   };
   const interactive = removing || !!onOpen;
-  const caption = (
-    <span className="w-full truncate text-center text-caption text-muted-foreground">{name}</span>
-  );
 
   return (
-    <div className="flex min-w-0 flex-col items-center gap-1" title={detail ? `${name} · ${detail}` : name}>
-      <span className="relative inline-flex" onDoubleClick={removing ? undefined : onDoubleOpen}>
+    <div className="flex w-full min-w-0 flex-col items-center gap-1" title={detail ? `${name} · ${detail}` : name}>
+      <span
+        className="relative inline-flex shrink-0 items-center justify-center"
+        style={{ width: ROSTER_CELL_PX, height: ROSTER_CELL_PX }}
+        onDoubleClick={removing ? undefined : onDoubleOpen}
+      >
         <ActorAvatar
           actorType={member.member_type}
           actorId={member.member_id}
@@ -479,18 +487,28 @@ function MemberTile({
           onClick={activate}
           onDoubleClick={removing ? undefined : onDoubleOpen}
           className={cn(
-            "w-full min-w-0 rounded-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+            ROSTER_CAPTION_CLASS,
+            "rounded-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
             onDoubleOpen && !removing && "select-none",
           )}
         >
-          {caption}
+          {name}
         </button>
       ) : (
-        caption
+        <span className={ROSTER_CAPTION_CLASS}>{name}</span>
       )}
     </div>
   );
 }
+
+/**
+ * Agent names are buttons (they open the profile) and member names are plain
+ * text unless a page handler is provided. Both sit in the same 16px caption
+ * box — `text-caption` on an inner span would leave the button on the page
+ * line-height and drop the agent label.
+ */
+const ROSTER_CAPTION_CLASS =
+  "block h-4 w-full min-w-0 truncate border-0 bg-transparent p-0 text-center text-caption leading-4 text-muted-foreground appearance-none";
 
 function RosterAction({
   label,
@@ -511,7 +529,7 @@ function RosterAction({
       aria-label={ariaLabel}
       aria-pressed={pressed}
       onClick={onClick}
-      className="flex min-w-0 flex-col items-center gap-1 rounded-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+      className="flex w-full min-w-0 flex-col items-center gap-1 rounded-sm border-0 bg-transparent p-0 appearance-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
     >
       <span
         className={cn(
@@ -522,7 +540,7 @@ function RosterAction({
       >
         {children}
       </span>
-      <span className="w-full truncate text-center text-caption text-muted-foreground">{label}</span>
+      <span className={ROSTER_CAPTION_CLASS}>{label}</span>
     </button>
   );
 }

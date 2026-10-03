@@ -93,10 +93,11 @@ function renderPanel() {
 }
 
 describe("rosterColumnCount", () => {
-  it("fits four 48px avatars across 200px, then one more only after another full slot", () => {
-    expect(rosterColumnCount(200)).toBe(4);
-    expect(rosterColumnCount(239)).toBe(4);
-    expect(rosterColumnCount(240)).toBe(5);
+  it("keeps a 16px margin between 48px avatars", () => {
+    expect(rosterColumnCount(200)).toBe(3);
+    expect(rosterColumnCount(48 + 16 + 48 - 1)).toBe(1);
+    expect(rosterColumnCount(48 + 16 + 48)).toBe(2);
+    expect(rosterColumnCount(5 * 48 + 4 * 16)).toBe(5);
     expect(rosterColumnCount(48)).toBe(1);
     expect(rosterColumnCount(47)).toBe(1);
     expect(rosterColumnCount(0)).toBe(1);
@@ -266,8 +267,17 @@ describe("ChatDetailsPanel roster", () => {
 
     expect(screen.queryByRole("heading", { name: "Agents in this chat" })).toBeNull();
     expect(screen.queryByRole("heading", { name: "People in this chat" })).toBeNull();
-    expect(screen.getByRole("button", { name: "name-agent-1" })).toBeInTheDocument();
-    expect(screen.getByText("name-user-1")).toBeInTheDocument();
+    const agentName = screen.getByRole("button", { name: "name-agent-1" });
+    const memberName = screen.getByText("name-user-1");
+    expect(agentName).toBeInTheDocument();
+    expect(memberName).toBeInTheDocument();
+    const roster = screen.getByRole("group", { name: "People and agents" });
+    expect(roster.style.columnGap).toBe("16px");
+    expect(roster.style.rowGap).toBe("16px");
+    for (const cls of ["h-4", "leading-4", "p-0", "border-0"]) {
+      expect(agentName).toHaveClass(cls);
+      expect(memberName).toHaveClass(cls);
+    }
 
     const calls = avatarProps.mock.calls.map((call) => call[0] as { actorId?: string; showStatusDot?: boolean });
     expect(calls.find((props) => props.actorId === "agent-1")?.showStatusDot).toBe(true);
