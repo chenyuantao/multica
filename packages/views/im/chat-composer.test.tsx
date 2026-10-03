@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import type { Attachment } from "@multica/core/types";
 import { renderWithI18n } from "../test/i18n";
 import { ChatComposer } from "./chat-composer";
+import { VOICE_LONG_PRESS_MS, VOICE_TOUCH_SHIELD_MS } from "./voice-hold";
 import { encodeDocExcerpt } from "./doc-excerpt";
 import { DocExcerptInsertProvider, useInsertDocExcerpt } from "./doc-excerpt-insert";
 import { DocExcerptRevealProvider } from "./doc-excerpt-reveal";
@@ -262,16 +263,114 @@ describe("ChatComposer document excerpts", () => {
     fireEvent.click(composerBox().querySelector("[data-doc-excerpt]")!);
     expect(onOpen).toHaveBeenCalledWith({ path: "notes/weekly.md", name: "本周周报" });
   });
+});
 
-  it("offers press-to-talk on a phone-width window and explains a blocked microphone", async () => {
-    const previous = window.innerWidth;
+describe("ChatComposer voice", () => {
+  const previousWidth = window.innerWidth;
+
+  beforeEach(() => {
+    localStorage.clear();
     Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: previousWidth });
+    vi.useRealTimers();
+  });
+
+  function denyMicrophone() {
     const getUserMedia = vi.fn().mockRejectedValue(new DOMException("denied", "NotAllowedError"));
     Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia } });
+    return getUserMedia;
+  }
+
+  it("holds the message field itself and keeps the send button", async () => {
+    const getUserMedia = denyMicrophone();
     renderComposer();
-    fireEvent.pointerDown(screen.getByRole("button", { name: "Hold to talk" }));
+    expect(screen.queryByRole("button", { name: "Hold to talk" })).toBeNull();
+    expect(screen.getByText("Hold to talk")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+
+    fireEvent.pointerDown(composerBox(), { button: 0, clientX: 20, clientY: 40, pointerId: 1 });
+    expect(getUserMedia).not.toHaveBeenCalled();
     expect(await screen.findByRole("status")).toHaveTextContent("Allow microphone access to dictate a message.");
-    expect(screen.queryByRole("button", { name: "Send" })).toBeNull();
-    Object.defineProperty(window, "innerWidth", { configurable: true, value: previous });
+    expect(getUserMedia).toHaveBeenCalledOnce();
+  });
+
+  it("treats a short tap as typing", async () => {
+    const getUserMedia = denyMicrophone();
+    renderComposer();
+    const box = composerBox();
+
+    fireEvent.pointerDown(box, { button: 0, clientX: 20, clientY: 40, pointerId: 1 });
+    fireEvent.pointerUp(box, { button: 0, clientX: 20, clientY: 40, pointerId: 1 });
+    expect(box).toHaveFocus();
+    await new Promise((resolve) => setTimeout(resolve, VOICE_LONG_PRESS_MS + 80));
+    expect(getUserMedia).not.toHaveBeenCalled();
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("ignores every control except cancel, edit, and release while the finger is down", async () => {
+    const outside = vi.fn();
+    const getUserMedia = vi.fn(() => new Promise<never>(() => {}));
+    Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia } });
+    const previousHeight = window.innerHeight;
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 800 });
+    const fileClick = vi.spyOn(HTMLInputElement.prototype, "click").mockImplementation(() => {});
+    try {
+      renderWithI18n(
+        <>
+          <button type="button" onClick={outside}>Outside</button>
+          <ChatComposer chatId="chat-1" chatTitle="Launch room" candidates={[]} onSend={vi.fn()} />
+        </>,
+      );
+      fireEvent.pointerDown(composerBox(), { button: 0, clientX: 180, clientY: 40, pointerId: 1 });
+      expect(await screen.findByRole("dialog", { name: "Release to send" })).toBeInTheDocument();
+
+      fireEvent.pointerMove(window, { clientX: 20, clientY: 700, pointerId: 1 });
+      expect(screen.getByRole("dialog", { name: "Release to cancel" })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Outside" }));
+      fireEvent.click(screen.getByRole("button", { name: "Attach file" }));
+      fireEvent.click(screen.getByRole("button", { name: "Send" }));
+      expect(outside).not.toHaveBeenCalled();
+      expect(fileClick).not.toHaveBeenCalled();
+
+      fireEvent.pointerMove(window, { clientX: 320, clientY: 700, pointerId: 1 });
+      expect(screen.getByRole("dialog", { name: "Release to edit" })).toBeInTheDocument();
+
+      fireEvent.pointerUp(window, { clientX: 20, clientY: 700, pointerId: 1 });
+      fireEvent.click(screen.getByRole("button", { name: "Outside" }));
+      expect(outside).not.toHaveBeenCalled();
+
+      await new Promise((resolve) => setTimeout(resolve, VOICE_TOUCH_SHIELD_MS + 40));
+      fireEvent.click(screen.getByRole("button", { name: "Outside" }));
+      expect(outside).toHaveBeenCalledOnce();
+    } finally {
+      fileClick.mockRestore();
+      Object.defineProperty(window, "innerHeight", { configurable: true, value: previousHeight });
+    }
+  });
+
+  it("covers the screen with a dark scrim while holding", async () => {
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia: vi.fn().mockReturnValue(new Promise(() => {})) },
+    });
+    renderComposer();
+    fireEvent.pointerDown(composerBox(), { button: 0, clientX: 20, clientY: 40, pointerId: 1 });
+    const scrim = await screen.findByRole("dialog", { name: "Release to send" });
+    expect(scrim.className).toContain("bg-black/90");
+  });
+
+  it("does not listen once the field has text", async () => {
+    const getUserMedia = denyMicrophone();
+    renderComposer();
+    setComposerText("hello");
+    expect(screen.queryByText("Hold to talk")).toBeNull();
+
+    fireEvent.pointerDown(composerBox(), { button: 0, clientX: 20, clientY: 40, pointerId: 1 });
+    await new Promise((resolve) => setTimeout(resolve, VOICE_LONG_PRESS_MS + 80));
+    expect(getUserMedia).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Send" })).toBeEnabled();
   });
 });

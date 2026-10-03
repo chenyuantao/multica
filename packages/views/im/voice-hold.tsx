@@ -1,20 +1,38 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type MouseEvent, type PointerEvent, type ReactNode, type TouchEvent } from "react";
 import { createPortal } from "react-dom";
-import { Mic } from "lucide-react";
 import { getApi } from "@multica/core/api";
-import { Button } from "@multica/ui/components/ui/button";
 import { useT } from "../i18n";
 import { voiceZone, type VoiceZone } from "./voice-zone";
 import { SpeechSession, capturePCM16, resolveSpeechToken, speechRealtimeURL } from "./voice-speech";
 
-interface VoiceHoldButtonProps {
+/** Matches the native composer's long-press delay. */
+export const VOICE_LONG_PRESS_MS = 280;
+/**
+ * After the finger lifts, browsers still synthesize a click on whatever is
+ * underneath. Keep swallowing touches through that click.
+ */
+export const VOICE_TOUCH_SHIELD_MS = 400;
+
+interface VoiceHoldOptions {
+  enabled: boolean;
   onSend: (text: string) => void;
   onEdit: (text: string) => void;
 }
 
-export function VoiceHoldButton({ onSend, onEdit }: VoiceHoldButtonProps) {
+interface VoiceHoldHandlers {
+  onPointerDown: (event: PointerEvent<HTMLElement>) => void;
+  onTouchStart: (event: TouchEvent<HTMLElement>) => void;
+  onPointerMove: (event: PointerEvent<HTMLElement>) => void;
+  /** True when this pointer release belongs to a voice hold, so the field should ignore it. */
+  onPointerUp: (event: PointerEvent<HTMLElement>) => boolean;
+  onPointerCancel: () => void;
+  onContextMenu: (event: MouseEvent<HTMLElement>) => void;
+  overlay: ReactNode;
+}
+
+export function useVoiceHold({ enabled, onSend, onEdit }: VoiceHoldOptions): VoiceHoldHandlers {
   const { t } = useT("im");
   const [holding, setHolding] = useState(false);
   const [zone, setZone] = useState<VoiceZone>("send");
@@ -31,8 +49,19 @@ export function VoiceHoldButton({ onSend, onEdit }: VoiceHoldButtonProps) {
   const genRef = useRef(0);
   const onSendRef = useRef(onSend);
   const onEditRef = useRef(onEdit);
+  const enabledRef = useRef(enabled);
+  const pressRef = useRef<{ timer: ReturnType<typeof setTimeout>; x: number; y: number } | null>(null);
+  const shieldRef = useRef<(() => void) | null>(null);
+  const releaseRef = useRef<() => void>(() => {});
   onSendRef.current = onSend;
   onEditRef.current = onEdit;
+  enabledRef.current = enabled;
+
+  const clearPress = useCallback(() => {
+    const press = pressRef.current;
+    pressRef.current = null;
+    if (press) clearTimeout(press.timer);
+  }, []);
 
   const stopMic = useCallback(async () => {
     const stop = stopMicRef.current;
@@ -149,6 +178,10 @@ export function VoiceHoldButton({ onSend, onEdit }: VoiceHoldButtonProps) {
 
   useEffect(() => () => {
     genRef.current += 1;
+    shieldRef.current?.();
+    const press = pressRef.current;
+    pressRef.current = null;
+    if (press) clearTimeout(press.timer);
     sessionRef.current?.cancel();
     void stopMicRef.current?.();
   }, []);
@@ -178,30 +211,174 @@ export function VoiceHoldButton({ onSend, onEdit }: VoiceHoldButtonProps) {
     }
     if (zoneRef.current === "cancel") abort();
   }, [abort, finish]);
+  releaseRef.current = release;
 
-  useEffect(() => {
-    if (!holding) return;
-    const move = (e: PointerEvent) => {
-      const next = voiceZone(e.clientX, e.clientY, window.innerWidth, window.innerHeight);
-      zoneRef.current = next;
-      setZone(next);
+  const armShield = useCallback((target: HTMLElement) => {
+    shieldRef.current?.();
+    let dropTimer: ReturnType<typeof setTimeout> | null = null;
+    let ended = false;
+    let removed = false;
+    let remove = () => {};
+    const disarm = () => {
+      if (removed) return;
+      removed = true;
+      if (dropTimer) clearTimeout(dropTimer);
+      dropTimer = null;
+      remove();
+      if (shieldRef.current === disarm) shieldRef.current = null;
     };
-    const up = (e: PointerEvent) => {
-      if (e.type === "pointercancel") {
-        zoneRef.current = "cancel";
-        setZone("cancel");
+    const pointOf = (event: Event) => {
+      if (typeof TouchEvent !== "undefined" && event instanceof TouchEvent) {
+        const touch = event.changedTouches[0] ?? event.touches[0];
+        return touch ? { x: touch.clientX, y: touch.clientY } : null;
       }
-      release();
+      if ("clientX" in event && "clientY" in event) {
+        const pointer = event as globalThis.PointerEvent;
+        return { x: pointer.clientX, y: pointer.clientY };
+      }
+      return null;
     };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
-    window.addEventListener("pointercancel", up);
-    return () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
-      window.removeEventListener("pointercancel", up);
+    const finishContact = (cancel: boolean) => {
+      if (ended) return;
+      ended = true;
+      if (pressRef.current) {
+        clearPress();
+        if (!cancel) target.focus();
+      } else if (activeRef.current) {
+        if (cancel) {
+          zoneRef.current = "cancel";
+          setZone("cancel");
+        }
+        releaseRef.current();
+      }
+      dropTimer = setTimeout(disarm, VOICE_TOUCH_SHIELD_MS);
     };
-  }, [holding, release]);
+    const onEvent = (event: Event) => {
+      if (event.cancelable) event.preventDefault();
+      event.stopPropagation();
+      const type = event.type;
+      if (type === "pointermove" || type === "touchmove") {
+        const point = pointOf(event);
+        if (!point || !activeRef.current) return;
+        const next = voiceZone(point.x, point.y, window.innerWidth, window.innerHeight);
+        zoneRef.current = next;
+        setZone(next);
+        return;
+      }
+      if (type === "pointerup" || type === "touchend") {
+        const point = pointOf(event);
+        if (point && activeRef.current) {
+          const next = voiceZone(point.x, point.y, window.innerWidth, window.innerHeight);
+          zoneRef.current = next;
+          setZone(next);
+        }
+        finishContact(false);
+        return;
+      }
+      if (type === "pointercancel" || type === "touchcancel") {
+        finishContact(true);
+        return;
+      }
+      if ((type === "click" || type === "auxclick") && ended) disarm();
+    };
+    const types = [
+      "pointerdown",
+      "pointermove",
+      "pointerup",
+      "pointercancel",
+      "touchstart",
+      "touchmove",
+      "touchend",
+      "touchcancel",
+      "mousedown",
+      "mousemove",
+      "mouseup",
+      "click",
+      "auxclick",
+      "contextmenu",
+    ];
+    for (const type of types) {
+      window.addEventListener(type, onEvent, { capture: true, passive: false });
+    }
+    remove = () => {
+      for (const type of types) window.removeEventListener(type, onEvent, { capture: true });
+    };
+    shieldRef.current = disarm;
+  }, [clearPress]);
+
+  const onPointerDown = useCallback((event: PointerEvent<HTMLElement>) => {
+    if (!enabledRef.current || event.button > 0 || pressRef.current || activeRef.current) return;
+    event.preventDefault();
+    const target = event.currentTarget;
+    const pointerId = event.pointerId;
+    armShield(target);
+    pressRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+      timer: setTimeout(() => {
+        pressRef.current = null;
+        if (!enabledRef.current) return;
+        if (document.activeElement === target) target.blur();
+        try {
+          target.setPointerCapture(pointerId);
+        } catch {
+          // jsdom and a lost pointer do not support capture; window listeners cover release.
+        }
+        void begin();
+      }, VOICE_LONG_PRESS_MS),
+    };
+  }, [armShield, begin]);
+
+  const onTouchStart = useCallback((event: TouchEvent<HTMLElement>) => {
+    if (!enabledRef.current || pressRef.current || activeRef.current) return;
+    const touch = event.changedTouches[0];
+    if (!touch) return;
+    event.preventDefault();
+    const target = event.currentTarget;
+    armShield(target);
+    pressRef.current = {
+      x: touch.clientX,
+      y: touch.clientY,
+      timer: setTimeout(() => {
+        pressRef.current = null;
+        if (!enabledRef.current) return;
+        if (document.activeElement === target) target.blur();
+        void begin();
+      }, VOICE_LONG_PRESS_MS),
+    };
+  }, [armShield, begin]);
+
+  const onPointerMove = useCallback((event: PointerEvent<HTMLElement>) => {
+    if (!activeRef.current) return;
+    const next = voiceZone(event.clientX, event.clientY, window.innerWidth, window.innerHeight);
+    zoneRef.current = next;
+    setZone(next);
+  }, []);
+
+  const onPointerUp = useCallback((_event: PointerEvent<HTMLElement>) => {
+    if (pressRef.current) {
+      clearPress();
+      return false;
+    }
+    if (!activeRef.current) return false;
+    release();
+    return true;
+  }, [clearPress, release]);
+
+  const onPointerCancel = useCallback(() => {
+    if (pressRef.current) {
+      clearPress();
+      return;
+    }
+    if (!activeRef.current) return;
+    zoneRef.current = "cancel";
+    setZone("cancel");
+    release();
+  }, [clearPress, release]);
+
+  const onContextMenu = useCallback((event: MouseEvent<HTMLElement>) => {
+    if (enabledRef.current || activeRef.current) event.preventDefault();
+  }, []);
 
   const hint = zone === "cancel"
     ? t(($) => $.composer.voice_release_cancel)
@@ -209,52 +386,29 @@ export function VoiceHoldButton({ onSend, onEdit }: VoiceHoldButtonProps) {
       ? t(($) => $.composer.voice_release_edit)
       : t(($) => $.composer.voice_release_send);
 
-  return (
+  const overlay = (
     <>
-      <Button
-        type="button"
-        size="icon-sm"
-        className="shrink-0 touch-none rounded-full"
-        aria-label={t(($) => $.composer.voice_hold)}
-        onContextMenu={(e) => e.preventDefault()}
-        onPointerDown={(e) => {
-          if (e.button > 0) return;
-          e.preventDefault();
-          try {
-            e.currentTarget.setPointerCapture(e.pointerId);
-          } catch {
-            // jsdom and a lost pointer do not support capture; window listeners cover release.
-          }
-          void begin();
-        }}
-        onPointerMove={(e) => {
-          if (!activeRef.current) return;
-          const next = voiceZone(e.clientX, e.clientY, window.innerWidth, window.innerHeight);
-          zoneRef.current = next;
-          setZone(next);
-        }}
-        onPointerUp={release}
-        onPointerCancel={() => {
-          zoneRef.current = "cancel";
-          setZone("cancel");
-          release();
-        }}
-      >
-        <Mic />
-      </Button>
       {holding && createPortal(
-        <div className="fixed inset-0 z-50 flex flex-col bg-background/80" role="dialog" aria-label={hint}>
+        <div
+          className="pointer-events-auto fixed inset-0 z-[200] flex touch-none flex-col bg-black/90"
+          role="dialog"
+          aria-label={hint}
+          onPointerDown={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+        >
           <div className="flex flex-1 items-center justify-center px-6">
             <p className="max-w-sm rounded-2xl bg-primary px-4 py-3 text-body text-primary-foreground">
               {preview || t(($) => $.composer.voice_listening)}
             </p>
           </div>
           <div className="grid grid-cols-3 items-end px-6 pb-10 text-center text-sm">
-            <span className={zone === "cancel" ? "font-medium text-destructive" : "text-muted-foreground"}>
+            <span className={zone === "cancel" ? "font-medium text-red-400" : "text-white/70"}>
               {t(($) => $.composer.voice_cancel)}
             </span>
-            <span className="text-muted-foreground">{hint}</span>
-            <span className={zone === "edit" ? "font-medium text-foreground" : "text-muted-foreground"}>
+            <span className="text-white/70">{hint}</span>
+            <span className={zone === "edit" ? "font-medium text-white" : "text-white/70"}>
               {t(($) => $.composer.voice_edit)}
             </span>
           </div>
@@ -269,4 +423,6 @@ export function VoiceHoldButton({ onSend, onEdit }: VoiceHoldButtonProps) {
       )}
     </>
   );
+
+  return { onPointerDown, onTouchStart, onPointerMove, onPointerUp, onPointerCancel, onContextMenu, overlay };
 }

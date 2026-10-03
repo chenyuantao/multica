@@ -27,7 +27,7 @@ import type { DocExcerpt } from "./doc-excerpt";
 import { useRegisterDocExcerptInsert } from "./doc-excerpt-insert";
 import { useRevealDocExcerpt } from "./doc-excerpt-reveal";
 import { activeMentionQuery, resolveComposerBody, type ComposerMention } from "./im-utils";
-import { VoiceHoldButton } from "./voice-hold";
+import { useVoiceHold } from "./voice-hold";
 
 interface ChatComposerProps {
   /** The chat's issue id; uploads are bound to it. */
@@ -241,6 +241,11 @@ export function ChatComposer({ chatId, chatTitle, candidates, onSend, quote, onC
     setCaret(spoken.length);
     el.focus();
   }, [setText]);
+  const voice = useVoiceHold({
+    enabled: voiceReady,
+    onSend: (spoken) => onSend(spoken, []),
+    onEdit: fillSpoken,
+  });
 
   const send = () => {
     if (!canSend) return;
@@ -420,7 +425,9 @@ export function ChatComposer({ chatId, chatTitle, candidates, onSend, quote, onC
           <div className="relative min-h-8 flex-1">
             {text.length === 0 && (
               <span aria-hidden className="pointer-events-none absolute inset-x-0 top-1.5 truncate text-body text-muted-foreground">
-                {t(($) => $.composer.placeholder, { title: chatTitle })}
+                {voiceReady
+                  ? t(($) => $.composer.voice_hold)
+                  : t(($) => $.composer.placeholder, { title: chatTitle })}
               </span>
             )}
             <div
@@ -435,13 +442,19 @@ export function ChatComposer({ chatId, chatTitle, candidates, onSend, quote, onC
               onMouseDown={(e) => {
                 if (ref.current && excerptFromComposerEvent(ref.current, e.target)) e.preventDefault();
               }}
+              onPointerDown={voice.onPointerDown}
+              onTouchStart={voice.onTouchStart}
+              onPointerMove={voice.onPointerMove}
               onPointerUp={(e) => {
+                if (voice.onPointerUp(e)) return;
                 const excerpt = ref.current ? excerptFromComposerEvent(ref.current, e.target) : null;
                 if (!excerpt || e.button > 0) return;
                 e.preventDefault();
                 chipTap.current = true;
                 revealExcerpt(excerpt);
               }}
+              onPointerCancel={voice.onPointerCancel}
+              onContextMenu={voice.onContextMenu}
               onClick={(e) => {
                 const excerpt = ref.current ? excerptFromComposerEvent(ref.current, e.target) : null;
                 if (excerpt) {
@@ -455,28 +468,26 @@ export function ChatComposer({ chatId, chatTitle, candidates, onSend, quote, onC
               onPaste={onPaste}
               onCopy={(e) => onClipboard(e, false)}
               onCut={(e) => onClipboard(e, true)}
-              className="max-h-[180px] min-h-8 w-full overflow-y-auto py-1.5 text-body break-words whitespace-pre-wrap outline-none"
+              style={voiceReady ? { WebkitTouchCallout: "none" } : undefined}
+              className={cn(
+                "max-h-[180px] min-h-8 w-full overflow-y-auto py-1.5 text-body break-words whitespace-pre-wrap outline-none",
+                voiceReady && "touch-none select-none",
+              )}
             />
           </div>
-          {voiceReady ? (
-            <VoiceHoldButton
-              onSend={(spoken) => onSend(spoken, [])}
-              onEdit={fillSpoken}
-            />
-          ) : (
-            <Button
-              size="icon-sm"
-              className="shrink-0 rounded-full"
-              onClick={send}
-              disabled={!canSend}
-              aria-label={uploading ? tEditor(($) => $.upload.in_progress) : t(($) => $.composer.send)}
-            >
-              <ArrowUp />
-            </Button>
-          )}
+          <Button
+            size="icon-sm"
+            className="shrink-0 rounded-full"
+            onClick={send}
+            disabled={!canSend}
+            aria-label={uploading ? tEditor(($) => $.upload.in_progress) : t(($) => $.composer.send)}
+          >
+            <ArrowUp />
+          </Button>
         </div>
         {isDragOver && <FileDropOverlay />}
       </div>
+      {voice.overlay}
     </div>
   );
 }
