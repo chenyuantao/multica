@@ -60,6 +60,9 @@ export interface Comment {
   // The message this one quotes. The target may be deleted since. Older
   // servers omit it.
   ref_message_id?: string | null;
+  // The external channel a member's message arrived through. Server-set;
+  // absent for messages typed in Multica and from older servers.
+  via_channel?: "wechat_claw" | null;
   // Per-target result of every explicit @agent / @squad mention in this comment
   // (MUL-4525 §2). Present only on create/edit responses; older servers omit it.
   trigger_outcomes?: CommentTriggerOutcome[];

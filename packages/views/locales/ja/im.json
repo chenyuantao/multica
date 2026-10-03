@@ -110,7 +110,8 @@
     "cancelled_details": "詳細",
     "cancelled_details_title": "キャンセル判断の詳細",
     "cancelled_request": "リクエスト",
-    "cancelled_response": "レスポンス"
+    "cancelled_response": "レスポンス",
+    "via_wechat_claw": "WeChat Claw から送信"
   },
   "composer": {
     "placeholder": "{{title}} にメッセージ — @ でエージェントを 1 つ指定",

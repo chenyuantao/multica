@@ -372,6 +372,11 @@ type Handler struct {
 	// enqueues EventChatDone work.
 	TelegramOutbound *telegram.Outbound
 
+	// WechatClaw binds each user's personal WeChat bot to one workspace and
+	// routes what they send it through Ask AI. Nil unless
+	// MULTICA_WECHAT_CLAW_SECRET_KEY is set.
+	WechatClaw *WechatClawService
+
 	// channelFileDelivery names the channel types that can, IN THIS
 	// DEPLOYMENT, carry a file the agent produced the last hop into the
 	// conversation. It answers the claim response's

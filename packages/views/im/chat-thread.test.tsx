@@ -201,6 +201,21 @@ describe("ChatThread pending messages", () => {
   });
 });
 
+describe("ChatThread message channel", () => {
+  beforeEach(() => {
+    messages = [
+      { ...message("m-wechat", "from my phone"), via_channel: "wechat_claw" },
+      message("m-web", "from the browser"),
+    ];
+    vi.mocked(useQuery).mockImplementation(() => ({ data: messages, isError: false }) as never);
+  });
+
+  it("marks only messages sent from WeChat Claw", () => {
+    renderThread();
+    expect(screen.getAllByRole("img", { name: "Sent from WeChat Claw" })).toHaveLength(1);
+  });
+});
+
 describe("ChatThread cancelled notice", () => {
   beforeEach(() => {
     messages = [

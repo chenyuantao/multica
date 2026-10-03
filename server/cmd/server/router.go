@@ -46,6 +46,7 @@ import (
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
 	"github.com/multica-ai/multica/server/pkg/featureflag"
 	"github.com/multica-ai/multica/server/pkg/llm"
+	"github.com/multica-ai/multica/server/pkg/protocol"
 	publicapiv1 "github.com/multica-ai/multica/server/pkg/publicapi/v1"
 	"github.com/multica-ai/multica/server/pkg/typesafe"
 )
@@ -1242,6 +1243,24 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 		slog.Info("telegram integration disabled (MULTICA_TELEGRAM_SECRET_KEY not set)")
 	}
 
+	// WeChat Claw: each user binds a personal WeChat iLink bot to one
+	// workspace; what they send it is asked through Ask AI and the agent's
+	// reply is relayed back. Gated by MULTICA_WECHAT_CLAW_SECRET_KEY (the
+	// at-rest bot token key). The long-poll loops start with the other
+	// background workers in main.
+	if wechatClawKey, err := secretbox.LoadKey("MULTICA_WECHAT_CLAW_SECRET_KEY"); err == nil {
+		box, err := secretbox.New(wechatClawKey)
+		if err != nil {
+			slog.Error("wechat claw: secretbox.New failed; wechat claw disabled", "error", err)
+		} else {
+			h.WechatClaw = handler.NewWechatClawService(box)
+			bus.Subscribe(protocol.EventCommentCreated, h.RelayWechatClawReply)
+			slog.Info("wechat claw enabled")
+		}
+	} else {
+		slog.Info("wechat claw disabled (MULTICA_WECHAT_CLAW_SECRET_KEY not set)")
+	}
+
 	// Composio integration (MUL-3720). Gated by COMPOSIO_API_KEY plus the
 	// composio_mcp_apps feature flag. The env var is the project-scoped key the
 	// standalone SDK authenticates Composio with (sent as x-api-key; the project
@@ -1680,6 +1699,13 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 		r.Post("/api/upload-file", h.UploadFile)
 		r.Post("/api/feedback", h.CreateFeedback)
 		r.With(handler.RequireHumanActor).Post("/api/client-usage", h.UpsertClientUsage)
+		r.Route("/api/me/wechat-claw", func(r chi.Router) {
+			r.Use(handler.RequireHumanActor)
+			r.Get("/", h.GetWechatClaw)
+			r.Delete("/", h.DeleteWechatClaw)
+			r.Post("/qrcode", h.CreateWechatClawQRCode)
+			r.Get("/qrcode/status", h.GetWechatClawQRCodeStatus)
+		})
 
 		// Obsidian vault browser. Paths and queries are JSON bodies so notes
 		// with non-ASCII names are not put in the URL. OBSIDIAN_VAULT_PATH

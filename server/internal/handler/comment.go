@@ -55,9 +55,13 @@ type CommentResponse struct {
 	QuickActionID *string `json:"quick_action_id,omitempty"`
 	// RefMessageID is the message this one quotes. The target may have been
 	// deleted since; readers treat a missing target as gone.
-	RefMessageID *string              `json:"ref_message_id,omitempty"`
-	Reactions    []ReactionResponse   `json:"reactions"`
-	Attachments  []AttachmentResponse `json:"attachments"`
+	RefMessageID *string `json:"ref_message_id,omitempty"`
+	// ViaChannel names the external channel a member's message arrived
+	// through ("wechat_claw"). Server-set only; omitted for messages typed in
+	// Multica.
+	ViaChannel  *string              `json:"via_channel,omitempty"`
+	Reactions   []ReactionResponse   `json:"reactions"`
+	Attachments []AttachmentResponse `json:"attachments"`
 	// Orientation stats — populated only on the roots_only path and omitted in
 	// every other mode, so the default response shape stays byte-identical for
 	// existing callers. ReplyCount is the number of descendants in the thread;
@@ -134,6 +138,7 @@ func commentToResponse(c db.Comment, reactions []ReactionResponse, attachments [
 		DeletedAt:      timestampToPtr(c.DeletedAt),
 		QuickActionID:  uuidToPtr(c.QuickActionID),
 		RefMessageID:   uuidToPtr(c.RefMessageID),
+		ViaChannel:     textToPtr(c.ViaChannel),
 		Reactions:      reactions,
 		Attachments:    attachments,
 	}
@@ -2067,6 +2072,9 @@ func (h *Handler) CreateComment(w http.ResponseWriter, r *http.Request) {
 		// replay skips the agents it names.
 		SuppressedAgentIds: suppressAgentIDs,
 		RefMessageID:       refMessageID,
+	}
+	if authorType == "member" {
+		createParams.ViaChannel = viaChannelFromContext(r.Context())
 	}
 	var created db.CreateCommentRow
 	var err error

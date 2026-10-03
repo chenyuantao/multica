@@ -587,6 +587,7 @@ type Comment struct {
 	DeletedAt          pgtype.Timestamptz `json:"deleted_at"`
 	SuppressedAgentIds []pgtype.UUID      `json:"suppressed_agent_ids"`
 	RefMessageID       pgtype.UUID        `json:"ref_message_id"`
+	ViaChannel         pgtype.Text        `json:"via_channel"`
 }
 
 type CommentAskContext struct {
@@ -1749,6 +1750,28 @@ type WebhookDelivery struct {
 	DispatchAttempts       int32              `json:"dispatch_attempts"`
 	ReasonCode             pgtype.Text        `json:"reason_code"`
 	ReplayIdempotencyKey   pgtype.Text        `json:"replay_idempotency_key"`
+}
+
+type WechatClawBinding struct {
+	UserID            pgtype.UUID        `json:"user_id"`
+	WorkspaceID       pgtype.UUID        `json:"workspace_id"`
+	BotTokenEncrypted string             `json:"bot_token_encrypted"`
+	IlinkBotID        string             `json:"ilink_bot_id"`
+	IlinkUserID       string             `json:"ilink_user_id"`
+	BaseUrl           string             `json:"base_url"`
+	SyncCursor        string             `json:"sync_cursor"`
+	ContextToken      string             `json:"context_token"`
+	LeaseToken        string             `json:"lease_token"`
+	LeaseExpiresAt    pgtype.Timestamptz `json:"lease_expires_at"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
+type WechatClawLogin struct {
+	Qrcode      string             `json:"qrcode"`
+	UserID      pgtype.UUID        `json:"user_id"`
+	WorkspaceID pgtype.UUID        `json:"workspace_id"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
 type Workspace struct {

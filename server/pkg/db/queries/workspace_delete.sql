@@ -414,6 +414,12 @@ deleted_comment_ask_contexts AS (
 deleted_comment_focus_notes AS (
     DELETE FROM comment_focus_note WHERE workspace_id = $1
 ),
+deleted_wechat_claw_bindings AS (
+    DELETE FROM wechat_claw_binding WHERE workspace_id = $1
+),
+deleted_wechat_claw_logins AS (
+    DELETE FROM wechat_claw_login WHERE workspace_id = $1
+),
 deleted_agent_invocation_targets AS (
     DELETE FROM agent_invocation_target
     WHERE agent_id IN (SELECT id FROM ws_agents)

@@ -413,7 +413,8 @@
       "billing": "Billing",
       "code": "Code",
       "channels": "Messaging",
-      "apps": "Connected apps"
+      "apps": "Connected apps",
+      "wechat_claw": "WeChat Claw"
     },
     "groups": {
       "personal": "Personal",
@@ -1452,5 +1453,36 @@
     "mcp": "Added by admins and shared across the workspace, then assigned per agent.",
     "apps": "Authorized with your own account through Composio and enabled on agents you own.",
     "plugins": "Installed packages that can add tools, scheduled hooks, and storage, each with its own permissions."
+  },
+  "wechat_claw": {
+    "description": "Text messages you send to your WeChat Claw go to an agent in the chosen workspace through Ask AI, and the agent's reply is sent back to WeChat.",
+    "load_failed": "Couldn't load WeChat Claw status",
+    "unavailable": "WeChat Claw isn't enabled on this deployment. Ask your administrator to set MULTICA_WECHAT_CLAW_SECRET_KEY.",
+    "bound_label": "Bound workspace",
+    "workspace_label": "Workspace",
+    "rebind_label": "Switch workspace",
+    "rebind_hint": "Rebinding replaces the current binding.",
+    "bind": "Get QR code",
+    "rebind": "Rebind",
+    "unbind": "Unbind",
+    "unbind_failed": "Couldn't unbind WeChat Claw",
+    "unbind_dialog": {
+      "title": "Unbind WeChat Claw?",
+      "description": "Messages you send to your WeChat Claw will no longer reach Multica.",
+      "cancel": "Cancel",
+      "confirm": "Unbind"
+    },
+    "dialog": {
+      "title": "Bind WeChat Claw",
+      "description": "Scan with WeChat and confirm to bind it to {{workspace}}.",
+      "qr_label": "WeChat Claw binding QR code",
+      "loading": "Getting QR code...",
+      "scanned": "Scanned. Confirm in WeChat.",
+      "expired": "This QR code has expired.",
+      "failed": "Couldn't get a QR code.",
+      "regenerate": "Get a new code",
+      "close": "Close",
+      "success": "WeChat Claw bound"
+    }
   }
 }

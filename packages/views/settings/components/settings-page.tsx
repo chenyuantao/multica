@@ -40,9 +40,11 @@ import { cn } from "@multica/ui/lib/utils";
 import { resolveSettingsLocation, settingsHref } from "./settings-navigation";
 import { AppLink, useNavigation } from "../../navigation";
 import { WorkspaceAvatar } from "../../workspace/workspace-avatar";
+import { WechatMark } from "../../common/wechat-mark";
 import { AccountTab } from "./account-tab";
 import { PreferencesTab } from "./preferences-tab";
 import { TokensTab } from "./tokens-tab";
+import { WechatClawTab } from "./wechat-claw-tab";
 import { WorkspaceTab } from "./workspace-tab";
 import { MembersTab } from "./members-tab";
 import { CodeTab } from "./code-tab";
@@ -170,6 +172,12 @@ export function SettingsPage({ extraDeviceTabs = [] }: SettingsPageProps = {}) {
             ...(appsAvailable
               ? [entry("apps", t(($) => $.page.tabs.apps), Plug, <ConnectedAppsTab />)]
               : []),
+            entry(
+              "wechat-claw",
+              t(($) => $.page.tabs.wechat_claw),
+              WechatMark,
+              <WechatClawTab />,
+            ),
             entry("tokens", t(($) => $.page.tabs.tokens), KeyRound, <TokensTab />),
           ],
         },

@@ -412,7 +412,8 @@
       "billing": "결제 및 요금제",
       "code": "코드",
       "channels": "메신저",
-      "apps": "연결된 앱"
+      "apps": "연결된 앱",
+      "wechat_claw": "WeChat Claw"
     },
     "groups": {
       "personal": "개인",
@@ -1442,5 +1443,36 @@
     "mcp": "관리자가 추가해 워크스페이스에서 공유하고, 에이전트별로 할당합니다.",
     "apps": "내 계정으로 Composio를 통해 승인하고, 내가 소유한 에이전트에서 사용합니다.",
     "plugins": "설치하면 도구, 예약 훅, 저장소를 추가할 수 있으며 플러그인마다 권한을 부여합니다."
+  },
+  "wechat_claw": {
+    "description": "WeChat Claw로 보낸 텍스트 메시지는 AI에게 묻기를 통해 선택한 워크스페이스의 에이전트에게 전달되고, 답장은 WeChat으로 다시 전송됩니다.",
+    "load_failed": "WeChat Claw 상태를 불러오지 못했습니다",
+    "unavailable": "이 배포에서는 WeChat Claw가 활성화되어 있지 않습니다. 관리자에게 MULTICA_WECHAT_CLAW_SECRET_KEY 설정을 요청하세요.",
+    "bound_label": "연결된 워크스페이스",
+    "workspace_label": "워크스페이스",
+    "rebind_label": "워크스페이스 변경",
+    "rebind_hint": "다시 연결하면 현재 연결이 대체됩니다.",
+    "bind": "QR 코드 생성",
+    "rebind": "다시 연결",
+    "unbind": "연결 해제",
+    "unbind_failed": "WeChat Claw 연결을 해제하지 못했습니다",
+    "unbind_dialog": {
+      "title": "WeChat Claw 연결을 해제할까요?",
+      "description": "WeChat Claw로 보낸 메시지가 더 이상 Multica에 전달되지 않습니다.",
+      "cancel": "취소",
+      "confirm": "연결 해제"
+    },
+    "dialog": {
+      "title": "WeChat Claw 연결",
+      "description": "WeChat으로 스캔하고 확인하면 {{workspace}}에 연결됩니다.",
+      "qr_label": "WeChat Claw 연결 QR 코드",
+      "loading": "QR 코드를 가져오는 중...",
+      "scanned": "스캔했습니다. WeChat에서 확인하세요.",
+      "expired": "QR 코드가 만료되었습니다.",
+      "failed": "QR 코드를 가져오지 못했습니다.",
+      "regenerate": "새 코드 받기",
+      "close": "닫기",
+      "success": "WeChat Claw가 연결되었습니다"
+    }
   }
 }

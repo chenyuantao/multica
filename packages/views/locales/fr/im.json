@@ -114,7 +114,8 @@
     "cancelled_details": "Détails",
     "cancelled_details_title": "Détails de l'annulation",
     "cancelled_request": "Requête",
-    "cancelled_response": "Réponse"
+    "cancelled_response": "Réponse",
+    "via_wechat_claw": "Envoyé depuis WeChat Claw"
   },
   "composer": {
     "placeholder": "Message à {{title}} — @ pour solliciter un agent",

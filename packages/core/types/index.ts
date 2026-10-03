@@ -258,6 +258,13 @@ export type {
   RedeemTelegramBindingTokenResponse,
 } from "./telegram";
 export type {
+  WechatClawBinding,
+  WechatClawStatus,
+  WechatClawQRCode,
+  WechatClawLoginStatus,
+  WechatClawQRCodeStatus,
+} from "./wechat-claw";
+export type {
   Autopilot,
   AutopilotStatus,
   AutopilotExecutionMode,

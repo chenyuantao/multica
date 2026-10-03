@@ -207,6 +207,9 @@ import type {
   ListTelegramInstallationsResponse,
   RegisterTelegramRequest,
   RedeemTelegramBindingTokenResponse,
+  WechatClawStatus,
+  WechatClawQRCode,
+  WechatClawQRCodeStatus,
   Squad,
   SquadMember,
   SquadMemberStatusListResponse,
@@ -392,6 +395,11 @@ import {
   EMPTY_TELEGRAM_INSTALLATION,
   EMPTY_LIST_TELEGRAM_INSTALLATIONS_RESPONSE,
   EMPTY_REDEEM_TELEGRAM_BINDING_TOKEN_RESPONSE,
+  WechatClawStatusSchema,
+  EMPTY_WECHAT_CLAW_STATUS,
+  WechatClawQRCodeSchema,
+  WechatClawQRCodeStatusSchema,
+  EMPTY_WECHAT_CLAW_QRCODE_STATUS,
   EMPTY_BILLING_BALANCE,
   EMPTY_BILLING_TRANSACTIONS_PAGE,
   EMPTY_BILLING_BATCHES_PAGE,
@@ -5520,5 +5528,38 @@ export class ApiClient {
       EMPTY_REDEEM_TELEGRAM_BINDING_TOKEN_RESPONSE,
       { endpoint: "POST /api/telegram/binding/redeem" },
     );
+  }
+
+  async getWechatClaw(): Promise<WechatClawStatus> {
+    const raw = await this.fetch<unknown>(`/api/me/wechat-claw`);
+    return parseWithFallback(raw, WechatClawStatusSchema, EMPTY_WECHAT_CLAW_STATUS, {
+      endpoint: "GET /api/me/wechat-claw",
+    });
+  }
+
+  /** Starts a WeChat QR login that, once confirmed, binds to `workspaceId`. */
+  async createWechatClawQRCode(workspaceId: string): Promise<WechatClawQRCode> {
+    const raw = await this.fetch<unknown>(`/api/me/wechat-claw/qrcode`, {
+      method: "POST",
+      body: JSON.stringify({ workspace_id: workspaceId }),
+    });
+    const parsed = WechatClawQRCodeSchema.safeParse(raw);
+    if (!parsed.success) throw new Error("Malformed WeChat QR code response");
+    return parsed.data;
+  }
+
+  /** Long-polls the QR login once; the server answers within about 25 seconds. */
+  async getWechatClawQRCodeStatus(qrcode: string, signal?: AbortSignal): Promise<WechatClawQRCodeStatus> {
+    const raw = await this.fetch<unknown>(
+      `/api/me/wechat-claw/qrcode/status?${new URLSearchParams({ qrcode }).toString()}`,
+      { signal },
+    );
+    return parseWithFallback(raw, WechatClawQRCodeStatusSchema, EMPTY_WECHAT_CLAW_QRCODE_STATUS, {
+      endpoint: "GET /api/me/wechat-claw/qrcode/status",
+    });
+  }
+
+  async deleteWechatClaw(): Promise<void> {
+    await this.fetch(`/api/me/wechat-claw`, { method: "DELETE" });
   }
 }

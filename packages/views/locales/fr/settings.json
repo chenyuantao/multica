@@ -413,7 +413,8 @@
       "billing": "Facturation",
       "code": "Code",
       "channels": "Messagerie",
-      "apps": "Applications connectées"
+      "apps": "Applications connectées",
+      "wechat_claw": "WeChat Claw"
     },
     "groups": {
       "personal": "Personnel",
@@ -1452,5 +1453,36 @@
     "mcp": "Ajoutés par les administrateurs, partagés dans l'espace de travail puis attribués agent par agent.",
     "apps": "Autorisées avec votre propre compte via Composio et activées sur les agents qui vous appartiennent.",
     "plugins": "Paquets installés pouvant ajouter des outils, des hooks planifiés et du stockage, chacun avec ses propres autorisations."
+  },
+  "wechat_claw": {
+    "description": "Les messages texte envoyés à votre WeChat Claw sont confiés à un agent de l'espace de travail choisi via Demander à l'IA, et sa réponse est renvoyée sur WeChat.",
+    "load_failed": "Impossible de charger l'état de WeChat Claw",
+    "unavailable": "WeChat Claw n'est pas activé sur ce déploiement. Demandez à votre administrateur de définir MULTICA_WECHAT_CLAW_SECRET_KEY.",
+    "bound_label": "Espace de travail lié",
+    "workspace_label": "Espace de travail",
+    "rebind_label": "Changer d'espace de travail",
+    "rebind_hint": "Une nouvelle liaison remplace la liaison actuelle.",
+    "bind": "Obtenir un QR code",
+    "rebind": "Lier à nouveau",
+    "unbind": "Délier",
+    "unbind_failed": "Impossible de délier WeChat Claw",
+    "unbind_dialog": {
+      "title": "Délier WeChat Claw ?",
+      "description": "Les messages envoyés à votre WeChat Claw n'arriveront plus dans Multica.",
+      "cancel": "Annuler",
+      "confirm": "Délier"
+    },
+    "dialog": {
+      "title": "Lier WeChat Claw",
+      "description": "Scannez avec WeChat et confirmez pour le lier à {{workspace}}.",
+      "qr_label": "QR code de liaison WeChat Claw",
+      "loading": "Récupération du QR code...",
+      "scanned": "Code scanné. Confirmez dans WeChat.",
+      "expired": "Ce QR code a expiré.",
+      "failed": "Impossible d'obtenir un QR code.",
+      "regenerate": "Obtenir un nouveau code",
+      "close": "Fermer",
+      "success": "WeChat Claw lié"
+    }
   }
 }

@@ -46,6 +46,8 @@ import type {
   TelegramInstallation,
   ListTelegramInstallationsResponse,
   RedeemTelegramBindingTokenResponse,
+  WechatClawStatus,
+  WechatClawQRCodeStatus,
   GroupedIssuesResponse,
   GitHubConnectResponse,
   IssuePullRequestsResponse,
@@ -1119,6 +1121,8 @@ export const CommentSchema = z.object({
   quick_action_id: z.string().nullable().optional(),
   deleted_at: z.string().nullable().optional().catch(undefined),
   ref_message_id: z.string().nullable().optional().catch(undefined),
+  // An unknown future channel reads as a plain message.
+  via_channel: z.enum(["wechat_claw"]).nullable().optional().catch(undefined),
 }).loose();
 
 export const CommentsListSchema = z.array(CommentSchema);
@@ -3531,6 +3535,33 @@ export const EMPTY_REDEEM_TELEGRAM_BINDING_TOKEN_RESPONSE: RedeemTelegramBinding
   installation_id: "",
   telegram_user_id: "",
 };
+
+export const WechatClawBindingSchema = z.object({
+  workspace_id: z.string(),
+  workspace_name: z.string().default(""),
+  workspace_slug: z.string().default(""),
+  bound_at: z.string().default(""),
+}).loose();
+
+export const WechatClawStatusSchema = z.object({
+  available: z.boolean().default(false),
+  binding: WechatClawBindingSchema.nullable().default(null).catch(null),
+}).loose();
+
+export const EMPTY_WECHAT_CLAW_STATUS: WechatClawStatus = { available: false, binding: null };
+
+export const WechatClawQRCodeSchema = z.object({
+  qrcode: z.string(),
+  url: z.string(),
+}).loose();
+
+export const WechatClawQRCodeStatusSchema = z.object({
+  // An unknown status keeps the dialog polling rather than ending it.
+  status: z.enum(["wait", "scanned", "confirmed", "expired"]).catch("wait"),
+  binding: WechatClawBindingSchema.nullable().optional().catch(undefined),
+}).loose();
+
+export const EMPTY_WECHAT_CLAW_QRCODE_STATUS: WechatClawQRCodeStatus = { status: "wait" };
 
 // Skills. Introduced for `POST /api/skills/:id/refresh` (update a skill from
 // its imported source). `config` stays a loose record: the server owns the

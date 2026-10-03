@@ -54,6 +54,7 @@ import { ConversationStarterChips } from "../chat/components/conversation-starte
 import { AgentTranscriptDialog } from "../common/task-transcript/agent-transcript-dialog";
 import { buildTimeline } from "../common/task-transcript/build-timeline";
 import { ActorAvatar } from "../common/actor-avatar";
+import { WechatMark } from "../common/wechat-mark";
 import { useAppForeground } from "../common/use-app-foreground";
 import { RichContent } from "../rich-content";
 import { useT } from "../i18n";
@@ -1063,11 +1064,26 @@ function MessageRow({
           wrap={wrap}
           onOpenProgress={onOpenProgress}
         />
+      ) : message.via_channel === "wechat_claw" ? (
+        <div className={cn("flex max-w-full min-w-0 items-center gap-1.5", !mine && "flex-row-reverse")}>
+          <ViaWechatClawMark />
+          {wrap(bubble)}
+        </div>
       ) : (
         wrap(bubble)
       )}
       {quote !== undefined && <QuotedLine quote={quote} onJump={onJumpToQuote} />}
     </MessageLayout>
+  );
+}
+
+function ViaWechatClawMark() {
+  const { t } = useT("im");
+  const label = t(($) => $.thread.via_wechat_claw);
+  return (
+    <span role="img" aria-label={label} title={label} className="shrink-0 text-muted-foreground">
+      <WechatMark className="size-3.5" />
+    </span>
   );
 }
 

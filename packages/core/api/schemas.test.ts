@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   AppConfigSchema,
+  WechatClawStatusSchema,
+  WechatClawQRCodeStatusSchema,
+  EMPTY_WECHAT_CLAW_STATUS,
+  EMPTY_WECHAT_CLAW_QRCODE_STATUS,
   WecomInstallationSchema,
   ListWecomInstallationsResponseSchema,
   RedeemWecomBindingTokenResponseSchema,
@@ -658,6 +662,60 @@ describe("CommentsListSchema.ref_message_id", () => {
     const parsed = CommentsListSchema.parse([{ ...comment, ref_message_id: 7 }]);
     expect(parsed).toHaveLength(1);
     expect(parsed[0]?.ref_message_id).toBeUndefined();
+  });
+});
+
+describe("CommentsListSchema.via_channel", () => {
+  const comment = {
+    id: "comment-3",
+    issue_id: "issue-1",
+    author_type: "member",
+    author_id: "user-1",
+    content: "hi",
+    type: "comment",
+    parent_id: null,
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z",
+  };
+
+  it("keeps a WeChat Claw origin", () => {
+    expect(CommentsListSchema.parse([{ ...comment, via_channel: "wechat_claw" }])[0]?.via_channel).toBe("wechat_claw");
+  });
+
+  it("reads an unknown channel as a plain message", () => {
+    const parsed = CommentsListSchema.parse([{ ...comment, via_channel: "fax" }]);
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0]?.via_channel).toBeUndefined();
+  });
+});
+
+describe("WeChat Claw schemas", () => {
+  it("defaults a missing status to unavailable and unbound", () => {
+    expect(WechatClawStatusSchema.parse({})).toEqual({ available: false, binding: null });
+  });
+
+  it("drops a malformed binding instead of failing the status", () => {
+    expect(WechatClawStatusSchema.parse({ available: true, binding: { workspace_id: 3 } })).toEqual({
+      available: true,
+      binding: null,
+    });
+  });
+
+  it("keeps polling on an unknown login status", () => {
+    expect(WechatClawQRCodeStatusSchema.parse({ status: "future" }).status).toBe("wait");
+  });
+
+  it("falls back safely for malformed responses", () => {
+    expect(
+      parseWithFallback("not json", WechatClawStatusSchema, EMPTY_WECHAT_CLAW_STATUS, {
+        endpoint: "GET /api/me/wechat-claw",
+      }),
+    ).toEqual(EMPTY_WECHAT_CLAW_STATUS);
+    expect(
+      parseWithFallback(null, WechatClawQRCodeStatusSchema, EMPTY_WECHAT_CLAW_QRCODE_STATUS, {
+        endpoint: "GET /api/me/wechat-claw/qrcode/status",
+      }),
+    ).toEqual(EMPTY_WECHAT_CLAW_QRCODE_STATUS);
   });
 });
 

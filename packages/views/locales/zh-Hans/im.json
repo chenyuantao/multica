@@ -110,7 +110,8 @@
     "cancelled_details": "详情",
     "cancelled_details_title": "取消判断详情",
     "cancelled_request": "入参",
-    "cancelled_response": "回包"
+    "cancelled_response": "回包",
+    "via_wechat_claw": "来自微信 Claw"
   },
   "composer": {
     "placeholder": "发消息到 {{title}} — 输入 @ 指定一个智能体",

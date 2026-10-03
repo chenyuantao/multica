@@ -412,7 +412,8 @@
       "billing": "账单与套餐",
       "code": "代码",
       "channels": "消息渠道",
-      "apps": "已连接应用"
+      "apps": "已连接应用",
+      "wechat_claw": "微信 Claw"
     },
     "groups": {
       "personal": "个人",
@@ -1442,5 +1443,36 @@
     "mcp": "由管理员添加、在工作区内共享，再按智能体分配。",
     "apps": "用你自己的账号通过 Composio 授权，在你拥有的智能体上启用。",
     "plugins": "安装后可提供工具、定时 hook 和存储，每个插件单独授权。"
+  },
+  "wechat_claw": {
+    "description": "发给微信 Claw 的文字消息会通过问 AI 交给所选工作区的智能体处理，回复会同步发回微信。",
+    "load_failed": "无法加载微信 Claw 状态",
+    "unavailable": "此部署未启用微信 Claw，请联系管理员配置 MULTICA_WECHAT_CLAW_SECRET_KEY。",
+    "bound_label": "已绑定工作区",
+    "workspace_label": "工作区",
+    "rebind_label": "更换工作区",
+    "rebind_hint": "重新绑定会替换当前绑定。",
+    "bind": "生成二维码",
+    "rebind": "重新绑定",
+    "unbind": "解绑",
+    "unbind_failed": "解绑微信 Claw 失败",
+    "unbind_dialog": {
+      "title": "解绑微信 Claw？",
+      "description": "解绑后，发给微信 Claw 的消息将不再进入 Multica。",
+      "cancel": "取消",
+      "confirm": "解绑"
+    },
+    "dialog": {
+      "title": "绑定微信 Claw",
+      "description": "用微信扫码并确认，绑定到 {{workspace}}。",
+      "qr_label": "微信 Claw 绑定二维码",
+      "loading": "正在获取二维码...",
+      "scanned": "已扫码，请在微信中确认。",
+      "expired": "二维码已过期。",
+      "failed": "无法获取二维码。",
+      "regenerate": "重新生成",
+      "close": "关闭",
+      "success": "微信 Claw 已绑定"
+    }
   }
 }
