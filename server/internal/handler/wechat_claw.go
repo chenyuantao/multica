@@ -499,6 +499,7 @@ type wechatClawReplyEvent struct {
 	ID           string  `json:"id"`
 	IssueID      string  `json:"issue_id"`
 	AuthorType   string  `json:"author_type"`
+	AuthorID     string  `json:"author_id"`
 	Content      string  `json:"content"`
 	Type         string  `json:"type"`
 	RefMessageID *string `json:"ref_message_id"`
@@ -559,6 +560,11 @@ func (h *Handler) relayWechatClawReply(ctx context.Context, workspaceID string, 
 	text := wechatclaw.MarkdownToPlainText(reply.Content)
 	if text == "" {
 		text = wechatClawEmptyReplyFallback
+	}
+	if agentID, err := util.ParseUUID(reply.AuthorID); err == nil {
+		if agent, err := h.Queries.GetAgentInWorkspace(ctx, db.GetAgentInWorkspaceParams{ID: agentID, WorkspaceID: wsID}); err == nil {
+			text = agent.Name + ":\n" + text
+		}
 	}
 	if err := client.SendText(ctx, binding.IlinkUserID, binding.ContextToken, text); err != nil {
 		slog.Warn("wechat claw relay failed", "user_id", uuidToString(binding.UserID), "comment_id", reply.ID, "error", err)
