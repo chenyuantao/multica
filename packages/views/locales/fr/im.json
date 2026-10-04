@@ -218,6 +218,8 @@
     "keep_mine": "Garder ma version",
     "placeholder": "Commencez à écrire…",
     "back": "Retour à la base de connaissances",
+    "voice_sending": "Envoi…",
+    "voice_failed": "Impossible d'envoyer. Réessayez.",
     "card": {
       "open_in_knowledge": "Ouvrir dans la base de connaissances"
     },

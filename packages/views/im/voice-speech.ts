@@ -171,6 +171,35 @@ type ScriptProcessor = {
   disconnect: () => void;
 };
 
+export type MicrophonePermission = "granted" | "denied" | "prompt" | "unknown";
+
+/** `granted` can start voice mode. `prompt` and `unknown` still need a browser request. */
+export async function readMicrophonePermission(): Promise<MicrophonePermission> {
+  const query = navigator.permissions?.query;
+  if (!query) return "unknown";
+  try {
+    const status = await query.call(navigator.permissions, { name: "microphone" as PermissionName });
+    if (status.state === "granted" || status.state === "denied" || status.state === "prompt") return status.state;
+    return "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
+export function microphonePermissionDenied(err: unknown): boolean {
+  const name = err instanceof DOMException ? err.name : "";
+  return name === "NotAllowedError" || name === "PermissionDeniedError";
+}
+
+/**
+ * Asks the browser for microphone access and releases the stream immediately.
+ * The grant itself is what the next press needs; this call does not record.
+ */
+export async function requestMicrophonePermission(): Promise<void> {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  for (const track of stream.getTracks()) track.stop();
+}
+
 /** Opens the microphone and emits 16 kHz PCM16 chunks until the caller stops it. */
 export async function capturePCM16(onChunk: (pcm: Uint8Array) => void): Promise<() => Promise<void>> {
   const stream = await navigator.mediaDevices.getUserMedia({

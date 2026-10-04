@@ -203,12 +203,15 @@ export function useSendGroupChatMessage(wsId: string, chatId: string) {
       attachmentIds,
       refMessageId,
       focusNote,
+      page,
     }: {
       content: string;
       attachmentIds?: string[];
       refMessageId?: string;
       focusNote?: FocusNote;
-    }) => api.createComment(chatId, content, undefined, undefined, attachmentIds, undefined, undefined, refMessageId, undefined, focusNote),
+      /** Page context stored with the message, such as the open note. */
+      page?: AskAIPage | null;
+    }) => api.createComment(chatId, content, undefined, undefined, attachmentIds, undefined, undefined, refMessageId, page, focusNote),
     onSuccess: (comment) => {
       qc.setQueryData<Comment[]>(groupChatKeys.messages(wsId, chatId), (old) =>
         old && !old.some((c) => c.id === comment.id) ? [...old, comment] : old,

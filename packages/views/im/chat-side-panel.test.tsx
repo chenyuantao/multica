@@ -18,6 +18,12 @@ vi.mock("./knowledge-document", () => ({
   KnowledgeDocument: ({ path }: { path: string }) => <div>{`doc ${path}`}</div>,
 }));
 
+vi.mock("./document-voice-ask", () => ({
+  DocumentVoiceAsk: ({ path, chatId }: { path: string; chatId: string }) => (
+    <div>{`voice ${chatId} ${path}`}</div>
+  ),
+}));
+
 const chat = {
   id: "c1",
   title: "Launch",
@@ -65,6 +71,7 @@ describe("ChatSidePanel", () => {
     expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Launch", "周报", "计划"]);
     expect(screen.getByRole("tab", { name: "周报" })).toHaveAttribute("aria-selected", "true");
     expect(await screen.findByText("doc Work/周报.md")).toBeInTheDocument();
+    expect(screen.queryByText("voice c1 Work/周报.md")).toBeNull();
 
     fireEvent.click(screen.getByRole("tab", { name: "Launch" }));
     expect(onSelectDetails).toHaveBeenCalled();
@@ -127,5 +134,6 @@ describe("ChatSidePanel", () => {
       />,
     );
     expect(localStorage.getItem("multica:im-column-width:details")).toBeNull();
+    expect(screen.getByText("voice c1 Work/周报.md")).toBeInTheDocument();
   });
 });

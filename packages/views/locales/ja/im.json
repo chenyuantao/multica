@@ -214,6 +214,8 @@
     "keep_mine": "自分の版を残す",
     "placeholder": "書き始める…",
     "back": "ナレッジベースに戻る",
+    "voice_sending": "送信しています…",
+    "voice_failed": "送信できませんでした。もう一度お試しください。",
     "card": {
       "open_in_knowledge": "ナレッジベースで開く"
     },

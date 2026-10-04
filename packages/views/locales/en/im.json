@@ -218,6 +218,8 @@
     "keep_mine": "Keep my version",
     "placeholder": "Start writing…",
     "back": "Back to knowledge base",
+    "voice_sending": "Sending…",
+    "voice_failed": "Couldn't send that. Try again.",
     "card": {
       "open_in_knowledge": "Open in knowledge base"
     },

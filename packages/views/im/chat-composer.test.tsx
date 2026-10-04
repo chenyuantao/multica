@@ -281,6 +281,19 @@ describe("ChatComposer voice", () => {
   function denyMicrophone() {
     const getUserMedia = vi.fn().mockRejectedValue(new DOMException("denied", "NotAllowedError"));
     Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia } });
+    Object.defineProperty(navigator, "permissions", {
+      configurable: true,
+      value: { query: vi.fn(async () => ({ state: "prompt" })) },
+    });
+    return getUserMedia;
+  }
+
+  function grantMicrophone(getUserMedia = vi.fn(() => new Promise<MediaStream>(() => {}))) {
+    Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia } });
+    Object.defineProperty(navigator, "permissions", {
+      configurable: true,
+      value: { query: vi.fn(async () => ({ state: "granted" })) },
+    });
     return getUserMedia;
   }
 
@@ -295,6 +308,36 @@ describe("ChatComposer voice", () => {
     expect(getUserMedia).not.toHaveBeenCalled();
     expect(await screen.findByRole("status")).toHaveTextContent("Allow microphone access to dictate a message.");
     expect(getUserMedia).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("asks for microphone access without entering voice mode, then enters on the next hold", async () => {
+    const stop = vi.fn();
+    let resolveMedia: (stream: { getTracks: () => Array<{ stop: () => void }> }) => void = () => {};
+    const getUserMedia = vi.fn(
+      () => new Promise((resolve) => {
+        resolveMedia = resolve;
+      }),
+    );
+    Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia } });
+    Object.defineProperty(navigator, "permissions", {
+      configurable: true,
+      value: { query: vi.fn(async () => ({ state: "prompt" })) },
+    });
+    renderComposer();
+    fireEvent.pointerDown(composerBox(), { button: 0, clientX: 20, clientY: 40, pointerId: 1 });
+
+    await waitFor(() => expect(getUserMedia).toHaveBeenCalledOnce());
+    expect(screen.queryByRole("dialog")).toBeNull();
+    resolveMedia({ getTracks: () => [{ stop }] });
+    await waitFor(() => expect(stop).toHaveBeenCalledOnce());
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    fireEvent.pointerUp(composerBox(), { button: 0, clientX: 20, clientY: 40, pointerId: 1 });
+    await new Promise((resolve) => setTimeout(resolve, VOICE_TOUCH_SHIELD_MS + 40));
+    getUserMedia.mockImplementation(() => new Promise(() => {}));
+    fireEvent.pointerDown(composerBox(), { button: 0, clientX: 20, clientY: 40, pointerId: 2 });
+    expect(await screen.findByRole("dialog", { name: "Release to send" })).toBeInTheDocument();
   });
 
   it("treats a short tap as typing", async () => {
@@ -312,8 +355,7 @@ describe("ChatComposer voice", () => {
 
   it("ignores every control except cancel, edit, and release while the finger is down", async () => {
     const outside = vi.fn();
-    const getUserMedia = vi.fn(() => new Promise<never>(() => {}));
-    Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia } });
+    grantMicrophone();
     const previousHeight = window.innerHeight;
     Object.defineProperty(window, "innerHeight", { configurable: true, value: 800 });
     const fileClick = vi.spyOn(HTMLInputElement.prototype, "click").mockImplementation(() => {});
@@ -367,10 +409,7 @@ describe("ChatComposer voice", () => {
   });
 
   it("fills the cancel and edit blocks while the finger is in those zones", async () => {
-    Object.defineProperty(navigator, "mediaDevices", {
-      configurable: true,
-      value: { getUserMedia: vi.fn().mockReturnValue(new Promise(() => {})) },
-    });
+    grantMicrophone();
     const previousHeight = window.innerHeight;
     Object.defineProperty(window, "innerHeight", { configurable: true, value: 800 });
     try {
@@ -395,10 +434,7 @@ describe("ChatComposer voice", () => {
   });
 
   it("covers the screen with a dark scrim while holding", async () => {
-    Object.defineProperty(navigator, "mediaDevices", {
-      configurable: true,
-      value: { getUserMedia: vi.fn().mockReturnValue(new Promise(() => {})) },
-    });
+    grantMicrophone();
     renderComposer();
     fireEvent.pointerDown(composerBox(), { button: 0, clientX: 20, clientY: 40, pointerId: 1 });
     const scrim = await screen.findByRole("dialog", { name: "Release to send" });

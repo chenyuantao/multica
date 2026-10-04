@@ -214,6 +214,8 @@
     "keep_mine": "保留我的版本",
     "placeholder": "开始写作…",
     "back": "返回知识库",
+    "voice_sending": "正在发送…",
+    "voice_failed": "没能发出去，请重试。",
     "card": {
       "open_in_knowledge": "在知识库中打开"
     },

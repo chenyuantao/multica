@@ -214,6 +214,8 @@
     "keep_mine": "내 버전 유지",
     "placeholder": "작성 시작…",
     "back": "지식 베이스로 돌아가기",
+    "voice_sending": "보내는 중…",
+    "voice_failed": "보내지 못했습니다. 다시 시도하세요.",
     "card": {
       "open_in_knowledge": "지식 베이스에서 열기"
     },

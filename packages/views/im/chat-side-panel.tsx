@@ -8,6 +8,7 @@ import type { GroupChat, GroupChatMember } from "@multica/core/types";
 import { cn } from "@multica/ui/lib/utils";
 import { useT } from "../i18n";
 import { ChatDetailsPanel } from "./chat-details-panel";
+import { DocumentVoiceAsk } from "./document-voice-ask";
 import { CHAT_PANEL_WIDTH } from "./chat-panel-width";
 import { useInsertDocExcerpt } from "./doc-excerpt-insert";
 import type { KnowledgeNoteTab } from "./knowledge-note-tabs";
@@ -100,30 +101,41 @@ export function ChatSidePanel({
       )}
       <div className="flex min-h-0 flex-1 flex-col">
         {active ? (
-          <Suspense
-            fallback={
-              <div className="flex flex-1 items-center justify-center text-muted-foreground">
-                <Loader2 className="size-5 animate-spin" />
-              </div>
-            }
-          >
-            <KnowledgeDocument
-              path={active.path}
-              variant="page"
-              onAskSelection={(text, from) => {
-                const passage = text.replaceAll("\u0000", "").trim();
-                if (!passage) return;
-                const name = active.name.trim() || active.path.split("/").pop() || active.path;
-                const placed = insertExcerpt(chat.id, {
-                  name,
-                  path: active.path,
-                  text: passage,
-                  ...(typeof from === "number" ? { from } : {}),
-                });
-                if (!placed) onReturnToComposer?.();
-              }}
-            />
-          </Suspense>
+          <>
+            <Suspense
+              fallback={
+                <div className="flex flex-1 items-center justify-center text-muted-foreground">
+                  <Loader2 className="size-5 animate-spin" />
+                </div>
+              }
+            >
+              <KnowledgeDocument
+                path={active.path}
+                variant="page"
+                onAskSelection={(text, from) => {
+                  const passage = text.replaceAll("\u0000", "").trim();
+                  if (!passage) return;
+                  const name = active.name.trim() || active.path.split("/").pop() || active.path;
+                  const placed = insertExcerpt(chat.id, {
+                    name,
+                    path: active.path,
+                    text: passage,
+                    ...(typeof from === "number" ? { from } : {}),
+                  });
+                  if (!placed) onReturnToComposer?.();
+                }}
+              />
+            </Suspense>
+            {chrome === "page" && (
+              <DocumentVoiceAsk
+                key={active.path}
+                path={active.path}
+                name={active.name}
+                chatId={chat.id}
+                onSent={onReturnToComposer}
+              />
+            )}
+          </>
         ) : (
           <ChatDetailsPanel wsId={wsId} chat={chat} userId={userId} variant="page" onOpenMember={onOpenMember} />
         )}

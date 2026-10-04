@@ -6,7 +6,15 @@ import { getApi } from "@multica/core/api";
 import { cn } from "@multica/ui/lib/utils";
 import { useT } from "../i18n";
 import { voiceZone, type VoiceZone } from "./voice-zone";
-import { SpeechSession, capturePCM16, resolveSpeechToken, speechRealtimeURL } from "./voice-speech";
+import {
+  SpeechSession,
+  capturePCM16,
+  microphonePermissionDenied,
+  readMicrophonePermission,
+  requestMicrophonePermission,
+  resolveSpeechToken,
+  speechRealtimeURL,
+} from "./voice-speech";
 
 /** Matches the native composer's long-press delay. */
 export const VOICE_LONG_PRESS_MS = 280;
@@ -50,12 +58,16 @@ export function useVoiceHold({ enabled, onSend, onEdit }: VoiceHoldOptions): Voi
   const readyRef = useRef(false);
   const activeRef = useRef(false);
   const finishingRef = useRef(false);
+  const primingRef = useRef(false);
+  /** Set once this page has successfully requested the microphone. */
+  const micReadyRef = useRef(false);
   const genRef = useRef(0);
   const onSendRef = useRef(onSend);
   const onEditRef = useRef(onEdit);
   const enabledRef = useRef(enabled);
   const pressRef = useRef<{ timer: ReturnType<typeof setTimeout>; x: number; y: number } | null>(null);
   const lockedRef = useRef<HTMLElement | null>(null);
+  const lockedEditableRef = useRef<string | null>(null);
   const shieldRef = useRef<(() => void) | null>(null);
   const releaseRef = useRef<() => void>(() => {});
   onSendRef.current = onSend;
@@ -70,11 +82,11 @@ export function useVoiceHold({ enabled, onSend, onEdit }: VoiceHoldOptions): Voi
 
   const unlockField = useCallback((focus: boolean) => {
     const target = lockedRef.current;
+    const editable = lockedEditableRef.current;
     lockedRef.current = null;
-    if (target) {
-      target.contentEditable = "true";
-      if (focus) target.focus();
-    }
+    lockedEditableRef.current = null;
+    if (target && editable !== null) target.contentEditable = editable;
+    if (target && focus) target.focus();
     setCapturing(false);
   }, []);
 
@@ -82,7 +94,14 @@ export function useVoiceHold({ enabled, onSend, onEdit }: VoiceHoldOptions): Voi
     lockedRef.current = target;
     // iOS still selects inside a contentEditable on long-press when
     // user-select is none. Take editing away until the finger lifts.
-    target.contentEditable = "false";
+    // A button is not editable; forcing contentEditable on it would let a
+    // short tap turn its label into a text field.
+    if (target.isContentEditable) {
+      lockedEditableRef.current = target.contentEditable;
+      target.contentEditable = "false";
+    } else {
+      lockedEditableRef.current = null;
+    }
     window.getSelection()?.removeAllRanges();
     setCapturing(true);
   }, []);
@@ -135,10 +154,29 @@ export function useVoiceHold({ enabled, onSend, onEdit }: VoiceHoldOptions): Voi
     }
   }, [fail, stopMic, unlockField]);
 
+  const prepareMicrophone = useCallback(async (): Promise<"ready" | "requested" | "denied"> => {
+    if (micReadyRef.current) return "ready";
+    const state = await readMicrophonePermission();
+    if (state === "granted") {
+      micReadyRef.current = true;
+      return "ready";
+    }
+    if (state === "denied") return "denied";
+    try {
+      await requestMicrophonePermission();
+    } catch (err) {
+      if (microphonePermissionDenied(err)) return "denied";
+      throw err;
+    }
+    micReadyRef.current = true;
+    // This gesture only asked for access. Voice mode starts on a later press.
+    return "requested";
+  }, []);
+
   const begin = useCallback(async () => {
-    if (activeRef.current) return;
+    if (activeRef.current || primingRef.current) return;
     const gen = ++genRef.current;
-    activeRef.current = true;
+    primingRef.current = true;
     releasedRef.current = false;
     readyRef.current = false;
     finishingRef.current = false;
@@ -148,6 +186,24 @@ export function useVoiceHold({ enabled, onSend, onEdit }: VoiceHoldOptions): Voi
     setZone("send");
     setPreview("");
     setError(null);
+    let access: "ready" | "requested" | "denied";
+    try {
+      access = await prepareMicrophone();
+    } catch (err) {
+      primingRef.current = false;
+      if (gen !== genRef.current) return;
+      unlockField(false);
+      fail(err);
+      return;
+    }
+    primingRef.current = false;
+    if (gen !== genRef.current) return;
+    if (access !== "ready" || releasedRef.current) {
+      unlockField(false);
+      if (access === "denied") fail(new DOMException("denied", "NotAllowedError"));
+      return;
+    }
+    activeRef.current = true;
     setHolding(true);
     try {
       const token = await Promise.all([
@@ -183,13 +239,13 @@ export function useVoiceHold({ enabled, onSend, onEdit }: VoiceHoldOptions): Voi
         session.cancel();
         sessionRef.current = null;
         readyRef.current = false;
-      activeRef.current = false;
-      setHolding(false);
-      unlockField(false);
-      await stopMic();
-      return;
-    }
-    if (releasedRef.current) void finish(gen);
+        activeRef.current = false;
+        setHolding(false);
+        unlockField(false);
+        await stopMic();
+        return;
+      }
+      if (releasedRef.current) void finish(gen);
     } catch (err) {
       if (gen !== genRef.current) return;
       sessionRef.current?.cancel();
@@ -198,10 +254,11 @@ export function useVoiceHold({ enabled, onSend, onEdit }: VoiceHoldOptions): Voi
       activeRef.current = false;
       setHolding(false);
       unlockField(false);
+      if (microphonePermissionDenied(err)) micReadyRef.current = false;
       await stopMic();
       fail(err);
     }
-  }, [fail, finish, stopMic, unlockField]);
+  }, [fail, finish, prepareMicrophone, stopMic, unlockField]);
 
   useEffect(() => () => {
     genRef.current += 1;
@@ -210,8 +267,10 @@ export function useVoiceHold({ enabled, onSend, onEdit }: VoiceHoldOptions): Voi
     pressRef.current = null;
     if (press) clearTimeout(press.timer);
     const target = lockedRef.current;
+    const editable = lockedEditableRef.current;
     lockedRef.current = null;
-    if (target) target.contentEditable = "true";
+    lockedEditableRef.current = null;
+    if (target && editable !== null) target.contentEditable = editable;
     document.documentElement.style.removeProperty("user-select");
     document.documentElement.style.removeProperty("-webkit-user-select");
     sessionRef.current?.cancel();
@@ -246,7 +305,7 @@ export function useVoiceHold({ enabled, onSend, onEdit }: VoiceHoldOptions): Voi
   }, [abort, finish]);
   releaseRef.current = release;
 
-  const armShield = useCallback((target: HTMLElement) => {
+  const armShield = useCallback((_target: HTMLElement) => {
     shieldRef.current?.();
     let dropTimer: ReturnType<typeof setTimeout> | null = null;
     let ended = false;
@@ -294,6 +353,9 @@ export function useVoiceHold({ enabled, onSend, onEdit }: VoiceHoldOptions): Voi
           setZone("cancel");
         }
         releaseRef.current();
+      } else if (primingRef.current) {
+        releasedRef.current = true;
+        unlockField(false);
       }
       dropTimer = setTimeout(disarm, VOICE_TOUCH_SHIELD_MS);
     };
@@ -353,7 +415,7 @@ export function useVoiceHold({ enabled, onSend, onEdit }: VoiceHoldOptions): Voi
   }, [clearPress, unlockField]);
 
   const onPointerDown = useCallback((event: PointerEvent<HTMLElement>) => {
-    if (!enabledRef.current || event.button > 0 || pressRef.current || activeRef.current) return;
+    if (!enabledRef.current || event.button > 0 || pressRef.current || activeRef.current || primingRef.current) return;
     event.preventDefault();
     const target = event.currentTarget;
     const pointerId = event.pointerId;
@@ -380,7 +442,7 @@ export function useVoiceHold({ enabled, onSend, onEdit }: VoiceHoldOptions): Voi
   }, [armShield, begin, lockField, unlockField]);
 
   const onTouchStart = useCallback((event: TouchEvent<HTMLElement>) => {
-    if (!enabledRef.current || pressRef.current || activeRef.current) return;
+    if (!enabledRef.current || pressRef.current || activeRef.current || primingRef.current) return;
     const touch = event.changedTouches[0];
     if (!touch) return;
     event.preventDefault();

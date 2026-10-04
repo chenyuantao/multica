@@ -207,6 +207,34 @@ describe("useSendGroupChatMessage", () => {
       note,
     );
   });
+
+  it("sends the open note's page with the message", async () => {
+    const createComment = vi.fn(async () => ({ id: "m1" }));
+    setApiInstance({ createComment } as unknown as ApiClient);
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={createQueryClient()}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useSendGroupChatMessage(WS, "chat-1"), { wrapper });
+    const note = { name: "本周周报", path: "notes/weekly.md" };
+    const page = {
+      note: { title: "weekly", path: "notes/weekly.md", modified_at: "", content: "周五发布", truncated: false },
+    };
+    await act(async () => {
+      await result.current.mutateAsync({ content: "总结一下", focusNote: note, page });
+    });
+    expect(createComment).toHaveBeenCalledWith(
+      "chat-1",
+      "总结一下",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      page,
+      note,
+    );
+  });
 });
 
 describe("useAskAI", () => {

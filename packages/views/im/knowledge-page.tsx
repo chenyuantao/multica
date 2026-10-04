@@ -14,6 +14,7 @@ import { MobileLevel, MobileTabScreen } from "./mobile-shell";
 import { noteAskPage } from "./ask-ai-context";
 import { ImRail } from "./im-rail";
 import { ImSearchDialog } from "./im-search-dialog";
+import { DocumentVoiceAsk } from "./document-voice-ask";
 import { KnowledgeDocument } from "./knowledge-document";
 import { KnowledgeSidebar } from "./knowledge-sidebar";
 import { noteTitle } from "./knowledge-utils";
@@ -107,6 +108,7 @@ export function KnowledgePage() {
             backLabel={t(($) => $.knowledge.back)}
           >
             <KnowledgeDocument key={selectedPath} path={selectedPath} variant="page" />
+            <DocumentVoiceAsk key={selectedPath} path={selectedPath} />
           </MobileLevel>
         ) : (
           <MobileTabScreen active="knowledge">
