@@ -1,12 +1,14 @@
 "use client";
 
-import { Suspense, useEffect, useSyncExternalStore } from "react";
+import { Suspense, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { imSurfaceSegment } from "@multica/core/paths";
 import {
   NavigationProvider,
   type NavigationAdapter,
 } from "@multica/views/navigation";
 import { canGoBackInApp } from "./in-app-history";
+import { commitWebNavigation } from "./im-surface-nav";
 
 /**
  * Web half of the `multica:navigate` bridge — the event shared content
@@ -18,7 +20,9 @@ import { canGoBackInApp } from "./in-app-history";
  * closest the web can get: JS cannot open a background tab, so both tab
  * dispositions land as a foreground browser tab.
  */
-function useInternalLinkHandler(router: ReturnType<typeof useRouter>) {
+function useInternalLinkHandler(go: (path: string) => void) {
+  const goRef = useRef(go);
+  goRef.current = go;
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (
@@ -37,11 +41,11 @@ function useInternalLinkHandler(router: ReturnType<typeof useRouter>) {
         );
         return;
       }
-      router.push(path);
+      goRef.current(path);
     };
     window.addEventListener("multica:navigate", handler);
     return () => window.removeEventListener("multica:navigate", handler);
-  }, [router]);
+  }, []);
 }
 
 /**
@@ -60,29 +64,58 @@ function subscribeToHash(onStoreChange: () => void): () => void {
   };
 }
 
+function searchFromWindow(): string {
+  const search = window.location.search;
+  return search.startsWith("?") ? search.slice(1) : search;
+}
+
 function NavigationProviderInner({
   children,
 }: {
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
+  const routerPathname = usePathname();
+  const routerSearchParams = useSearchParams();
+  const routerSearch = routerSearchParams.toString();
+  const [soft, setSoft] = useState<{ pathname: string; search: string } | null>(null);
   const hash = useSyncExternalStore(
     subscribeToHash,
     () => window.location.hash,
     () => "",
   );
-  useInternalLinkHandler(router);
+
+  useEffect(() => {
+    if (!soft) return;
+    if (routerPathname === soft.pathname && routerSearch === soft.search) setSoft(null);
+  }, [routerPathname, routerSearch, soft]);
+
+  useEffect(() => {
+    const onPop = () => {
+      const pathname = window.location.pathname;
+      if (imSurfaceSegment(pathname)) setSoft({ pathname, search: searchFromWindow() });
+      else setSoft(null);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
+  const pathname = soft?.pathname ?? routerPathname;
+  const search = soft?.search ?? routerSearch;
+
+  const go = (path: string, mode: "push" | "replace") => {
+    commitWebNavigation(path, pathname, router, mode, setSoft);
+  };
+  useInternalLinkHandler((path) => go(path, "push"));
 
   const adapter: NavigationAdapter = {
-    push: router.push,
-    replace: router.replace,
+    push: (path: string) => go(path, "push"),
+    replace: (path: string) => go(path, "replace"),
     back: router.back,
     forward: router.forward,
     canGoBack: canGoBackInApp,
     pathname,
-    searchParams: new URLSearchParams(searchParams.toString()),
+    searchParams: new URLSearchParams(search),
     hash,
     getShareableUrl: (path: string) =>
       typeof window === "undefined" ? path : window.location.origin + path,

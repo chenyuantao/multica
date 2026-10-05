@@ -4,6 +4,12 @@ export {
   AGENT_FOCUS_CONVERSATION_STARTERS,
 } from "./paths";
 export type { WorkspacePaths } from "./paths";
+export {
+  IM_SURFACE_SEGMENTS,
+  imSurfaceSegment,
+  isImSurfaceLocalNav,
+} from "./im-surface";
+export type { ImSurfaceSegment } from "./im-surface";
 export { RESERVED_SLUGS, isReservedSlug } from "./reserved-slugs";
 export {
   WORKSPACE_PAGES,

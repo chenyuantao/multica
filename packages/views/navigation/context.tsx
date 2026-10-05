@@ -9,6 +9,7 @@ import {
   useState,
   useTransition,
 } from "react";
+import { isImSurfaceLocalNav } from "@multica/core/paths";
 import type { NavigationAdapter } from "./types";
 
 const NavigationContext = createContext<NavigationAdapter | null>(null);
@@ -45,8 +46,17 @@ export function NavigationProvider({
   const wrapped = useMemo<NavigationAdapter>(
     () => ({
       ...value,
-      push: (path: string) => startTransition(() => value.push(path)),
-      replace: (path: string) => startTransition(() => value.replace(path)),
+      // IM tab swaps write history in the browser. Leaving them inside
+      // startTransition defers the panel until React is free, which is the
+      // pause this surface is trying to drop.
+      push: (path: string) => {
+        if (isImSurfaceLocalNav(value.pathname, path)) value.push(path);
+        else startTransition(() => value.push(path));
+      },
+      replace: (path: string) => {
+        if (isImSurfaceLocalNav(value.pathname, path)) value.replace(path);
+        else startTransition(() => value.replace(path));
+      },
     }),
     [value],
   );

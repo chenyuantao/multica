@@ -1,14 +1,12 @@
 "use client";
 
 import { Suspense } from "react";
-import { ImPage } from "@multica/views/im";
-import { ModalRegistry } from "@multica/views/modals/registry";
+import { ImSurface } from "@multica/views/im";
 
 export default function Page() {
   return (
     <Suspense fallback={null}>
-      <ImPage view="contacts" />
-      <ModalRegistry />
+      <ImSurface />
     </Suspense>
   );
 }

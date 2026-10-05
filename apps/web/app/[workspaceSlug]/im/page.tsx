@@ -1,16 +1,12 @@
 "use client";
 
 import { Suspense } from "react";
-import { ImPage } from "@multica/views/im";
-import { ModalRegistry } from "@multica/views/modals/registry";
+import { ImSurface } from "@multica/views/im";
 
-// Group chats render full-window, outside the (dashboard) shell, so they
-// mount their own ModalRegistry.
 export default function Page() {
   return (
     <Suspense fallback={null}>
-      <ImPage />
-      <ModalRegistry />
+      <ImSurface />
     </Suspense>
   );
 }

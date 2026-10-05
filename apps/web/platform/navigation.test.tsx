@@ -7,7 +7,7 @@
  * answer it with a router push, or those links silently do nothing.
  */
 import { describe, expect, it, vi, afterEach, beforeEach } from "vitest";
-import { act, render } from "@testing-library/react";
+import { act, cleanup, render } from "@testing-library/react";
 
 const router = vi.hoisted(() => ({
   push: vi.fn(),
@@ -15,11 +15,12 @@ const router = vi.hoisted(() => ({
   back: vi.fn(),
   prefetch: vi.fn(),
 }));
+const locationRef = vi.hoisted(() => ({ pathname: "/acme/issues", search: "" }));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => router,
-  usePathname: () => "/acme/issues",
-  useSearchParams: () => new URLSearchParams(),
+  usePathname: () => locationRef.pathname,
+  useSearchParams: () => new URLSearchParams(locationRef.search),
 }));
 
 import { WebNavigationProvider } from "./navigation";
@@ -47,6 +48,13 @@ function renderAdapter(): () => NavigationAdapter {
 
 beforeEach(() => {
   router.push.mockReset();
+  router.replace.mockReset();
+  locationRef.pathname = "/acme/issues";
+  locationRef.search = "";
+});
+
+afterEach(() => {
+  cleanup();
 });
 
 describe("WebNavigationProvider internal link bridge", () => {
@@ -113,7 +121,9 @@ describe("WebNavigationProvider canGoBack", () => {
     win.navigation = { canGoBack: false };
     const adapter = renderAdapter();
 
-    adapter().push("/acme/issues");
+    act(() => {
+      adapter().push("/acme/issues");
+    });
 
     expect(router.push).toHaveBeenCalledWith("/acme/issues");
     expect(adapter().canGoBack!()).toBe(false);
@@ -121,6 +131,37 @@ describe("WebNavigationProvider canGoBack", () => {
 
   it("reports false where the browser cannot answer, so callers use the fallback", () => {
     expect(renderAdapter()().canGoBack!()).toBe(false);
+  });
+});
+
+describe("WebNavigationProvider IM surface", () => {
+  it("writes history for a tab change and skips the App Router", () => {
+    locationRef.pathname = "/acme/im";
+    const pushState = vi.spyOn(window.history, "pushState");
+    const adapter = renderAdapter();
+
+    act(() => {
+      adapter().push("/acme/knowledge");
+    });
+
+    expect(router.push).not.toHaveBeenCalled();
+    expect(pushState).toHaveBeenCalledWith(null, "", "/acme/knowledge");
+    expect(adapter().pathname).toBe("/acme/knowledge");
+    pushState.mockRestore();
+  });
+
+  it("still asks Next when leaving for settings", () => {
+    locationRef.pathname = "/acme/im";
+    const pushState = vi.spyOn(window.history, "pushState");
+    const adapter = renderAdapter();
+
+    act(() => {
+      adapter().push("/acme/settings");
+    });
+
+    expect(router.push).toHaveBeenCalledWith("/acme/settings");
+    expect(pushState).not.toHaveBeenCalled();
+    pushState.mockRestore();
   });
 });
 
