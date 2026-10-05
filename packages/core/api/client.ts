@@ -497,6 +497,8 @@ import {
   GroupChatSchema,
   GroupChatsListSchema,
   GroupChatSearchResultSchema,
+  MessageCollectionSchema,
+  MessageCollectionsListSchema,
   AskAIResponseSchema,
   DocFileSchema,
   DocMoveResultSchema,
@@ -508,7 +510,9 @@ import type {
   AskAIRequest,
   FocusNote,
   CreateGroupChatRequest,
+  CreateMessageCollectionRequest,
   GroupChat,
+  MessageCollection,
   GroupChatMemberRef,
   GroupChatMemberType,
   GroupChatSearchResult,
@@ -4598,6 +4602,32 @@ export class ApiClient {
 
   // Pins
   // Group chats — issues with members; messages go through the comment API.
+  async listMessageCollections(): Promise<MessageCollection[]> {
+    const raw = await this.fetch<unknown>("/api/message-collections");
+    return parseWithFallback<{ collections: MessageCollection[] }>(
+      raw,
+      MessageCollectionsListSchema,
+      { collections: [] },
+      { endpoint: "GET /api/message-collections" },
+    ).collections;
+  }
+
+  async createMessageCollection(data: CreateMessageCollectionRequest): Promise<MessageCollection> {
+    const raw = await this.fetch<unknown>("/api/message-collections", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+    const saved = parseWithFallback<MessageCollection | null>(raw, MessageCollectionSchema, null, {
+      endpoint: "POST /api/message-collections",
+    });
+    if (!saved?.id) throw new Error("Invalid collection response");
+    return saved;
+  }
+
+  async deleteMessageCollection(id: string): Promise<void> {
+    await this.fetch(`/api/message-collections/${encodeURIComponent(id)}`, { method: "DELETE" });
+  }
+
   async listGroupChats(): Promise<GroupChat[]> {
     const raw = await this.fetch<unknown>("/api/group-chats");
     return parseWithFallback<{ chats: GroupChat[] }>(raw, GroupChatsListSchema, { chats: [] }, {

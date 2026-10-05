@@ -2,9 +2,10 @@
 
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Brain, Check, Copy, Forward, Info, ListChecks, Loader2, MoreHorizontal, PanelRight, Quote, RotateCw, Search, Sparkles, Trash2, X } from "lucide-react";
+import { AlertTriangle, Bookmark, Brain, Check, Copy, Forward, Info, ListChecks, Loader2, MoreHorizontal, PanelRight, Quote, RotateCw, Search, Sparkles, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { configuredConversationStarters } from "@multica/core/agents";
+import { useCreateMessageCollection } from "@multica/core/collections";
 import { useTaskMessages } from "@multica/core/chat/queries";
 import {
   directChatPeer,
@@ -69,6 +70,7 @@ import { highlightedTextWithin } from "./ask-ai-context";
 import { ChatComposer, QuoteText, type ComposerQuote } from "./chat-composer";
 import {
   CHAT_HISTORY_MAX_BYTES,
+  COLLECTION_MAX_BYTES,
   canForwardMessage,
   encodeChatHistory,
   historyContentOf,
@@ -159,6 +161,7 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAsk
   const { data: agentList = EMPTY_AGENTS } = useQuery(agentListOptions(wsId));
   const send = useSendGroupChatMessage(wsId, chat.id);
   const forward = useForwardChatHistory(wsId);
+  const collect = useCreateMessageCollection(wsId);
   const remove = useDeleteGroupChatMessage(wsId, chat.id);
   const [pending, setPending] = useState<PendingMessage[]>([]);
   const [quoteId, setQuoteId] = useState<string | null>(null);
@@ -291,6 +294,49 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAsk
     [t],
   );
 
+  const saveCollection = useCallback(
+    async (chosen: Comment[], asHistory: boolean) => {
+      if (chosen.length === 0) return;
+      const content = asHistory
+        ? encodeChatHistory({
+            messages: chosen.map((m) => ({
+              author_name: getActorName(m.author_type, m.author_id),
+              content: historyContentOf(m),
+              created_at: m.created_at,
+            })),
+          })
+        : historyContentOf(chosen[0]!);
+      if (!content.trim()) {
+        toast.error(t(($) => $.thread.collect_failed));
+        return;
+      }
+      if (utf8Size(content) > COLLECTION_MAX_BYTES) {
+        toast.error(t(($) => $.thread.collect_too_large));
+        return;
+      }
+      const names: string[] = [];
+      for (const message of chosen) {
+        const name = getActorName(message.author_type, message.author_id) || message.author_id;
+        if (name && !names.includes(name)) names.push(name);
+      }
+      try {
+        await collect.mutateAsync({
+          content,
+          source_title: chatDisplayTitle(chat, userId, getActorName) || chat.id,
+          sender_name: names.join(", "),
+        });
+        toast.success(t(($) => $.thread.collected));
+        if (asHistory) {
+          setSelecting(false);
+          setSelected(new Set());
+        }
+      } catch {
+        toast.error(t(($) => $.thread.collect_failed));
+      }
+    },
+    [chat, collect, getActorName, t, userId],
+  );
+
   const actionsFor = (m: Comment): MessageActions => {
     const mine = m.author_type === "member" && m.author_id === userId;
     return {
@@ -300,6 +346,10 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAsk
       onForward: () => {
         if (!canForwardMessage(m)) return;
         setForwardIds([m.id]);
+      },
+      onCollect: () => {
+        if (!canForwardMessage(m)) return;
+        void saveCollection([m], false);
       },
       onMultiSelect: () => {
         if (!canForwardMessage(m)) return;
@@ -487,6 +537,11 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAsk
     const ids = messages.filter((m) => selected.has(m.id) && canForwardMessage(m)).map((m) => m.id);
     if (ids.length === 0) return;
     setForwardIds(ids);
+  };
+
+  const collectSelected = () => {
+    const chosen = messages.filter((m) => selected.has(m.id) && canForwardMessage(m));
+    void saveCollection(chosen, true);
   };
 
   const confirmForward = async (targets: string[], note: string) => {
@@ -705,6 +760,9 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAsk
       <div className="mx-auto w-full max-w-3xl">
         {selecting ? (
           <div className="flex gap-2 px-4 py-3">
+            <Button type="button" variant="outline" className="flex-1" disabled={selected.size === 0 || collect.isPending} onClick={collectSelected}>
+              {t(($) => $.thread.collect)}
+            </Button>
             <Button type="button" className="flex-1" disabled={selected.size === 0} onClick={openForward}>
               {t(($) => $.thread.forward)}
             </Button>
@@ -777,6 +835,7 @@ interface MessageActions {
   /** Thinking bubbles keep the entries visible and refuse them. */
   canForward: boolean;
   onForward: () => void;
+  onCollect: () => void;
   onMultiSelect: () => void;
 }
 
@@ -786,7 +845,7 @@ interface MessageActions {
  * pressed bubble lifted slightly while the menu is open. Text highlighted in
  * the message when the menu opens goes with Ask AI.
  *
- * Order: Ask AI, Copy | Forward, multi-select, Quote | Delete.
+ * Order: Ask AI, Copy | Forward, Favorite, multi-select, Quote | Delete.
  */
 function MessageMenu({ actions, ios, children }: { actions: MessageActions; ios?: boolean; children: React.ReactNode }) {
   const { t } = useT("im");
@@ -813,6 +872,13 @@ function MessageMenu({ actions, ios, children }: { actions: MessageActions; ios?
         icon: Forward,
         label: t(($) => $.thread.forward),
         onClick: actions.onForward,
+        disabled: !actions.canForward,
+      },
+      {
+        key: "collect",
+        icon: Bookmark,
+        label: t(($) => $.thread.collect),
+        onClick: actions.onCollect,
         disabled: !actions.canForward,
       },
       {

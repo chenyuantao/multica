@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { Comment } from "@multica/core/types";
 import {
   canForwardMessage,
+  collectionListTitle,
   encodeChatHistory,
   historyAt,
   historyAuthorNames,
@@ -104,6 +105,18 @@ describe("chat history snapshot", () => {
       ),
     ).toBe(false);
     expect(canForwardMessage(comment({ type: "system", author_type: "system", content: "joined" }))).toBe(false);
+  });
+
+  it("uses the first line, and the first inner line of a chat history", () => {
+    expect(collectionListTitle("hello world\nsecond", labels)).toBe("hello world");
+    expect(collectionListTitle("![shot](https://cdn.test/a.png)\ncaption", labels)).toBe("[图片]");
+    const card = encodeChatHistory({
+      messages: [
+        { author_name: "Ada", content: "first saved line\nmore", created_at: "2026-01-01T00:00:00Z" },
+        { author_name: "Bo", content: "later", created_at: "2026-01-01T00:00:00Z" },
+      ],
+    });
+    expect(collectionListTitle(card, labels)).toBe("first saved line");
   });
 
   it("ignores a comment that is not a history card", () => {

@@ -61,6 +61,7 @@ describe("offline page paths", () => {
     "/acme/member",
     "/acme/knowledge",
     "/acme/knowledge/note",
+    "/acme/collect",
     "/member",
     "/knowledge",
     "/acme/issues",
@@ -79,6 +80,7 @@ describe("offline page paths", () => {
     expect(isPwaOfflinePath("/acme/im")).toBe(true);
     expect(isPwaOfflinePath("/acme/member")).toBe(true);
     expect(isPwaOfflinePath("/acme/knowledge")).toBe(true);
+    expect(isPwaOfflinePath("/acme/collect")).toBe(true);
     expect(isPwaOfflinePath("/acme/issues")).toBe(false);
     expect(isPwaOfflinePath("/member")).toBe(false);
   });

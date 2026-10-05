@@ -23,13 +23,26 @@
     "profile": "个人资料",
     "chats": "会话",
     "contacts": "通讯录",
-    "knowledge": "知识库"
+    "knowledge": "知识库",
+    "collect": "收藏"
   },
   "tabs": {
     "chats": "消息",
     "contacts": "通讯录",
     "knowledge": "知识库",
     "me": "我的"
+  },
+  "collect": {
+    "settings": "设置",
+    "switcher": "设置和收藏",
+    "remove": "移除收藏",
+    "removed": "已移除",
+    "remove_failed": "移除失败",
+    "empty": "还没有收藏",
+    "select": "选择一条收藏",
+    "load_failed": "收藏加载失败",
+    "back": "返回",
+    "untitled": "（无内容）"
   },
   "contacts": {
     "search": "搜索联系人",
@@ -88,6 +101,10 @@
     "cancel": "取消",
     "quote_line": "{{name}}：{{text}}",
     "forward": "转发",
+    "collect": "收藏",
+    "collected": "已收藏",
+    "collect_failed": "收藏失败",
+    "collect_too_large": "这些消息太长，无法收藏",
     "select_messages": "多选",
     "forward_title": "转发给",
     "forward_description": "可以选择多个会话。",

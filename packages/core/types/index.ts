@@ -365,6 +365,8 @@ export type {
   GroupChatSearchHit,
   GroupChatSearchResult,
   CreateGroupChatRequest,
+  CreateMessageCollectionRequest,
+  MessageCollection,
   UpdateGroupChatRequest,
 } from "./group-chat";
 export type {

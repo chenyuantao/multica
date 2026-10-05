@@ -2058,6 +2058,14 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 				r.Post("/changes", h.ListSearchIndexChanges)
 			})
 
+			// Saved copies of chat messages. Private to the member who saved them.
+			r.Route("/api/message-collections", func(r chi.Router) {
+				r.Use(handler.RequireHumanActor)
+				r.Get("/", h.ListMessageCollections)
+				r.Post("/", h.CreateMessageCollection)
+				r.Delete("/{id}", h.DeleteMessageCollection)
+			})
+
 			// Group chats (issues with members). Messages use the issue
 			// comment routes, which enforce chat membership.
 			r.Route("/api/group-chats", func(r chi.Router) {

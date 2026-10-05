@@ -24,13 +24,26 @@
     "profile": "Votre profil",
     "chats": "Discussions",
     "contacts": "Contacts",
-    "knowledge": "Base de connaissances"
+    "knowledge": "Base de connaissances",
+    "collect": "Favoris"
   },
   "tabs": {
     "chats": "Discussions",
     "contacts": "Contacts",
     "knowledge": "Connaissances",
     "me": "Moi"
+  },
+  "collect": {
+    "settings": "Paramètres",
+    "switcher": "Paramètres et favoris",
+    "remove": "Retirer",
+    "removed": "Retiré",
+    "remove_failed": "Impossible de retirer",
+    "empty": "Aucun favori pour l'instant",
+    "select": "Choisir un message enregistré",
+    "load_failed": "Impossible de charger les favoris",
+    "back": "Retour",
+    "untitled": "(Vide)"
   },
   "contacts": {
     "search": "Rechercher des contacts",
@@ -92,6 +105,10 @@
     "cancel": "Annuler",
     "quote_line": "{{name}} : {{text}}",
     "forward": "Transférer",
+    "collect": "Favori",
+    "collected": "Enregistré",
+    "collect_failed": "Impossible d'enregistrer",
+    "collect_too_large": "Ces messages sont trop longs pour être enregistrés",
     "select_messages": "Sélection multiple",
     "forward_title": "Transférer à",
     "forward_description": "Choisissez une ou plusieurs discussions.",

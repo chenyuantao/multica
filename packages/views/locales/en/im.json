@@ -24,13 +24,26 @@
     "profile": "Your profile",
     "chats": "Chats",
     "contacts": "Contacts",
-    "knowledge": "Knowledge base"
+    "knowledge": "Knowledge base",
+    "collect": "Favorites"
   },
   "tabs": {
     "chats": "Chats",
     "contacts": "Contacts",
     "knowledge": "Knowledge",
     "me": "Me"
+  },
+  "collect": {
+    "settings": "Settings",
+    "switcher": "Settings and favorites",
+    "remove": "Remove",
+    "removed": "Removed",
+    "remove_failed": "Couldn't remove",
+    "empty": "Nothing saved yet",
+    "select": "Choose a saved message",
+    "load_failed": "Couldn't load saved messages",
+    "back": "Back",
+    "untitled": "(Empty)"
   },
   "contacts": {
     "search": "Search contacts",
@@ -92,6 +105,10 @@
     "cancel": "Cancel",
     "quote_line": "{{name}}: {{text}}",
     "forward": "Forward",
+    "collect": "Favorite",
+    "collected": "Saved",
+    "collect_failed": "Couldn't save",
+    "collect_too_large": "These messages are too long to save",
     "select_messages": "Select",
     "forward_title": "Forward to",
     "forward_description": "Pick one or more chats.",

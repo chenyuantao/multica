@@ -47,6 +47,7 @@ vi.mock("@multica/core/paths", () => ({
     im: () => "/acme/im",
     member: () => "/acme/member",
     knowledge: () => "/acme/knowledge",
+    collect: () => "/acme/collect",
     settings: () => "/acme/settings",
   }),
 }));
@@ -110,7 +111,7 @@ function trigger() {
 }
 
 function nav() {
-  return screen.getByRole("navigation", { name: "Settings" });
+  return screen.getByRole("navigation", { name: (name) => name === "Settings" });
 }
 
 beforeEach(() => {
@@ -173,6 +174,10 @@ describe("SettingsPage phone tab bar", () => {
     const tabs = screen.getByRole("navigation", { name: "Sections" });
     expect(within(tabs).getByRole("link", { name: "Me" })).toHaveAttribute("aria-current", "page");
     expect(within(tabs).getByRole("link", { name: "Chats" })).toHaveAttribute("href", "/acme/im");
+    expect(within(tabs).queryByRole("link", { name: "Favorites" })).not.toBeInTheDocument();
+    const mine = screen.getByRole("navigation", { name: "Settings and favorites" });
+    expect(within(mine).getByRole("link", { name: "Settings" })).toHaveAttribute("aria-current", "page");
+    expect(within(mine).getByRole("link", { name: "Favorites" })).toHaveAttribute("href", "/acme/collect");
     expect(screen.queryByRole("button", { name: "Back" })).not.toBeInTheDocument();
   });
 
@@ -181,6 +186,7 @@ describe("SettingsPage phone tab bar", () => {
     renderWithI18n(<SettingsPage />);
 
     expect(screen.queryByRole("navigation", { name: "Sections" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Settings and favorites" })).not.toBeInTheDocument();
   });
 });
 

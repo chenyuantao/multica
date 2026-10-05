@@ -125,3 +125,19 @@ export interface CreateGroupChatRequest {
   title: string;
   members: GroupChatMemberRef[];
 }
+
+/** A saved copy of one message, or of several messages stored as a chat-history snapshot. */
+export interface MessageCollection {
+  id: string;
+  workspace_id: string;
+  content: string;
+  source_title: string;
+  sender_name: string;
+  created_at: string;
+}
+
+export interface CreateMessageCollectionRequest {
+  content: string;
+  source_title: string;
+  sender_name: string;
+}

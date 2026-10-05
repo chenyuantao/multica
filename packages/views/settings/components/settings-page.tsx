@@ -65,6 +65,7 @@ import { HighlightText } from "../../search/highlight-text";
 import { useSettingsSearchIndex } from "./use-settings-search-index";
 import { WakeupsTab } from "./wakeups-tab";
 import { CollapsedNavTrigger } from "../../layout/page-header";
+import { MeSectionTabs } from "../../im/me-section-tabs";
 import { MobileTabBar } from "../../im/mobile-tab-bar";
 import { describeLocation } from "../../im/ask-ai-element";
 import { ImSearchDialog } from "../../im/im-search-dialog";
@@ -603,6 +604,7 @@ export function SettingsPage({ extraDeviceTabs = [] }: SettingsPageProps = {}) {
   }
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <MeSectionTabs active="settings" />
       {page}
       <MobileTabBar active="settings" />
       {askAI}

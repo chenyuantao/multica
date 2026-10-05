@@ -50,6 +50,7 @@ import {
   DocSearchResultSchema,
   GroupChatsListSchema,
   GroupChatSearchResultSchema,
+  MessageCollectionsListSchema,
   InboxItemListSchema,
   InboxUnreadSummarySchema,
   IssueTriggerPreviewSchema,
@@ -1554,6 +1555,30 @@ describe("GroupChatsListSchema unread_count", () => {
       ENDPOINT,
     );
     expect(parsed.chats.map((c) => c.pinned)).toEqual([true, false, false]);
+  });
+});
+
+describe("MessageCollectionsListSchema", () => {
+  const ENDPOINT = { endpoint: "GET /api/message-collections" };
+
+  it("defaults a missing sender and source, and rejects a payload that is not a list", () => {
+    const parsed = parseWithFallback<{ collections: { id: string; sender_name: string; source_title: string; content: string }[] }>(
+      { collections: [{ id: "c1", content: "hello", sender_name: 4 }] },
+      MessageCollectionsListSchema,
+      { collections: [] },
+      ENDPOINT,
+    );
+    expect(parsed.collections).toEqual([
+      { id: "c1", workspace_id: "", content: "hello", source_title: "", sender_name: "", created_at: "" },
+    ]);
+
+    const broken = parseWithFallback(
+      { collections: "nope" },
+      MessageCollectionsListSchema,
+      { collections: [] },
+      ENDPOINT,
+    );
+    expect(broken.collections).toEqual([]);
   });
 });
 

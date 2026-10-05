@@ -11,7 +11,7 @@ function isPwaOfflinePath(pathname) {
   // /{slug}/im; the worker only special-cases this path when the network
   // cannot do that redirect.
   if (parts[0] === "im") return true;
-  return parts.length >= 2 && (parts[1] === "im" || parts[1] === "member" || parts[1] === "knowledge");
+  return parts.length >= 2 && (parts[1] === "im" || parts[1] === "member" || parts[1] === "knowledge" || parts[1] === "collect");
 }
 
 function pwaHeader(request, name) {

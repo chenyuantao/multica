@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, Menu, MessageCircle, UsersRound } from "lucide-react";
+import { BookOpen, Bookmark, Menu, MessageCircle, UsersRound } from "lucide-react";
 import { useAuthStore } from "@multica/core/auth";
 import { useWorkspacePaths } from "@multica/core/paths";
 import { cn } from "@multica/ui/lib/utils";
@@ -10,7 +10,7 @@ import { useT } from "../i18n";
 import { UnreadBadge } from "./unread-badge";
 import { useGroupChatUnreadTotal } from "./use-group-chat-unread";
 
-export type ImView = "chats" | "contacts" | "knowledge";
+export type ImView = "chats" | "contacts" | "knowledge" | "collect";
 
 /**
  * `settings` stands for the whole dashboard shell: every non-IM workspace
@@ -56,6 +56,7 @@ export function ImRail({ active, readingChatId, className }: ImRailProps) {
           { id: "chats", href: paths.im(), label: t(($) => $.rail.chats), icon: MessageCircle },
           { id: "contacts", href: paths.member(), label: t(($) => $.rail.contacts), icon: UsersRound },
           { id: "knowledge", href: paths.knowledge(), label: t(($) => $.rail.knowledge), icon: BookOpen },
+          { id: "collect", href: paths.collect(), label: t(($) => $.rail.collect), icon: Bookmark },
         ] as const
       ).map(({ id, href, label, icon: Icon }) => (
         <AppLink

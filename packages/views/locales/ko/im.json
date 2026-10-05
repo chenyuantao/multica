@@ -23,13 +23,26 @@
     "profile": "내 프로필",
     "chats": "채팅",
     "contacts": "연락처",
-    "knowledge": "지식 베이스"
+    "knowledge": "지식 베이스",
+    "collect": "즐겨찾기"
   },
   "tabs": {
     "chats": "메시지",
     "contacts": "연락처",
     "knowledge": "지식",
     "me": "나"
+  },
+  "collect": {
+    "settings": "설정",
+    "switcher": "설정과 즐겨찾기",
+    "remove": "즐겨찾기에서 제거",
+    "removed": "제거했습니다",
+    "remove_failed": "제거하지 못했습니다",
+    "empty": "아직 즐겨찾기가 없습니다",
+    "select": "즐겨찾기를 선택하세요",
+    "load_failed": "즐겨찾기를 불러오지 못했습니다",
+    "back": "뒤로",
+    "untitled": "(내용 없음)"
   },
   "contacts": {
     "search": "연락처 검색",
@@ -88,6 +101,10 @@
     "cancel": "취소",
     "quote_line": "{{name}}: {{text}}",
     "forward": "전달",
+    "collect": "즐겨찾기",
+    "collected": "저장했습니다",
+    "collect_failed": "저장하지 못했습니다",
+    "collect_too_large": "메시지가 너무 길어 저장할 수 없습니다",
     "select_messages": "다중 선택",
     "forward_title": "전달 대상",
     "forward_description": "대화를 하나 이상 고를 수 있습니다.",

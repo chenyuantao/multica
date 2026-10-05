@@ -26,6 +26,8 @@ describe("paths.workspace(slug)", () => {
       "/acme/im?chat=c1&view=settings&contact=agent%3Aa1",
     );
     expect(ws.knowledge()).toBe("/acme/knowledge");
+    expect(ws.collect()).toBe("/acme/collect");
+    expect(ws.collectItem("col 1")).toBe("/acme/collect?item=col%201");
     expect(ws.knowledgeFile("库/笔记 1.md")).toBe("/acme/knowledge?file=%E5%BA%93%2F%E7%AC%94%E8%AE%B0%201.md");
     expect(ws.usage()).toBe("/acme/usage");
     expect(ws.issues()).toBe("/acme/issues");

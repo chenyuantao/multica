@@ -23,13 +23,26 @@
     "profile": "プロフィール",
     "chats": "チャット",
     "contacts": "連絡先",
-    "knowledge": "ナレッジベース"
+    "knowledge": "ナレッジベース",
+    "collect": "お気に入り"
   },
   "tabs": {
     "chats": "メッセージ",
     "contacts": "連絡先",
     "knowledge": "ナレッジ",
     "me": "マイページ"
+  },
+  "collect": {
+    "settings": "設定",
+    "switcher": "設定とお気に入り",
+    "remove": "お気に入りから削除",
+    "removed": "削除しました",
+    "remove_failed": "削除できませんでした",
+    "empty": "お気に入りはまだありません",
+    "select": "お気に入りを選択",
+    "load_failed": "お気に入りを読み込めませんでした",
+    "back": "戻る",
+    "untitled": "（内容なし）"
   },
   "contacts": {
     "search": "連絡先を検索",
@@ -88,6 +101,10 @@
     "cancel": "キャンセル",
     "quote_line": "{{name}}：{{text}}",
     "forward": "転送",
+    "collect": "お気に入り",
+    "collected": "保存しました",
+    "collect_failed": "保存できませんでした",
+    "collect_too_large": "メッセージが長すぎて保存できません",
     "select_messages": "複数選択",
     "forward_title": "転送先",
     "forward_description": "チャットを一つ以上選べます。",

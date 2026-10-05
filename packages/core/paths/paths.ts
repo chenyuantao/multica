@@ -88,6 +88,8 @@ function workspaceScoped(slug: string) {
     memberChatContact: (chatId: string, actorType: string, actorId: string) =>
       `${ws}/member?chat=${encode(chatId)}&contact=${encode(`${actorType}:${actorId}`)}`,
     knowledge: () => `${ws}/knowledge`,
+    collect: () => `${ws}/collect`,
+    collectItem: (id: string) => `${ws}/collect?item=${encode(id)}`,
     knowledgeSearch: () => `${ws}/knowledge?view=search`,
     // "" is the vault root.
     knowledgeNewNote: (dir: string) =>

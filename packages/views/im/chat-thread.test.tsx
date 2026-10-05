@@ -10,6 +10,7 @@ import { ChatThread } from "./chat-thread";
 
 const sendMutateAsync = vi.fn();
 const forwardMutateAsync = vi.fn();
+const collectMutateAsync = vi.fn();
 const cancelRun = vi.hoisted(() => ({ mutate: vi.fn(), isPending: false, isSuccess: false }));
 const deleteMessage = vi.hoisted(() => ({ mutate: vi.fn(), isPending: false }));
 const copyText = vi.hoisted(() => vi.fn());
@@ -39,6 +40,9 @@ vi.mock("@multica/core/group-chats", async () => ({
   useMarkGroupChatRead: () => ({ mutate: markRead }),
 }));
 
+vi.mock("@multica/core/collections", () => ({
+  useCreateMessageCollection: () => ({ mutateAsync: collectMutateAsync, isPending: false }),
+}));
 vi.mock("@multica/core/issues/mutations", () => ({ useCancelIssueRun: () => cancelRun }));
 vi.mock("@multica/core/chat/queries", () => ({ useTaskMessages: () => ({ data: [] }) }));
 vi.mock("../common/task-transcript/agent-transcript-dialog", () => ({
@@ -489,7 +493,7 @@ describe("ChatThread message menu", () => {
     );
   }
 
-  it("orders actions as ask, copy, then forward, select, quote, then delete", async () => {
+  it("orders actions as ask, copy, then forward, favorite, select, quote, then delete", async () => {
     renderWithI18n(
       <ChatThread wsId="ws-1" chat={chat} userId="user-1" panelOpen={false} onTogglePanel={() => {}} onAskAI={() => {}} />,
     );
@@ -498,6 +502,7 @@ describe("ChatThread message menu", () => {
       "Copy",
       "----",
       "Forward",
+      "Favorite",
       "Select",
       "Quote",
       "----",
@@ -510,6 +515,7 @@ describe("ChatThread message menu", () => {
       "Copy",
       "----",
       "Forward",
+      "Favorite",
       "Select",
       "Quote",
     ]);
@@ -700,6 +706,7 @@ describe("ChatThread forward and multi-select", () => {
     ];
     sendMutateAsync.mockReset().mockReturnValue(new Promise(() => {}));
     forwardMutateAsync.mockReset().mockResolvedValue({ sent: ["chat-2"], failed: [], noteFailed: [] });
+    collectMutateAsync.mockReset().mockResolvedValue({ id: "saved-1" });
     vi.mocked(useQuery).mockImplementation(
       ((opts: { queryKey?: readonly unknown[] }) => {
         const key = opts?.queryKey?.[0];
@@ -726,11 +733,15 @@ describe("ChatThread forward and multi-select", () => {
     renderThread();
     fireEvent.contextMenu(screen.getByText("思考中..."));
     const forward = await screen.findByRole("menuitem", { name: "Forward" });
+    const favorite = screen.getByRole("menuitem", { name: "Favorite" });
     const select = screen.getByRole("menuitem", { name: "Select" });
     expect(forward).toHaveAttribute("aria-disabled", "true");
+    expect(favorite).toHaveAttribute("aria-disabled", "true");
     expect(select).toHaveAttribute("aria-disabled", "true");
     fireEvent.click(forward);
+    fireEvent.click(favorite);
     expect(screen.queryByRole("heading", { name: "Forward to" })).toBeNull();
+    expect(collectMutateAsync).not.toHaveBeenCalled();
   });
 
   it("selects messages from the bar and leaves that mode on cancel", async () => {
@@ -759,6 +770,28 @@ describe("ChatThread forward and multi-select", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: "Select" }));
     fireEvent.click(screen.getByText("思考中..."));
     expect(screen.getAllByRole("button", { pressed: true })).toHaveLength(1);
+  });
+
+  it("saves one message from the menu, and several as a history snapshot", async () => {
+    renderThread();
+    await openMenu("sounds good");
+    fireEvent.click(screen.getByRole("menuitem", { name: "Favorite" }));
+    await waitFor(() => expect(collectMutateAsync).toHaveBeenCalled());
+    const single = collectMutateAsync.mock.calls[0]?.[0] as { content: string; source_title: string; sender_name: string };
+    expect(single).toEqual({ content: "sounds good", source_title: "Launch room", sender_name: "name-user-1" });
+
+    collectMutateAsync.mockClear();
+    await openMenu("sounds good");
+    fireEvent.click(screen.getByRole("menuitem", { name: "Select" }));
+    fireEvent.click(screen.getByText("Ship v2 on Friday"));
+    fireEvent.click(screen.getByRole("button", { name: "Favorite" }));
+    await waitFor(() => expect(collectMutateAsync).toHaveBeenCalled());
+    const many = collectMutateAsync.mock.calls[0]?.[0] as { content: string; sender_name: string };
+    expect(many.content.startsWith("```multica-chat-history")).toBe(true);
+    expect(many.content).toContain("sounds good");
+    expect(many.content).toContain("Ship v2 on Friday");
+    expect(many.sender_name).toBe("name-user-2, name-user-1");
+    await waitFor(() => expect(screen.getByRole("button", { name: "send" })).toBeInTheDocument());
   });
 
   it("forwards the chosen messages as a history card, with a note after it", async () => {

@@ -14,6 +14,9 @@ const MENTION_GAP = "mention:\u200b//";
 /** Stay under the server's 64KiB comment limit, with room for encoding. */
 export const CHAT_HISTORY_MAX_BYTES = 60 * 1024;
 
+/** Saved message text. The collection row allows a full comment-sized body. */
+export const COLLECTION_MAX_BYTES = 64 * 1024;
+
 const PREVIEW_LIMIT = 3;
 
 const IMAGE_MD = /!\[[^\]]*\]\([^)]*\)/g;
@@ -117,6 +120,24 @@ function isAttachmentUrl(url: string): boolean {
 }
 
 /** One plain line: images and document cards become the short placeholders. */
+/** First line of a saved message. A chat-history snapshot uses its first inner line. */
+export function collectionListTitle(content: string, labels: HistoryLabels): string {
+  const nested = parseChatHistory(content);
+  if (nested) {
+    for (const message of nested.messages) {
+      const line = collectionListTitle(message.content, labels);
+      if (line) return line;
+    }
+    return labels.history;
+  }
+  for (const raw of content.split("\n")) {
+    const line = raw.trim();
+    if (!line) continue;
+    return summarizeMessageContent(line, labels);
+  }
+  return "";
+}
+
 export function summarizeMessageContent(content: string, labels: HistoryLabels): string {
   if (parseChatHistory(content)) return labels.history;
   const lines = content.split("\n").map((line) => {

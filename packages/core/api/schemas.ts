@@ -1205,6 +1205,19 @@ export const GroupChatSearchResultSchema = z.object({
   hits: z.array(GroupChatSearchHitSchema).default([]),
 }).loose();
 
+export const MessageCollectionSchema = z.object({
+  id: z.string(),
+  workspace_id: z.string().default(""),
+  content: z.string().default("").catch(""),
+  source_title: z.string().default("").catch(""),
+  sender_name: z.string().default("").catch(""),
+  created_at: z.string().default("").catch(""),
+}).loose();
+
+export const MessageCollectionsListSchema = z.object({
+  collections: z.array(MessageCollectionSchema).default([]),
+}).loose();
+
 export const DocNodeSchema: z.ZodType<DocNode> = z.lazy(() =>
   z.object({
     name: z.string(),
