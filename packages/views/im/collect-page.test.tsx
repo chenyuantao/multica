@@ -6,6 +6,7 @@ import type { MessageCollection } from "@multica/core/types";
 import { renderWithI18n } from "../test/i18n";
 import { NavigationProvider, type NavigationAdapter } from "../navigation";
 import { encodeChatHistory } from "./chat-history";
+import { formatStamp } from "./im-utils";
 import { CollectPage } from "./collect-page";
 
 const isMobile = vi.hoisted(() => ({ current: false }));
@@ -105,6 +106,7 @@ describe("CollectPage", () => {
     expect(rows[0]).toHaveTextContent("first saved line");
     expect(rows[0]).toHaveTextContent("Design");
     expect(rows[0]).toHaveTextContent("Ada");
+    expect(rows[0]).toHaveTextContent(formatStamp(items[0]!.created_at, new Date(), (time) => `Yesterday ${time}`));
     expect(rows[1]).toHaveTextContent("Only the first line");
     expect(rows[1]).not.toHaveTextContent("hidden");
     expect(rows[1]).toHaveTextContent("Grace");

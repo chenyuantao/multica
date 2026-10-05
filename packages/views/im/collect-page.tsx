@@ -16,6 +16,7 @@ import { useNavigation } from "../navigation";
 import { DragStrip } from "../platform";
 import { RichContent } from "../rich-content";
 import { collectionListTitle, parseChatHistory, type HistoryLabels } from "./chat-history";
+import { formatStamp } from "./im-utils";
 import { ChatHistoryTranscript } from "./chat-history-card";
 import { ImRail } from "./im-rail";
 import { ImSidebarSearch } from "./im-sidebar-search";
@@ -178,8 +179,13 @@ function CollectionList({
                           selected ? "bg-brand/12 hover:bg-brand/12" : "hover:bg-foreground/5",
                         )}
                       >
-                        <span className="truncate text-body font-medium" title={title}>
-                          {title}
+                        <span className="flex items-baseline gap-2">
+                          <span className="min-w-0 flex-1 truncate text-body font-medium" title={title}>
+                            {title}
+                          </span>
+                          <span className="shrink-0 text-micro text-muted-foreground tabular-nums">
+                            {formatStamp(item.created_at, new Date(), (time) => t(($) => $.thread.yesterday, { time }))}
+                          </span>
                         </span>
                         <span className="flex min-w-0 items-baseline gap-3 text-caption text-muted-foreground">
                           <span className="min-w-0 flex-1 truncate">{item.source_title}</span>
