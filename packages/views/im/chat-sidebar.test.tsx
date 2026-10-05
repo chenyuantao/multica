@@ -108,6 +108,16 @@ describe("ChatSidebar drafts", () => {
     expect(screen.getByRole("button", { name: /Room b/ })).toHaveTextContent("No messages yet");
   });
 
+  it("keeps the last message on the open chat even when a draft is stored", () => {
+    setChatDraft("a", "not sent\nyet");
+    renderSidebar("a", [{ ...chat("a", 0), last_message: message("shipped it") }, chat("b", 0)]);
+
+    const row = screen.getByRole("button", { name: /Room a/ });
+    expect(row).toHaveTextContent("shipped it");
+    expect(row).not.toHaveTextContent("[Draft]");
+    expect(screen.queryByText("[Draft]")).toBeNull();
+  });
+
   it("keeps the last message when the draft is only whitespace", () => {
     setChatDraft("a", "   \n");
     renderSidebar(null, [chat("a", 0)]);

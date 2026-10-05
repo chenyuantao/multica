@@ -199,7 +199,9 @@ function ChatListItem({
 }) {
   const { t } = useT("im");
   const { getActorName } = useActorName();
-  const draft = chatDraftSummary(useChatDraft(chat.id));
+  const storedDraft = useChatDraft(chat.id);
+  // The open chat already shows the composer, so its draft stays out of the list.
+  const draft = selected ? "" : chatDraftSummary(storedDraft);
   const last = chat.last_message;
   const text = !last
     ? ""
