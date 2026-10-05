@@ -1,17 +1,17 @@
-import type { DocNode, GroupChat, GroupChatSearchHit } from "@multica/core/types";
+import type { DocNode, GroupChat, GroupChatSearchHit, MessageCollection } from "@multica/core/types";
 import { chatActivityAt } from "./im-utils";
 import type { DirectoryEntry } from "./use-chat-directory";
 
-export type SearchScope = "all" | "chats" | "contacts" | "notes";
+export type SearchScope = "all" | "chats" | "contacts" | "notes" | "favorites";
 
 export type SearchSection = Exclude<SearchScope, "all">;
 
 /** Rows kept visible in a grouped result before "view all" expands the rest. */
 export const SEARCH_SECTION_PREVIEW = 3;
 
-const SEARCH_SECTIONS: SearchSection[] = ["chats", "contacts", "notes"];
+const SEARCH_SECTIONS: SearchSection[] = ["chats", "contacts", "notes", "favorites"];
 
-/** `priority` first, then the other sections in the usual chats → contacts → notes order. */
+/** `priority` first, then the other sections in the usual chats → contacts → notes → favorites order. */
 export function orderSearchSections(priority: SearchSection): SearchSection[] {
   return [priority, ...SEARCH_SECTIONS.filter((section) => section !== priority)];
 }
@@ -93,6 +93,44 @@ export function rankContacts(entries: readonly DirectoryEntry[], query: string):
     if (hits > 0) rows.push({ entry, hits, nameMatch: nameHits > 0 });
   }
   return rows.sort((a, b) => Number(b.nameMatch) - Number(a.nameMatch) || b.hits - a.hits);
+}
+
+export interface FavoriteSearchRow {
+  item: MessageCollection;
+  title: string;
+  hits: number;
+  titleMatch: boolean;
+}
+
+/**
+ * Saved messages whose title, chat, sender, or body contains `query`.
+ * Title matches come first, then more hits, then the newest save.
+ */
+export function rankFavorites(
+  items: readonly MessageCollection[],
+  query: string,
+  titleOf: (item: MessageCollection) => string,
+  textOf: (item: MessageCollection) => string,
+): FavoriteSearchRow[] {
+  const rows: FavoriteSearchRow[] = [];
+  for (const item of items) {
+    const title = titleOf(item);
+    const titleHits = countMatches(title, query);
+    const hits =
+      titleHits +
+      countMatches(item.source_title, query) +
+      countMatches(item.sender_name, query) +
+      countMatches(textOf(item), query);
+    if (hits === 0) continue;
+    rows.push({ item, title, hits, titleMatch: titleHits > 0 });
+  }
+  return rows.sort(
+    (a, b) =>
+      Number(b.titleMatch) - Number(a.titleMatch) ||
+      b.hits - a.hits ||
+      b.item.created_at.localeCompare(a.item.created_at) ||
+      b.item.id.localeCompare(a.item.id),
+  );
 }
 
 /** Note hits: title matches first, then more hits, then the most recently modified. */

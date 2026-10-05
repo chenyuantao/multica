@@ -4,6 +4,7 @@ import type { Comment } from "@multica/core/types";
 import {
   canForwardMessage,
   collectionListTitle,
+  collectionSearchText,
   encodeChatHistory,
   historyAt,
   historyAuthorNames,
@@ -117,6 +118,9 @@ describe("chat history snapshot", () => {
       ],
     });
     expect(collectionListTitle(card, labels)).toBe("first saved line");
+    expect(collectionSearchText(card)).toContain("first saved line\nmore");
+    expect(collectionSearchText(card)).toContain("Ada");
+    expect(collectionSearchText(card)).not.toContain("multica-chat-history");
   });
 
   it("ignores a comment that is not a history card", () => {

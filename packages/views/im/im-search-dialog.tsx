@@ -228,10 +228,11 @@ export function ImSearchDialog({
     } else if (row.kind === "contact") {
       if (onOpenContact) onOpenContact(row.entry);
       else navigation.push(paths.memberContact(row.entry.type, row.entry.id));
-    } else if (onOpenNote) {
-      onOpenNote(row.node.path);
+    } else if (row.kind === "note") {
+      if (onOpenNote) onOpenNote(row.node.path);
+      else navigation.push(paths.knowledgeFile(row.node.path));
     } else {
-      navigation.push(paths.knowledgeFile(row.node.path));
+      navigation.push(paths.collectItem(row.id));
     }
   };
 

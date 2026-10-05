@@ -57,6 +57,9 @@ vi.mock("@multica/core/auth", () => {
     }),
   };
 });
+vi.mock("./im-sidebar-search", () => ({
+  ImSidebarSearch: () => <input aria-label="Search" />,
+}));
 vi.mock("./use-group-chat-unread", () => ({ useGroupChatUnreadTotal: () => 0 }));
 vi.mock("../common/actor-avatar", () => ({ ActorAvatar: () => <span /> }));
 
@@ -96,6 +99,7 @@ describe("CollectPage", () => {
       "/acme/settings",
     ]);
     expect(rail.querySelector('[href="/acme/collect"]')).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("textbox", { name: "Search" })).toBeInTheDocument();
 
     const rows = screen.getAllByRole("button", { name: /Design|Launch/ });
     expect(rows[0]).toHaveTextContent("first saved line");
@@ -128,6 +132,7 @@ describe("CollectPage", () => {
       "Me",
     ]);
     expect(bottom.querySelector('[href="/acme/settings"]')).toHaveAttribute("aria-current", "page");
+    expect(screen.queryByRole("textbox", { name: "Search" })).not.toBeInTheDocument();
     const mine = screen.getByRole("navigation", { name: "Settings and favorites" });
     expect(mine.querySelector('[href="/acme/collect"]')).toHaveAttribute("aria-current", "page");
 

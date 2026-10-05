@@ -2,7 +2,8 @@
 
 import { describe, expect, it } from "vitest";
 import type { DocNode, GroupChat, GroupChatSearchHit } from "@multica/core/types";
-import { countMatches, orderSearchSections, previewSearchRows, rankChats, rankContacts, rankNotes } from "./im-search-utils";
+import type { MessageCollection } from "@multica/core/types";
+import { countMatches, orderSearchSections, previewSearchRows, rankChats, rankContacts, rankFavorites, rankNotes } from "./im-search-utils";
 import type { DirectoryEntry } from "./use-chat-directory";
 
 const chat = (id: string, title: string, lastAt: string): GroupChat =>
@@ -86,11 +87,41 @@ describe("rankNotes", () => {
   });
 });
 
+describe("rankFavorites", () => {
+  const saved = (id: string, content: string, source: string, sender: string, at: string): MessageCollection => ({
+    id,
+    workspace_id: "ws",
+    content,
+    source_title: source,
+    sender_name: sender,
+    created_at: at,
+  });
+  const items = [
+    saved("body", "status\nlaunch launch", "Ops", "Bea", "2026-03-01T00:00:00Z"),
+    saved("title", "Launch plan", "Quiet", "Cy", "2026-01-01T00:00:00Z"),
+    saved("source", "notes", "Launch room", "Ada", "2026-04-01T00:00:00Z"),
+    saved("miss", "nothing", "Elsewhere", "Dee", "2026-05-01T00:00:00Z"),
+  ];
+
+  it("puts the title match first, then more hits, then the newest save", () => {
+    const rows = rankFavorites(
+      items,
+      "launch",
+      (item) => item.content.split("\n")[0] ?? "",
+      (item) => item.content,
+    );
+    expect(rows.map((row) => row.item.id)).toEqual(["title", "body", "source"]);
+    expect(rows[0]?.titleMatch).toBe(true);
+    expect(rows[2]?.titleMatch).toBe(false);
+  });
+});
+
 describe("orderSearchSections", () => {
   it("keeps the requested section first and the others in their usual order", () => {
-    expect(orderSearchSections("chats")).toEqual(["chats", "contacts", "notes"]);
-    expect(orderSearchSections("contacts")).toEqual(["contacts", "chats", "notes"]);
-    expect(orderSearchSections("notes")).toEqual(["notes", "chats", "contacts"]);
+    expect(orderSearchSections("chats")).toEqual(["chats", "contacts", "notes", "favorites"]);
+    expect(orderSearchSections("contacts")).toEqual(["contacts", "chats", "notes", "favorites"]);
+    expect(orderSearchSections("notes")).toEqual(["notes", "chats", "contacts", "favorites"]);
+    expect(orderSearchSections("favorites")).toEqual(["favorites", "chats", "contacts", "notes"]);
   });
 });
 

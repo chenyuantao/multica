@@ -1,7 +1,7 @@
 "use client";
 
 import { Command as CommandPrimitive } from "cmdk";
-import { FileText } from "lucide-react";
+import { Bookmark, FileText } from "lucide-react";
 import { ActorAvatar } from "../common/actor-avatar";
 import { useT } from "../i18n";
 import { HighlightText } from "../search/highlight-text";
@@ -61,8 +61,10 @@ export function SearchResultGroups({
             />
           ) : row.kind === "contact" ? (
             <ContactResult entry={row.entry} userId={userId} query={highlight} />
-          ) : (
+          ) : row.kind === "note" ? (
             <NoteResult node={row.node} query={noteQuery} />
+          ) : (
+            <FavoriteResult row={row} query={highlight} />
           )}
         </CommandPrimitive.Item>
       ))}
@@ -129,6 +131,27 @@ function ContactResult({ entry, userId, query }: { entry: DirectoryEntry; userId
       </span>
       <span className="shrink-0 text-caption text-muted-foreground">
         {entry.type === "agent" ? t(($) => $.contacts.agent) : t(($) => $.contacts.person)}
+      </span>
+    </>
+  );
+}
+
+function FavoriteResult({ row, query }: { row: Extract<SearchRow, { kind: "favorite" }>; query: string }) {
+  return (
+    <>
+      <Bookmark className="size-4 shrink-0 text-muted-foreground" strokeWidth={1.7} />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate">
+          <HighlightText text={row.title} query={query} />
+        </span>
+        <span className="flex min-w-0 items-baseline gap-3 text-caption text-muted-foreground">
+          <span className="min-w-0 flex-1 truncate">
+            <HighlightText text={row.source} query={query} />
+          </span>
+          <span className="max-w-[40%] shrink-0 truncate text-right">
+            <HighlightText text={row.sender} query={query} />
+          </span>
+        </span>
       </span>
     </>
   );

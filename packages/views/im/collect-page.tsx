@@ -18,6 +18,7 @@ import { RichContent } from "../rich-content";
 import { collectionListTitle, parseChatHistory, type HistoryLabels } from "./chat-history";
 import { ChatHistoryTranscript } from "./chat-history-card";
 import { ImRail } from "./im-rail";
+import { ImSidebarSearch } from "./im-sidebar-search";
 import { ImSidebarHeader, ImSidebarShell } from "./im-sidebar-shell";
 import { MeSectionTabs } from "./me-section-tabs";
 import { MobileLevel, MobileTabScreen } from "./mobile-shell";
@@ -148,7 +149,12 @@ function CollectionList({
   const { t } = useT("im");
   return (
     <ImSidebarShell className={hideHeader ? "w-auto min-w-0 flex-1 border-r-0" : undefined}>
-      {!hideHeader && <ImSidebarHeader title={t(($) => $.rail.collect)} />}
+      {!hideHeader && (
+        <ImSidebarHeader
+          title={t(($) => $.rail.collect)}
+          desktopSearch={<ImSidebarSearch priority="favorites" onOpenFavorite={onSelect} />}
+        />
+      )}
       <nav className="min-h-0 flex-1 overflow-y-auto" aria-label={t(($) => $.rail.collect)}>
         {isError ? (
           <p className="px-3 py-8 text-center text-body text-muted-foreground">{t(($) => $.collect.load_failed)}</p>

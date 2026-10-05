@@ -13,22 +13,23 @@ import type { SearchSection } from "./im-search-utils";
 import { useImSearchGroups, type SearchRow } from "./use-im-search-groups";
 import type { DirectoryEntry } from "./use-chat-directory";
 
-const ALL_SECTIONS: SearchSection[] = ["chats", "contacts", "notes"];
+const ALL_SECTIONS: SearchSection[] = ["chats", "contacts", "notes", "favorites"];
 
 interface ImSidebarSearchProps {
-  /** Which of the three sections leads the results. */
+  /** Which section leads the results. */
   priority: SearchSection;
   onOpenChat?: (chatId: string) => void;
   onOpenContact?: (entry: DirectoryEntry) => void;
   onOpenNote?: (path: string) => void;
+  onOpenFavorite?: (id: string) => void;
 }
 
 /**
- * Desktop search field for chats, contacts and knowledge. Focusing it opens a
- * dropdown of the same three sections as the Mod+O switcher, without Ask AI.
- * `priority` is the section shown first.
+ * Desktop search field for chats, contacts, knowledge, and favorites. Focusing
+ * it opens a dropdown of those four sections, without Ask AI. `priority` is
+ * the section shown first.
  */
-export function ImSidebarSearch({ priority, onOpenChat, onOpenContact, onOpenNote }: ImSidebarSearchProps) {
+export function ImSidebarSearch({ priority, onOpenChat, onOpenContact, onOpenNote, onOpenFavorite }: ImSidebarSearchProps) {
   const { t } = useT("im");
   const navigation = useNavigation();
   const paths = useWorkspacePaths();
@@ -81,10 +82,13 @@ export function ImSidebarSearch({ priority, onOpenChat, onOpenContact, onOpenNot
     } else if (row.kind === "contact") {
       if (onOpenContact) onOpenContact(row.entry);
       else navigation.push(paths.memberContact(row.entry.type, row.entry.id));
-    } else if (onOpenNote) {
-      onOpenNote(row.node.path);
+    } else if (row.kind === "note") {
+      if (onOpenNote) onOpenNote(row.node.path);
+      else navigation.push(paths.knowledgeFile(row.node.path));
+    } else if (onOpenFavorite) {
+      onOpenFavorite(row.id);
     } else {
-      navigation.push(paths.knowledgeFile(row.node.path));
+      navigation.push(paths.collectItem(row.id));
     }
   };
 

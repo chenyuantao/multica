@@ -119,7 +119,15 @@ function isAttachmentUrl(url: string): boolean {
   return /\/api\/attachments\/|\/uploads\//.test(url) || FILE_EXT.test(url);
 }
 
-/** One plain line: images and document cards become the short placeholders. */
+/** Plain text of a saved message, with a chat-history snapshot opened into its messages. */
+export function collectionSearchText(content: string): string {
+  const nested = parseChatHistory(content);
+  if (!nested) return content;
+  return nested.messages
+    .map((message) => `${message.author_name}\n${collectionSearchText(message.content)}`)
+    .join("\n");
+}
+
 /** First line of a saved message. A chat-history snapshot uses its first inner line. */
 export function collectionListTitle(content: string, labels: HistoryLabels): string {
   const nested = parseChatHistory(content);
@@ -138,6 +146,7 @@ export function collectionListTitle(content: string, labels: HistoryLabels): str
   return "";
 }
 
+/** One plain line: images and document cards become the short placeholders. */
 export function summarizeMessageContent(content: string, labels: HistoryLabels): string {
   if (parseChatHistory(content)) return labels.history;
   const lines = content.split("\n").map((line) => {

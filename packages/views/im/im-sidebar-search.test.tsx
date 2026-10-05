@@ -31,6 +31,28 @@ const noteHits = [dir("Deep", [node("Deep/Roadmap.md", { match: "title" })])];
 const people: DirectoryEntry[] = [{ type: "member", id: "u2", name: "Ada", detail: "roadmap owner" }];
 const agents: DirectoryEntry[] = [{ type: "agent", id: "a1", name: "Roadmapper", detail: "" }];
 
+const favorites = [
+  {
+    id: "fav-1",
+    workspace_id: "ws-1",
+    content: "Roadmap sketch",
+    source_title: "Design",
+    sender_name: "Ada",
+    created_at: "2026-03-02T00:00:00Z",
+  },
+  {
+    id: "fav-2",
+    workspace_id: "ws-1",
+    content: "Quiet note",
+    source_title: "Ops",
+    sender_name: "Bea",
+    created_at: "2026-03-01T00:00:00Z",
+  },
+];
+
+vi.mock("@multica/core/collections", () => ({
+  messageCollectionListOptions: (wsId: string) => ({ queryKey: ["message-collections", wsId] }),
+}));
 vi.mock("@multica/core/docs", () => ({
   docsTreeOptions: () => ({ queryKey: ["docs", "tree"] }),
   docsSearchOptions: (q: string) => ({ queryKey: ["docs", "search", q] }),
@@ -48,6 +70,7 @@ vi.mock("@tanstack/react-query", async () => {
     useQuery: vi.fn(({ queryKey }: { queryKey: string[] }) => {
       const [root, kind, q] = queryKey;
       if (root === "group-chats") return kind === "list" ? ok(chats) : ok(q ? { query: q, hits: chatHits } : undefined);
+      if (root === "message-collections") return ok(favorites);
       if (kind === "tree") return ok(tree);
       if (!q) return ok(undefined);
       return ok({ query: q, nodes: noteHits, truncated: false });
@@ -81,6 +104,7 @@ function renderSearch(priority: SearchSection, locale?: "zh-Hans") {
   const onOpenChat = vi.fn();
   const onOpenContact = vi.fn();
   const onOpenNote = vi.fn();
+  const onOpenFavorite = vi.fn();
   const navigation: NavigationAdapter = {
     push: vi.fn(),
     replace: vi.fn(),
@@ -92,11 +116,17 @@ function renderSearch(priority: SearchSection, locale?: "zh-Hans") {
   };
   renderWithI18n(
     <NavigationProvider value={navigation}>
-      <ImSidebarSearch priority={priority} onOpenChat={onOpenChat} onOpenContact={onOpenContact} onOpenNote={onOpenNote} />
+      <ImSidebarSearch
+        priority={priority}
+        onOpenChat={onOpenChat}
+        onOpenContact={onOpenContact}
+        onOpenNote={onOpenNote}
+        onOpenFavorite={onOpenFavorite}
+      />
     </NavigationProvider>,
     locale ? { locale } : undefined,
   );
-  return { onOpenChat, onOpenContact, onOpenNote, navigation };
+  return { onOpenChat, onOpenContact, onOpenNote, onOpenFavorite, navigation };
 }
 
 async function typeQuery(value: string) {
@@ -119,26 +149,26 @@ describe("ImSidebarSearch", () => {
     expect(screen.queryByRole("listbox")).toBeNull();
 
     fireEvent.focus(input);
-    expect(headings()).toEqual(["Recently modified notes", "Recent chats", "Contacts"]);
+    expect(headings()).toEqual(["Recently modified notes", "Recent chats", "Contacts", "Recent favorites"]);
     expect(screen.queryByRole("option", { name: /Ask AI/ })).toBeNull();
     expect(screen.queryByRole("tab")).toBeNull();
 
     await typeQuery("r");
-    expect(headings()).toEqual(["Notes", "Chats", "Contacts"]);
+    expect(headings()).toEqual(["Notes", "Chats", "Contacts", "Favorites"]);
   });
 
   it("shows chats, contacts, and notes when search opens on the message page", () => {
     renderSearch("chats");
     fireEvent.focus(screen.getByRole("combobox", { name: "Search" }));
-    expect(headings()).toEqual(["Recent chats", "Contacts", "Recently modified notes"]);
+    expect(headings()).toEqual(["Recent chats", "Contacts", "Recently modified notes", "Recent favorites"]);
   });
 
   it("leads with contacts from the member page", async () => {
     renderSearch("contacts");
     fireEvent.focus(screen.getByRole("combobox", { name: "Search" }));
-    expect(headings()).toEqual(["Contacts", "Recent chats", "Recently modified notes"]);
+    expect(headings()).toEqual(["Contacts", "Recent chats", "Recently modified notes", "Recent favorites"]);
     await typeQuery("r");
-    expect(headings()).toEqual(["Contacts", "Chats", "Notes"]);
+    expect(headings()).toEqual(["Contacts", "Chats", "Notes", "Favorites"]);
   });
 
   it("uses the page names and collapses each section after three rows", async () => {
@@ -162,6 +192,18 @@ describe("ImSidebarSearch", () => {
     await typeQuery("room");
     fireEvent.click(screen.getAllByRole("option").find((option) => option.textContent?.startsWith("Room"))!);
     expect(onOpenChat).toHaveBeenCalledWith("room-5");
+    expect(screen.queryByRole("listbox")).toBeNull();
+  });
+
+  it("leads with favorites and opens the saved message", async () => {
+    const { onOpenFavorite } = renderSearch("favorites");
+    fireEvent.focus(screen.getByRole("combobox", { name: "Search" }));
+    expect(headings()[0]).toBe("Recent favorites");
+
+    await typeQuery("quiet");
+    expect(headings()[0]).toBe("Favorites");
+    fireEvent.click(screen.getByRole("option", { name: /Quiet note/ }));
+    expect(onOpenFavorite).toHaveBeenCalledWith("fav-2");
     expect(screen.queryByRole("listbox")).toBeNull();
   });
 });
