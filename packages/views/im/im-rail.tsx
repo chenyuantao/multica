@@ -54,9 +54,9 @@ export function ImRail({ active, readingChatId, className }: ImRailProps) {
       {(
         [
           { id: "chats", href: paths.im(), label: t(($) => $.rail.chats), icon: MessageCircle },
-          { id: "contacts", href: paths.member(), label: t(($) => $.rail.contacts), icon: UsersRound },
-          { id: "knowledge", href: paths.knowledge(), label: t(($) => $.rail.knowledge), icon: BookOpen },
           { id: "reminder", href: paths.reminder(), label: t(($) => $.rail.reminder), icon: ListTodo },
+          { id: "knowledge", href: paths.knowledge(), label: t(($) => $.rail.knowledge), icon: BookOpen },
+          { id: "contacts", href: paths.member(), label: t(($) => $.rail.contacts), icon: UsersRound },
           { id: "collect", href: paths.collect(), label: t(($) => $.rail.collect), icon: Bookmark },
         ] as const
       ).map(({ id, href, label, icon: Icon }) => (

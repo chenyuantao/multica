@@ -31,11 +31,11 @@
     "chats": "メッセージ",
     "contacts": "連絡先",
     "knowledge": "ナレッジ",
-    "me": "マイページ"
+    "me": "設定"
   },
   "collect": {
     "settings": "設定",
-    "switcher": "設定、リマインダー、お気に入り",
+    "switcher": "連絡先とお気に入り",
     "remove": "お気に入りから削除",
     "removed": "削除しました",
     "remove_failed": "削除できませんでした",

@@ -28,7 +28,7 @@ const EMPTY: MessageCollection[] = [];
 
 /**
  * Saved messages. Desktop matches the chat surface: a list on the left and
- * the message on the right. A phone keeps this inside Me, and opens one
+ * the message on the right. A phone keeps this inside Settings, and opens one
  * saved message as its own level.
  */
 export function CollectPage() {

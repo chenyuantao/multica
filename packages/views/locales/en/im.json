@@ -32,11 +32,11 @@
     "chats": "Chats",
     "contacts": "Contacts",
     "knowledge": "Knowledge",
-    "me": "Me"
+    "me": "Settings"
   },
   "collect": {
     "settings": "Settings",
-    "switcher": "Settings, reminders, and favorites",
+    "switcher": "Contacts and favorites",
     "remove": "Remove",
     "removed": "Removed",
     "remove_failed": "Couldn't remove",

@@ -31,11 +31,11 @@
     "chats": "消息",
     "contacts": "通讯录",
     "knowledge": "知识库",
-    "me": "我的"
+    "me": "设置"
   },
   "collect": {
     "settings": "设置",
-    "switcher": "设置、提醒和收藏",
+    "switcher": "通讯录和收藏",
     "remove": "移除收藏",
     "removed": "已移除",
     "remove_failed": "移除失败",

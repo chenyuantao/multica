@@ -94,9 +94,9 @@ describe("CollectPage", () => {
     expect([...rail.querySelectorAll("a")].map((link) => link.getAttribute("href"))).toEqual([
       "/acme/settings?tab=profile",
       "/acme/im",
-      "/acme/member",
-      "/acme/knowledge",
       "/acme/reminder",
+      "/acme/knowledge",
+      "/acme/member",
       "/acme/collect",
       "/acme/settings",
     ]);
@@ -124,20 +124,21 @@ describe("CollectPage", () => {
     expect(deleteMutate).toHaveBeenCalledWith("c2", expect.any(Object));
   });
 
-  it("keeps favorites inside Me on a phone", () => {
+  it("keeps favorites inside Settings on a phone", () => {
     isMobile.current = true;
     const list = renderPage();
     const bottom = screen.getByRole("navigation", { name: "Sections" });
     expect([...bottom.querySelectorAll("a")].map((link) => link.textContent)).toEqual([
       "Chats",
-      "Contacts",
+      "Reminders",
       "Knowledge",
-      "Me",
+      "Settings",
     ]);
     expect(bottom.querySelector('[href="/acme/settings"]')).toHaveAttribute("aria-current", "page");
     expect(screen.queryByRole("textbox", { name: "Search" })).not.toBeInTheDocument();
-    const mine = screen.getByRole("navigation", { name: "Settings, reminders, and favorites" });
+    const mine = screen.getByRole("navigation", { name: "Contacts and favorites" });
     expect(mine.querySelector('[href="/acme/collect"]')).toHaveAttribute("aria-current", "page");
+    expect(mine.querySelector('[href="/acme/member"]')).toBeInTheDocument();
 
     list.unmount();
     const { navigation } = renderPage("item=c1");

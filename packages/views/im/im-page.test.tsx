@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, screen } from "@testing-library/react";
+import { fireEvent, screen, within } from "@testing-library/react";
 import type { GroupChat } from "@multica/core/types";
 import { renderWithI18n } from "../test/i18n";
 import { NavigationProvider, type NavigationAdapter } from "../navigation";
@@ -207,9 +207,9 @@ describe("ImPage tab roots on mobile", () => {
 
     expect(links).toEqual([
       ["Chats", "/acme/im"],
-      ["Contacts", "/acme/member"],
+      ["Reminders", "/acme/reminder"],
       ["Knowledge", "/acme/knowledge"],
-      ["Me", "/acme/settings"],
+      ["Settings", "/acme/settings"],
     ]);
     expect(screen.getByRole("link", { name: "Chats" })).toHaveAttribute("aria-current", "page");
   });
@@ -241,6 +241,15 @@ describe("ImPage tab roots on mobile", () => {
     const navigation = renderPage("contacts");
     fireEvent.click(screen.getByRole("button", { name: "Search" }));
     expect(navigation.push).toHaveBeenCalledWith("/acme/member?view=search");
+  });
+
+  it("keeps contacts inside Settings, next to favorites", () => {
+    renderPage("contacts");
+    const tabs = screen.getByRole("navigation", { name: "Sections" });
+    expect(within(tabs).getByRole("link", { name: "Settings" })).toHaveAttribute("aria-current", "page");
+    const mine = screen.getByRole("navigation", { name: "Contacts and favorites" });
+    expect(within(mine).getByRole("link", { name: "Contacts" })).toHaveAttribute("aria-current", "page");
+    expect(within(mine).getByRole("link", { name: "Favorites" })).toHaveAttribute("href", "/acme/collect");
   });
 
   it("pushes new chat as its own page", () => {

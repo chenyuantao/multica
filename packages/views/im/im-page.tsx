@@ -28,6 +28,7 @@ import { ChatThread } from "./chat-thread";
 import { ContactCard } from "./contact-card";
 import { ContactList } from "./contact-list";
 import { ImRail, type ImView } from "./im-rail";
+import { MeSectionTabs } from "./me-section-tabs";
 import { ImSearchDialog } from "./im-search-dialog";
 import { MobileContactDetail, MobileLevel, MobileTabScreen, parseContactParam } from "./mobile-shell";
 import { chatDisplayTitle, sortChats } from "./im-utils";
@@ -265,7 +266,14 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
           </MobileLevel>
         );
       } else {
-        contactLevel = <MobileTabScreen active="contacts">{contactList("min-w-0 flex-1 border-r-0")}</MobileTabScreen>;
+        contactLevel = (
+          <MobileTabScreen active="settings">
+            <div className="flex min-w-0 flex-1 flex-col">
+              <MeSectionTabs active="contacts" />
+              {contactList("min-w-0 flex-1 border-r-0")}
+            </div>
+          </MobileTabScreen>
+        );
       }
       return (
         <KnowledgeNotesProvider onOpen={openNote}>

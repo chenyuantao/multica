@@ -169,17 +169,24 @@ describe("SettingsPage nav trigger", () => {
 });
 
 describe("SettingsPage phone tab bar", () => {
-  it("is a tab root on phones: bottom tabs with Me current, no back button", () => {
+  it("is a tab root on phones: bottom tabs with Settings current, no back button", () => {
     renderWithI18n(<SettingsPage />);
 
     const tabs = screen.getByRole("navigation", { name: "Sections" });
-    expect(within(tabs).getByRole("link", { name: "Me" })).toHaveAttribute("aria-current", "page");
+    expect([...tabs.querySelectorAll("a")].map((link) => link.textContent)).toEqual([
+      "Chats",
+      "Reminders",
+      "Knowledge",
+      "Settings",
+    ]);
+    expect(within(tabs).getByRole("link", { name: "Settings" })).toHaveAttribute("aria-current", "page");
     expect(within(tabs).getByRole("link", { name: "Chats" })).toHaveAttribute("href", "/acme/im");
     expect(within(tabs).queryByRole("link", { name: "Favorites" })).not.toBeInTheDocument();
-    const mine = screen.getByRole("navigation", { name: "Settings, reminders, and favorites" });
-    expect(within(mine).getByRole("link", { name: "Settings" })).toHaveAttribute("aria-current", "page");
-    expect(within(mine).getByRole("link", { name: "Reminders" })).toHaveAttribute("href", "/acme/reminder");
+    const mine = screen.getByRole("navigation", { name: "Contacts and favorites" });
+    expect(within(mine).getByRole("link", { name: "Contacts" })).toHaveAttribute("href", "/acme/member");
     expect(within(mine).getByRole("link", { name: "Favorites" })).toHaveAttribute("href", "/acme/collect");
+    expect(within(mine).queryByRole("link", { name: "Settings" })).not.toBeInTheDocument();
+    expect(within(mine).queryByRole("link", { name: "Reminders" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Back" })).not.toBeInTheDocument();
   });
 
@@ -188,7 +195,7 @@ describe("SettingsPage phone tab bar", () => {
     renderWithI18n(<SettingsPage />);
 
     expect(screen.queryByRole("navigation", { name: "Sections" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("navigation", { name: "Settings, reminders, and favorites" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Contacts and favorites" })).not.toBeInTheDocument();
   });
 });
 

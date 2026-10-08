@@ -42,7 +42,6 @@ import { ChatThread } from "./chat-thread";
 import { ImRail } from "./im-rail";
 import { ImSidebarHeader, ImSidebarShell } from "./im-sidebar-shell";
 import { resolveTitleMentions, type ComposerMention } from "./im-utils";
-import { MeSectionTabs } from "./me-section-tabs";
 import { MobileContactDetail, MobileLevel, MobileTabScreen, parseContactParam } from "./mobile-shell";
 import {
   endPosition,
@@ -276,9 +275,8 @@ export function ReminderPage() {
       );
     }
     return (
-      <MobileTabScreen active="settings">
+      <MobileTabScreen active="reminder">
         <div className="flex min-w-0 flex-1 flex-col">
-          <MeSectionTabs active="reminder" />
           <FilterTabs filter={filter} onChange={chooseFilter} />
           <div className="flex shrink-0 flex-col gap-2 border-b px-3 py-2">
             <div className="flex min-w-0 items-center gap-2">

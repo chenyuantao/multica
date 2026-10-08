@@ -140,15 +140,15 @@ afterEach(() => {
 });
 
 describe("ReminderPage", () => {
-  it("sits between knowledge and favorites and lists the week by day, without the chat list", () => {
+  it("sits between chats and knowledge and lists the week by day, without the chat list", () => {
     const { navigation } = renderPage();
     const rail = screen.getByRole("navigation", { name: "Sections" });
     expect([...rail.querySelectorAll("a")].map((link) => link.getAttribute("href"))).toEqual([
       "/acme/settings?tab=profile",
       "/acme/im",
-      "/acme/member",
-      "/acme/knowledge",
       "/acme/reminder",
+      "/acme/knowledge",
+      "/acme/member",
       "/acme/collect",
       "/acme/settings",
     ]);
@@ -297,11 +297,12 @@ describe("ReminderPage", () => {
     expect(navigation.replace).toHaveBeenCalledWith("/acme/reminder");
   });
 
-  it("lives in Me on phones and opens a reminder as its own level", () => {
+  it("is its own tab on phones and opens a reminder as its own level", () => {
     isMobile.current = true;
     const list = renderPage();
-    const mine = screen.getByRole("navigation", { name: "Settings, reminders, and favorites" });
-    expect(within(mine).getByRole("link", { name: "Reminders" })).toHaveAttribute("aria-current", "page");
+    const tabs = screen.getByRole("navigation", { name: "Sections" });
+    expect(within(tabs).getByRole("link", { name: "Reminders" })).toHaveAttribute("aria-current", "page");
+    expect(screen.queryByRole("navigation", { name: "Contacts and favorites" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Ship it" }));
     expect(list.navigation.push).toHaveBeenCalledWith("/acme/reminder?item=r1");
     list.unmount();

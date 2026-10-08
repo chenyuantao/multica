@@ -5,13 +5,12 @@ import { cn } from "@multica/ui/lib/utils";
 import { useT } from "../i18n";
 import { AppLink } from "../navigation";
 
-/** Phone switcher at the top of Me: settings stays put, reminders and favorites are the other pages. */
-export function MeSectionTabs({ active }: { active: "settings" | "reminder" | "collect" }) {
+/** Phone switcher at the top of Settings. The settings page is the tab itself; members and favorites are the other pages. */
+export function MeSectionTabs({ active }: { active: "settings" | "contacts" | "collect" }) {
   const { t } = useT("im");
   const paths = useWorkspacePaths();
   const tabs = [
-    { id: "settings" as const, href: paths.settings(), label: t(($) => $.collect.settings) },
-    { id: "reminder" as const, href: paths.reminder(), label: t(($) => $.rail.reminder) },
+    { id: "contacts" as const, href: paths.member(), label: t(($) => $.rail.contacts) },
     { id: "collect" as const, href: paths.collect(), label: t(($) => $.rail.collect) },
   ];
 
@@ -19,7 +18,7 @@ export function MeSectionTabs({ active }: { active: "settings" | "reminder" | "c
     <div className="flex shrink-0 justify-center border-b bg-sidebar px-4 py-2">
       <nav
         aria-label={t(($) => $.collect.switcher)}
-        className="grid w-full max-w-xs grid-cols-3 rounded-lg bg-foreground/5 p-0.5"
+        className="grid w-full max-w-xs grid-cols-2 rounded-lg bg-foreground/5 p-0.5"
       >
         {tabs.map(({ id, href, label }) => (
           <AppLink
