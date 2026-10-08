@@ -709,6 +709,10 @@ func (h *Handler) AddGroupChatMember(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "members of a direct chat cannot change")
 		return
 	}
+	if isReminder(issue) {
+		writeError(w, http.StatusBadRequest, "agents join a reminder when mentioned")
+		return
+	}
 	if !isGroupChatCreator(issue, userID) {
 		writeError(w, http.StatusForbidden, "only the chat creator can manage members")
 		return

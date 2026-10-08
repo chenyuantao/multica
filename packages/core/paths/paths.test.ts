@@ -28,6 +28,10 @@ describe("paths.workspace(slug)", () => {
     expect(ws.knowledge()).toBe("/acme/knowledge");
     expect(ws.collect()).toBe("/acme/collect");
     expect(ws.collectItem("col 1")).toBe("/acme/collect?item=col%201");
+    expect(ws.reminder()).toBe("/acme/reminder");
+    expect(ws.reminderItem("r 1")).toBe("/acme/reminder?item=r%201");
+    expect(ws.reminderItemContact("r1", "agent", "a1")).toBe("/acme/reminder?item=r1&contact=agent%3Aa1");
+    expect(ws.reminderItemProgress("r1", "t1")).toBe("/acme/reminder?item=r1&view=progress&task=t1");
     expect(ws.knowledgeFile("库/笔记 1.md")).toBe("/acme/knowledge?file=%E5%BA%93%2F%E7%AC%94%E8%AE%B0%201.md");
     expect(ws.usage()).toBe("/acme/usage");
     expect(ws.issues()).toBe("/acme/issues");

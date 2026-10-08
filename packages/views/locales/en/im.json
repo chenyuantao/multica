@@ -25,6 +25,7 @@
     "chats": "Chats",
     "contacts": "Contacts",
     "knowledge": "Knowledge base",
+    "reminder": "Reminders",
     "collect": "Favorites"
   },
   "tabs": {
@@ -35,7 +36,7 @@
   },
   "collect": {
     "settings": "Settings",
-    "switcher": "Settings and favorites",
+    "switcher": "Settings, reminders, and favorites",
     "remove": "Remove",
     "removed": "Removed",
     "remove_failed": "Couldn't remove",
@@ -132,7 +133,8 @@
     "cancelled_details_title": "Cancellation details",
     "cancelled_request": "Request",
     "cancelled_response": "Response",
-    "via_wechat_claw": "Sent from WeChat Claw"
+    "via_wechat_claw": "Sent from WeChat Claw",
+    "close_panel": "Close"
   },
   "composer": {
     "placeholder": "Message {{title}} — @ to address one agent",
@@ -278,5 +280,56 @@
     "context_remove": "Don't send this context",
     "pick_element": "Pick an element on the page",
     "pick_hint": "Click an element to ask about it · Esc to cancel"
+  },
+  "reminder": {
+    "title": "Reminders",
+    "filters": "Reminder filters",
+    "week": "This week",
+    "today": "Today",
+    "open": "Open",
+    "done": "Completed",
+    "prev_week": "Previous week",
+    "next_week": "Next week",
+    "current_week": "Back to this week",
+    "weekdays": {
+      "mon": "Mon",
+      "tue": "Tue",
+      "wed": "Wed",
+      "thu": "Thu",
+      "fri": "Fri",
+      "sat": "Sat",
+      "sun": "Sun"
+    },
+    "day_label": "{{weekday}} ({{date}})",
+    "add_more": "Add more",
+    "add_placeholder": "New reminder",
+    "empty": "No reminders",
+    "load_failed": "Couldn't load reminders",
+    "mark_done": "Mark \"{{title}}\" as completed",
+    "mark_open": "Mark \"{{title}}\" as not completed",
+    "delete": "Delete \"{{title}}\"",
+    "deleted": "Reminder deleted",
+    "delete_failed": "Couldn't delete the reminder",
+    "create_failed": "Couldn't add the reminder",
+    "update_failed": "Couldn't update the reminder",
+    "not_found": "This reminder isn't available",
+    "back": "Reminders",
+    "resize": "Resize reminder messages",
+    "refresh": "Refresh",
+    "pending": "Pending",
+    "hide_completed": "Hide completed",
+    "show_completed": "Show completed",
+    "tag_filters": "Tags",
+    "clear_tags": "Clear tag filter",
+    "add_first": "Add reminder",
+    "title_field": "Reminder title",
+    "completed_count": "{{count}} completed",
+    "move_today": "Move to today",
+    "move_tomorrow": "Move to tomorrow",
+    "move_friday": "Move to Friday",
+    "move_next_monday": "Move to next Monday",
+    "pin": "Pin as pending",
+    "unpin": "Unpin",
+    "delete_action": "Delete"
   }
 }

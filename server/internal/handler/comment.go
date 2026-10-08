@@ -1881,6 +1881,7 @@ func (h *Handler) CreateComment(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid comment type")
 		return
 	}
+	h.admitReminderMentionedAgents(r, issue, req.Content)
 	if h.rejectNonMemberAgentMentions(w, r, issue, req.Content) {
 		return
 	}

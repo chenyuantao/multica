@@ -24,6 +24,7 @@
     "chats": "채팅",
     "contacts": "연락처",
     "knowledge": "지식 베이스",
+    "reminder": "미리 알림",
     "collect": "즐겨찾기"
   },
   "tabs": {
@@ -34,7 +35,7 @@
   },
   "collect": {
     "settings": "설정",
-    "switcher": "설정과 즐겨찾기",
+    "switcher": "설정, 미리 알림, 즐겨찾기",
     "remove": "즐겨찾기에서 제거",
     "removed": "제거했습니다",
     "remove_failed": "제거하지 못했습니다",
@@ -128,7 +129,8 @@
     "cancelled_details_title": "취소 판단 상세",
     "cancelled_request": "요청",
     "cancelled_response": "응답",
-    "via_wechat_claw": "WeChat Claw에서 보냄"
+    "via_wechat_claw": "WeChat Claw에서 보냄",
+    "close_panel": "닫기"
   },
   "composer": {
     "placeholder": "{{title}}에 메시지 보내기 — @로 에이전트 하나 지정",
@@ -273,5 +275,56 @@
     "context_remove": "이 컨텍스트 보내지 않기",
     "pick_element": "페이지 요소 선택",
     "pick_hint": "요소를 클릭하면 질문과 함께 전송됩니다 · Esc로 취소"
+  },
+  "reminder": {
+    "title": "미리 알림",
+    "filters": "미리 알림 필터",
+    "week": "이번 주",
+    "today": "오늘",
+    "open": "미완료",
+    "done": "완료",
+    "prev_week": "이전 주",
+    "next_week": "다음 주",
+    "current_week": "이번 주로 돌아가기",
+    "weekdays": {
+      "mon": "월",
+      "tue": "화",
+      "wed": "수",
+      "thu": "목",
+      "fri": "금",
+      "sat": "토",
+      "sun": "일"
+    },
+    "day_label": "{{weekday}} ({{date}})",
+    "add_more": "추가",
+    "add_placeholder": "새 미리 알림",
+    "empty": "미리 알림이 없습니다",
+    "load_failed": "미리 알림을 불러오지 못했습니다",
+    "mark_done": "'{{title}}' 완료로 표시",
+    "mark_open": "'{{title}}' 미완료로 표시",
+    "delete": "'{{title}}' 삭제",
+    "deleted": "미리 알림을 삭제했습니다",
+    "delete_failed": "미리 알림을 삭제하지 못했습니다",
+    "create_failed": "미리 알림을 추가하지 못했습니다",
+    "update_failed": "미리 알림을 업데이트하지 못했습니다",
+    "not_found": "이 미리 알림을 사용할 수 없습니다",
+    "back": "미리 알림",
+    "resize": "미리 알림 메시지 너비 조절",
+    "refresh": "새로고침",
+    "pending": "보류",
+    "hide_completed": "완료 항목 숨기기",
+    "show_completed": "완료 항목 표시",
+    "tag_filters": "태그",
+    "clear_tags": "태그 필터 해제",
+    "add_first": "미리 알림 추가",
+    "title_field": "미리 알림 제목",
+    "completed_count": "{{count}}개 완료",
+    "move_today": "오늘로 이동",
+    "move_tomorrow": "내일로 이동",
+    "move_friday": "금요일로 이동",
+    "move_next_monday": "다음 주 월요일로 이동",
+    "pin": "보류로 고정",
+    "unpin": "고정 해제",
+    "delete_action": "삭제"
   }
 }

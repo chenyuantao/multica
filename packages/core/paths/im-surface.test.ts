@@ -4,10 +4,11 @@ import { describe, expect, it } from "vitest";
 import { imSurfaceSegment, isImSurfaceLocalNav } from "./im-surface";
 
 describe("imSurfaceSegment", () => {
-  it("names the four full-window IM tabs", () => {
+  it("names the five full-window IM tabs", () => {
     expect(imSurfaceSegment("/acme/im")).toBe("im");
     expect(imSurfaceSegment("/acme/member")).toBe("member");
     expect(imSurfaceSegment("/acme/knowledge")).toBe("knowledge");
+    expect(imSurfaceSegment("/acme/reminder")).toBe("reminder");
     expect(imSurfaceSegment("/acme/collect")).toBe("collect");
   });
 
@@ -19,8 +20,9 @@ describe("imSurfaceSegment", () => {
 });
 
 describe("isImSurfaceLocalNav", () => {
-  it("stays local across the four tabs in one workspace", () => {
+  it("stays local across the five tabs in one workspace", () => {
     expect(isImSurfaceLocalNav("/acme/im", "/acme/knowledge")).toBe(true);
+    expect(isImSurfaceLocalNav("/acme/reminder", "/acme/reminder?item=r1")).toBe(true);
     expect(isImSurfaceLocalNav("/acme/collect", "/acme/member?contact=member%3Au1")).toBe(true);
     expect(isImSurfaceLocalNav("/acme/im", "/acme/im?chat=c1")).toBe(true);
   });

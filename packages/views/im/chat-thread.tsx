@@ -117,10 +117,16 @@ interface ChatThreadProps {
   onAskAI?: (selection?: AskAISelection) => void;
   /** The knowledge note tab open beside the chat. Each send tells the agent the message is about it. */
   focusNote?: FocusNote | null;
+  /** Who the composer can @mention. Defaults to the other chat members. */
+  mentionCandidates?: ComposerMention[];
+  /** Shows a close button in place of the details toggle, for a thread opened as a side panel. */
+  onClose?: () => void;
   /** Mobile stacked layout: back to the chat list, on to chat settings, and profiles as page levels. */
   mobileNav?: {
     backHref: string;
-    settingsHref: string;
+    backLabel?: string;
+    /** Absent when the chat has no settings level. */
+    settingsHref?: string;
     onOpenProfile: (actorType: string, actorId: string) => void;
     /** Opens a forwarded history card as its own page. */
     onOpenHistory?: (messageId: string) => void;
@@ -149,7 +155,18 @@ function asGroupChats(data: unknown): GroupChat[] {
   );
 }
 
-export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAskAI, focusNote, mobileNav }: ChatThreadProps) {
+export function ChatThread({
+  wsId,
+  chat,
+  userId,
+  panelOpen,
+  onTogglePanel,
+  onAskAI,
+  focusNote,
+  mentionCandidates,
+  onClose,
+  mobileNav,
+}: ChatThreadProps) {
   const { t } = useT("im");
   const { getActorName } = useActorName();
   const {
@@ -510,10 +527,11 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAsk
   const agents = chat.members.filter((m) => m.member_type === "agent");
   const candidates = useMemo<ComposerMention[]>(
     () =>
+      mentionCandidates ??
       chat.members
         .filter((m) => !(m.member_type === "member" && m.member_id === userId))
         .map((m) => ({ type: m.member_type, id: m.member_id, name: getActorName(m.member_type, m.member_id) })),
-    [chat.members, getActorName, userId],
+    [mentionCandidates, chat.members, getActorName, userId],
   );
 
   const deliver = useCallback(
@@ -638,19 +656,21 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAsk
           title={title}
           subtitle={subtitle}
           backHref={mobileNav.backHref}
-          backLabel={t(($) => $.thread.back)}
+          backLabel={mobileNav.backLabel ?? t(($) => $.thread.back)}
           action={
             <div className="flex items-center gap-0.5">
               {searchButton}
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                nativeButton={false}
-                render={<AppLink href={mobileNav.settingsHref} />}
-                aria-label={peer ? t(($) => $.contacts.view_profile) : t(($) => $.thread.settings)}
-              >
-                <MoreHorizontal />
-              </Button>
+              {mobileNav.settingsHref && (
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  nativeButton={false}
+                  render={<AppLink href={mobileNav.settingsHref} />}
+                  aria-label={peer ? t(($) => $.contacts.view_profile) : t(($) => $.thread.settings)}
+                >
+                  <MoreHorizontal />
+                </Button>
+              )}
             </div>
           }
         />
@@ -665,17 +685,30 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAsk
           </div>
           {onAskAI && <AskAIBadge onClick={() => onAskAI()} />}
           {searchButton}
-          <Button
-            variant={panelOpen ? "secondary" : "ghost"}
-            size="icon-sm"
-            className="relative"
-            style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-            onClick={onTogglePanel}
-            aria-pressed={panelOpen}
-            aria-label={t(($) => $.thread.toggle_panel)}
-          >
-            <PanelRight />
-          </Button>
+          {onClose ? (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="relative"
+              style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+              onClick={onClose}
+              aria-label={t(($) => $.thread.close_panel)}
+            >
+              <X />
+            </Button>
+          ) : (
+            <Button
+              variant={panelOpen ? "secondary" : "ghost"}
+              size="icon-sm"
+              className="relative"
+              style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+              onClick={onTogglePanel}
+              aria-pressed={panelOpen}
+              aria-label={t(($) => $.thread.toggle_panel)}
+            >
+              <PanelRight />
+            </Button>
+          )}
         </header>
       )}
 

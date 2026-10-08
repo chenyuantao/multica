@@ -126,6 +126,43 @@ export interface CreateGroupChatRequest {
   members: GroupChatMemberRef[];
 }
 
+/**
+ * A personal to-do kept as a group chat that stays off the chat list. Its
+ * messages are the details; an agent joins when a message mentions it.
+ */
+export interface Reminder extends GroupChat {
+  /** `done` once checked off; anything else is open. */
+  status: string;
+  /** YYYY-MM-DD, or null when the reminder has no day. */
+  due_date: string | null;
+  /** Order among the open reminders of the same day; smaller sorts first. */
+  position: number;
+  updated_at: string;
+  /** Pinned above the days until it is done, whatever its due date. */
+  pending: boolean;
+}
+
+export interface CreateReminderRequest {
+  title: string;
+  due_date?: string | null;
+  position?: number;
+}
+
+/** Fields a reminder row edits in place. */
+export interface ReminderPatch {
+  title?: string;
+  due_date?: string | null;
+  position?: number;
+  done?: boolean;
+}
+
+export interface ListRemindersParams {
+  /** Inclusive YYYY-MM-DD window on the due date. */
+  from?: string;
+  to?: string;
+  status?: "open" | "done";
+}
+
 /** A saved copy of one message, or of several messages stored as a chat-history snapshot. */
 export interface MessageCollection {
   id: string;

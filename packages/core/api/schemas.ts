@@ -1189,6 +1189,19 @@ export const GroupChatsListSchema = z.object({
   chats: z.array(GroupChatSchema).default([]),
 }).loose();
 
+export const ReminderSchema = GroupChatSchema.extend({
+  // An unknown status reads as open so the row keeps its checkbox.
+  status: z.string().catch("todo"),
+  due_date: z.string().nullable().default(null).catch(null),
+  position: z.number().default(0).catch(0),
+  updated_at: z.string().default("").catch(""),
+  pending: z.boolean().default(false).catch(false),
+}).loose();
+
+export const RemindersListSchema = z.object({
+  reminders: z.array(ReminderSchema).default([]),
+}).loose();
+
 export const GroupChatSearchHitSchema = z.object({
   chat_id: z.string(),
   message_id: z.string().default(""),

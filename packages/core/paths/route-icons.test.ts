@@ -19,7 +19,7 @@ describe("workspace page coverage", () => {
   // `im`, `member` and `knowledge` are full-window surfaces outside the
   // dashboard shell, along with their query-param levels.
   const EXCLUDED_METHODS = new Set(["root"]);
-  const FULL_WINDOW_SEGMENTS = new Set(["im", "member", "knowledge", "collect"]);
+  const FULL_WINDOW_SEGMENTS = new Set(["im", "member", "knowledge", "reminder", "collect"]);
   const KNOWN_SEGMENTS = new Set(
     (Object.keys(WORKSPACE_PAGES) as WorkspacePageKey[]).map(
       (k) => WORKSPACE_PAGES[k].segment,

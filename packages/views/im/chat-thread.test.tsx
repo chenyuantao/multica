@@ -78,7 +78,9 @@ const startDirectChat = vi.hoisted(() => vi.fn());
 vi.mock("../modals/agent-detail", () => ({ useOpenAgentDetail: () => openAgentDetail }));
 vi.mock("./use-direct-chat", () => ({ useStartDirectChat: () => ({ start: startDirectChat, isPending: false }) }));
 vi.mock("../platform", () => ({ DragStrip: () => null }));
-vi.mock("./mobile-shell", () => ({ MobileLevelHeader: () => null }));
+vi.mock("./mobile-shell", () => ({
+  MobileLevelHeader: ({ backLabel }: { backLabel: string }) => <div data-testid="level-header" data-back-label={backLabel} />,
+}));
 vi.mock("../common/actor-avatar", () => ({
   ActorAvatar: ({ onPickConversationStarter }: { onPickConversationStarter?: (prompt: string) => void }) =>
     onPickConversationStarter ? (
@@ -94,12 +96,15 @@ vi.mock("./chat-composer", () => ({
     onSend,
     quote,
     onCancelQuote,
+    candidates,
   }: {
     onSend: (content: string, attachmentIds: string[]) => void;
     quote?: { name: string; text: string } | null;
     onCancelQuote?: () => void;
+    candidates?: { name: string }[];
   }) => (
     <>
+      <p data-testid="composer-candidates">{candidates?.map((c) => c.name).join(",")}</p>
       <button type="button" onClick={() => onSend("hello", [])}>
         send
       </button>
@@ -693,6 +698,46 @@ describe("ChatThread moderation and phone menu", () => {
       vi.useRealTimers();
     }
     expect(screen.queryByRole("menu")).toBeNull();
+  });
+});
+
+describe("ChatThread opened as a reminder", () => {
+  beforeEach(() => {
+    messages = [message("m-0", "details")];
+    vi.mocked(useQuery).mockImplementation(() => ({ data: messages, isError: false }) as never);
+  });
+
+  it("closes instead of toggling details and mentions the given candidates", () => {
+    const onClose = vi.fn();
+    renderWithI18n(
+      <ChatThread
+        wsId="ws-1"
+        chat={chat}
+        userId="user-1"
+        panelOpen={false}
+        onTogglePanel={() => {}}
+        mentionCandidates={[{ type: "agent", id: "agent-9", name: "Jev" }]}
+        onClose={onClose}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "Toggle chat details" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(onClose).toHaveBeenCalled();
+    expect(screen.getByTestId("composer-candidates")).toHaveTextContent("Jev");
+  });
+
+  it("labels the phone back control for the reminder list", () => {
+    renderWithI18n(
+      <ChatThread
+        wsId="ws-1"
+        chat={chat}
+        userId="user-1"
+        panelOpen={false}
+        onTogglePanel={() => {}}
+        mobileNav={{ backHref: "/reminder", backLabel: "Reminders", onOpenProfile: () => {} }}
+      />,
+    );
+    expect(screen.getByTestId("level-header")).toHaveAttribute("data-back-label", "Reminders");
   });
 });
 

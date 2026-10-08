@@ -32,7 +32,7 @@ SELECT EXISTS (
 -- name: ListGroupChatsForMember :many
 -- Group chats the given person/agent belongs to: the ones they pinned first,
 -- then newest message first. Chats without messages yet sort by their
--- creation time.
+-- creation time. Reminders are chats too but live only on the reminder page.
 SELECT i.* FROM issue i
 JOIN issue_member m
   ON m.issue_id = i.id
@@ -40,6 +40,7 @@ JOIN issue_member m
  AND m.member_type = @member_type
  AND m.member_id = @member_id
 WHERE i.workspace_id = @workspace_id
+  AND i.origin_type IS DISTINCT FROM 'reminder'
 ORDER BY (m.pinned_at IS NOT NULL) DESC, COALESCE(i.last_comment_at, i.created_at) DESC, i.id DESC
 LIMIT @row_limit;
 
@@ -95,12 +96,29 @@ JOIN issue_member m
  AND m.workspace_id = c.workspace_id
  AND m.member_type = 'member'
  AND m.member_id = @member_id
+JOIN issue i
+  ON i.id = c.issue_id
+ AND i.origin_type IS DISTINCT FROM 'reminder'
 WHERE c.workspace_id = @workspace_id
   AND c.deleted_at IS NULL
   AND c.author_type <> 'system'
   AND c.type NOT IN ('status_change', 'system')
   AND LOWER(c.content) LIKE @pattern
 ORDER BY c.issue_id, c.created_at DESC, c.id DESC;
+
+-- name: ListRemindersForCreator :many
+-- The creator's reminders, optionally narrowed to a due-date window and to
+-- open or done ones. Undated reminders only match when no window is given.
+SELECT i.* FROM issue i
+WHERE i.workspace_id = @workspace_id
+  AND i.origin_type = 'reminder'
+  AND i.creator_type = 'member'
+  AND i.creator_id = @creator_id
+  AND (sqlc.narg('due_from')::date IS NULL OR i.due_date >= sqlc.narg('due_from')::date)
+  AND (sqlc.narg('due_to')::date IS NULL OR i.due_date <= sqlc.narg('due_to')::date)
+  AND (sqlc.narg('done')::bool IS NULL OR (i.status = 'done') = sqlc.narg('done')::bool)
+ORDER BY i.due_date ASC NULLS LAST, i.position ASC, i.created_at ASC, i.id ASC
+LIMIT @row_limit;
 
 -- name: ListIssueHumanMemberUserIDs :many
 -- Recipients for group chat realtime events.

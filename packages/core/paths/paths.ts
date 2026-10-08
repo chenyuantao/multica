@@ -90,6 +90,14 @@ function workspaceScoped(slug: string) {
     knowledge: () => `${ws}/knowledge`,
     collect: () => `${ws}/collect`,
     collectItem: (id: string) => `${ws}/collect?item=${encode(id)}`,
+    reminder: () => `${ws}/reminder`,
+    // The open reminder's messages; a phone shows them as their own level,
+    // with a profile and a run log stacked on top.
+    reminderItem: (id: string) => `${ws}/reminder?item=${encode(id)}`,
+    reminderItemContact: (id: string, actorType: string, actorId: string) =>
+      `${ws}/reminder?item=${encode(id)}&contact=${encode(`${actorType}:${actorId}`)}`,
+    reminderItemProgress: (id: string, taskId: string) =>
+      `${ws}/reminder?item=${encode(id)}&view=progress&task=${encode(taskId)}`,
     knowledgeSearch: () => `${ws}/knowledge?view=search`,
     // "" is the vault root.
     knowledgeNewNote: (dir: string) =>

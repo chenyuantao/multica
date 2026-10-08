@@ -88,7 +88,7 @@ beforeEach(() => {
 });
 
 describe("CollectPage", () => {
-  it("puts favorites fourth in the desktop rail and expands a saved history", () => {
+  it("puts favorites last in the desktop rail sections and expands a saved history", () => {
     renderPage();
     const rail = screen.getByRole("navigation", { name: "Sections" });
     expect([...rail.querySelectorAll("a")].map((link) => link.getAttribute("href"))).toEqual([
@@ -96,6 +96,7 @@ describe("CollectPage", () => {
       "/acme/im",
       "/acme/member",
       "/acme/knowledge",
+      "/acme/reminder",
       "/acme/collect",
       "/acme/settings",
     ]);
@@ -135,7 +136,7 @@ describe("CollectPage", () => {
     ]);
     expect(bottom.querySelector('[href="/acme/settings"]')).toHaveAttribute("aria-current", "page");
     expect(screen.queryByRole("textbox", { name: "Search" })).not.toBeInTheDocument();
-    const mine = screen.getByRole("navigation", { name: "Settings and favorites" });
+    const mine = screen.getByRole("navigation", { name: "Settings, reminders, and favorites" });
     expect(mine.querySelector('[href="/acme/collect"]')).toHaveAttribute("aria-current", "page");
 
     list.unmount();

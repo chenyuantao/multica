@@ -366,7 +366,11 @@ export type {
   GroupChatSearchResult,
   CreateGroupChatRequest,
   CreateMessageCollectionRequest,
+  CreateReminderRequest,
+  ReminderPatch,
+  ListRemindersParams,
   MessageCollection,
+  Reminder,
   UpdateGroupChatRequest,
 } from "./group-chat";
 export type {

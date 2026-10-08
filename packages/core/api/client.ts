@@ -499,6 +499,8 @@ import {
   GroupChatSearchResultSchema,
   MessageCollectionSchema,
   MessageCollectionsListSchema,
+  ReminderSchema,
+  RemindersListSchema,
   AskAIResponseSchema,
   DocFileSchema,
   DocMoveResultSchema,
@@ -513,11 +515,14 @@ import type {
   FocusNote,
   CreateGroupChatRequest,
   CreateMessageCollectionRequest,
+  CreateReminderRequest,
   GroupChat,
+  ListRemindersParams,
   MessageCollection,
   GroupChatMemberRef,
   GroupChatMemberType,
   GroupChatSearchResult,
+  Reminder,
   UpdateGroupChatRequest,
 } from "../types/group-chat";
 import type {
@@ -4731,6 +4736,41 @@ export class ApiClient {
     await this.fetch(`/api/group-chats/${chatId}/members/${memberType}/${memberId}`, {
       method: "DELETE",
     });
+  }
+
+  async listReminders(params: ListRemindersParams = {}): Promise<Reminder[]> {
+    const query = new URLSearchParams();
+    if (params.from) query.set("from", params.from);
+    if (params.to) query.set("to", params.to);
+    if (params.status) query.set("status", params.status);
+    const qs = query.toString();
+    const raw = await this.fetch<unknown>(`/api/reminders${qs ? `?${qs}` : ""}`);
+    return parseWithFallback<{ reminders: Reminder[] }>(raw, RemindersListSchema, { reminders: [] }, {
+      endpoint: "GET /api/reminders",
+    }).reminders;
+  }
+
+  async createReminder(data: CreateReminderRequest): Promise<Reminder> {
+    const raw = await this.fetch<unknown>("/api/reminders", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+    const reminder = parseWithFallback<Reminder | null>(raw, ReminderSchema, null, {
+      endpoint: "POST /api/reminders",
+    });
+    if (!reminder) throw new Error("Invalid reminder response");
+    return reminder;
+  }
+
+  async setIssueMetadataKey(issueId: string, key: string, value: unknown): Promise<void> {
+    await this.fetch(`/api/issues/${issueId}/metadata/${encodeURIComponent(key)}`, {
+      method: "PUT",
+      body: JSON.stringify({ value }),
+    });
+  }
+
+  async deleteIssueMetadataKey(issueId: string, key: string): Promise<void> {
+    await this.fetch(`/api/issues/${issueId}/metadata/${encodeURIComponent(key)}`, { method: "DELETE" });
   }
 
   async listFileShares(): Promise<FileShare[]> {

@@ -51,6 +51,7 @@ import {
   GroupChatsListSchema,
   GroupChatSearchResultSchema,
   MessageCollectionsListSchema,
+  RemindersListSchema,
   InboxItemListSchema,
   InboxUnreadSummarySchema,
   IssueTriggerPreviewSchema,
@@ -84,7 +85,7 @@ import {
   EMPTY_ISSUE_STATUS_ENTRY,
 } from "./schemas";
 import { parseWithFallback } from "./schema";
-import type { DocSearchResult, GroupChat, GroupChatSearchResult } from "../types";
+import type { DocSearchResult, GroupChat, GroupChatSearchResult, Reminder } from "../types";
 
 const baseIssue = {
   id: "11111111-1111-1111-1111-111111111111",
@@ -1555,6 +1556,33 @@ describe("GroupChatsListSchema unread_count", () => {
       ENDPOINT,
     );
     expect(parsed.chats.map((c) => c.pinned)).toEqual([true, false, false]);
+  });
+});
+
+describe("RemindersListSchema", () => {
+  const ENDPOINT = { endpoint: "GET /api/reminders" };
+
+  it("defaults a missing status and due date, and rejects a payload that is not a list", () => {
+    const parsed = parseWithFallback<{ reminders: Reminder[] }>(
+      {
+        reminders: [
+          { id: "r1", workspace_id: "ws-1", title: "Ship", status: "done", due_date: "2026-10-08" },
+          { id: "r2", workspace_id: "ws-1", title: "Plan", status: 3, due_date: 7 },
+          { id: "r3", workspace_id: "ws-1", title: "Call" },
+        ],
+      },
+      RemindersListSchema,
+      { reminders: [] },
+      ENDPOINT,
+    );
+    expect(parsed.reminders.map((r) => [r.status, r.due_date, r.members, r.unread_count])).toEqual([
+      ["done", "2026-10-08", [], 0],
+      ["todo", null, [], 0],
+      ["todo", null, [], 0],
+    ]);
+
+    const broken = parseWithFallback({ reminders: "nope" }, RemindersListSchema, { reminders: [] }, ENDPOINT);
+    expect(broken.reminders).toEqual([]);
   });
 });
 

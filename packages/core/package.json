@@ -109,6 +109,7 @@
     "./autopilots/mutations": "./autopilots/mutations.ts",
     "./group-chats": "./group-chats/index.ts",
     "./collections": "./collections/index.ts",
+    "./reminders": "./reminders/index.ts",
     "./docs": "./docs/index.ts",
     "./pins": "./pins/index.ts",
     "./pins/queries": "./pins/queries.ts",

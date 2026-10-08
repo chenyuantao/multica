@@ -45,7 +45,7 @@ function placeholderRun(chatId: string, taskId: string): AgentTask {
  * Phone level for the run behind a thinking bubble. Desktop opens the same
  * transcript in a dialog; this page uses the level's back control instead.
  */
-export function ChatProgressRoute({ chatId, taskId }: { chatId: string; taskId: string }) {
+export function ChatProgressRoute({ chatId, taskId, backHref }: { chatId: string; taskId: string; backHref?: string }) {
   const { t } = useT("im");
   const paths = useWorkspacePaths();
   const { getActorName } = useActorName();
@@ -62,7 +62,7 @@ export function ChatProgressRoute({ chatId, taskId }: { chatId: string; taskId: 
   return (
     <MobileLevel
       title={t(($) => $.thread.view_progress)}
-      backHref={paths.imChat(chatId)}
+      backHref={backHref ?? paths.imChat(chatId)}
       backLabel={t(($) => $.panel.back)}
     >
       {taskId ? (

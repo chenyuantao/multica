@@ -6,7 +6,7 @@
 export function isPwaOfflinePath(pathname: string): boolean {
   const parts = pathname.split("/").filter(Boolean);
   if (parts[0] === "im") return true;
-  return parts.length >= 2 && (parts[1] === "im" || parts[1] === "member" || parts[1] === "knowledge" || parts[1] === "collect");
+  return parts.length >= 2 && (parts[1] === "im" || parts[1] === "member" || parts[1] === "knowledge" || parts[1] === "reminder" || parts[1] === "collect");
 }
 
 export const PWA_SHELL_CACHE = "multica-pwa-shell-v1";

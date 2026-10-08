@@ -146,6 +146,7 @@ JOIN issue_member m
  AND m.member_type = $1
  AND m.member_id = $2
 WHERE i.workspace_id = $3
+  AND i.origin_type IS DISTINCT FROM 'reminder'
 ORDER BY (m.pinned_at IS NOT NULL) DESC, COALESCE(i.last_comment_at, i.created_at) DESC, i.id DESC
 LIMIT $4
 `
@@ -159,7 +160,7 @@ type ListGroupChatsForMemberParams struct {
 
 // Group chats the given person/agent belongs to: the ones they pinned first,
 // then newest message first. Chats without messages yet sort by their
-// creation time.
+// creation time. Reminders are chats too but live only on the reminder page.
 func (q *Queries) ListGroupChatsForMember(ctx context.Context, arg ListGroupChatsForMemberParams) ([]Issue, error) {
 	rows, err := q.db.Query(ctx, listGroupChatsForMember,
 		arg.MemberType,
@@ -381,6 +382,90 @@ func (q *Queries) ListLatestCommentsForIssues(ctx context.Context, arg ListLates
 	return items, nil
 }
 
+const listRemindersForCreator = `-- name: ListRemindersForCreator :many
+SELECT i.id, i.workspace_id, i.title, i.description, i.status, i.priority, i.assignee_type, i.assignee_id, i.creator_type, i.creator_id, i.parent_issue_id, i.acceptance_criteria, i.context_refs, i.position, i.due_date, i.created_at, i.updated_at, i.number, i.project_id, i.origin_type, i.origin_id, i.first_executed_at, i.start_date, i.metadata, i.stage, i.properties, i.revision, i.last_activity_at, i.triage_state, i.duplicate_of_issue_id, i.last_comment_at, i.is_direct_chat FROM issue i
+WHERE i.workspace_id = $1
+  AND i.origin_type = 'reminder'
+  AND i.creator_type = 'member'
+  AND i.creator_id = $2
+  AND ($3::date IS NULL OR i.due_date >= $3::date)
+  AND ($4::date IS NULL OR i.due_date <= $4::date)
+  AND ($5::bool IS NULL OR (i.status = 'done') = $5::bool)
+ORDER BY i.due_date ASC NULLS LAST, i.position ASC, i.created_at ASC, i.id ASC
+LIMIT $6
+`
+
+type ListRemindersForCreatorParams struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	CreatorID   pgtype.UUID `json:"creator_id"`
+	DueFrom     pgtype.Date `json:"due_from"`
+	DueTo       pgtype.Date `json:"due_to"`
+	Done        pgtype.Bool `json:"done"`
+	RowLimit    int32       `json:"row_limit"`
+}
+
+// The creator's reminders, optionally narrowed to a due-date window and to
+// open or done ones. Undated reminders only match when no window is given.
+func (q *Queries) ListRemindersForCreator(ctx context.Context, arg ListRemindersForCreatorParams) ([]Issue, error) {
+	rows, err := q.db.Query(ctx, listRemindersForCreator,
+		arg.WorkspaceID,
+		arg.CreatorID,
+		arg.DueFrom,
+		arg.DueTo,
+		arg.Done,
+		arg.RowLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Issue{}
+	for rows.Next() {
+		var i Issue
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.Title,
+			&i.Description,
+			&i.Status,
+			&i.Priority,
+			&i.AssigneeType,
+			&i.AssigneeID,
+			&i.CreatorType,
+			&i.CreatorID,
+			&i.ParentIssueID,
+			&i.AcceptanceCriteria,
+			&i.ContextRefs,
+			&i.Position,
+			&i.DueDate,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Number,
+			&i.ProjectID,
+			&i.OriginType,
+			&i.OriginID,
+			&i.FirstExecutedAt,
+			&i.StartDate,
+			&i.Metadata,
+			&i.Stage,
+			&i.Properties,
+			&i.Revision,
+			&i.LastActivityAt,
+			&i.TriageState,
+			&i.DuplicateOfIssueID,
+			&i.LastCommentAt,
+			&i.IsDirectChat,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const markIssueDirectChat = `-- name: MarkIssueDirectChat :exec
 UPDATE issue SET is_direct_chat = true WHERE id = $1
 `
@@ -431,6 +516,9 @@ JOIN issue_member m
  AND m.workspace_id = c.workspace_id
  AND m.member_type = 'member'
  AND m.member_id = $1
+JOIN issue i
+  ON i.id = c.issue_id
+ AND i.origin_type IS DISTINCT FROM 'reminder'
 WHERE c.workspace_id = $2
   AND c.deleted_at IS NULL
   AND c.author_type <> 'system'

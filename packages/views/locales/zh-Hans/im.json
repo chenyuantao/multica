@@ -24,6 +24,7 @@
     "chats": "会话",
     "contacts": "通讯录",
     "knowledge": "知识库",
+    "reminder": "提醒",
     "collect": "收藏"
   },
   "tabs": {
@@ -34,7 +35,7 @@
   },
   "collect": {
     "settings": "设置",
-    "switcher": "设置和收藏",
+    "switcher": "设置、提醒和收藏",
     "remove": "移除收藏",
     "removed": "已移除",
     "remove_failed": "移除失败",
@@ -128,7 +129,8 @@
     "cancelled_details_title": "取消判断详情",
     "cancelled_request": "入参",
     "cancelled_response": "回包",
-    "via_wechat_claw": "来自微信 Claw"
+    "via_wechat_claw": "来自微信 Claw",
+    "close_panel": "关闭"
   },
   "composer": {
     "placeholder": "发消息到 {{title}} — 输入 @ 指定一个智能体",
@@ -273,5 +275,56 @@
     "context_remove": "不发送此上下文",
     "pick_element": "拾取页面元素",
     "pick_hint": "点击页面上的元素，随问题一起发送 · 按 Esc 取消"
+  },
+  "reminder": {
+    "title": "提醒事项",
+    "filters": "提醒事项筛选",
+    "week": "每周事项",
+    "today": "今天",
+    "open": "未完成",
+    "done": "已完成",
+    "prev_week": "上一周",
+    "next_week": "下一周",
+    "current_week": "回到本周",
+    "weekdays": {
+      "mon": "周一",
+      "tue": "周二",
+      "wed": "周三",
+      "thu": "周四",
+      "fri": "周五",
+      "sat": "周六",
+      "sun": "周日"
+    },
+    "day_label": "{{weekday}}（{{date}}）",
+    "add_more": "添加更多",
+    "add_placeholder": "新提醒事项",
+    "empty": "没有提醒事项",
+    "load_failed": "提醒事项加载失败",
+    "mark_done": "将“{{title}}”标为已完成",
+    "mark_open": "将“{{title}}”标为未完成",
+    "delete": "删除“{{title}}”",
+    "deleted": "已删除提醒事项",
+    "delete_failed": "提醒事项删除失败",
+    "create_failed": "提醒事项添加失败",
+    "update_failed": "提醒事项更新失败",
+    "not_found": "该提醒事项不存在或已删除",
+    "back": "提醒事项",
+    "resize": "调整提醒消息栏宽度",
+    "refresh": "刷新",
+    "pending": "Pending",
+    "hide_completed": "隐藏已完成",
+    "show_completed": "显示已完成",
+    "tag_filters": "标签",
+    "clear_tags": "清除标签筛选",
+    "add_first": "添加提醒事项",
+    "title_field": "提醒事项标题",
+    "completed_count": "已完成 {{count}} 项",
+    "move_today": "挪到今天",
+    "move_tomorrow": "挪到明天",
+    "move_friday": "挪到周五",
+    "move_next_monday": "挪到下周一",
+    "pin": "固定为 Pending",
+    "unpin": "取消 Pending",
+    "delete_action": "删除"
   }
 }

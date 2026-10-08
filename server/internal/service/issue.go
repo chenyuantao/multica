@@ -102,6 +102,9 @@ type IssueCreateParams struct {
 	// DirectChat marks the group chat as a two-person direct chat, whose
 	// membership is fixed at creation.
 	DirectChat bool
+	// Position places the issue in a caller-ordered list. Nil sorts it to the
+	// top of its status column.
+	Position *float64
 }
 
 // IssueMemberRef names one group chat member: a person ("member") or an agent.
@@ -367,8 +370,10 @@ func (s *IssueService) Create(ctx context.Context, p IssueCreateParams, opts Iss
 	// a reorder is still allowed to collide on position — manual ordering
 	// is best-effort and the UI tolerates equal positions by falling back
 	// to the secondary ORDER BY key.
-	newPosition, err := issueposition.NextTopPosition(ctx, tx, p.WorkspaceID, p.Status)
-	if err != nil {
+	var newPosition float64
+	if p.Position != nil {
+		newPosition = *p.Position
+	} else if newPosition, err = issueposition.NextTopPosition(ctx, tx, p.WorkspaceID, p.Status); err != nil {
 		return IssueCreateResult{}, fmt.Errorf("next top position: %w", err)
 	}
 
@@ -849,6 +854,8 @@ func classifyOrigin(issue db.Issue, opts IssueCreateOpts) (source, taskID, autop
 		return analytics.SourceManual, originID, ""
 	case "autopilot":
 		return analytics.SourceAutopilot, "", originID
+	case "reminder":
+		return analytics.SourceManual, "", ""
 	default:
 		slog.Warn("analytics: unknown issue origin type",
 			"origin_type", issue.OriginType.String,

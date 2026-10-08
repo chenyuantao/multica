@@ -25,6 +25,7 @@
     "chats": "Discussions",
     "contacts": "Contacts",
     "knowledge": "Base de connaissances",
+    "reminder": "Rappels",
     "collect": "Favoris"
   },
   "tabs": {
@@ -35,7 +36,7 @@
   },
   "collect": {
     "settings": "Paramètres",
-    "switcher": "Paramètres et favoris",
+    "switcher": "Paramètres, rappels et favoris",
     "remove": "Retirer",
     "removed": "Retiré",
     "remove_failed": "Impossible de retirer",
@@ -132,7 +133,8 @@
     "cancelled_details_title": "Détails de l'annulation",
     "cancelled_request": "Requête",
     "cancelled_response": "Réponse",
-    "via_wechat_claw": "Envoyé depuis WeChat Claw"
+    "via_wechat_claw": "Envoyé depuis WeChat Claw",
+    "close_panel": "Fermer"
   },
   "composer": {
     "placeholder": "Message à {{title}} — @ pour solliciter un agent",
@@ -278,5 +280,56 @@
     "context_remove": "Ne pas envoyer ce contexte",
     "pick_element": "Choisir un élément de la page",
     "pick_hint": "Cliquez sur un élément pour poser une question à son sujet · Échap pour annuler"
+  },
+  "reminder": {
+    "title": "Rappels",
+    "filters": "Filtres des rappels",
+    "week": "Cette semaine",
+    "today": "Aujourd'hui",
+    "open": "À faire",
+    "done": "Terminés",
+    "prev_week": "Semaine précédente",
+    "next_week": "Semaine suivante",
+    "current_week": "Revenir à cette semaine",
+    "weekdays": {
+      "mon": "Lun",
+      "tue": "Mar",
+      "wed": "Mer",
+      "thu": "Jeu",
+      "fri": "Ven",
+      "sat": "Sam",
+      "sun": "Dim"
+    },
+    "day_label": "{{weekday}} ({{date}})",
+    "add_more": "Ajouter",
+    "add_placeholder": "Nouveau rappel",
+    "empty": "Aucun rappel",
+    "load_failed": "Impossible de charger les rappels",
+    "mark_done": "Marquer « {{title}} » comme terminé",
+    "mark_open": "Marquer « {{title}} » comme à faire",
+    "delete": "Supprimer « {{title}} »",
+    "deleted": "Rappel supprimé",
+    "delete_failed": "Impossible de supprimer le rappel",
+    "create_failed": "Impossible d'ajouter le rappel",
+    "update_failed": "Impossible de mettre à jour le rappel",
+    "not_found": "Ce rappel n'est pas disponible",
+    "back": "Rappels",
+    "resize": "Redimensionner les messages du rappel",
+    "refresh": "Actualiser",
+    "pending": "En attente",
+    "hide_completed": "Masquer les terminés",
+    "show_completed": "Afficher les terminés",
+    "tag_filters": "Étiquettes",
+    "clear_tags": "Effacer le filtre d'étiquettes",
+    "add_first": "Ajouter un rappel",
+    "title_field": "Titre du rappel",
+    "completed_count": "{{count}} terminé(s)",
+    "move_today": "Déplacer à aujourd'hui",
+    "move_tomorrow": "Déplacer à demain",
+    "move_friday": "Déplacer à vendredi",
+    "move_next_monday": "Déplacer à lundi prochain",
+    "pin": "Épingler en attente",
+    "unpin": "Désépingler",
+    "delete_action": "Supprimer"
   }
 }
