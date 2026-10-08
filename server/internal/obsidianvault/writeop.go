@@ -27,30 +27,10 @@ func applyInstruction(ctx context.Context, root, op string, req EditRequest) (Fi
 		return FileContent{}, err
 	}
 	unlock := lockNote(resolved)
-	locked := true
-	defer func() {
-		if locked {
-			unlock()
-		}
-	}()
+	defer unlock()
 	current, err := loadNote(resolved, cleaned)
 	if err != nil {
 		return FileContent{}, err
-	}
-	if op == "overwrite" && current.Revision != strings.TrimSpace(req.BaseRevision) && req.Resolve == "merge" && req.BaseContent == nil {
-		unlock()
-		locked = false
-		found, err := FindRevision(ctx, root, cleaned, strings.TrimSpace(req.BaseRevision))
-		if err != nil {
-			return FileContent{}, err
-		}
-		req.BaseContent = &found
-		unlock = lockNote(resolved)
-		locked = true
-		current, err = loadNote(resolved, cleaned)
-		if err != nil {
-			return FileContent{}, err
-		}
 	}
 	updated, err := instructionText(ctx, op, current, req)
 	if err != nil {

@@ -28,10 +28,6 @@ var (
 	ErrInvalidEdit = errors.New("invalid document edit")
 	// ErrConflict means the note changed after the client read it.
 	ErrConflict = errors.New("document changed since it was loaded")
-	// ErrCLIUnavailable means the Obsidian CLI is not installed or not running.
-	ErrCLIUnavailable = errors.New("obsidian cli is unavailable")
-	// ErrCLIFailed means the Obsidian CLI ran and returned an error.
-	ErrCLIFailed = errors.New("obsidian cli failed")
 )
 
 // FileContent is one markdown note. Revision is the SHA-256 of the exact
@@ -62,7 +58,8 @@ type EditChange struct {
 //
 // Append and prepend follow the Obsidian CLI: they run on the latest text.
 // Inline glues Content on without a separating newline. Overwrite and range
-// edits send BaseRevision; Resolve "merge" keeps them when the file changed.
+// edits send BaseRevision; Resolve "merge" keeps them when the file changed,
+// which needs BaseContent, the text BaseRevision was read from.
 type EditRequest struct {
 	Path         string       `json:"path"`
 	Op           string       `json:"op,omitempty"`
@@ -130,12 +127,7 @@ func Apply(ctx context.Context, root string, req EditRequest) (FileContent, erro
 		return FileContent{}, err
 	}
 	unlock := lockNote(resolved)
-	locked := true
-	defer func() {
-		if locked {
-			unlock()
-		}
-	}()
+	defer unlock()
 	if err := ctx.Err(); err != nil {
 		return FileContent{}, err
 	}
@@ -148,23 +140,6 @@ func Apply(ctx context.Context, root string, req EditRequest) (FileContent, erro
 	haveBase := req.BaseContent != nil
 	if haveBase {
 		base = *req.BaseContent
-	}
-	rev := strings.TrimSpace(req.BaseRevision)
-	if current.Revision != rev && req.Resolve == "merge" && !haveBase {
-		unlock()
-		locked = false
-		found, err := FindRevision(ctx, root, cleaned, rev)
-		if err != nil {
-			return FileContent{}, err
-		}
-		base = found
-		haveBase = true
-		unlock = lockNote(resolved)
-		locked = true
-		current, err = loadNote(resolved, cleaned)
-		if err != nil {
-			return FileContent{}, err
-		}
 	}
 	updated, err := composeEdit(ctx, current, req, base, haveBase)
 	if err != nil {

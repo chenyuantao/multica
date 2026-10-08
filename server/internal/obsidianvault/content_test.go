@@ -140,6 +140,30 @@ func TestApplyMergeConflictDoesNotWrite(t *testing.T) {
 	}
 }
 
+func TestMergeWithoutBaseContentConflicts(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "note.md", "beta")
+	ctx := context.Background()
+	stale := contentRevision([]byte("alpha"))
+	for name, req := range map[string]EditRequest{
+		"range":     {Path: "note.md", BaseRevision: stale, Resolve: "merge", Changes: []EditChange{{From: 0, To: intPtr(5), Insert: "ours"}}},
+		"overwrite": {Path: "note.md", Op: "overwrite", BaseRevision: stale, Resolve: "merge", Content: "ours"},
+	} {
+		_, err := Apply(ctx, root, req)
+		var conflict *ConflictError
+		if !errors.As(err, &conflict) || conflict.Reason != "base version not found" {
+			t.Fatalf("%s: err = %v", name, err)
+		}
+	}
+	raw, err := os.ReadFile(filepath.Join(root, "note.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(raw) != "beta" {
+		t.Fatalf("disk = %q", raw)
+	}
+}
+
 func intPtr(n int) *int { return &n }
 
 func TestApplyOverwriteAppendPrepend(t *testing.T) {
