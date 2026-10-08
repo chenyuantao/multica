@@ -297,7 +297,7 @@
     },
     "day_label": "{{weekday}}（{{date}}）",
     "add_more": "追加",
-    "add_placeholder": "新しいリマインダー",
+    "add_placeholder": "新しいリマインダー — @ で割り当て",
     "empty": "リマインダーはありません",
     "load_failed": "リマインダーを読み込めませんでした",
     "mark_done": "「{{title}}」を完了にする",

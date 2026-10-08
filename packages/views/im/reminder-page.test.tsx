@@ -215,6 +215,43 @@ describe("ReminderPage", () => {
     expect(createMutateAsync).toHaveBeenLastCalledWith({ title: "Pasted note", due_date: "2026-10-08", position: 2 });
   });
 
+  it("assigns an agent from @ in the title, without a separate message", async () => {
+    createMutateAsync.mockResolvedValue(reminder("r9", "Ask Jev", "2026-10-08"));
+    renderPage();
+    const today = day("Today");
+    fireEvent.click(within(today).getByRole("button", { name: "Add more" }));
+    const field = within(today).getByRole("textbox", { name: "Reminder title" });
+    fireEvent.change(field, { target: { value: "Ask @Je" } });
+    field.setSelectionRange(7, 7);
+    fireEvent.keyUp(field, { key: "e" });
+
+    const menu = await screen.findByRole("listbox", { name: "Mention an agent" });
+    expect(within(menu).getByRole("option", { name: "Jev" })).toBeInTheDocument();
+    expect(within(menu).queryByRole("option", { name: "Old" })).not.toBeInTheDocument();
+    fireEvent.click(within(menu).getByRole("button", { name: "Jev" }));
+    expect(field).toHaveValue("Ask @Jev ");
+
+    await act(async () => {
+      fireEvent.keyDown(field, { key: "Enter" });
+    });
+    expect(createMutateAsync).toHaveBeenCalledWith({
+      title: "Ask [@Jev](mention://agent/a1)",
+      due_date: "2026-10-08",
+      position: 2,
+    });
+
+    await act(async () => {
+      const paste = new Event("paste", { bubbles: true, cancelable: true }) as ClipboardEvent;
+      Object.defineProperty(paste, "clipboardData", { value: { getData: () => "@Jev draft the note" } });
+      document.dispatchEvent(paste);
+    });
+    expect(createMutateAsync).toHaveBeenLastCalledWith({
+      title: "[@Jev](mention://agent/a1) draft the note",
+      due_date: "2026-10-08",
+      position: 2,
+    });
+  });
+
   it("moves, pins, and deletes from a reminder's context menu", async () => {
     renderPage();
     fireEvent.contextMenu(within(day("Today")).getByRole("button", { name: "Ship it" }));

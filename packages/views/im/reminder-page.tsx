@@ -41,7 +41,7 @@ import { ChatProgressRoute } from "./chat-progress-view";
 import { ChatThread } from "./chat-thread";
 import { ImRail } from "./im-rail";
 import { ImSidebarHeader, ImSidebarShell } from "./im-sidebar-shell";
-import type { ComposerMention } from "./im-utils";
+import { resolveTitleMentions, type ComposerMention } from "./im-utils";
 import { MeSectionTabs } from "./me-section-tabs";
 import { MobileContactDetail, MobileLevel, MobileTabScreen, parseContactParam } from "./mobile-shell";
 import {
@@ -73,7 +73,8 @@ function isTyping(el: Element | null): boolean {
 
 /**
  * Reminders: each one is a chat that never shows in `/im`. Its title is the
- * to-do, the messages are its details, and an @mentioned agent joins it.
+ * to-do, the messages are its details, and an @ in the title or a message
+ * assigns an agent without a separate hand-off.
  * Desktop opens a reminder's messages in a resizable column on the right;
  * a phone keeps the list inside Me and opens a reminder as its own level.
  */
@@ -138,9 +139,10 @@ export function ReminderPage() {
   };
 
   // Pasting anywhere outside a text field adds the text as a reminder for today.
-  const pasteRef = useRef({ all, create: actions.create, todayKey });
+  // A pasted `@Name` that matches one agent is the assignment.
+  const pasteRef = useRef({ all, create: actions.create, todayKey, candidates: mentionCandidates });
   useEffect(() => {
-    pasteRef.current = { all, create: actions.create, todayKey };
+    pasteRef.current = { all, create: actions.create, todayKey, candidates: mentionCandidates };
   });
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
@@ -148,8 +150,9 @@ export function ReminderPage() {
       const text = e.clipboardData?.getData("text/plain").trim();
       if (!text) return;
       e.preventDefault();
-      const { all: current, create: add, todayKey: key } = pasteRef.current;
-      void add(text, key, endPosition(current, key));
+      const { all: current, create: add, todayKey: key, candidates } = pasteRef.current;
+      const resolved = resolveTitleMentions(text, [], candidates);
+      void add(resolved.ok ? resolved.markdown : text, key, endPosition(current, key));
     };
     document.addEventListener("paste", onPaste);
     return () => document.removeEventListener("paste", onPaste);
@@ -177,6 +180,7 @@ export function ReminderPage() {
       hideCompleted={(filter === "week" || filter === "today") && hideCompleted}
       openId={selected?.id ?? null}
       draggable={!isMobile}
+      mentionCandidates={mentionCandidates}
       onEditingChange={setEditingId}
       actions={actions}
     />

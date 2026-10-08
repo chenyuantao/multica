@@ -6,9 +6,11 @@ import {
   THINKING_MESSAGE,
   activeMentionQuery,
   dayRelation,
+  decodeMentionDraft,
   encodeMentions,
   formatStamp,
   resolveComposerMentions,
+  resolveTitleMentions,
   needsTimeSeparator,
   plainTextPreview,
   runProgress,
@@ -57,6 +59,36 @@ describe("resolveComposerMentions", () => {
     expect(resolveComposerMentions("@Dev take this", [devs[1]!], devs)).toEqual({
       ok: true,
       markdown: "[@Dev](mention://agent/a-2) take this",
+    });
+  });
+});
+
+describe("resolveTitleMentions", () => {
+  const jev = { name: "Jev", type: "agent" as const, id: "a1" };
+  const devs = [
+    { name: "Dev", type: "agent" as const, id: "a-1" },
+    { name: "Dev", type: "agent" as const, id: "a-2" },
+  ];
+
+  it("links a typed name when only one agent uses it", () => {
+    expect(resolveTitleMentions("@Jev ship it", [], [jev])).toEqual({
+      ok: true,
+      markdown: "[@Jev](mention://agent/a1) ship it",
+    });
+  });
+
+  it("round-trips a stored mention through the editor", () => {
+    const markdown = "[@Jev](mention://agent/a1) ship it";
+    const draft = decodeMentionDraft(markdown);
+    expect(draft).toEqual({ text: "@Jev ship it", picked: [jev] });
+    expect(resolveTitleMentions(draft.text, draft.picked, [jev])).toEqual({ ok: true, markdown });
+  });
+
+  it("refuses a name shared by two agents until one is picked", () => {
+    expect(resolveTitleMentions("@Dev go", [], devs)).toEqual({ ok: false, name: "Dev" });
+    expect(resolveTitleMentions("@Dev go", [devs[0]!], devs)).toEqual({
+      ok: true,
+      markdown: "[@Dev](mention://agent/a-1) go",
     });
   });
 });

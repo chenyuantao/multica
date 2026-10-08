@@ -141,6 +141,66 @@ func TestReminderMentionAddsTheAgentAndStartsIt(t *testing.T) {
 	}
 }
 
+func TestReminderTitleMentionAssignsWithoutAMessage(t *testing.T) {
+	agentID := createHandlerTestAgent(t, "reminder-title-agent", nil)
+	title := "[@Writer](mention://agent/" + agentID + ") draft the launch post"
+	reminder := newReminder(t, title, "")
+
+	var agentMembers int
+	for _, m := range reminder.Members {
+		if m.MemberType == "agent" && m.MemberID == agentID {
+			agentMembers++
+		}
+	}
+	if agentMembers != 1 {
+		t.Fatalf("members = %+v, want the title mention to add the agent", reminder.Members)
+	}
+	if n := dbfx.Count(t, `SELECT count(*) FROM agent_task_queue WHERE issue_id = $1 AND agent_id = $2`, reminder.ID, agentID); n != 1 {
+		t.Fatalf("tasks = %d, want one run for the agent named in the title", n)
+	}
+	if n := dbfx.Count(t, `SELECT count(*) FROM comment WHERE issue_id = $1`, reminder.ID); n != 0 {
+		t.Fatalf("comments = %d, want the title mention to assign without a message", n)
+	}
+}
+
+func TestReminderTitleEditStartsOnlyNewlyMentionedAgents(t *testing.T) {
+	agentID := createHandlerTestAgent(t, "reminder-title-edit-agent", nil)
+	otherID := createHandlerTestAgent(t, "reminder-title-edit-other", nil)
+	reminder := newReminder(t, "Draft the launch post", "")
+	if n := dbfx.Count(t, `SELECT count(*) FROM agent_task_queue WHERE issue_id = $1`, reminder.ID); n != 0 {
+		t.Fatalf("tasks = %d, want none before a mention", n)
+	}
+
+	mention := "[@Writer](mention://agent/" + agentID + ") draft the launch post"
+	testutil.Call(t, testHandler.UpdateIssue, withURLParam(groupChatRequestAs(t, testUserID, "PUT", "/api/issues/"+reminder.ID, map[string]any{
+		"title": mention,
+	}), "id", reminder.ID)).Want(http.StatusOK)
+	if n := dbfx.Count(t, `SELECT count(*) FROM agent_task_queue WHERE issue_id = $1 AND agent_id = $2`, reminder.ID, agentID); n != 1 {
+		t.Fatalf("tasks = %d, want one run after the title gains a mention", n)
+	}
+	if n := dbfx.Count(t, `SELECT count(*) FROM comment WHERE issue_id = $1`, reminder.ID); n != 0 {
+		t.Fatalf("comments = %d, want no message for a title assignment", n)
+	}
+
+	// Rewording keeps the same agent, so it must not start another run.
+	testutil.Call(t, testHandler.UpdateIssue, withURLParam(groupChatRequestAs(t, testUserID, "PUT", "/api/issues/"+reminder.ID, map[string]any{
+		"title": "[@Writer](mention://agent/" + agentID + ") shorter please",
+	}), "id", reminder.ID)).Want(http.StatusOK)
+	if n := dbfx.Count(t, `SELECT count(*) FROM agent_task_queue WHERE issue_id = $1 AND agent_id = $2`, reminder.ID, agentID); n != 1 {
+		t.Fatalf("tasks = %d, want the existing run kept when the mention stays", n)
+	}
+
+	testutil.Call(t, testHandler.UpdateIssue, withURLParam(groupChatRequestAs(t, testUserID, "PUT", "/api/issues/"+reminder.ID, map[string]any{
+		"title": "[@Writer](mention://agent/" + otherID + ") take a look",
+	}), "id", reminder.ID)).Want(http.StatusOK)
+	if n := dbfx.Count(t, `SELECT count(*) FROM agent_task_queue WHERE issue_id = $1 AND agent_id = $2`, reminder.ID, otherID); n != 1 {
+		t.Fatalf("tasks = %d, want a run for the newly named agent", n)
+	}
+	if n := dbfx.Count(t, `SELECT count(*) FROM agent_task_queue WHERE issue_id = $1 AND agent_id = $2`, reminder.ID, agentID); n != 1 {
+		t.Fatalf("tasks = %d, want the first agent's run left in place", n)
+	}
+}
+
 func TestReminderKeepsItsDayOrderAndPendingPin(t *testing.T) {
 	later := newReminderWith(t, map[string]any{"title": "Second", "due_date": "2026-10-09", "position": 5})
 	first := newReminderWith(t, map[string]any{"title": "First", "due_date": "2026-10-09", "position": 1})

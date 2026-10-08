@@ -4095,6 +4095,10 @@ func (h *Handler) UpdateIssue(w http.ResponseWriter, r *http.Request) {
 		h.processChildEvents(r.Context(), issue.ParentIssueID, prevIssue.ParentIssueID)
 	}
 
+	if titleChanged && isReminder(issue) {
+		h.dispatchReminderTitleMentions(r, issue, prevIssue.Title)
+	}
+
 	writeJSON(w, http.StatusOK, resp)
 }
 

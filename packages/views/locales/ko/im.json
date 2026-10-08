@@ -297,7 +297,7 @@
     },
     "day_label": "{{weekday}} ({{date}})",
     "add_more": "추가",
-    "add_placeholder": "새 미리 알림",
+    "add_placeholder": "새 미리 알림 — @로 할당",
     "empty": "미리 알림이 없습니다",
     "load_failed": "미리 알림을 불러오지 못했습니다",
     "mark_done": "'{{title}}' 완료로 표시",

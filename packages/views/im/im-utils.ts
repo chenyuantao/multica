@@ -114,6 +114,40 @@ export function resolveComposerBody(
   return { ok: true, markdown };
 }
 
+const MENTION_LINK = /\[@(.+?)\]\(mention:\/\/(agent|member)\/([0-9a-fA-F-]+)\)/g;
+
+/** Turns stored mention links back into `@Name` text for a single-line editor. */
+export function decodeMentionDraft(markdown: string): { text: string; picked: ComposerMention[] } {
+  const picked: ComposerMention[] = [];
+  const text = markdown.replace(MENTION_LINK, (_token, name: string, type: ComposerMention["type"], id: string) => {
+    picked.push({ name, type, id });
+    return `@${name}`;
+  });
+  return { text, picked };
+}
+
+/**
+ * Encodes `@Name` in a reminder title. A name that matches exactly one
+ * candidate is linked even when it was typed rather than picked; a name shared
+ * by several candidates still has to be picked, or the title is refused.
+ */
+export function resolveTitleMentions(
+  text: string,
+  picked: ComposerMention[],
+  candidates: ComposerMention[],
+): { ok: true; markdown: string } | { ok: false; name: string } {
+  const auto = [...picked];
+  for (const token of text.matchAll(/(^|\s)@([^\s@]+)/g)) {
+    const name = (token[2] ?? "").replace(/[.,;:!?]+$/, "");
+    if (!name) continue;
+    const same = candidates.filter((c) => c.name.toLowerCase() === name.toLowerCase());
+    if (same.length !== 1) continue;
+    const only = same[0]!;
+    if (!auto.some((p) => p.type === only.type && p.id === only.id)) auto.push(only);
+  }
+  return resolveComposerMentions(text, auto, candidates);
+}
+
 export function encodeMentions(text: string, mentions: ComposerMention[]): string {
   const unique = new Map(mentions.map((m) => [`${m.type}:${m.id}`, m]));
   const ordered = [...unique.values()].sort((a, b) => b.name.length - a.name.length);

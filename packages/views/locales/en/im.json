@@ -302,7 +302,7 @@
     },
     "day_label": "{{weekday}} ({{date}})",
     "add_more": "Add more",
-    "add_placeholder": "New reminder",
+    "add_placeholder": "New reminder — @ to assign an agent",
     "empty": "No reminders",
     "load_failed": "Couldn't load reminders",
     "mark_done": "Mark \"{{title}}\" as completed",

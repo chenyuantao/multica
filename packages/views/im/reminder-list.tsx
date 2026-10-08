@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import {
   closestCenter,
   DndContext,
@@ -24,7 +24,6 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { Check, Loader2, Pin, Plus, Trash2 } from "lucide-react";
 import type { Reminder, ReminderPatch } from "@multica/core/types";
-import { isImeComposing } from "@multica/core/utils";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -36,6 +35,8 @@ import { cn } from "@multica/ui/lib/utils";
 import { ActorAvatar } from "../common/actor-avatar";
 import { useT } from "../i18n";
 import { RichContent } from "../rich-content";
+import { decodeMentionDraft, resolveTitleMentions, type ComposerMention } from "./im-utils";
+import { ReminderTitleField } from "./reminder-title-field";
 import {
   dayGroups,
   dropPosition,
@@ -78,6 +79,8 @@ interface ReminderListProps {
   openId: string | null;
   /** Rows reorder and change day by dragging; off on phones, where a long press opens the menu. */
   draggable: boolean;
+  /** Agents a title can @. Naming one in the title assigns the reminder. */
+  mentionCandidates: ComposerMention[];
   onEditingChange: (id: string | null) => void;
   actions: ReminderListActions;
 }
@@ -97,6 +100,7 @@ export function ReminderList({
   hideCompleted,
   openId,
   draggable,
+  mentionCandidates,
   onEditingChange,
   actions,
 }: ReminderListProps) {
@@ -104,8 +108,13 @@ export function ReminderList({
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [editing, setEditingState] = useState<Editing>(null);
   const [text, setText] = useState("");
+  const [picked, setPicked] = useState<ComposerMention[]>([]);
+  const [nameError, setNameError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const editGen = useRef(0);
   const committing = useRef(false);
+  /** Enter commits and then blur commits again as the field unmounts. */
+  const commitLock = useRef(false);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [dragContainers, setDragContainers] = useState<Record<string, string[]> | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -127,10 +136,46 @@ export function ReminderList({
     if (!activeId) setDragContainers(null);
   }, [baseContainers, activeId]);
 
-  const setEditing = (next: Editing, initial = "") => {
+  const setEditing = (next: Editing, initial = "", nextPicked: ComposerMention[] = []) => {
+    editGen.current += 1;
     setEditingState(next);
     setText(initial);
+    setPicked(nextPicked);
+    setNameError(null);
     onEditingChange(next?.kind === "row" ? next.id : null);
+  };
+
+  /** Markdown title, "" when the field is empty, or null when a shared name must be picked. */
+  const resolveCurrent = (): string | null => {
+    const title = text.trim();
+    if (!title) return "";
+    const resolved = resolveTitleMentions(title, picked, mentionCandidates);
+    if (!resolved.ok) {
+      setNameError(resolved.name);
+      return null;
+    }
+    setNameError(null);
+    return resolved.markdown;
+  };
+
+  const applyTitle = (title: string) => {
+    if (editing?.kind === "row") {
+      const r = byId.get(editing.id);
+      if (r && !title) actions.remove([r.id]);
+      else if (r && title !== r.title) actions.update([{ id: r.id, patch: { title } }]);
+      return;
+    }
+    if (editing?.kind === "draft" && title && !saving && !committing.current) {
+      committing.current = true;
+      setSaving(true);
+      const gen = editGen.current;
+      void actions.create(title, editing.key, endPosition(all, editing.key)).then((created) => {
+        committing.current = false;
+        setSaving(false);
+        if (created && editGen.current === gen) setEditing(null);
+        else commitLock.current = false;
+      });
+    }
   };
 
   useEffect(() => {
@@ -151,64 +196,50 @@ export function ReminderList({
     };
   }, []);
 
+  useEffect(() => {
+    commitLock.current = false;
+  }, [editing]);
+
   const anchorKey = anchor.toDateString();
   useEffect(() => {
     if (filter !== "week") return;
     scrollRef.current?.querySelector(`[data-day="${todayKey}"]`)?.scrollIntoView?.({ block: "start" });
   }, [filter, anchorKey, todayKey]);
 
-  /** Saves what is being typed without waiting, before another edit starts. */
+  /** Saves what is being typed before another edit starts. False when the title cannot be saved yet. */
   const flushEditing = () => {
-    const title = text.trim();
-    if (editing?.kind === "row") {
-      const r = byId.get(editing.id);
-      if (r && !title) actions.remove([r.id]);
-      else if (r && title !== r.title) actions.update([{ id: r.id, patch: { title } }]);
-    } else if (editing?.kind === "draft" && title && !saving) {
-      void actions.create(title, editing.key, endPosition(all, editing.key));
-    }
+    if (!editing) return true;
+    if (commitLock.current || committing.current) return true;
+    const title = resolveCurrent();
+    if (title === null) return false;
+    commitLock.current = true;
+    applyTitle(title);
+    return true;
   };
 
-  const commit = async () => {
-    if (!editing || committing.current) return;
-    const title = text.trim();
-    if (editing.kind === "row") {
-      flushEditing();
+  const commit = () => {
+    if (commitLock.current || !editing || committing.current) return;
+    const title = resolveCurrent();
+    if (title === null) return;
+    commitLock.current = true;
+    if (!title && editing.kind === "draft") {
       setEditing(null);
       return;
     }
-    if (!title) {
-      setEditing(null);
-      return;
-    }
-    committing.current = true;
-    setSaving(true);
-    const created = await actions.create(title, editing.key, endPosition(all, editing.key));
-    committing.current = false;
-    setSaving(false);
-    if (created) setEditing(null);
-  };
-
-  const editKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (isImeComposing(e)) return;
-    if (e.key === "Enter") {
-      e.preventDefault();
-      void commit();
-    } else if (e.key === "Escape") {
-      e.preventDefault();
-      setEditing(null);
-    }
+    applyTitle(title);
+    if (editing.kind === "row") setEditing(null);
   };
 
   const startDraft = (key: string, initial = "") => {
-    flushEditing();
+    if (!flushEditing()) return;
     setEditing({ kind: "draft", key }, initial);
   };
 
   const startRename = (r: Reminder) => {
     if (editing?.kind === "row" && editing.id === r.id) return;
-    flushEditing();
-    setEditing({ kind: "row", id: r.id }, r.title);
+    if (!flushEditing()) return;
+    const draft = decodeMentionDraft(r.title);
+    setEditing({ kind: "row", id: r.id }, draft.text, draft.picked);
   };
 
   const clickRow = (id: string, e: MouseEvent) => {
@@ -341,14 +372,19 @@ export function ReminderList({
         editing={isEditing}
         editor={
           isEditing ? (
-            <input
-              autoFocus
+            <ReminderTitleField
               value={text}
-              onChange={(e) => setText(e.target.value)}
-              onKeyDown={editKeyDown}
-              onBlur={() => void commit()}
-              aria-label={t(($) => $.reminder.title_field)}
-              className="min-w-0 flex-1 bg-transparent text-body outline-none"
+              onChange={(next) => {
+                setNameError(null);
+                setText(next);
+              }}
+              picked={picked}
+              onPickedChange={setPicked}
+              candidates={mentionCandidates}
+              errorName={nameError}
+              onCommit={commit}
+              onCancel={() => setEditing(null)}
+              ariaLabel={t(($) => $.reminder.title_field)}
             />
           ) : null
         }
@@ -368,16 +404,21 @@ export function ReminderList({
   const draftRow = (
     <div className="ml-2 flex items-center gap-3 rounded-lg bg-brand/8 p-1 ring-1 ring-brand/30">
       <span className="size-5 shrink-0 rounded-full border-2 border-border" />
-      <input
-        autoFocus
+      <ReminderTitleField
         value={text}
+        onChange={(next) => {
+          setNameError(null);
+          setText(next);
+        }}
+        picked={picked}
+        onPickedChange={setPicked}
+        candidates={mentionCandidates}
+        errorName={nameError}
+        onCommit={commit}
+        onCancel={() => setEditing(null)}
         disabled={saving}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={editKeyDown}
-        onBlur={() => void commit()}
         placeholder={t(($) => $.reminder.add_placeholder)}
-        aria-label={t(($) => $.reminder.title_field)}
-        className="min-w-0 flex-1 bg-transparent text-body outline-none placeholder:text-muted-foreground"
+        ariaLabel={t(($) => $.reminder.title_field)}
       />
       {saving && <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" />}
     </div>
@@ -445,7 +486,9 @@ export function ReminderList({
           </div>
           <DragOverlay dropAnimation={null}>
             {activeReminder ? (
-              <div className="rounded-lg border bg-popover p-3 text-body break-words shadow-xl">{activeReminder.title}</div>
+              <div className="rounded-lg border bg-popover p-3 text-body break-words shadow-xl">
+                {decodeMentionDraft(activeReminder.title).text}
+              </div>
             ) : null}
           </DragOverlay>
         </DndContext>
@@ -560,6 +603,7 @@ function ReminderRow({
   const { role: _role, ...dragAttributes } = attributes;
   const done = isDone(reminder);
   const tags = reminderTags(reminder.title);
+  const titleLabel = decodeMentionDraft(reminder.title).text;
   const agents = reminder.members.filter((m) => m.member_type === "agent");
 
   return (
@@ -592,8 +636,8 @@ function ReminderRow({
             onClick={onToggle}
             aria-label={
               done
-                ? t(($) => $.reminder.mark_open, { title: reminder.title })
-                : t(($) => $.reminder.mark_done, { title: reminder.title })
+                ? t(($) => $.reminder.mark_open, { title: titleLabel })
+                : t(($) => $.reminder.mark_done, { title: titleLabel })
             }
             className={cn(
               "relative z-10 flex size-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
@@ -611,7 +655,7 @@ function ReminderRow({
                 onClick={onClick}
                 onDoubleClick={onRename}
                 aria-current={current ? "true" : undefined}
-                aria-label={reminder.title}
+                aria-label={titleLabel}
                 className="absolute inset-0 rounded-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset"
               />
               <div className="pointer-events-none relative min-w-0 flex-1 transition-colors group-hover/row:text-brand [&_a]:pointer-events-auto">
@@ -655,7 +699,7 @@ function ReminderRow({
               <button
                 type="button"
                 onClick={onDelete}
-                aria-label={t(($) => $.reminder.delete, { title: reminder.title })}
+                aria-label={t(($) => $.reminder.delete, { title: titleLabel })}
                 className="relative z-10 shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:text-destructive focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none md:opacity-0 md:group-hover/row:opacity-100 md:focus-visible:opacity-100"
               >
                 <Trash2 className="size-4" />

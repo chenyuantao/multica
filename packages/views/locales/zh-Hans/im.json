@@ -297,7 +297,7 @@
     },
     "day_label": "{{weekday}}（{{date}}）",
     "add_more": "添加更多",
-    "add_placeholder": "新提醒事项",
+    "add_placeholder": "新提醒事项 — 输入 @ 分配给智能体",
     "empty": "没有提醒事项",
     "load_failed": "提醒事项加载失败",
     "mark_done": "将“{{title}}”标为已完成",

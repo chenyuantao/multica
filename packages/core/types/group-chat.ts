@@ -128,7 +128,8 @@ export interface CreateGroupChatRequest {
 
 /**
  * A personal to-do kept as a group chat that stays off the chat list. Its
- * messages are the details; an agent joins when a message mentions it.
+ * messages are the details; an agent joins when the title or a message
+ * mentions it. A title mention assigns the agent without another message.
  */
 export interface Reminder extends GroupChat {
   /** `done` once checked off; anything else is open. */

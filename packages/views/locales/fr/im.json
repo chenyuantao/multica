@@ -302,7 +302,7 @@
     },
     "day_label": "{{weekday}} ({{date}})",
     "add_more": "Ajouter",
-    "add_placeholder": "Nouveau rappel",
+    "add_placeholder": "Nouveau rappel — @ pour assigner",
     "empty": "Aucun rappel",
     "load_failed": "Impossible de charger les rappels",
     "mark_done": "Marquer « {{title}} » comme terminé",

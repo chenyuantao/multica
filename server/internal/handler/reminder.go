@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -16,8 +17,10 @@ import (
 )
 
 // A reminder is a group chat created on the reminder page: its title is the
-// to-do, its messages are the details, and agents join only when someone
-// @mentions them. It never appears in the IM chat list or the issue lists.
+// to-do, its messages are the details, and agents join when someone @mentions
+// them in the title or in a message. A title mention assigns the agent and
+// starts a run, so the person does not send a separate message. It never
+// appears in the IM chat list or the issue lists.
 
 const (
 	reminderOrigin    = "reminder"
@@ -123,6 +126,7 @@ func (h *Handler) CreateReminder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.subscribeGroupChatMember(ctx, res.Issue.ID, creator)
+	h.dispatchReminderTitleMentions(r, res.Issue, "")
 
 	members, err := h.Queries.ListIssueMembers(ctx, db.ListIssueMembersParams{IssueID: res.Issue.ID, WorkspaceID: res.Issue.WorkspaceID})
 	if err != nil {
@@ -262,5 +266,46 @@ func (h *Handler) admitReminderMentionedAgents(r *http.Request, issue db.Issue, 
 	}
 	if added {
 		h.publishGroupChatUpdated(workspaceID, actorID, issue.ID)
+	}
+}
+
+// dispatchReminderTitleMentions assigns every agent newly named in a reminder
+// title. The title is the assignment: the agent joins and a run starts, and no
+// message is posted. Agents already named in previousTitle are left alone, so
+// editing the wording does not start another run.
+func (h *Handler) dispatchReminderTitleMentions(r *http.Request, issue db.Issue, previousTitle string) {
+	if !isReminder(issue) {
+		return
+	}
+	h.admitReminderMentionedAgents(r, issue, issue.Title)
+	previous := map[string]struct{}{}
+	for _, m := range util.ParseMentions(previousTitle) {
+		if m.Type == "agent" {
+			previous[strings.ToLower(m.ID)] = struct{}{}
+		}
+	}
+	ctx := r.Context()
+	for _, m := range util.ParseMentions(issue.Title) {
+		if m.Type != "agent" {
+			continue
+		}
+		if _, seen := previous[strings.ToLower(m.ID)]; seen {
+			continue
+		}
+		id, err := util.ParseUUID(m.ID)
+		if err != nil {
+			continue
+		}
+		agent, err := h.Queries.GetAgentInWorkspace(ctx, db.GetAgentInWorkspaceParams{ID: id, WorkspaceID: issue.WorkspaceID})
+		if err != nil || agent.ArchivedAt.Valid {
+			continue
+		}
+		isMember, err := h.Queries.IsIssueMember(ctx, db.IsIssueMemberParams{IssueID: issue.ID, MemberType: "agent", MemberID: id})
+		if err != nil || !isMember {
+			continue
+		}
+		if _, err := h.TaskService.EnqueueTaskForMention(ctx, issue, id, pgtype.UUID{}, service.OriginNamed); err != nil && !errors.Is(err, service.ErrDuplicatePendingTask) {
+			slog.Warn("enqueue reminder title mention failed", "issue_id", uuidToString(issue.ID), "agent_id", m.ID, "error", err)
+		}
 	}
 }
