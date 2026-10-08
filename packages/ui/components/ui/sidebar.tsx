@@ -7,7 +7,7 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { useTranslation } from "react-i18next"
 
 import { useIsCompact } from "@multica/ui/hooks/use-mobile"
-import { clampSidebarWidth, useSidebarWidth } from "@multica/ui/hooks/use-sidebar-width"
+import { clampSidebarWidth, sidebarSplitWidth, useSidebarWidth } from "@multica/ui/hooks/use-sidebar-width"
 import { cn } from "@multica/ui/lib/utils"
 import { Button } from "@multica/ui/components/ui/button"
 import { Input } from "@multica/ui/components/ui/input"
@@ -135,7 +135,22 @@ function SidebarProvider({
   const isCompact = useIsCompact()
   const [openMobile, setOpenMobile] = React.useState(false)
 
-  const { width, commitWidth } = useSidebarWidth()
+  const { width: preferredWidth, commitWidth } = useSidebarWidth()
+  const wrapperRef = React.useRef<HTMLDivElement>(null)
+  const [splitWidth, setSplitWidth] = React.useState(0)
+  React.useLayoutEffect(() => {
+    const wrapper = wrapperRef.current
+    if (!wrapper) return
+    const measure = () => {
+      const gap = wrapper.querySelector<HTMLElement>("[data-slot='sidebar-gap']")
+      setSplitWidth(gap ? sidebarSplitWidth(gap, wrapper) : wrapper.getBoundingClientRect().width)
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(wrapper)
+    return () => observer.disconnect()
+  }, [])
+  const width = clampSidebarWidth(preferredWidth, splitWidth)
 
   // This is the internal state of the sidebar.
   // We use openProp and setOpenProp for control from outside the component.
@@ -236,6 +251,7 @@ function SidebarProvider({
     <SidebarContext.Provider value={contextValue}>
       <SidebarResizeContext.Provider value={resizeContextValue}>
         <div
+          ref={wrapperRef}
           data-slot="sidebar-wrapper"
           style={
             {
@@ -413,6 +429,7 @@ function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
     wrapperEl: HTMLElement
     gapEl: HTMLElement
     containerEl: HTMLElement
+    splitWidth: number
     liveWidthConsumers: HTMLElement[]
   } | null>(null)
   const cancelActiveDragRef = React.useRef<(() => void) | null>(null)
@@ -435,7 +452,8 @@ function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
         wrapperEl.querySelectorAll<HTMLElement>("[data-sidebar-resize-consumer]")
       )
 
-      const startWidth = clampSidebarWidth(containerEl.getBoundingClientRect().width)
+      const splitWidth = sidebarSplitWidth(gapEl, wrapperEl)
+      const startWidth = clampSidebarWidth(containerEl.getBoundingClientRect().width, splitWidth)
       dragRef.current = {
         pointerId: e.pointerId,
         startX: e.clientX,
@@ -445,6 +463,7 @@ function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
         wrapperEl,
         gapEl,
         containerEl,
+        splitWidth,
         liveWidthConsumers,
       }
 
@@ -498,7 +517,7 @@ function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
         }
 
         didDragRef.current = true
-        const nextWidth = clampSidebarWidth(drag.startWidth + delta)
+        const nextWidth = clampSidebarWidth(drag.startWidth + delta, drag.splitWidth)
         if (nextWidth === drag.latestWidth) return
 
         drag.latestWidth = nextWidth
