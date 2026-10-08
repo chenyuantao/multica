@@ -360,6 +360,7 @@ func TestPlatformSkillDescriptionNamesEveryDomain(t *testing.T) {
 		"references/projects.md":     "project",
 		"references/runtimes.md":     "runtime",
 		"references/skill-import.md": "skill import",
+		"references/files.md":        "shared director",
 	}
 
 	skill, ok := findSkill(t, PlatformSkillName)
@@ -686,6 +687,22 @@ func TestPlatformSkillCoversPlatformContracts(t *testing.T) {
 			notWant: []string{
 				"multica agent skills set <agent-id> --skill-ids <skill-id>",
 				"merge the new skill id with the existing ids",
+			},
+		},
+		{
+			file: "references/files.md",
+			want: []string{
+				// A path into the agent's working directory is dead for every
+				// reader, so the attachment stays the default deliverable and
+				// a shared directory is the exception for notes that last.
+				"This is the default",
+				"Use 3 only when the note is meant to last",
+				// The share's visibility is checked against the reader, not
+				// the agent; an unreadable card is worse than an attachment.
+				"You seeing a share does not mean the reader can",
+				"--base-revision",
+				// The note card opens knowledge paths only.
+				"never absolute",
 			},
 		},
 	}
