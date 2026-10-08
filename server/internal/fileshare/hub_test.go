@@ -127,7 +127,6 @@ func TestMachineName(t *testing.T) {
 		"Tao/Studio":    "Tao-Studio",
 		"a..b":          "a.b",
 		"..":            "",
-		"system":        "",
 		"  ":            "",
 		"x\ty":          "xy",
 	}

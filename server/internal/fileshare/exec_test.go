@@ -93,9 +93,6 @@ func (p *countingPeer) Call(ctx context.Context, op string, payload any, dest an
 }
 
 func TestSanitizeMachine(t *testing.T) {
-	if _, err := SanitizeMachine("system"); err == nil {
-		t.Fatal("system must be reserved")
-	}
 	if _, err := SanitizeMachine("../x"); err == nil {
 		t.Fatal("parent path must be rejected")
 	}

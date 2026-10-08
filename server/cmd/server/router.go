@@ -1709,11 +1709,10 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			r.Get("/qrcode/status", h.GetWechatClawQRCodeStatus)
 		})
 
-		// Obsidian vault browser. Paths and queries are JSON bodies so notes
-		// with non-ASCII names are not put in the URL. OBSIDIAN_VAULT_PATH
-		// points at one directory shared by this deployment.
-		// multica-file daemons attach here and answer knowledge calls for
-		// machine-name/ paths. The browser keeps using /api/docs.
+		// Knowledge browser. multica-file daemons attach here, and every
+		// /api/docs path starts with the name of the machine that shares it.
+		// Paths and queries are JSON bodies so notes with non-ASCII names are
+		// not put in the URL.
 		r.Get("/api/file-shares/connect", h.ConnectFileShare)
 		r.Route("/api/docs", func(r chi.Router) {
 			r.Post("/tree", h.PostDocsTree)
@@ -1723,8 +1722,6 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			r.Post("/move", h.PostDocsMove)
 			r.Post("/files/hierarchy", h.PostDocsFileHierarchy)
 			r.Post("/files/content", h.PostDocsFileContent)
-			r.Post("/files/history", h.PostDocsFileHistory)
-			r.Post("/files/version", h.PostDocsFileVersion)
 			r.Patch("/files/content", h.PatchDocsFileContent)
 		})
 

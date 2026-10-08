@@ -240,27 +240,9 @@ func TestSymlinkOutsideVaultIsHidden(t *testing.T) {
 	}
 }
 
-func TestVaultRoot(t *testing.T) {
-	t.Setenv(EnvVaultPath, "")
-	if _, err := VaultRoot(); err != ErrUnconfigured {
-		t.Fatalf("empty err = %v", err)
-	}
-	t.Setenv(EnvVaultPath, filepath.Join(t.TempDir(), "missing"))
-	if _, err := VaultRoot(); err != ErrUnavailable {
+func TestMissingRootIsUnavailable(t *testing.T) {
+	if _, err := Tree(context.Background(), filepath.Join(t.TempDir(), "missing")); err != ErrUnavailable {
 		t.Fatalf("missing err = %v", err)
-	}
-	root := t.TempDir()
-	t.Setenv(EnvVaultPath, root)
-	got, err := VaultRoot()
-	if err != nil {
-		t.Fatalf("VaultRoot: %v", err)
-	}
-	if got != root {
-		// macOS temp dirs may resolve through a symlink.
-		resolved, err := filepath.EvalSymlinks(root)
-		if err != nil || got != resolved {
-			t.Fatalf("VaultRoot = %s, want %s", got, root)
-		}
 	}
 }
 

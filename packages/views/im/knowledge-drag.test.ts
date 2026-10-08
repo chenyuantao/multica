@@ -7,18 +7,24 @@ const dir = (path: string) => ({ path, type: "dir" as const });
 
 describe("dropDirectory", () => {
   it("moves a note into a folder, or beside a note into that note's folder", () => {
-    expect(dropDirectory(file("readme.md"), dir("Strategy"))).toBe("Strategy");
-    expect(dropDirectory(file("readme.md"), file("Strategy/budget.md"))).toBe("Strategy");
-    expect(dropDirectory(dir("Archive"), file("Strategy/budget.md"))).toBe("Strategy");
+    expect(dropDirectory(file("mbp/readme.md"), dir("mbp/Strategy"))).toBe("mbp/Strategy");
+    expect(dropDirectory(file("mbp/readme.md"), file("mbp/Strategy/budget.md"))).toBe("mbp/Strategy");
+    expect(dropDirectory(dir("mbp/Archive"), file("mbp/Strategy/budget.md"))).toBe("mbp/Strategy");
+    expect(canDrop(dir("mbp/Strategy/2025"), "mbp")).toBe(true);
   });
 
   it("rejects a no-op and a folder dropped into itself", () => {
-    expect(dropDirectory(file("Strategy/budget.md"), dir("Strategy"))).toBeNull();
-    expect(dropDirectory(file("readme.md"), file("other.md"))).toBeNull();
-    expect(dropDirectory(dir("Strategy"), dir("Strategy"))).toBeNull();
-    expect(dropDirectory(dir("Strategy"), dir("Strategy/2025"))).toBeNull();
-    expect(canDrop(dir("Strategy/2025"), "")).toBe(true);
-    expect(canDrop(file("readme.md"), "")).toBe(false);
+    expect(dropDirectory(file("mbp/Strategy/budget.md"), dir("mbp/Strategy"))).toBeNull();
+    expect(dropDirectory(file("mbp/readme.md"), file("mbp/other.md"))).toBeNull();
+    expect(dropDirectory(dir("mbp/Strategy"), dir("mbp/Strategy"))).toBeNull();
+    expect(dropDirectory(dir("mbp/Strategy"), dir("mbp/Strategy/2025"))).toBeNull();
+  });
+
+  it("keeps entries on their machine and machine roots in place", () => {
+    expect(dropDirectory(file("mbp/readme.md"), dir("studio/Inbox"))).toBeNull();
+    expect(dropDirectory(file("mbp/readme.md"), dir("studio"))).toBeNull();
+    expect(dropDirectory(dir("mbp"), dir("studio/Inbox"))).toBeNull();
+    expect(canDrop(file("mbp/Strategy/budget.md"), "")).toBe(false);
   });
 });
 

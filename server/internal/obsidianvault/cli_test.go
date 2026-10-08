@@ -48,9 +48,9 @@ func TestFindRevisionReadsCLIHistory(t *testing.T) {
 	runCLI = func(context.Context, string, []string) (string, error) {
 		return "", ErrCLIUnavailable
 	}
-	_, err = History(context.Background(), root, "note.md")
+	_, err = FindRevision(context.Background(), root, "note.md", contentRevision([]byte(base)))
 	if !errors.Is(err, ErrCLIUnavailable) {
-		t.Fatalf("history err = %v", err)
+		t.Fatalf("cli down err = %v", err)
 	}
 	if strings.Contains(base, "synced") {
 		t.Fatal("fixture mixed")

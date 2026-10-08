@@ -20,7 +20,7 @@ import { useT } from "../i18n";
 import { formatStamp } from "./im-utils";
 import { ImSidebarSearch } from "./im-sidebar-search";
 import { ImSidebarHeader, ImSidebarShell } from "./im-sidebar-shell";
-import { canDrop, dropDirectory, FOLDER_EXPAND_DELAY_MS, springOpenFolder, type DragNode } from "./knowledge-drag";
+import { dropDirectory, FOLDER_EXPAND_DELAY_MS, springOpenFolder, type DragNode } from "./knowledge-drag";
 import { ancestorDirs, parentDir } from "./knowledge-utils";
 
 const EMPTY_NODES: DocNode[] = [];
@@ -161,32 +161,9 @@ export function KnowledgeSidebar({ selectedPath, onSelect, onCreate, onOpenSearc
     void runMove(item.path, dest);
   };
 
-  const onNavDragOver = (event: DragEvent) => {
-    const item = draggingRef.current;
-    if (!item) return;
-    if ((event.target as HTMLElement).closest("[data-path]")) return;
-    const dest = canDrop(item, "") ? "" : null;
-    if (dest !== null) {
-      event.preventDefault();
-      event.dataTransfer.dropEffect = "move";
-    }
-    setHoverPath((prev) => (prev === "" ? prev : ""));
-    setDropDest((prev) => (prev === dest ? prev : dest));
-    clearExpand();
-  };
-
-  const onNavDrop = (event: DragEvent) => {
-    const item = draggingRef.current;
-    if (!item) return;
-    if ((event.target as HTMLElement).closest("[data-path]")) return;
-    event.preventDefault();
-    const dest = canDrop(item, "") ? "" : null;
-    finishDrag();
-    if (dest === null) return;
-    void runMove(item.path, dest);
-  };
-
-  const createTarget = selectedPath ? parentDir(selectedPath) : "";
+  // A note lives on one machine, so a new note needs a folder to go in: the
+  // open note's, or the only shared machine when there is just one.
+  const createTarget = selectedPath ? parentDir(selectedPath) : nodes.length === 1 ? (nodes[0]?.path ?? null) : null;
 
   return (
     <ImSidebarShell className={className}>
@@ -197,10 +174,11 @@ export function KnowledgeSidebar({ selectedPath, onSelect, onCreate, onOpenSearc
       >
         <button
           type="button"
-          onClick={() => onCreate(createTarget)}
+          onClick={() => createTarget !== null && onCreate(createTarget)}
+          disabled={createTarget === null}
           aria-label={t(($) => $.knowledge.new_note)}
           title={t(($) => $.knowledge.new_note)}
-          className="flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          className="flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50"
         >
           <CirclePlus className="size-[21px]" strokeWidth={1.7} />
         </button>
@@ -208,16 +186,11 @@ export function KnowledgeSidebar({ selectedPath, onSelect, onCreate, onOpenSearc
 
       <nav
         ref={navRef}
-        className={cn(
-          "min-h-0 flex-1 overflow-y-auto px-2 pb-3",
-          hoverPath === "" && dropDest === "" && "ring-2 ring-inset ring-brand",
-        )}
+        className="min-h-0 flex-1 overflow-y-auto px-2 pb-3"
         aria-label={t(($) => $.rail.knowledge)}
-        onDragOver={onNavDragOver}
-        onDrop={onNavDrop}
       >
         {tree.isError ? (
-          <SidebarNotice>{loadErrorText(tree.error, t)}</SidebarNotice>
+          <SidebarNotice>{t(($) => $.knowledge.load_failed)}</SidebarNotice>
         ) : tree.isPending && !tree.data ? null : nodes.length === 0 ? (
           <SidebarNotice>{t(($) => $.knowledge.empty)}</SidebarNotice>
         ) : (
@@ -262,17 +235,6 @@ export function moveErrorText(error: unknown, t: Translate): string {
       return t(($) => $.knowledge.move_invalid);
     default:
       return t(($) => $.knowledge.move_failed);
-  }
-}
-
-export function loadErrorText(error: unknown, t: Translate): string {
-  switch (errorCode(error)) {
-    case "obsidian_vault_unconfigured":
-      return t(($) => $.knowledge.unconfigured);
-    case "obsidian_vault_unavailable":
-      return t(($) => $.knowledge.unavailable);
-    default:
-      return t(($) => $.knowledge.load_failed);
   }
 }
 

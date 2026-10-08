@@ -13,48 +13,28 @@ import (
 	"github.com/multica-ai/multica/server/pkg/db/generated"
 )
 
-// docsTarget is either the deployment vault or one connected machine.
-// rel is the path under that root. Vault responses are prefixed with system/.
+// docsTarget is one connected machine the caller may use; rel is the path
+// under its shared directory. Responses are prefixed with the machine name.
 type docsTarget struct {
-	vault string
-	rel   string
-	peer  fileshare.Peer
+	rel  string
+	peer fileshare.Peer
 }
 
+// resolveDocsPath maps a knowledge path to its machine. A machine that is not
+// connected, or that the caller may not use, reads as not found so a private
+// share's name does not leak.
 func (h *Handler) resolveDocsPath(w http.ResponseWriter, r *http.Request, path string) (docsTarget, bool) {
 	root, rest := fileshare.Cut(path)
-	if root != "" && root != fileshare.SystemRoot {
-		if h.FileShares != nil && h.FileShares.Known(root) {
-			if peer := h.peerFor(r, root); peer != nil {
-				return docsTarget{rel: rest, peer: peer}, true
-			}
-			writeDocsVaultError(w, r, obsidianvault.ErrNotFound)
-			return docsTarget{}, false
-		}
-		vault, err := obsidianvault.VaultRoot()
-		if err != nil {
-			writeDocsVaultError(w, r, err)
-			return docsTarget{}, false
-		}
-		return docsTarget{vault: vault, rel: trimSlash(path)}, true
-	}
-	vault, err := obsidianvault.VaultRoot()
-	if err != nil {
-		writeDocsVaultError(w, r, err)
+	peer := h.peerFor(r, root)
+	if peer == nil {
+		writeDocsVaultError(w, r, obsidianvault.ErrNotFound)
 		return docsTarget{}, false
 	}
-	return docsTarget{vault: vault, rel: rest}, true
-}
-
-func trimSlash(path string) string {
-	for len(path) > 0 && path[0] == '/' {
-		path = path[1:]
-	}
-	return path
+	return docsTarget{rel: rest, peer: peer}, true
 }
 
 func (h *Handler) peerFor(r *http.Request, machine string) fileshare.Peer {
-	if h.FileShares == nil || machine == "" || machine == fileshare.SystemRoot {
+	if h.FileShares == nil || machine == "" {
 		return nil
 	}
 	peer := h.FileShares.Get(machine)
@@ -178,44 +158,9 @@ func prefixNode(root string, node obsidianvault.Node) obsidianvault.Node {
 	return node
 }
 
-func systemNode(children []obsidianvault.Node) obsidianvault.Node {
-	kids := prefixNodes(fileshare.SystemRoot, children)
-	return obsidianvault.Node{
-		Name:       fileshare.SystemRoot,
-		Path:       fileshare.SystemRoot,
-		Type:       obsidianvault.TypeDir,
-		ChildCount: len(kids),
-		Children:   kids,
-	}
-}
-
 func prefixFile(root string, file obsidianvault.FileContent) obsidianvault.FileContent {
 	file.Path = fileshare.Join(root, file.Path)
 	return file
-}
-
-func (h *Handler) writeDocsRoots(w http.ResponseWriter, r *http.Request) {
-	nodes := make([]obsidianvault.Node, 0, 2)
-	root, err := obsidianvault.VaultRoot()
-	switch {
-	case err == nil:
-		children, childErr := obsidianvault.Children(r.Context(), root, "")
-		if childErr != nil {
-			writeDocsVaultError(w, r, childErr)
-			return
-		}
-		nodes = append(nodes, systemNode(children.Nodes))
-	case errors.Is(err, obsidianvault.ErrUnconfigured):
-	default:
-		writeDocsVaultError(w, r, err)
-		return
-	}
-	nodes = append(nodes, h.machineLevels(r)...)
-	if len(nodes) == 0 {
-		writeDocsVaultError(w, r, obsidianvault.ErrUnconfigured)
-		return
-	}
-	writeJSON(w, http.StatusOK, obsidianvault.ChildrenResult{Path: "", Nodes: nodes})
 }
 
 func (h *Handler) machineLevels(r *http.Request) []obsidianvault.Node {

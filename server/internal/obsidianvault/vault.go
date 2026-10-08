@@ -1,6 +1,7 @@
-// Package obsidianvault reads and updates an Obsidian vault for the docs APIs.
+// Package obsidianvault reads and updates a local Markdown directory, such as
+// an Obsidian vault, for the machine shares behind the docs APIs.
 //
-// The vault root comes from OBSIDIAN_VAULT_PATH. Listings keep markdown files
+// Every call takes the directory root explicitly. Listings keep markdown files
 // and directories that still contain markdown after that filter. Hidden
 // entries (names starting with "."), every other file type, and directories
 // that become empty are omitted. Paths in responses use forward slashes and
@@ -20,9 +21,6 @@ import (
 )
 
 const (
-	// EnvVaultPath is the absolute path of the Obsidian vault.
-	EnvVaultPath = "OBSIDIAN_VAULT_PATH"
-
 	TypeDir  = "dir"
 	TypeFile = "file"
 
@@ -40,9 +38,7 @@ const (
 var maxSearchMatches = 200
 
 var (
-	// ErrUnconfigured means OBSIDIAN_VAULT_PATH is empty.
-	ErrUnconfigured = errors.New("obsidian vault is not configured")
-	// ErrUnavailable means the configured path is missing or not a directory.
+	// ErrUnavailable means the root is missing or not a directory.
 	ErrUnavailable = errors.New("obsidian vault is unavailable")
 	// ErrInvalidPath means the requested path escapes the vault or is malformed.
 	ErrInvalidPath = errors.New("invalid document path")
@@ -98,15 +94,6 @@ type SearchResult struct {
 	Query     string `json:"query"`
 	Nodes     []Node `json:"nodes"`
 	Truncated bool   `json:"truncated,omitempty"`
-}
-
-// VaultRoot resolves OBSIDIAN_VAULT_PATH to a real directory.
-func VaultRoot() (string, error) {
-	raw := strings.TrimSpace(os.Getenv(EnvVaultPath))
-	if raw == "" {
-		return "", ErrUnconfigured
-	}
-	return resolveRoot(raw)
 }
 
 func resolveRoot(root string) (string, error) {

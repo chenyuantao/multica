@@ -17,87 +17,19 @@ import (
 
 const maxHistoryScan = 20
 
-// Version is one File recovery snapshot or one Obsidian Sync version.
+// version is one File recovery snapshot or one Obsidian Sync version.
 // Numbers start at 1 for the newest. The bytes live outside the note:
 // local snapshots are in Obsidian's global app data, and Sync versions are
 // on the Sync service. Both are read through the running Obsidian CLI.
-type Version struct {
-	Source  string `json:"source"`
-	Version int    `json:"version"`
-	Label   string `json:"label,omitempty"`
-}
-
-// HistoryResult lists local File recovery versions and Sync versions.
-type HistoryResult struct {
-	Path       string    `json:"path"`
-	Local      []Version `json:"local"`
-	Sync       []Version `json:"sync"`
-	LocalError string    `json:"local_error,omitempty"`
-	SyncError  string    `json:"sync_error,omitempty"`
-}
-
-// VersionContent is the full text of one historical version.
-type VersionContent struct {
-	Path     string `json:"path"`
-	Source   string `json:"source"`
-	Version  int    `json:"version"`
-	Content  string `json:"content"`
-	Revision string `json:"revision"`
+type version struct {
+	Source  string
+	Version int
+	Label   string
 }
 
 type cliRunner func(ctx context.Context, vault string, args []string) (string, error)
 
 var runCLI cliRunner = defaultRunCLI
-
-// History asks the Obsidian CLI for local and Sync versions of one note.
-func History(ctx context.Context, root, rel string) (HistoryResult, error) {
-	root, cleaned, err := noteRoot(ctx, root, rel)
-	if err != nil {
-		return HistoryResult{}, err
-	}
-	localRaw, localErr := runCLI(ctx, root, historyArgs("local", cleaned))
-	syncRaw, syncErr := runCLI(ctx, root, historyArgs("sync", cleaned))
-	if localErr != nil && syncErr != nil {
-		if cliDown(localErr) && cliDown(syncErr) {
-			return HistoryResult{}, ErrCLIUnavailable
-		}
-		return HistoryResult{}, errors.Join(localErr, syncErr)
-	}
-	result := HistoryResult{Path: cleaned, Local: []Version{}, Sync: []Version{}}
-	if localErr != nil {
-		result.LocalError = localErr.Error()
-	} else {
-		result.Local = parseVersions(localRaw, "local")
-	}
-	if syncErr != nil {
-		result.SyncError = syncErr.Error()
-	} else {
-		result.Sync = parseVersions(syncRaw, "sync")
-	}
-	return result, nil
-}
-
-// ReadVersion reads one historical version through the Obsidian CLI.
-func ReadVersion(ctx context.Context, root, rel, source string, version int) (VersionContent, error) {
-	if version < 1 || (source != "local" && source != "sync") {
-		return VersionContent{}, ErrInvalidEdit
-	}
-	root, cleaned, err := noteRoot(ctx, root, rel)
-	if err != nil {
-		return VersionContent{}, err
-	}
-	body, err := runCLI(ctx, root, readArgs(source, cleaned, version))
-	if err != nil {
-		return VersionContent{}, err
-	}
-	return VersionContent{
-		Path:     cleaned,
-		Source:   source,
-		Version:  version,
-		Content:  body,
-		Revision: contentRevision([]byte(body)),
-	}, nil
-}
 
 // FindRevision scans CLI history for the snapshot whose bytes hash to revision.
 func FindRevision(ctx context.Context, root, rel, revision string) (string, error) {
@@ -161,8 +93,8 @@ func readArgs(source, rel string, version int) []string {
 	return []string{cmd, "path=" + rel, "version=" + strconv.Itoa(version)}
 }
 
-func parseVersions(raw, source string) []Version {
-	out := make([]Version, 0)
+func parseVersions(raw, source string) []version {
+	out := make([]version, 0)
 	seen := map[int]struct{}{}
 	for _, line := range strings.Split(raw, "\n") {
 		line = strings.TrimSpace(line)
@@ -184,7 +116,7 @@ func parseVersions(raw, source string) []Version {
 		if len(fields) > 1 {
 			label = strings.Join(fields[1:], " ")
 		}
-		out = append(out, Version{Source: source, Version: n, Label: label})
+		out = append(out, version{Source: source, Version: n, Label: label})
 	}
 	return out
 }

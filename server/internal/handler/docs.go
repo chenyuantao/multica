@@ -24,83 +24,46 @@ type docsCreateRequest struct {
 	Content string `json:"content"`
 }
 
-type docsVersionRequest struct {
-	Path    string `json:"path"`
-	Source  string `json:"source"`
-	Version int    `json:"version"`
-}
-
 type docsMoveRequest struct {
 	Path string `json:"path"`
 	Dest string `json:"dest"`
 }
 
-// PostDocsTree returns the Obsidian vault as a nested directory tree.
-// Only markdown files are included, and directories with no markdown left
-// after that filter are omitted.
+// PostDocsTree returns every machine share the caller can use as a nested
+// directory tree. Only markdown files are included, and directories with no
+// markdown left after that filter are omitted.
 func (h *Handler) PostDocsTree(w http.ResponseWriter, r *http.Request) {
 	if !decodeDocsBody(w, r, &struct{}{}) {
 		return
 	}
-	nodes := make([]obsidianvault.Node, 0, 2)
-	root, err := obsidianvault.VaultRoot()
-	switch {
-	case err == nil:
-		result, treeErr := obsidianvault.Tree(r.Context(), root)
-		if treeErr != nil {
-			writeDocsVaultError(w, r, treeErr)
-			return
-		}
-		nodes = append(nodes, systemNode(result.Nodes))
-	case errors.Is(err, obsidianvault.ErrUnconfigured):
-	default:
-		writeDocsVaultError(w, r, err)
-		return
-	}
-	nodes = append(nodes, h.machineTrees(r)...)
-	if len(nodes) == 0 {
-		writeDocsVaultError(w, r, obsidianvault.ErrUnconfigured)
-		return
-	}
-	writeJSON(w, http.StatusOK, obsidianvault.TreeResult{Nodes: nodes})
+	writeJSON(w, http.StatusOK, obsidianvault.TreeResult{Nodes: h.machineTrees(r)})
 }
 
 // PostDocsChildren returns the next visible level under path.
-// An empty path lists the vault root.
+// An empty path lists the machine roots.
 func (h *Handler) PostDocsChildren(w http.ResponseWriter, r *http.Request) {
 	var req docsPathRequest
 	if !decodeDocsBody(w, r, &req) {
 		return
 	}
-	if trimSlash(req.Path) == "" {
-		h.writeDocsRoots(w, r)
+	if root, _ := fileshare.Cut(req.Path); root == "" {
+		writeJSON(w, http.StatusOK, obsidianvault.ChildrenResult{Path: "", Nodes: h.machineLevels(r)})
 		return
 	}
 	target, ok := h.resolveDocsPath(w, r, req.Path)
 	if !ok {
 		return
 	}
-	if target.peer != nil {
-		ctx, cancel := h.shareContext(r)
-		defer cancel()
-		var result obsidianvault.ChildrenResult
-		if err := target.peer.Call(ctx, fileshare.OpChildren, map[string]string{"path": target.rel}, &result); err != nil {
-			writeShareError(w, r, err)
-			return
-		}
-		machine := target.peer.Meta().Machine
-		result.Path = fileshare.Join(machine, result.Path)
-		result.Nodes = prefixNodes(machine, result.Nodes)
-		writeJSON(w, http.StatusOK, result)
+	ctx, cancel := h.shareContext(r)
+	defer cancel()
+	var result obsidianvault.ChildrenResult
+	if err := target.peer.Call(ctx, fileshare.OpChildren, map[string]string{"path": target.rel}, &result); err != nil {
+		writeShareError(w, r, err)
 		return
 	}
-	result, err := obsidianvault.Children(r.Context(), target.vault, target.rel)
-	if err != nil {
-		writeDocsVaultError(w, r, err)
-		return
-	}
-	result.Path = fileshare.Join(fileshare.SystemRoot, result.Path)
-	result.Nodes = prefixNodes(fileshare.SystemRoot, result.Nodes)
+	machine := target.peer.Meta().Machine
+	result.Path = fileshare.Join(machine, result.Path)
+	result.Nodes = prefixNodes(machine, result.Nodes)
 	writeJSON(w, http.StatusOK, result)
 }
 
@@ -114,27 +77,16 @@ func (h *Handler) PostDocsFileHierarchy(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	if target.peer != nil {
-		ctx, cancel := h.shareContext(r)
-		defer cancel()
-		var result obsidianvault.HierarchyResult
-		if err := target.peer.Call(ctx, fileshare.OpHierarchy, map[string]string{"path": target.rel}, &result); err != nil {
-			writeShareError(w, r, err)
-			return
-		}
-		machine := target.peer.Meta().Machine
-		result.File = prefixNode(machine, result.File)
-		result.Ancestors = prefixNodes(machine, result.Ancestors)
-		writeJSON(w, http.StatusOK, result)
+	ctx, cancel := h.shareContext(r)
+	defer cancel()
+	var result obsidianvault.HierarchyResult
+	if err := target.peer.Call(ctx, fileshare.OpHierarchy, map[string]string{"path": target.rel}, &result); err != nil {
+		writeShareError(w, r, err)
 		return
 	}
-	result, err := obsidianvault.Hierarchy(r.Context(), target.vault, target.rel)
-	if err != nil {
-		writeDocsVaultError(w, r, err)
-		return
-	}
-	result.File = prefixNode(fileshare.SystemRoot, result.File)
-	result.Ancestors = prefixNodes(fileshare.SystemRoot, result.Ancestors)
+	machine := target.peer.Meta().Machine
+	result.File = prefixNode(machine, result.File)
+	result.Ancestors = prefixNodes(machine, result.Ancestors)
 	writeJSON(w, http.StatusOK, result)
 }
 
@@ -148,67 +100,14 @@ func (h *Handler) PostDocsFileContent(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if target.peer != nil {
-		ctx, cancel := h.shareContext(r)
-		defer cancel()
-		file, err := h.FileShares.Read(ctx, target.peer, target.rel)
-		if err != nil {
-			writeShareError(w, r, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, prefixFile(target.peer.Meta().Machine, file))
-		return
-	}
-	result, err := obsidianvault.Read(r.Context(), target.vault, target.rel)
+	ctx, cancel := h.shareContext(r)
+	defer cancel()
+	file, err := h.FileShares.Read(ctx, target.peer, target.rel)
 	if err != nil {
-		writeDocsVaultError(w, r, err)
+		writeShareError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, prefixFile(fileshare.SystemRoot, result))
-}
-
-// PostDocsFileHistory lists File recovery and Sync versions via the Obsidian CLI.
-func (h *Handler) PostDocsFileHistory(w http.ResponseWriter, r *http.Request) {
-	var req docsPathRequest
-	if !decodeDocsBody(w, r, &req) {
-		return
-	}
-	target, ok := h.resolveDocsPath(w, r, req.Path)
-	if !ok {
-		return
-	}
-	if target.peer != nil {
-		writeErrorCode(w, http.StatusBadRequest, "docs_history_unavailable", "version history is only available for system documents")
-		return
-	}
-	result, err := obsidianvault.History(r.Context(), target.vault, target.rel)
-	if err != nil {
-		writeDocsVaultError(w, r, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, result)
-}
-
-// PostDocsFileVersion reads one historical version via the Obsidian CLI.
-func (h *Handler) PostDocsFileVersion(w http.ResponseWriter, r *http.Request) {
-	var req docsVersionRequest
-	if !decodeDocsBody(w, r, &req) {
-		return
-	}
-	target, ok := h.resolveDocsPath(w, r, req.Path)
-	if !ok {
-		return
-	}
-	if target.peer != nil {
-		writeErrorCode(w, http.StatusBadRequest, "docs_history_unavailable", "version history is only available for system documents")
-		return
-	}
-	result, err := obsidianvault.ReadVersion(r.Context(), target.vault, target.rel, req.Source, req.Version)
-	if err != nil {
-		writeDocsVaultError(w, r, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, result)
+	writeJSON(w, http.StatusOK, prefixFile(target.peer.Meta().Machine, file))
 }
 
 // PatchDocsFileContent writes a note. Range edits use changes; op overwrite,
@@ -224,28 +123,21 @@ func (h *Handler) PatchDocsFileContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Path = target.rel
-	if target.peer != nil {
-		ctx, cancel := h.shareContext(r)
-		defer cancel()
-		var result obsidianvault.FileContent
-		if err := target.peer.Call(ctx, fileshare.OpWrite, req, &result); err != nil {
-			writeShareError(w, r, err)
-			return
-		}
-		h.FileShares.Invalidate(target.peer.Meta().Machine)
-		writeJSON(w, http.StatusOK, prefixFile(target.peer.Meta().Machine, result))
+	ctx, cancel := h.shareContext(r)
+	defer cancel()
+	var result obsidianvault.FileContent
+	if err := target.peer.Call(ctx, fileshare.OpWrite, req, &result); err != nil {
+		writeShareError(w, r, err)
 		return
 	}
-	result, err := obsidianvault.Apply(r.Context(), target.vault, req)
-	if err != nil {
-		writeDocsVaultError(w, r, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, prefixFile(fileshare.SystemRoot, result))
+	machine := target.peer.Meta().Machine
+	h.FileShares.Invalidate(machine)
+	writeJSON(w, http.StatusOK, prefixFile(machine, result))
 }
 
-// PostDocsMove places a markdown file or directory into another directory.
-// Dest is the destination directory; an empty dest is the vault root.
+// PostDocsMove places a markdown file or directory into another directory on
+// the same machine. Dest is the destination directory; the bare machine name
+// is the share root.
 func (h *Handler) PostDocsMove(w http.ResponseWriter, r *http.Request) {
 	var req docsMoveRequest
 	if !decodeDocsBody(w, r, &req) {
@@ -255,52 +147,26 @@ func (h *Handler) PostDocsMove(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	destRoot, destRest := fileshare.Cut(req.Dest)
-	if destRoot == "" {
-		destRoot = fileshare.SystemRoot
-	}
-	fromRoot := fileshare.SystemRoot
-	if from.peer != nil {
-		fromRoot = from.peer.Meta().Machine
-	}
-	destRel := req.Dest
-	if from.peer != nil {
-		if destRoot != fromRoot {
-			writeDocsVaultError(w, r, obsidianvault.ErrInvalidMove)
-			return
-		}
-		destRel = destRest
-		ctx, cancel := h.shareContext(r)
-		defer cancel()
-		var result obsidianvault.MoveResult
-		if err := from.peer.Call(ctx, fileshare.OpMove, map[string]string{"path": from.rel, "dest": destRel}, &result); err != nil {
-			writeShareError(w, r, err)
-			return
-		}
-		h.FileShares.Invalidate(fromRoot)
-		result.From = fileshare.Join(fromRoot, result.From)
-		result.Path = fileshare.Join(fromRoot, result.Path)
-		writeJSON(w, http.StatusOK, result)
-		return
-	}
-	if destRoot != fileshare.SystemRoot && h.peerFor(r, destRoot) != nil {
+	machine := from.peer.Meta().Machine
+	destRoot, destRel := fileshare.Cut(req.Dest)
+	if destRoot != machine {
 		writeDocsVaultError(w, r, obsidianvault.ErrInvalidMove)
 		return
 	}
-	if destRoot == fileshare.SystemRoot {
-		destRel = destRest
-	}
-	result, err := obsidianvault.Move(r.Context(), from.vault, from.rel, trimSlash(destRel))
-	if err != nil {
-		writeDocsVaultError(w, r, err)
+	ctx, cancel := h.shareContext(r)
+	defer cancel()
+	var result obsidianvault.MoveResult
+	if err := from.peer.Call(ctx, fileshare.OpMove, map[string]string{"path": from.rel, "dest": destRel}, &result); err != nil {
+		writeShareError(w, r, err)
 		return
 	}
-	result.From = fileshare.Join(fileshare.SystemRoot, result.From)
-	result.Path = fileshare.Join(fileshare.SystemRoot, result.Path)
+	h.FileShares.Invalidate(machine)
+	result.From = fileshare.Join(machine, result.From)
+	result.Path = fileshare.Join(machine, result.Path)
 	writeJSON(w, http.StatusOK, result)
 }
 
-// PostDocsFile creates a markdown note inside an existing vault directory.
+// PostDocsFile creates a markdown note inside an existing shared directory.
 func (h *Handler) PostDocsFile(w http.ResponseWriter, r *http.Request) {
 	var req docsCreateRequest
 	if !decodeDocsBody(w, r, &req) {
@@ -310,64 +176,44 @@ func (h *Handler) PostDocsFile(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if target.peer != nil {
-		ctx, cancel := h.shareContext(r)
-		defer cancel()
-		var result obsidianvault.FileContent
-		if err := target.peer.Call(ctx, fileshare.OpCreate, map[string]string{"path": target.rel, "content": req.Content}, &result); err != nil {
-			writeShareError(w, r, err)
-			return
-		}
-		h.FileShares.Invalidate(target.peer.Meta().Machine)
-		writeJSON(w, http.StatusCreated, prefixFile(target.peer.Meta().Machine, result))
+	ctx, cancel := h.shareContext(r)
+	defer cancel()
+	var result obsidianvault.FileContent
+	if err := target.peer.Call(ctx, fileshare.OpCreate, map[string]string{"path": target.rel, "content": req.Content}, &result); err != nil {
+		writeShareError(w, r, err)
 		return
 	}
-	result, err := obsidianvault.Create(r.Context(), target.vault, target.rel, req.Content)
-	if err != nil {
-		writeDocsVaultError(w, r, err)
-		return
-	}
-	writeJSON(w, http.StatusCreated, prefixFile(fileshare.SystemRoot, result))
+	machine := target.peer.Meta().Machine
+	h.FileShares.Invalidate(machine)
+	writeJSON(w, http.StatusCreated, prefixFile(machine, result))
 }
 
-// PostDocsSearch finds notes by title or body and returns them inside their directories.
+// PostDocsSearch finds notes by title or body across every machine share the
+// caller can use and returns them inside their directories. A machine that
+// fails to answer is left out rather than failing the whole search.
 func (h *Handler) PostDocsSearch(w http.ResponseWriter, r *http.Request) {
 	var req docsSearchRequest
 	if !decodeDocsBody(w, r, &req) {
 		return
 	}
-	var result obsidianvault.SearchResult
-	root, err := obsidianvault.VaultRoot()
-	if err == nil {
-		found, searchErr := obsidianvault.Search(r.Context(), root, req.Q)
-		if searchErr != nil {
-			writeDocsVaultError(w, r, searchErr)
-			return
-		}
-		result = found
-		result.Nodes = prefixNodes(fileshare.SystemRoot, found.Nodes)
-	} else if !errors.Is(err, obsidianvault.ErrUnconfigured) {
-		writeDocsVaultError(w, r, err)
-		return
-	} else if req.Q == "" {
+	if req.Q == "" {
 		writeDocsVaultError(w, r, obsidianvault.ErrQueryRequired)
 		return
 	}
-	if result.Query == "" {
-		result.Query = req.Q
-	}
+	result := obsidianvault.SearchResult{Query: req.Q, Nodes: []obsidianvault.Node{}}
 	ctx, cancel := h.shareContext(r)
 	defer cancel()
 	for _, peer := range h.visiblePeers(r) {
 		var found obsidianvault.SearchResult
 		if err := peer.Call(ctx, fileshare.OpSearch, map[string]string{"q": req.Q}, &found); err != nil {
+			if errors.Is(err, obsidianvault.ErrQueryTooLong) {
+				writeDocsVaultError(w, r, err)
+				return
+			}
 			continue
 		}
 		result.Nodes = append(result.Nodes, prefixNodes(peer.Meta().Machine, found.Nodes)...)
 		result.Truncated = result.Truncated || found.Truncated
-	}
-	if result.Nodes == nil {
-		result.Nodes = []obsidianvault.Node{}
 	}
 	writeJSON(w, http.StatusOK, result)
 }
@@ -383,15 +229,6 @@ func decodeDocsBody(w http.ResponseWriter, r *http.Request, dest any) bool {
 		return false
 	}
 	return true
-}
-
-func requireDocsVault(w http.ResponseWriter) (string, bool) {
-	root, err := obsidianvault.VaultRoot()
-	if err != nil {
-		writeDocsVaultError(w, nil, err)
-		return "", false
-	}
-	return root, true
 }
 
 func writeDocsVaultError(w http.ResponseWriter, r *http.Request, err error) {
@@ -423,10 +260,6 @@ func writeDocsVaultError(w http.ResponseWriter, r *http.Request, err error) {
 		return
 	}
 	switch {
-	case errors.Is(err, obsidianvault.ErrUnconfigured):
-		writeErrorCode(w, http.StatusNotFound, "obsidian_vault_unconfigured", "Obsidian vault is not configured")
-	case errors.Is(err, obsidianvault.ErrUnavailable):
-		writeErrorCode(w, http.StatusNotFound, "obsidian_vault_unavailable", "Obsidian vault is unavailable")
 	case errors.Is(err, obsidianvault.ErrInvalidPath):
 		writeErrorCode(w, http.StatusBadRequest, "invalid_docs_path", "invalid document path")
 	case errors.Is(err, obsidianvault.ErrNotFound):
@@ -449,12 +282,8 @@ func writeDocsVaultError(w http.ResponseWriter, r *http.Request, err error) {
 		writeErrorCode(w, http.StatusBadRequest, "docs_not_utf8", "document is not utf-8")
 	case errors.Is(err, obsidianvault.ErrTooLarge):
 		writeErrorCode(w, http.StatusRequestEntityTooLarge, "docs_too_large", "document is too large")
-	case errors.Is(err, obsidianvault.ErrCLIUnavailable):
-		writeErrorCode(w, http.StatusServiceUnavailable, "obsidian_cli_unavailable", "Obsidian CLI is unavailable")
-	case errors.Is(err, obsidianvault.ErrCLIFailed):
-		writeErrorCode(w, http.StatusBadGateway, "obsidian_cli_failed", "Obsidian CLI failed")
 	default:
-		slog.Error("docs vault request failed", "err", err)
+		slog.Error("docs request failed", "err", err)
 		writeError(w, http.StatusInternalServerError, "failed to read documents")
 	}
 }

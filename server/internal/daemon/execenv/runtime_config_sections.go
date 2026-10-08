@@ -969,12 +969,13 @@ func writeInlineBlocksPolicy(b *strings.Builder) {
 }
 
 // writeObsidianNotePolicy tells the same web-rendered surfaces how to report
-// an Obsidian note the agent created or modified. The web turns a closed
-// `obsidian` fence holding this JSON into a note card that opens the note from
-// the deployment's vault, and the docs API addresses notes by vault-relative
-// path only — an absolute path cannot be opened.
+// a knowledge note the agent created or modified. The web turns a closed
+// `obsidian` fence holding this JSON into a note card that opens the note in
+// knowledge. Knowledge is made of machine shares only, and the docs API
+// addresses a note by its knowledge path, `<machine>/<path inside the share>`
+// — a path without the machine prefix, or an absolute one, cannot be opened.
 func writeObsidianNotePolicy(b *strings.Builder) {
-	b.WriteString("\n**Obsidian notes:** for each Obsidian note you create or modify, add one fenced `obsidian` code block to your reply holding only this JSON: `{\"name\": \"<file name without .md>\", \"summary\": \"<first 50 characters of the note body, frontmatter and Markdown markup removed>\", \"path\": \"<path from the vault root, forward slashes, ending in .md>\"}`. It renders as a note card that opens the note. The vault root is the nearest ancestor directory containing `.obsidian/`; `path` is never absolute and never starts with `/`.\n")
+	b.WriteString("\n**Knowledge notes:** for each note you create or modify in a shared directory, add one fenced `obsidian` code block to your reply holding only this JSON: `{\"name\": \"<file name without .md>\", \"summary\": \"<first 50 characters of the note body, frontmatter and Markdown markup removed>\", \"path\": \"<knowledge path>\"}`. It renders as a note card that opens the note. The knowledge path is the machine name, then the path inside that machine's shared directory, ending in .md — `multica-file write` prints it, and `multica-file path <local-file>` maps a file on disk to it; `path` is never absolute and never starts with `/`. Where a file belongs in the first place: the multica-platform files reference.\n")
 }
 
 // writeOutput emits the kind-specific Output section: the always-on delivery

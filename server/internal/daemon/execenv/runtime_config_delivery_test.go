@@ -77,7 +77,7 @@ func TestBriefObsidianNoteRuleFollowsRenderedSurfaces(t *testing.T) {
 			t.Errorf("kind=%s: obsidian note rule present=%v, inline blocks rule present=%v", name, got, rendered)
 		}
 		if rendered {
-			for _, want := range []string{`"name"`, `"summary"`, `"path"`, "first 50 characters", "nearest ancestor directory containing `.obsidian/`", "never absolute"} {
+			for _, want := range []string{`"name"`, `"summary"`, `"path"`, "first 50 characters", "the machine name, then the path inside that machine's shared directory", "multica-file path <local-file>", "never absolute"} {
 				if !strings.Contains(out, want) {
 					t.Errorf("kind=%s: obsidian note rule is missing %q", name, want)
 				}

@@ -42,7 +42,6 @@ import { ElementPicker } from "./element-picker";
 import { plainTextPreview } from "./im-utils";
 import { SEARCH_ITEM_CLASS, SearchResultGroups, SearchResultNotice } from "./im-search-results";
 import type { SearchScope, SearchSection } from "./im-search-utils";
-import { loadErrorText } from "./knowledge-sidebar";
 import type { AskAIDialogState } from "./use-ask-ai-launcher";
 import { useImSearchGroups, type SearchRow } from "./use-im-search-groups";
 import type { DirectoryEntry } from "./use-chat-directory";
@@ -361,7 +360,7 @@ export function ImSearchDialog({
             </CommandPrimitive.Group>
             {asking ? null : sectionError ? (
               <SearchResultNotice>
-                {sectionError.section === "notes" ? loadErrorText(sectionError.error, t) : t(($) => $.search.load_failed)}
+                {sectionError.section === "notes" ? t(($) => $.knowledge.load_failed) : t(($) => $.search.load_failed)}
               </SearchResultNotice>
             ) : groups.length > 0 ? (
               <SearchResultGroups

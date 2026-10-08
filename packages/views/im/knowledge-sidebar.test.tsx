@@ -22,10 +22,12 @@ const node = (path: string, children?: DocNode[]): DocNode => ({
   hits: 0,
 });
 
-const tree = [
-  node("Strategy", [node("Strategy/2025", [node("Strategy/2025/plan.md")]), node("Strategy/budget.md")]),
-  node("readme.md"),
-];
+// Every top-level node is a machine that shares a folder.
+const mbp = node("mbp", [
+  node("mbp/Strategy", [node("mbp/Strategy/2025", [node("mbp/Strategy/2025/plan.md")]), node("mbp/Strategy/budget.md")]),
+  node("mbp/readme.md"),
+]);
+let tree: DocNode[] = [mbp];
 let searchNodes: DocNode[] = [];
 
 const { moveDoc } = vi.hoisted(() => ({ moveDoc: vi.fn() }));
@@ -64,47 +66,68 @@ describe("KnowledgeSidebar", () => {
     onSelect.mockReset();
     onCreate.mockReset();
     moveDoc.mockReset();
-    moveDoc.mockResolvedValue({ from: "readme.md", path: "Strategy/readme.md", name: "readme.md", type: "file" });
+    moveDoc.mockResolvedValue({ from: "mbp/readme.md", path: "mbp/Strategy/readme.md", name: "readme.md", type: "file" });
+    tree = [mbp];
     searchNodes = [];
     // jsdom has no layout, so scrollIntoView isn't defined at all.
     Element.prototype.scrollIntoView = vi.fn();
   });
 
-  it("opens top-level folders and toggles nested ones", () => {
+  it("opens machine roots and toggles the folders inside them", () => {
     renderWithI18n(<KnowledgeSidebar selectedPath={null} onSelect={onSelect} onCreate={onCreate} />);
-    expect(screen.getByRole("button", { name: /^Strategy/ })).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByText("budget.md")).toBeInTheDocument();
-    expect(screen.queryByText("plan.md")).toBeNull();
+    expect(screen.getByRole("button", { name: /^mbp/ })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: /^Strategy/ })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("budget.md")).toBeNull();
 
+    fireEvent.click(screen.getByRole("button", { name: /^Strategy/ }));
     fireEvent.click(screen.getByRole("button", { name: /^2025/ }));
     fireEvent.click(screen.getByRole("button", { name: /^plan\.md/ }));
-    expect(onSelect).toHaveBeenCalledWith("Strategy/2025/plan.md");
+    expect(onSelect).toHaveBeenCalledWith("mbp/Strategy/2025/plan.md");
   });
 
   it("expands the folders of the open note and creates beside it", () => {
-    renderWithI18n(<KnowledgeSidebar selectedPath="Strategy/2025/plan.md" onSelect={onSelect} onCreate={onCreate} />);
+    renderWithI18n(<KnowledgeSidebar selectedPath="mbp/Strategy/2025/plan.md" onSelect={onSelect} onCreate={onCreate} />);
     expect(screen.getByRole("button", { name: /^plan\.md/ })).toHaveAttribute("aria-current", "page");
     fireEvent.click(screen.getByRole("button", { name: "New note" }));
-    expect(onCreate).toHaveBeenCalledWith("Strategy/2025");
+    expect(onCreate).toHaveBeenCalledWith("mbp/Strategy/2025");
+  });
+
+  it("creates in the only machine, and needs an open note to pick between several", () => {
+    const { unmount } = renderWithI18n(<KnowledgeSidebar selectedPath={null} onSelect={onSelect} onCreate={onCreate} />);
+    fireEvent.click(screen.getByRole("button", { name: "New note" }));
+    expect(onCreate).toHaveBeenCalledWith("mbp");
+    unmount();
+
+    tree = [mbp, node("studio", [node("studio/a.md")])];
+    renderWithI18n(<KnowledgeSidebar selectedPath={null} onSelect={onSelect} onCreate={onCreate} />);
+    expect(screen.getByRole("button", { name: "New note" })).toBeDisabled();
+  });
+
+  it("says how to share a folder when nothing is shared", () => {
+    tree = [];
+    renderWithI18n(<KnowledgeSidebar selectedPath={null} onSelect={onSelect} onCreate={onCreate} />);
+    expect(screen.getByText(/multica-file share/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "New note" })).toBeDisabled();
   });
 
   it("re-expands, pins, and scrolls to the folders of a newly opened note", () => {
     const scrollIntoView = vi.mocked(Element.prototype.scrollIntoView);
     const { rerender } = renderWithI18n(
-      <KnowledgeSidebar selectedPath="Strategy/budget.md" onSelect={onSelect} onCreate={onCreate} />,
+      <KnowledgeSidebar selectedPath="mbp/Strategy/budget.md" onSelect={onSelect} onCreate={onCreate} />,
     );
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: /^Strategy/ }));
     expect(screen.queryByText("budget.md")).toBeNull();
 
-    rerender(<KnowledgeSidebar selectedPath="Strategy/2025/plan.md" onSelect={onSelect} onCreate={onCreate} />);
+    rerender(<KnowledgeSidebar selectedPath="mbp/Strategy/2025/plan.md" onSelect={onSelect} onCreate={onCreate} />);
     const leaf = screen.getByRole("button", { name: /^plan\.md/ });
     expect(leaf).toHaveAttribute("aria-current", "page");
     expect(scrollIntoView).toHaveBeenCalledTimes(2);
     expect(scrollIntoView).toHaveBeenLastCalledWith({ block: "nearest" });
     for (const [name, top] of [
-      [/^Strategy/, "0px"],
-      [/^2025/, "32px"],
+      [/^mbp/, "0px"],
+      [/^Strategy/, "32px"],
+      [/^2025/, "64px"],
     ] as const) {
       const pin = screen.getByRole("button", { name }).parentElement?.parentElement;
       expect(pin).toHaveClass("sticky");
@@ -142,11 +165,22 @@ describe("KnowledgeSidebar", () => {
     fireEvent.dragStart(row(/^readme\.md/), { dataTransfer: transfer });
     fireEvent.dragOver(row(/^Strategy/), { dataTransfer: transfer });
     fireEvent.drop(row(/^Strategy/), { dataTransfer: transfer });
-    expect(moveDoc).toHaveBeenCalledWith({ path: "readme.md", dest: "Strategy" });
+    expect(moveDoc).toHaveBeenCalledWith({ path: "mbp/readme.md", dest: "mbp/Strategy" });
+  });
+
+  it("does not move a note to another machine", () => {
+    tree = [mbp, node("studio", [node("studio/Inbox", [node("studio/Inbox/a.md")])])];
+    renderWithI18n(<KnowledgeSidebar selectedPath={null} onSelect={onSelect} onCreate={onCreate} />);
+    const transfer = dragTransfer();
+    fireEvent.dragStart(row(/^readme\.md/), { dataTransfer: transfer });
+    fireEvent.dragOver(row(/^Inbox/), { dataTransfer: transfer });
+    fireEvent.drop(row(/^Inbox/), { dataTransfer: transfer });
+    expect(moveDoc).not.toHaveBeenCalled();
   });
 
   it("expands a collapsed folder after the pointer rests on it for 200ms", () => {
     renderWithI18n(<KnowledgeSidebar selectedPath={null} onSelect={onSelect} onCreate={onCreate} />);
+    fireEvent.click(screen.getByRole("button", { name: /^Strategy/ }));
     const folder = screen.getByRole("button", { name: /^2025/ });
     expect(folder).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByText("plan.md")).toBeNull();
@@ -172,6 +206,7 @@ describe("KnowledgeSidebar", () => {
 
   it("does not expand a folder when the pointer rests on a note", () => {
     renderWithI18n(<KnowledgeSidebar selectedPath={null} onSelect={onSelect} onCreate={onCreate} />);
+    fireEvent.click(screen.getByRole("button", { name: /^Strategy/ }));
     vi.useFakeTimers();
     try {
       const transfer = dragTransfer();

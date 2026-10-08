@@ -9,9 +9,6 @@ import (
 )
 
 const (
-	// SystemRoot is the knowledge path of the deployment's existing vault.
-	SystemRoot = "system"
-
 	VisibilityPrivate   = "private"
 	VisibilityWorkspace = "workspace"
 )
@@ -44,13 +41,10 @@ func Join(root, rest string) string {
 }
 
 // SanitizeMachine checks the name used as the path prefix. It has to be one
-// path segment, and it cannot take the system vault's name.
+// path segment.
 func SanitizeMachine(name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
-		return "", errBadMachine
-	}
-	if name == SystemRoot || strings.EqualFold(name, SystemRoot) {
 		return "", errBadMachine
 	}
 	if name == "." || strings.ContainsAny(name, `/\`) || strings.Contains(name, "..") {
