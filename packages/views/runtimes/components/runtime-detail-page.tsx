@@ -28,6 +28,7 @@ import { RenameMachineDialog } from "./rename-machine-dialog";
 import { RuntimeProfilesDialog } from "./runtime-profiles-dialog";
 import { pendingRuntimesForProfiles } from "./pending-runtime";
 import { MachineCliSection } from "./machine-cli-section";
+import { FileShareSection } from "./file-share-section";
 import { HealthIcon, useHealthLabel } from "./shared";
 import { useT, useTimeAgo } from "../../i18n";
 
@@ -295,6 +296,7 @@ export function RuntimeDetailPage({
 
       <div className="min-h-0 flex-1 overflow-y-auto bg-background">
         <div className={cn(PAGE_RAIL, PAGE_GUTTER, "py-4 sm:py-6")}>
+          <FileShareSection wsId={wsId} machine={machine} />
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div className="min-w-0">
               <h2 className="text-body font-semibold">

@@ -37,6 +37,7 @@ import type {
   DingTalkInstallation,
   DocMoveResult,
   DocNode,
+  FileShare,
   ListDingTalkInstallationsResponse,
   ListDingTalkGroupsResponse,
   RedeemDingTalkBindingTokenResponse,
@@ -1232,6 +1233,19 @@ export const DocNodeSchema: z.ZodType<DocNode> = z.lazy(() =>
     hits: z.number().default(0).catch(0),
   }).loose(),
 );
+
+export const FileShareSchema: z.ZodType<FileShare> = z.object({
+  machine: z.string(),
+  dir: z.string().default("").catch(""),
+  visibility: z.enum(["private", "workspace"]).catch("private"),
+  enabled: z.boolean().default(true).catch(true),
+  online: z.boolean().default(false).catch(false),
+  workspace_id: z.string().default("").catch(""),
+}).loose();
+
+export const FileShareListSchema = z.object({
+  shares: z.array(FileShareSchema).default([]),
+}).loose();
 
 export const DocTreeSchema = z.object({
   nodes: z.array(DocNodeSchema).default([]),

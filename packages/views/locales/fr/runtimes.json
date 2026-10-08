@@ -1,4 +1,16 @@
 {
+  "file_share": {
+    "title": "Partage de fichiers",
+    "online": "En ligne",
+    "offline": "Hors ligne",
+    "path": "Chemin partagé",
+    "access": "Accès distant",
+    "visibility": "Qui peut l'ouvrir",
+    "private": "Vous et vos agents",
+    "workspace": "Tout le monde dans cet espace",
+    "saved": "Partage de fichiers mis à jour",
+    "failed": "Impossible de mettre à jour le partage"
+  },
   "cleanup": {
     "action": "Nettoyer les inutilisés",
     "title_one": "Supprimer {{count}} runtime inutilisé ?",

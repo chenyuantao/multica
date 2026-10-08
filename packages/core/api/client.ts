@@ -504,6 +504,8 @@ import {
   DocMoveResultSchema,
   DocSearchResultSchema,
   DocTreeSchema,
+  FileShareListSchema,
+  FileShareSchema,
 } from "./schemas";
 import type {
   AskAIPage,
@@ -527,6 +529,7 @@ import type {
   MoveDocRequest,
   SaveDocFileRequest,
 } from "../types/docs";
+import type { FileShare, UpdateFileShareRequest } from "../types/file-share";
 
 /** Identifies the calling client to the server.
  *  Sent on every HTTP request as X-Client-Platform / X-Client-Version /
@@ -4727,6 +4730,34 @@ export class ApiClient {
   ): Promise<void> {
     await this.fetch(`/api/group-chats/${chatId}/members/${memberType}/${memberId}`, {
       method: "DELETE",
+    });
+  }
+
+  async listFileShares(): Promise<FileShare[]> {
+    const raw = await this.fetch<unknown>("/api/file-shares");
+    return parseWithFallback<{ shares: FileShare[] }>(
+      raw,
+      FileShareListSchema,
+      { shares: [] },
+      { endpoint: "GET /api/file-shares" },
+    ).shares;
+  }
+
+  async updateFileShare(machine: string, patch: UpdateFileShareRequest): Promise<FileShare> {
+    const raw = await this.fetch<unknown>(`/api/file-shares/${encodeURIComponent(machine)}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    });
+    const fallback: FileShare = {
+      machine,
+      dir: "",
+      visibility: patch.visibility ?? "private",
+      enabled: patch.enabled ?? true,
+      online: false,
+      workspace_id: "",
+    };
+    return parseWithFallback(raw, FileShareSchema, fallback, {
+      endpoint: "PATCH /api/file-shares/{machine}",
     });
   }
 

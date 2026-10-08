@@ -1,4 +1,16 @@
 {
+  "file_share": {
+    "title": "파일 공유",
+    "online": "온라인",
+    "offline": "오프라인",
+    "path": "공유 경로",
+    "access": "원격 액세스",
+    "visibility": "열 수 있는 사람",
+    "private": "나와 내 에이전트만",
+    "workspace": "이 워크스페이스의 모든 사람",
+    "saved": "파일 공유를 업데이트했습니다",
+    "failed": "파일 공유를 업데이트하지 못했습니다"
+  },
   "cleanup": {
     "action": "미사용 정리",
     "title_other": "미사용 런타임 {{count}}개를 삭제할까요?",

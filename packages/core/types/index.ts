@@ -379,3 +379,4 @@ export type {
   MoveDocRequest,
   DocMoveResult,
 } from "./docs";
+export type { FileShare, UpdateFileShareRequest } from "./file-share";

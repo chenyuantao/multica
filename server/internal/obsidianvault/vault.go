@@ -305,6 +305,9 @@ func list(ctx context.Context, root, dirAbs, rel string, stack map[string]struct
 			childRel = rel + "/" + name
 		}
 		if info.IsDir() {
+			if skippedDir(ctx, name) {
+				continue
+			}
 			kids, err := list(ctx, root, resolved, childRel, stack, attach)
 			if err != nil {
 				return nil, err
@@ -375,6 +378,9 @@ func walkFiles(ctx context.Context, root, dirAbs, rel string, stack map[string]s
 			childRel = rel + "/" + name
 		}
 		if info.IsDir() {
+			if skippedDir(ctx, name) {
+				continue
+			}
 			if err := walkFiles(ctx, root, resolved, childRel, stack, visit); err != nil {
 				return err
 			}
@@ -520,6 +526,27 @@ func contained(root, candidate string) (string, bool) {
 
 func isMarkdown(name string) bool {
 	return strings.EqualFold(filepath.Ext(name), ".md")
+}
+
+type skipDirsKey struct{}
+
+// WithSkipDirs tells Tree, Children, and Search to leave these directory
+// names out. The vault browser does not set it. A machine file share does,
+// so a shared project does not walk node_modules over the request path.
+func WithSkipDirs(ctx context.Context, names ...string) context.Context {
+	set := make(map[string]struct{}, len(names))
+	for _, name := range names {
+		if name != "" {
+			set[name] = struct{}{}
+		}
+	}
+	return context.WithValue(ctx, skipDirsKey{}, set)
+}
+
+func skippedDir(ctx context.Context, name string) bool {
+	set, _ := ctx.Value(skipDirsKey{}).(map[string]struct{})
+	_, ok := set[name]
+	return ok
 }
 
 func sortNodes(nodes []Node) {

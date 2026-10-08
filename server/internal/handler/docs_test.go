@@ -54,7 +54,11 @@ func TestDocsHTTPTreeAndSearch(t *testing.T) {
 	if err := json.Unmarshal(treeW.Body.Bytes(), &tree); err != nil {
 		t.Fatal(err)
 	}
-	if len(tree.Nodes) != 1 || tree.Nodes[0].Name != "库" || tree.Nodes[0].Children[0].Name != "笔记.md" {
+	if len(tree.Nodes) != 1 || tree.Nodes[0].Name != "system" || tree.Nodes[0].Path != "system" {
+		t.Fatalf("tree = %#v", tree)
+	}
+	folder := tree.Nodes[0].Children[0]
+	if folder.Name != "库" || folder.Children[0].Name != "笔记.md" || folder.Children[0].Path != "system/库/笔记.md" {
 		t.Fatalf("tree = %#v", tree)
 	}
 
@@ -68,7 +72,7 @@ func TestDocsHTTPTreeAndSearch(t *testing.T) {
 	if err := json.Unmarshal(searchW.Body.Bytes(), &found); err != nil {
 		t.Fatal(err)
 	}
-	if len(found.Nodes) != 1 || found.Nodes[0].Children[0].Path != "库/笔记.md" {
+	if len(found.Nodes) != 1 || found.Nodes[0].Children[0].Path != "system/库/笔记.md" {
 		t.Fatalf("search = %#v", found)
 	}
 }
@@ -88,7 +92,7 @@ func TestDocsHTTPCreate(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &note); err != nil {
 		t.Fatal(err)
 	}
-	if note.Path != "新笔记.md" || note.Content != "# 新笔记\n" || note.Revision == "" {
+	if note.Path != "system/新笔记.md" || note.Content != "# 新笔记\n" || note.Revision == "" {
 		t.Fatalf("note = %#v", note)
 	}
 
@@ -126,7 +130,7 @@ func TestDocsHTTPMove(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &moved); err != nil {
 		t.Fatal(err)
 	}
-	if moved.From != "笔记.md" || moved.Path != "归档/笔记.md" || moved.Type != obsidianvault.TypeFile {
+	if moved.From != "system/笔记.md" || moved.Path != "system/归档/笔记.md" || moved.Type != obsidianvault.TypeFile {
 		t.Fatalf("moved = %#v", moved)
 	}
 
@@ -162,7 +166,7 @@ func TestDocsHTTPContentEdit(t *testing.T) {
 	if err := json.Unmarshal(readW.Body.Bytes(), &note); err != nil {
 		t.Fatal(err)
 	}
-	if note.Content != "hello" || note.Revision == "" {
+	if note.Path != "system/note.md" || note.Content != "hello" || note.Revision == "" {
 		t.Fatalf("note = %#v", note)
 	}
 

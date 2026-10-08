@@ -1,4 +1,16 @@
 {
+  "file_share": {
+    "title": "File sharing",
+    "online": "Online",
+    "offline": "Offline",
+    "path": "Shared path",
+    "access": "Remote access",
+    "visibility": "Who can open it",
+    "private": "Only you and your agents",
+    "workspace": "Everyone in this workspace",
+    "saved": "File sharing updated",
+    "failed": "Couldn't update file sharing"
+  },
   "cleanup": {
     "action": "Clean up unused",
     "title_one": "Delete {{count}} unused runtime?",

@@ -1,4 +1,16 @@
 {
+  "file_share": {
+    "title": "文件共享",
+    "online": "在线",
+    "offline": "离线",
+    "path": "共享路径",
+    "access": "远程访问",
+    "visibility": "谁可以访问",
+    "private": "仅自己和自己的 Agent",
+    "workspace": "工作区所有人",
+    "saved": "已更新文件共享",
+    "failed": "没能更新文件共享"
+  },
   "cleanup": {
     "action": "清理未使用",
     "title_other": "删除 {{count}} 个未使用的运行时？",

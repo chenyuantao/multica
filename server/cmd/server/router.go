@@ -25,6 +25,7 @@ import (
 	"github.com/multica-ai/multica/server/internal/entitlement"
 	"github.com/multica-ai/multica/server/internal/events"
 	"github.com/multica-ai/multica/server/internal/featureflags"
+	"github.com/multica-ai/multica/server/internal/fileshare"
 	"github.com/multica-ai/multica/server/internal/handler"
 	"github.com/multica-ai/multica/server/internal/integrations/channel"
 	"github.com/multica-ai/multica/server/internal/integrations/channel/engine"
@@ -448,6 +449,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 		ServerVersion:            normalizeServerVersion(version),
 	}
 	h := handler.New(queries, pool, hub, bus, emailSvc, store, cfSigner, analyticsClient, signupConfig, daemonHub)
+	h.FileShares = fileshare.NewHub()
 	h.GroupChatDecider = typesafe.New(typesafe.Config{
 		APIKey:  strings.TrimSpace(os.Getenv("TYPESAFE_API_KEY")),
 		BaseURL: strings.TrimSpace(os.Getenv("TYPESAFE_BASE_URL")),
@@ -1710,6 +1712,9 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 		// Obsidian vault browser. Paths and queries are JSON bodies so notes
 		// with non-ASCII names are not put in the URL. OBSIDIAN_VAULT_PATH
 		// points at one directory shared by this deployment.
+		// multica-file daemons attach here and answer knowledge calls for
+		// machine-name/ paths. The browser keeps using /api/docs.
+		r.Get("/api/file-shares/connect", h.ConnectFileShare)
 		r.Route("/api/docs", func(r chi.Router) {
 			r.Post("/tree", h.PostDocsTree)
 			r.Post("/children", h.PostDocsChildren)
@@ -2407,6 +2412,13 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 				r.Get("/runtime/daily", h.GetDashboardRunTimeDaily)
 				r.Get("/failures/daily", h.GetDashboardFailuresDaily)
 				r.Get("/failures/by-agent", h.GetDashboardFailuresByAgent)
+			})
+
+			// Machine file shares for the runtime page. The daemon connects on
+			// /api/file-shares/connect; these routes only read and switch access.
+			r.Route("/api/file-shares", func(r chi.Router) {
+				r.Get("/", h.ListFileShares)
+				r.Patch("/{machine}", h.UpdateFileShare)
 			})
 
 			// Runtimes

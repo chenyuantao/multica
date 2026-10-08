@@ -339,6 +339,7 @@ build: EXE = $(if $(filter windows,$(or $(GOOS),$(shell go env GOOS))),.exe,)
 build: ## Build the server, CLI, and migrate binaries into server/bin
 	cd server && go build -ldflags "-X main.version=$(VERSION) -X main.commit=$(COMMIT)" -o bin/server$(EXE) ./cmd/server
 	cd server && go build -ldflags "-X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.date=$(DATE)" -o bin/multica$(EXE) ./cmd/multica
+	cd server && go build -o bin/multica-file$(EXE) ./cmd/multica-file
 	cd server && go build -o bin/migrate$(EXE) ./cmd/migrate
 
 test: ## Run Go tests after ensuring the target DB exists and migrations are applied

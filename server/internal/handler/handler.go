@@ -25,6 +25,7 @@ import (
 	"github.com/multica-ai/multica/server/internal/dbreader"
 	"github.com/multica-ai/multica/server/internal/entitlement"
 	"github.com/multica-ai/multica/server/internal/events"
+	"github.com/multica-ai/multica/server/internal/fileshare"
 	"github.com/multica-ai/multica/server/internal/groupchat"
 	"github.com/multica-ai/multica/server/internal/integrations/channel/engine"
 	composio "github.com/multica-ai/multica/server/internal/integrations/composio"
@@ -202,12 +203,15 @@ type RuntimeRecoveryNotifier interface {
 }
 
 type Handler struct {
-	Queries                *db.Queries
-	ReadSelector           *dbreader.Selector
-	DB                     dbExecutor
-	TxStarter              txStarter
-	Hub                    *realtime.Hub
-	DaemonHub              *daemonws.Hub
+	Queries      *db.Queries
+	ReadSelector *dbreader.Selector
+	DB           dbExecutor
+	TxStarter    txStarter
+	Hub          *realtime.Hub
+	DaemonHub    *daemonws.Hub
+	// FileShares is the set of multica-file daemons connected to this process.
+	// Nil keeps the docs API on the deployment vault only.
+	FileShares             *fileshare.Hub
 	DaemonProfileRefresh   RuntimeProfileRefreshNotifier
 	DaemonWorkspaceRefresh WorkspaceSetRefreshNotifier
 	DaemonRuntimeGone      RuntimeGoneNotifier

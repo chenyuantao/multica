@@ -61,6 +61,7 @@ import { buildWorkloadIndex, RuntimeList } from "./runtime-list";
 import { pendingRuntimeFromProfile } from "./pending-runtime";
 import { buildRuntimeMachines, type RuntimeMachine } from "./runtime-machines";
 import { HealthDot, HealthIcon, useHealthLabel } from "./shared";
+import { FileShareSection } from "./file-share-section";
 import { useT, useTimeAgo } from "../../i18n";
 import { daemonRuntimesDocsHref } from "./runtime-docs";
 
@@ -206,6 +207,7 @@ export function RuntimesPage({
                 currentUserId={currentUserId ?? null}
               />
             )}
+            <FileShareSection wsId={wsId} />
             {(machines.length > 0 || bootstrapping) && (
               <MachineList
                 machines={machines}

@@ -1,4 +1,16 @@
 {
+  "file_share": {
+    "title": "ファイル共有",
+    "online": "オンライン",
+    "offline": "オフライン",
+    "path": "共有パス",
+    "access": "リモートアクセス",
+    "visibility": "開ける人",
+    "private": "自分と自分のエージェント",
+    "workspace": "このワークスペースの全員",
+    "saved": "ファイル共有を更新しました",
+    "failed": "ファイル共有を更新できませんでした"
+  },
   "cleanup": {
     "action": "未使用を整理",
     "title_other": "未使用のランタイム {{count}} 個を削除しますか？",
