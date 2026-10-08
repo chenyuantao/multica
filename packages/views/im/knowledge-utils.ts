@@ -102,5 +102,5 @@ export function resolveDocPath(cardPath: string, nodes: readonly DocNode[]): str
   if (matches.length === 0) return null;
   const time = (file: DocNode) => (file.modified_at ? Date.parse(file.modified_at) || 0 : 0);
   matches.sort((a, b) => time(b) - time(a) || a.path.localeCompare(b.path));
-  return matches[0].path;
+  return matches[0]?.path ?? null;
 }
