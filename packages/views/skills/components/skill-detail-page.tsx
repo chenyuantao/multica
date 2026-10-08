@@ -275,6 +275,7 @@ function useOriginLabel(origin: OriginInfo | null, runtime: AgentRuntime | null)
   if (origin.type === "clawhub") return t(($) => $.detail.subline.origin_clawhub);
   if (origin.type === "skills_sh") return t(($) => $.detail.subline.origin_skills_sh);
   if (origin.type === "github") return t(($) => $.detail.subline.origin_github);
+  if (origin.type === "skillhub") return t(($) => $.detail.subline.origin_skillhub);
   return t(($) => $.detail.subline.origin_workspace);
 }
 

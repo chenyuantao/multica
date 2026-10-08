@@ -20,6 +20,12 @@ describe("originSourceUrl", () => {
     expect(
       originSourceUrl({ type: "clawhub", source_url: "https://clawhub.ai/owner/slug" }),
     ).toBe("https://clawhub.ai/owner/slug");
+    expect(
+      originSourceUrl({
+        type: "skillhub",
+        source_url: "https://skillhub.cn/skills/org-rdj3h8zv/ctripaitravelassistant",
+      }),
+    ).toBe("https://skillhub.cn/skills/org-rdj3h8zv/ctripaitravelassistant");
   });
 
   it("accepts http and www variants, matching the server allowlist", () => {

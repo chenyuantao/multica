@@ -59,7 +59,7 @@ var skillDeleteCmd = &cobra.Command{
 
 var skillImportCmd = &cobra.Command{
 	Use:   "import",
-	Short: "Import a skill from a URL (clawhub.ai, skills.sh, github.com) or a local .skill/.zip archive",
+	Short: "Import a skill from a URL (clawhub.ai, skills.sh, github.com, skillhub.cn) or a local .skill/.zip archive",
 	RunE:  runSkillImport,
 }
 
@@ -149,7 +149,7 @@ func init() {
 	skillDeleteCmd.Flags().Bool("yes", false, "Skip confirmation prompt")
 
 	// skill import
-	skillImportCmd.Flags().String("url", "", "URL to import from (clawhub.ai, skills.sh, or github.com). Mutually exclusive with --file.")
+	skillImportCmd.Flags().String("url", "", "URL to import from (clawhub.ai, skills.sh, github.com, or skillhub.cn). Mutually exclusive with --file.")
 	skillImportCmd.Flags().String("file", "", "Path to a local skill archive (.skill or .zip) to import. Mutually exclusive with --url.")
 	skillImportCmd.Flags().String("on-conflict", "fail", "Conflict strategy when a skill with the same name exists: fail, overwrite, rename, or skip")
 	skillImportCmd.Flags().String("output", "json", "Output format: table or json")

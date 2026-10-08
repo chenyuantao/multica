@@ -55,9 +55,11 @@ multica skill import --url skills.sh/owner/repo/skill --output json
 multica skill import --url github.com/owner/repo --output json
 multica skill import --url github.com/owner/repo/tree/main/path/to/skill --output json
 multica skill import --url github.com/owner/repo/blob/main/path/to/SKILL.md --output json
+multica skill import --url https://skillhub.cn/skills/org-rdj3h8zv/ctripaitravelassistant --output json
 ```
 
-- `clawhub.ai`, `skills.sh`, `github.com` are the recognized hosts.
+- `clawhub.ai`, `skills.sh`, `github.com`, `skillhub.cn` are the recognized hosts.
+- A SkillHub URL is `skillhub.cn/skills/{owner}/{slug}`.
 - A GitHub URL may be a bare `owner/repo`, a `/tree/{ref}/...` directory, or a
   `/blob/{ref}/.../SKILL.md` file.
 - A bare ClawHub slug (no host) is accepted and routed to ClawHub.

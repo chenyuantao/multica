@@ -62,7 +62,8 @@
     "source_runtime_unknown": "ランタイムから",
     "source_clawhub": "ClawHub から",
     "source_skills_sh": "Skills.sh から",
-    "source_github": "GitHub から"
+    "source_github": "GitHub から",
+    "source_skillhub": "SkillHub から"
   },
   "actions": {
     "row_menu": "操作",
@@ -132,6 +133,7 @@
       "origin_clawhub": "インポート済み · ClawHub",
       "origin_skills_sh": "インポート済み · Skills.sh",
       "origin_github": "インポート済み · GitHub",
+      "origin_skillhub": "インポート済み · SkillHub",
       "origin_workspace": "手動で作成"
     },
     "conflict_banner": {
@@ -158,6 +160,7 @@
       "button": "更新",
       "tooltip": "ソースからスキルを再ダウンロードします",
       "source_github": "GitHub",
+      "source_skillhub": "SkillHub",
       "source_skills_sh": "Skills.sh",
       "source_clawhub": "ClawHub",
       "toast_success": "{{source}} からスキルを更新しました",
@@ -297,6 +300,7 @@
       "importing_clawhub": "ClawHub からインポート中…",
       "importing_skills_sh": "Skills.sh からインポート中…",
       "importing_github": "GitHub からインポート中…",
+      "importing_skillhub": "SkillHub からインポート中…",
       "name_conflict_hint": " インポートしたスキル名はすでに存在します。再試行する前に既存のものを削除してください。",
       "fallback_error": "インポートに失敗しました",
       "cancel": "キャンセル",

@@ -33,6 +33,7 @@ export function useRefreshSourceLabel(origin: OriginInfo | null): string {
   const { t } = useT("skills");
   if (origin?.type === "clawhub") return t(($) => $.detail.refresh.source_clawhub);
   if (origin?.type === "skills_sh") return t(($) => $.detail.refresh.source_skills_sh);
+  if (origin?.type === "skillhub") return t(($) => $.detail.refresh.source_skillhub);
   return t(($) => $.detail.refresh.source_github);
 }
 

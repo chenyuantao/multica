@@ -183,6 +183,7 @@ export function SkillListToolbar({
     clawhub: t(($) => $.table.source_clawhub),
     skills_sh: t(($) => $.table.source_skills_sh),
     github: t(($) => $.table.source_github),
+    skillhub: t(($) => $.table.source_skillhub),
   };
 
   const COLUMN_LABELS: Record<SkillColumnKey, string> = {

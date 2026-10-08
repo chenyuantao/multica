@@ -344,6 +344,9 @@ function SourceCell({
   } else if (origin.type === "github") {
     icon = <Download className="h-3 w-3 shrink-0" />;
     label = t(($) => $.table.source_github);
+  } else if (origin.type === "skillhub") {
+    icon = <Download className="h-3 w-3 shrink-0" />;
+    label = t(($) => $.table.source_skillhub);
   }
 
   // Imported skills link to their upstream page; the anchor must not bubble

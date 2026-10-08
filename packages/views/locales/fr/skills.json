@@ -62,7 +62,8 @@
     "source_runtime_unknown": "Depuis un runtime",
     "source_clawhub": "Depuis ClawHub",
     "source_skills_sh": "Depuis Skills.sh",
-    "source_github": "Depuis GitHub"
+    "source_github": "Depuis GitHub",
+    "source_skillhub": "Depuis SkillHub"
   },
   "actions": {
     "row_menu": "Actions",
@@ -140,6 +141,7 @@
       "origin_clawhub": "Importé · ClawHub",
       "origin_skills_sh": "Importé · Skills.sh",
       "origin_github": "Importé · GitHub",
+      "origin_skillhub": "Importé · SkillHub",
       "origin_workspace": "Créé manuellement"
     },
     "conflict_banner": {
@@ -167,6 +169,7 @@
       "button": "Mettre à jour",
       "tooltip": "Retélécharger ce skill depuis sa source",
       "source_github": "GitHub",
+      "source_skillhub": "SkillHub",
       "source_skills_sh": "Skills.sh",
       "source_clawhub": "ClawHub",
       "toast_success": "Skill mis à jour depuis {{source}}",
@@ -313,6 +316,7 @@
       "importing_clawhub": "Importation depuis ClawHub…",
       "importing_skills_sh": "Importation depuis Skills.sh…",
       "importing_github": "Importation depuis GitHub…",
+      "importing_skillhub": "Importation depuis SkillHub…",
       "name_conflict_hint": " Le nom du skill importé existe déjà — supprimez l'existant avant de réessayer.",
       "fallback_error": "Échec de l'importation",
       "cancel": "Annuler",

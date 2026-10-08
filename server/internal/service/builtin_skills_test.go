@@ -667,6 +667,7 @@ func TestPlatformSkillCoversPlatformContracts(t *testing.T) {
 				"clawhub.ai",
 				"skills.sh",
 				"github.com",
+				"skillhub.cn",
 				"config.origin",
 				"--on-conflict fail",
 				"--on-conflict overwrite",
