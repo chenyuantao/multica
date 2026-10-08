@@ -174,6 +174,14 @@ WHERE workspace_id = @workspace_id
   AND daemon_id = @daemon_id
   AND id <> @exclude_id;
 
+-- name: ListMachineCustomNames :many
+-- Lists the custom_name of every runtime on (workspace_id, daemon_id). The
+-- file share names its knowledge root after the machine-level name derived
+-- from these with the same rule as ListDaemonCustomNames.
+SELECT custom_name FROM agent_runtime
+WHERE workspace_id = @workspace_id
+  AND daemon_id = @daemon_id;
+
 
 -- name: TouchAgentRuntimeLastSeen :execrows
 -- Bumps last_seen_at on an already-online runtime. Deliberately does NOT

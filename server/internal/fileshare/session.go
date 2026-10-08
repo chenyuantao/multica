@@ -66,9 +66,27 @@ func (s *Session) SetAccess(visibility string, enabled bool) {
 	s.metaMu.Unlock()
 }
 
+func (s *Session) SetMachine(name string) {
+	s.metaMu.Lock()
+	s.meta.Machine = name
+	s.metaMu.Unlock()
+}
+
 func (s *Session) PushAccess(visibility string, enabled bool) error {
 	s.SetAccess(visibility, enabled)
-	return s.write(Envelope{Type: "config", Visibility: visibility, Enabled: &enabled})
+	return s.pushConfig()
+}
+
+// PushMachine tells the daemon its knowledge path prefix changed.
+func (s *Session) PushMachine(name string) error {
+	s.SetMachine(name)
+	return s.pushConfig()
+}
+
+func (s *Session) pushConfig() error {
+	meta := s.Meta()
+	enabled := meta.Enabled
+	return s.write(Envelope{Type: "config", Machine: meta.Machine, Visibility: meta.Visibility, Enabled: &enabled})
 }
 
 func (s *Session) Close() {
@@ -150,8 +168,10 @@ func (s *Session) ReadLoop(onClose func()) {
 
 // ServeConn answers request envelopes by running them on root. It returns
 // when the connection closes or ctx is canceled.
-// ConfigUpdate is an access change pushed by the runtime UI.
+// ConfigUpdate is a change pushed by the runtime UI. Machine is the knowledge
+// path prefix the server uses for this share; it is empty from older servers.
 type ConfigUpdate struct {
+	Machine    string
 	Visibility string
 	Enabled    bool
 }
@@ -184,7 +204,7 @@ func ServeConn(ctx context.Context, conn *websocket.Conn, root string, onConfig 
 				if env.Enabled != nil {
 					enabled = *env.Enabled
 				}
-				onConfig(ConfigUpdate{Visibility: env.Visibility, Enabled: enabled})
+				onConfig(ConfigUpdate{Machine: env.Machine, Visibility: env.Visibility, Enabled: enabled})
 			}
 			continue
 		}
@@ -262,13 +282,14 @@ func AcceptHello(env Envelope, ownerUserID string) (ShareMeta, error) {
 		enabled = *env.Enabled
 	}
 	return ShareMeta{
-		DaemonID:    daemonID,
-		Machine:     machine,
-		OwnerUserID: ownerUserID,
-		WorkspaceID: env.WorkspaceID,
-		Visibility:  visibility,
-		Dir:         strings.TrimSpace(env.Dir),
-		Enabled:     enabled,
-		Online:      true,
+		DaemonID:       daemonID,
+		Machine:        machine,
+		DefaultMachine: machine,
+		OwnerUserID:    ownerUserID,
+		WorkspaceID:    env.WorkspaceID,
+		Visibility:     visibility,
+		Dir:            strings.TrimSpace(env.Dir),
+		Enabled:        enabled,
+		Online:         true,
 	}, nil
 }

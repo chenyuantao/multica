@@ -2,9 +2,11 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -15,8 +17,12 @@ import (
 )
 
 type shareConfig struct {
-	Dir         string `json:"dir"`
+	Dir string `json:"dir"`
+	// Machine is the knowledge path prefix this machine proposes. The server
+	// uses the machine's runtime nickname instead when it has one, and the
+	// daemon records the prefix in use as Root.
 	Machine     string `json:"machine"`
+	Root        string `json:"root,omitempty"`
 	Visibility  string `json:"visibility"`
 	WorkspaceID string `json:"workspace_id,omitempty"`
 	// ServerURL lets `path` pick this machine's share for the server an
@@ -34,6 +40,21 @@ func (c shareConfig) accessEnabled() bool {
 	return *c.Enabled
 }
 
+// same compares by value; Enabled is a pointer, so == would differ on every load.
+func (c shareConfig) same(o shareConfig) bool {
+	a, b := c, o
+	a.Enabled, b.Enabled = nil, nil
+	return a == b && c.accessEnabled() == o.accessEnabled()
+}
+
+// knowledgeRoot is the knowledge path prefix of this share.
+func (c shareConfig) knowledgeRoot() string {
+	if c.Root != "" {
+		return c.Root
+	}
+	return c.Machine
+}
+
 func newShareCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "share [dir]",
@@ -41,7 +62,7 @@ func newShareCmd() *cobra.Command {
 		Args:  cobra.MaximumNArgs(1),
 		RunE:  runShare,
 	}
-	cmd.Flags().String("machine", "", "Knowledge path prefix for this machine (default: host name)")
+	cmd.Flags().String("machine", "", "Knowledge path prefix when the machine has no name on the runtime page (default: host name)")
 	cmd.Flags().String("visibility", "", "private or workspace; omit to keep the current setting")
 	return cmd
 }
@@ -130,21 +151,26 @@ func runShare(cmd *cobra.Command, args []string) error {
 	if visibility == fileshare.VisibilityWorkspace && login.WorkspaceID == "" {
 		return fmt.Errorf("workspace visibility needs a workspace; run multica workspace switch")
 	}
+	root := cfg.Root
+	if login.WorkspaceID != cfg.WorkspaceID {
+		root = ""
+	}
 	cfg = shareConfig{
 		Dir:         abs,
 		Machine:     machine,
+		Root:        root,
 		Visibility:  visibility,
 		WorkspaceID: login.WorkspaceID,
 		ServerURL:   strings.TrimRight(login.ServerURL, "/"),
 	}
-	daemonID, err := localDaemonID(profile)
+	daemonID, err := localDaemonID(profile, cfg)
 	if err != nil {
 		return fmt.Errorf("read this machine's daemon id: %w", err)
 	}
 	if err := saveShare(profile, cfg); err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "sharing %s as %s/ (%s) for machine %s\n", cfg.Dir, cfg.Machine, cfg.Visibility, daemonID)
+	fmt.Fprintf(os.Stderr, "sharing %s as %s/ (%s) for machine %s\n", cfg.Dir, cfg.knowledgeRoot(), cfg.Visibility, daemonID)
 	fmt.Fprintf(os.Stderr, "run `multica-file daemon start` if the daemon is not already running\n")
 	return nil
 }
@@ -201,15 +227,15 @@ func runVisibility(cmd *cobra.Command, args []string) error {
 
 func runStatus(cmd *cobra.Command, _ []string) error {
 	profile := profileOf(cmd)
-	if daemonID, err := localDaemonID(profile); err == nil {
+	cfg, err := loadShare(profile)
+	if daemonID, idErr := localDaemonID(profile, cfg); idErr == nil {
 		fmt.Fprintf(os.Stdout, "machine: %s\n", daemonID)
 	}
-	cfg, err := loadShare(profile)
 	if err != nil {
 		fmt.Fprintln(os.Stdout, "share: none")
 	} else {
 		fmt.Fprintf(os.Stdout, "share: %s\n", cfg.Dir)
-		fmt.Fprintf(os.Stdout, "path: %s/\n", cfg.Machine)
+		fmt.Fprintf(os.Stdout, "path: %s/\n", cfg.knowledgeRoot())
 		fmt.Fprintf(os.Stdout, "visibility: %s\n", cfg.Visibility)
 		if cfg.WorkspaceID != "" {
 			fmt.Fprintf(os.Stdout, "workspace: %s\n", cfg.WorkspaceID)
@@ -223,27 +249,87 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-// localDaemonID is the id this machine's multica daemon registers its runtimes
+// localDaemonID is the id this machine's runtime daemon registers its runtimes
 // under. The share is bound to it, so the runtime page shows it on this
 // machine and each machine carries one share.
-func localDaemonID(profile string) (string, error) {
+//
+// Rebranded builds of the multica CLI (imultica, …) keep the same layout under
+// their own ~/.<name>multica directory, so every such directory with a
+// daemon.id is considered: a running daemon wins, then one configured for the
+// share's workspace, then its server, then ~/.multica. With none on disk the
+// id is minted the way the multica daemon would, except inside an agent task.
+func localDaemonID(profile string, share shareConfig) (string, error) {
 	if id := strings.TrimSpace(os.Getenv("MULTICA_DAEMON_ID")); id != "" {
 		return id, nil
 	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	if id := pickDaemonID(home, share); id != "" {
+		return id, nil
+	}
 	if inTaskContext() {
-		// The task's config root is private; read the machine's id without
-		// minting one there.
-		dir, err := hostMulticaDir()
-		if err != nil {
-			return "", err
-		}
-		data, err := os.ReadFile(filepath.Join(dir, "daemon.id"))
-		if err != nil {
-			return "", err
-		}
-		return strings.TrimSpace(string(data)), nil
+		return "", errors.New("no runtime daemon id found on this machine")
 	}
 	return daemon.EnsureDaemonID(profile)
+}
+
+func pickDaemonID(home string, share shareConfig) string {
+	dirs, _ := filepath.Glob(filepath.Join(home, ".*multica"))
+	primary := filepath.Join(home, ".multica")
+	sort.SliceStable(dirs, func(i, j int) bool { return dirs[i] == primary && dirs[j] != primary })
+	best, bestScore := "", -1
+	for _, dir := range dirs {
+		data, err := os.ReadFile(filepath.Join(dir, "daemon.id"))
+		id := strings.TrimSpace(string(data))
+		if err != nil || id == "" {
+			continue
+		}
+		score := daemonDirScore(dir, share)
+		if score > bestScore {
+			best, bestScore = id, score
+		}
+	}
+	return best
+}
+
+func daemonDirScore(dir string, share shareConfig) int {
+	pidFiles := []string{filepath.Join(dir, "daemon.pid")}
+	configs := []string{filepath.Join(dir, "config.json")}
+	if profiles, err := filepath.Glob(filepath.Join(dir, "profiles", "*")); err == nil {
+		for _, p := range profiles {
+			pidFiles = append(pidFiles, filepath.Join(p, "daemon.pid"))
+			configs = append(configs, filepath.Join(p, "config.json"))
+		}
+	}
+	score := 0
+	for _, pidFile := range pidFiles {
+		if _, alive := daemonAliveAt(pidFile); alive {
+			score += 4
+			break
+		}
+	}
+	workspace, server := false, false
+	for _, path := range configs {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		var cfg cli.CLIConfig
+		if json.Unmarshal(data, &cfg) != nil {
+			continue
+		}
+		workspace = workspace || (share.WorkspaceID != "" && cfg.WorkspaceID == share.WorkspaceID)
+		server = server || (share.ServerURL != "" && strings.TrimRight(cfg.ServerURL, "/") == share.ServerURL)
+	}
+	if workspace {
+		score += 2
+	}
+	if server {
+		score++
+	}
+	return score
 }
 
 func inTaskContext() bool {

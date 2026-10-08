@@ -89,6 +89,55 @@ func TestHubUpdateAccessByDaemon(t *testing.T) {
 	}
 }
 
+func TestHubRenameFollowsNickname(t *testing.T) {
+	hub := NewHub()
+	peer := sharePeer(t, "user-1", "daemon-a", "host-a")
+	other := sharePeer(t, "user-1", "daemon-b", "studio")
+	for _, p := range []*Local{peer, other} {
+		if err := hub.Register(p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := hub.Rename("ws-1", "daemon-a", "Tao Mac"); err != nil {
+		t.Fatal(err)
+	}
+	if hub.Known("host-a") || hub.Get("Tao Mac") != peer || peer.Meta().Machine != "Tao Mac" {
+		t.Fatalf("records = %#v", hub.Records("user-1", "ws-1"))
+	}
+	if err := hub.Rename("ws-1", "daemon-a", "studio"); !errors.Is(err, ErrMachineTaken) {
+		t.Fatalf("taken name err = %v", err)
+	}
+	if hub.Get("Tao Mac") != peer {
+		t.Fatal("refused rename moved the share")
+	}
+	if err := hub.Rename("ws-1", "daemon-a", ""); err != nil {
+		t.Fatal(err)
+	}
+	if hub.Get("host-a") != peer {
+		t.Fatal("cleared nickname did not restore the daemon's name")
+	}
+	if err := hub.Rename("ws-2", "daemon-a", "elsewhere"); err != nil || hub.Known("elsewhere") {
+		t.Fatalf("rename in another workspace moved the share: %v", err)
+	}
+}
+
+func TestMachineName(t *testing.T) {
+	cases := map[string]string{
+		"  Tao's Mac  ": "Tao's Mac",
+		"Tao/Studio":    "Tao-Studio",
+		"a..b":          "a.b",
+		"..":            "",
+		"system":        "",
+		"  ":            "",
+		"x\ty":          "xy",
+	}
+	for in, want := range cases {
+		if got := MachineName(in); got != want {
+			t.Errorf("MachineName(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestRegisterRequiresDaemonID(t *testing.T) {
 	if err := NewHub().Register(sharePeer(t, "user-1", "", "mbp")); err == nil {
 		t.Fatal("share without a daemon id was accepted")

@@ -806,6 +806,40 @@ func (q *Queries) ListDaemonCustomNames(ctx context.Context, arg ListDaemonCusto
 	return items, nil
 }
 
+const listMachineCustomNames = `-- name: ListMachineCustomNames :many
+SELECT custom_name FROM agent_runtime
+WHERE workspace_id = $1
+  AND daemon_id = $2
+`
+
+type ListMachineCustomNamesParams struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	DaemonID    pgtype.Text `json:"daemon_id"`
+}
+
+// Lists the custom_name of every runtime on (workspace_id, daemon_id). The
+// file share names its knowledge root after the machine-level name derived
+// from these with the same rule as ListDaemonCustomNames.
+func (q *Queries) ListMachineCustomNames(ctx context.Context, arg ListMachineCustomNamesParams) ([]pgtype.Text, error) {
+	rows, err := q.db.Query(ctx, listMachineCustomNames, arg.WorkspaceID, arg.DaemonID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.Text{}
+	for rows.Next() {
+		var custom_name pgtype.Text
+		if err := rows.Scan(&custom_name); err != nil {
+			return nil, err
+		}
+		items = append(items, custom_name)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listStaleOfflineRuntimeGCCandidates = `-- name: ListStaleOfflineRuntimeGCCandidates :many
 SELECT id FROM agent_runtime
 WHERE status = 'offline'

@@ -3,6 +3,8 @@ import { api } from "../api";
 import { runtimeKeys } from "./queries";
 import { workspaceKeys } from "../workspace/queries";
 import { agentTaskSnapshotKeys } from "../agents/queries";
+import { docsKeys } from "../docs/queries";
+import { fileShareKeys } from "../file-shares/queries";
 
 export function useDeleteRuntime(wsId: string) {
   const qc = useQueryClient();
@@ -73,8 +75,13 @@ export function useUpdateRuntime(wsId: string) {
         apply_to_machine?: boolean;
       };
     }) => api.updateRuntime(runtimeId, patch),
-    onSettled: () => {
+    onSettled: (_data, _error, { patch }) => {
       qc.invalidateQueries({ queryKey: runtimeKeys.all(wsId) });
+      // A machine name is also its shared directory's knowledge path prefix.
+      if (patch.custom_name !== undefined) {
+        qc.invalidateQueries({ queryKey: fileShareKeys.all(wsId) });
+        qc.invalidateQueries({ queryKey: docsKeys.all() });
+      }
     },
   });
 }

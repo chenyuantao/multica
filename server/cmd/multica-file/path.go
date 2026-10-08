@@ -76,8 +76,8 @@ func runPath(cmd *cobra.Command, args []string) error {
 	cmd.SilenceUsage = true
 	profile := profileOf(cmd)
 	asJSON, _ := cmd.Flags().GetBool("json")
-	daemonID, _ := localDaemonID(profile)
 	cfg, pidFile, err := findShare(profile)
+	daemonID, _ := localDaemonID(profile, cfg)
 	if err != nil {
 		var notShared *notSharedError
 		if !errors.As(err, &notShared) {
@@ -101,14 +101,14 @@ func runPath(cmd *cobra.Command, args []string) error {
 		Shared:        true,
 		DaemonID:      daemonID,
 		Dir:           cfg.Dir,
-		KnowledgeRoot: cfg.Machine + "/",
+		KnowledgeRoot: cfg.knowledgeRoot() + "/",
 		Visibility:    cfg.Visibility,
 		Enabled:       cfg.accessEnabled(),
 	}
 	_, report.DaemonRunning = daemonAliveAt(pidFile)
 
 	var failure error
-	knowledgePath := cfg.Machine
+	knowledgePath := cfg.knowledgeRoot()
 	isDir := true
 	if len(args) == 1 {
 		local, rel, err := resolveSharePath(cfg, args[0])
@@ -116,7 +116,7 @@ func runPath(cmd *cobra.Command, args []string) error {
 			return err
 		}
 		report.Local = local
-		report.Knowledge = fileshare.Join(cfg.Machine, rel)
+		report.Knowledge = fileshare.Join(cfg.knowledgeRoot(), rel)
 		info, statErr := os.Stat(local)
 		exists := statErr == nil
 		report.Exists = &exists
@@ -247,7 +247,7 @@ func findShare(profile string) (shareConfig, string, error) {
 		}
 		if (server != "" && cfg.ServerURL != "" && cfg.ServerURL != server) ||
 			(workspace != "" && cfg.WorkspaceID != "" && cfg.WorkspaceID != workspace) {
-			others = append(others, cfg.Machine+"/")
+			others = append(others, cfg.knowledgeRoot()+"/")
 			continue
 		}
 		return cfg, filepath.Join(filepath.Dir(path), "file-daemon.pid"), nil
@@ -267,9 +267,9 @@ func findShare(profile string) (shareConfig, string, error) {
 // below the share root, slash-separated. Symlinks are resolved on both sides
 // so /tmp and /private/tmp style aliases still match.
 func resolveSharePath(cfg shareConfig, arg string) (local, rel string, err error) {
-	prefix := cfg.Machine + "/"
-	if arg == cfg.Machine || strings.HasPrefix(arg, prefix) {
-		rest := strings.Trim(strings.TrimPrefix(arg, cfg.Machine), "/")
+	prefix := cfg.knowledgeRoot()
+	if arg == prefix || strings.HasPrefix(arg, prefix+"/") {
+		rest := strings.Trim(strings.TrimPrefix(arg, prefix), "/")
 		for _, segment := range strings.Split(rest, "/") {
 			if segment == ".." {
 				return "", "", errOutsideShare

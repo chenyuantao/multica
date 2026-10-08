@@ -165,7 +165,7 @@ func serveOnce(ctx context.Context, profile string) time.Duration {
 		fmt.Fprintf(os.Stderr, "shared directory %s is not available\n", cfg.Dir)
 		return 5 * time.Second
 	}
-	daemonID, err := localDaemonID(profile)
+	daemonID, err := localDaemonID(profile, cfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "daemon id: %v\n", err)
 		return 5 * time.Second
@@ -211,12 +211,21 @@ func serveOnce(ctx context.Context, profile string) time.Duration {
 		fmt.Fprintln(os.Stderr, ready.ErrorText("server rejected the share"))
 		return 5 * time.Second
 	}
-	fmt.Fprintf(os.Stderr, "sharing %s as %s/\n", cfg.Dir, cfg.Machine)
+	if root := rootInUse(cfg, ready.Machine); root != cfg.Root {
+		cfg.Root = root
+		if err := saveShare(profile, cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "save share settings: %v\n", err)
+		}
+	}
+	fmt.Fprintf(os.Stderr, "sharing %s as %s/\n", cfg.Dir, cfg.knowledgeRoot())
 	serveCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	go watchShare(serveCtx, profile, cfg, cancel)
 	if err := fileshare.ServeConn(serveCtx, conn, cfg.Dir, func(update fileshare.ConfigUpdate) {
 		next := cfg
+		if update.Machine != "" {
+			next.Root = rootInUse(cfg, update.Machine)
+		}
 		next.Visibility = update.Visibility
 		enabled := update.Enabled
 		next.Enabled = &enabled
@@ -227,6 +236,15 @@ func serveOnce(ctx context.Context, profile string) time.Duration {
 		fmt.Fprintf(os.Stderr, "connection closed: %v\n", err)
 	}
 	return time.Second
+}
+
+// rootInUse is the Root to record for the prefix the server reported. It is
+// empty when the server kept the proposed name or did not say.
+func rootInUse(cfg shareConfig, served string) string {
+	if served == "" || served == cfg.Machine {
+		return ""
+	}
+	return served
 }
 
 func watchShare(ctx context.Context, profile string, current shareConfig, cancel context.CancelFunc) {
@@ -244,7 +262,7 @@ func watchShare(ctx context.Context, profile string, current shareConfig, cancel
 		case <-ticker.C:
 			next, err := loadShare(profile)
 			info, statErr := os.Stat(path)
-			if err != nil || statErr != nil || next != current || (initial != nil && info != nil && !info.ModTime().Equal(initial.ModTime())) {
+			if err != nil || statErr != nil || !next.same(current) || (initial != nil && info != nil && !info.ModTime().Equal(initial.ModTime())) {
 				cancel()
 				return
 			}

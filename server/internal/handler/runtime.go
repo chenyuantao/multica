@@ -611,6 +611,7 @@ func (h *Handler) UpdateAgentRuntime(w http.ResponseWriter, r *http.Request) {
 			rt = updated
 			changed = true
 		}
+		h.renameFileShares(r.Context(), rt)
 	}
 
 	if changed {

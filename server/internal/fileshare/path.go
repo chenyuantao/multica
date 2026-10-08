@@ -53,7 +53,7 @@ func SanitizeMachine(name string) (string, error) {
 	if name == SystemRoot || strings.EqualFold(name, SystemRoot) {
 		return "", errBadMachine
 	}
-	if strings.ContainsAny(name, `/\`) || strings.Contains(name, "..") {
+	if name == "." || strings.ContainsAny(name, `/\`) || strings.Contains(name, "..") {
 		return "", errBadMachine
 	}
 	for _, r := range name {
@@ -62,6 +62,31 @@ func SanitizeMachine(name string) (string, error) {
 		}
 	}
 	return name, nil
+}
+
+// MachineName turns a runtime nickname into a knowledge path prefix. Slashes
+// and ".." would split or escape the segment, so they become "-" and ".";
+// control characters are dropped. It returns "" when nothing usable is left.
+func MachineName(nickname string) string {
+	var b strings.Builder
+	for _, r := range strings.TrimSpace(nickname) {
+		switch {
+		case r == '/' || r == '\\':
+			b.WriteRune('-')
+		case r < 32 || r == 127 || unicode.IsControl(r):
+		default:
+			b.WriteRune(r)
+		}
+	}
+	name := b.String()
+	for strings.Contains(name, "..") {
+		name = strings.ReplaceAll(name, "..", ".")
+	}
+	name, err := SanitizeMachine(name)
+	if err != nil {
+		return ""
+	}
+	return name
 }
 
 // SanitizeDaemonID checks the id the multica daemon registers its runtimes

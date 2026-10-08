@@ -11,18 +11,20 @@ import (
 
 // ShareMeta is what the server remembers about a share. A share belongs to one
 // owner on one machine, identified by the multica daemon id the machine's
-// runtimes register under. Machine is the knowledge path prefix. Dir is the
-// absolute path reported by the machine, shown in the runtime UI and never
-// written back.
+// runtimes register under. Machine is the knowledge path prefix: the machine's
+// runtime nickname when it has one, otherwise DefaultMachine, the name the
+// daemon proposed. Dir is the absolute path reported by the machine, shown in
+// the runtime UI and never written back.
 type ShareMeta struct {
-	DaemonID    string
-	Machine     string
-	OwnerUserID string
-	WorkspaceID string
-	Visibility  string
-	Dir         string
-	Enabled     bool
-	Online      bool
+	DaemonID       string
+	Machine        string
+	DefaultMachine string
+	OwnerUserID    string
+	WorkspaceID    string
+	Visibility     string
+	Dir            string
+	Enabled        bool
+	Online         bool
 }
 
 // AccessPatch is a runtime-UI change. Nil fields stay as they are. Dir is not
@@ -84,6 +86,9 @@ func (h *Hub) Register(peer Peer) error {
 		return err
 	}
 	meta.Machine = name
+	if meta.DefaultMachine == "" {
+		meta.DefaultMachine = name
+	}
 	meta.DaemonID = daemonID
 	meta.Online = true
 	key := slotKey(meta.OwnerUserID, daemonID)
@@ -244,6 +249,62 @@ func (h *Hub) UpdateAccess(ownerUserID, daemonID string, patch AccessPatch) (Sha
 	return meta, nil
 }
 
+// Rename moves the shares of one machine in a workspace to a new knowledge
+// path prefix after its runtimes were renamed. An empty nickname goes back to
+// the name the daemon proposed. A name held by another share is refused with
+// ErrMachineTaken and that share keeps its current prefix. Connected daemons
+// are told the new prefix.
+func (h *Hub) Rename(workspaceID, daemonID, nickname string) error {
+	daemonID, err := SanitizeDaemonID(daemonID)
+	if err != nil {
+		return err
+	}
+	type pushed struct {
+		peer Peer
+		name string
+	}
+	var (
+		pushes   []pushed
+		firstErr error
+	)
+	h.mu.Lock()
+	for key, slot := range h.slots {
+		if slot.meta.DaemonID != daemonID || slot.meta.WorkspaceID != workspaceID {
+			continue
+		}
+		name := nickname
+		if name == "" {
+			name = slot.meta.DefaultMachine
+		}
+		name, err := SanitizeMachine(name)
+		if err != nil || name == slot.meta.Machine {
+			continue
+		}
+		if holder, ok := h.names[name]; ok && holder != key {
+			if firstErr == nil {
+				firstErr = ErrMachineTaken
+			}
+			continue
+		}
+		delete(h.names, slot.meta.Machine)
+		h.cache.dropMachine(slot.meta.Machine)
+		h.names[name] = key
+		slot.meta.Machine = name
+		if slot.peer != nil {
+			pushes = append(pushes, pushed{slot.peer, name})
+		}
+	}
+	h.mu.Unlock()
+	for _, p := range pushes {
+		if pusher, ok := p.peer.(interface{ PushMachine(string) error }); ok {
+			_ = pusher.PushMachine(p.name)
+		} else if setter, ok := p.peer.(interface{ SetMachine(string) }); ok {
+			setter.SetMachine(p.name)
+		}
+	}
+	return firstErr
+}
+
 // slot finds a share by its knowledge path prefix.
 func (h *Hub) slot(machine string) *shareSlot {
 	name, err := SanitizeMachine(machine)
@@ -317,6 +378,8 @@ func (p *Local) SetAccess(visibility string, enabled bool) {
 	p.meta.Visibility = visibility
 	p.meta.Enabled = enabled
 }
+
+func (p *Local) SetMachine(name string) { p.meta.Machine = name }
 
 func (p *Local) Call(ctx context.Context, op string, payload any, dest any) error {
 	raw, err := json.Marshal(payload)
