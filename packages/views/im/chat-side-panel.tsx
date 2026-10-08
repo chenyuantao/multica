@@ -1,6 +1,6 @@
 "use client";
 
-import { lazy, Suspense, useEffect, useRef } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { X, Loader2 } from "lucide-react";
 import { directChatPeer } from "@multica/core/group-chats";
 import { useActorName } from "@multica/core/workspace/hooks";
@@ -11,7 +11,7 @@ import { ChatDetailsPanel } from "./chat-details-panel";
 import { DocumentVoiceAsk } from "./document-voice-ask";
 import { CHAT_PANEL_WIDTH } from "./chat-panel-width";
 import { useInsertDocExcerpt } from "./doc-excerpt-insert";
-import type { KnowledgeNoteTab } from "./knowledge-note-tabs";
+import { retainOpenNotes, type KnowledgeNoteTab } from "./knowledge-note-tabs";
 import { ColumnResizeHandle, useColumnWidth } from "./resizable-column";
 
 const KnowledgeDocument = lazy(() =>
@@ -38,6 +38,10 @@ interface ChatSidePanelProps {
  * Chat details, plus one tab per knowledge note opened from a document card.
  * The details tab stays first and cannot close. The tab bar appears only
  * once a note is open, and scrolls sideways when the titles do not fit.
+ *
+ * Switching tabs hides the previous pane instead of unmounting it, so the
+ * editor's text, cursor, and scroll stay in memory. Closing a note, or the
+ * last note of a chat, is what drops that tree.
  */
 export function ChatSidePanel({
   wsId,
@@ -67,6 +71,15 @@ export function ChatSidePanel({
     expandedFor.current = activePath;
     commit(CHAT_PANEL_WIDTH.max);
   }, [activePath, chrome, commit]);
+  const noteKey = `${chat.id}:${notes.map((note) => `${note.path}\n${note.name}`).join("\0")}`;
+  const [appliedNoteKey, setAppliedNoteKey] = useState(noteKey);
+  const [retained, setRetained] = useState<Record<string, readonly KnowledgeNoteTab[]>>(() =>
+    notes.length > 0 ? { [chat.id]: notes } : {},
+  );
+  if (appliedNoteKey !== noteKey) {
+    setAppliedNoteKey(noteKey);
+    setRetained((prev) => retainOpenNotes(prev, chat.id, notes));
+  }
   const active = notes.find((note) => note.path === activePath) ?? null;
   const peer = directChatPeer(chat, userId);
   const detailsLabel = peer ? getActorName(peer.member_type, peer.member_id) : chat.title || t(($) => $.panel.info);
@@ -100,44 +113,45 @@ export function ChatSidePanel({
         </div>
       )}
       <div className="flex min-h-0 flex-1 flex-col">
-        {active ? (
-          <>
-            <Suspense
-              fallback={
-                <div className="flex flex-1 items-center justify-center text-muted-foreground">
-                  <Loader2 className="size-5 animate-spin" />
-                </div>
-              }
-            >
-              <KnowledgeDocument
-                path={active.path}
-                variant="page"
-                onAskSelection={(text, from) => {
-                  const passage = text.replaceAll("\u0000", "").trim();
-                  if (!passage) return;
-                  const name = active.name.trim() || active.path.split("/").pop() || active.path;
-                  const placed = insertExcerpt(chat.id, {
-                    name,
-                    path: active.path,
-                    text: passage,
-                    ...(typeof from === "number" ? { from } : {}),
-                  });
-                  if (!placed) onReturnToComposer?.();
-                }}
-              />
-            </Suspense>
-            {chrome === "page" && (
-              <DocumentVoiceAsk
-                key={active.path}
-                path={active.path}
-                name={active.name}
-                chatId={chat.id}
-                onSent={onReturnToComposer}
-              />
-            )}
-          </>
-        ) : (
-          <ChatDetailsPanel wsId={wsId} chat={chat} userId={userId} variant="page" onOpenMember={onOpenMember} />
+        <KeptPane visible={active == null}>
+          <ChatDetailsPanel
+            key={chat.id}
+            wsId={wsId}
+            chat={chat}
+            userId={userId}
+            variant="page"
+            onOpenMember={onOpenMember}
+          />
+        </KeptPane>
+        {Object.entries(retained).map(([noteChatId, chatNotes]) =>
+          chatNotes.map((note) => {
+            const selected = noteChatId === chat.id && note.path === active?.path;
+            return (
+              <KeptPane key={`${noteChatId}:${note.path}`} visible={selected}>
+                <Suspense fallback={<NoteLoading />}>
+                  <KnowledgeDocument
+                    path={note.path}
+                    variant="page"
+                    onAskSelection={(text, from) => {
+                      const passage = text.replaceAll("\u0000", "").trim();
+                      if (!passage) return;
+                      const name = note.name.trim() || note.path.split("/").pop() || note.path;
+                      const placed = insertExcerpt(noteChatId, {
+                        name,
+                        path: note.path,
+                        text: passage,
+                        ...(typeof from === "number" ? { from } : {}),
+                      });
+                      if (!placed) onReturnToComposer?.();
+                    }}
+                  />
+                </Suspense>
+                {chrome === "page" && (
+                  <DocumentVoiceAsk path={note.path} name={note.name} chatId={noteChatId} onSent={onReturnToComposer} />
+                )}
+              </KeptPane>
+            );
+          }),
         )}
       </div>
     </>
@@ -148,6 +162,27 @@ export function ChatSidePanel({
     <div className="relative flex h-full shrink-0 flex-col border-l" style={{ width }}>
       {body}
       <ColumnResizeHandle edge="left" width={width} options={options} onCommit={commit} label={t(($) => $.panel.resize)} />
+    </div>
+  );
+}
+
+/** One side-panel page. Hidden pages stay mounted so their memory survives the switch. */
+function KeptPane({ visible, children }: { visible: boolean; children: ReactNode }) {
+  return (
+    <div
+      className={cn("min-h-0 min-w-0 flex-1 flex-col", visible && "flex")}
+      hidden={!visible}
+      inert={!visible}
+    >
+      {children}
+    </div>
+  );
+}
+
+function NoteLoading() {
+  return (
+    <div className="flex flex-1 items-center justify-center text-muted-foreground">
+      <Loader2 className="size-5 animate-spin" />
     </div>
   );
 }

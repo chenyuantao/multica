@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, screen } from "@testing-library/react";
 import type { GroupChat } from "@multica/core/types";
@@ -11,11 +12,27 @@ vi.mock("@multica/core/workspace/hooks", () => ({
 }));
 
 vi.mock("./chat-details-panel", () => ({
-  ChatDetailsPanel: () => <div>group details</div>,
+  ChatDetailsPanel: ({ chat }: { chat: { id: string } }) => {
+    const [text, setText] = useState("");
+    return (
+      <div>
+        group details
+        <input aria-label={`details ${chat.id}`} value={text} onChange={(e) => setText(e.target.value)} />
+      </div>
+    );
+  },
 }));
 
 vi.mock("./knowledge-document", () => ({
-  KnowledgeDocument: ({ path }: { path: string }) => <div>{`doc ${path}`}</div>,
+  KnowledgeDocument: ({ path }: { path: string }) => {
+    const [text, setText] = useState("");
+    return (
+      <div>
+        <span>{`doc ${path}`}</span>
+        <input aria-label={`edit ${path}`} value={text} onChange={(e) => setText(e.target.value)} />
+      </div>
+    );
+  },
 }));
 
 vi.mock("./document-voice-ask", () => ({
@@ -117,6 +134,42 @@ describe("ChatSidePanel", () => {
 
     view.rerender(<ChatSidePanel {...props} activePath={plan.path} />);
     expect(handle()).toHaveAttribute("aria-valuenow", "520");
+  });
+
+  it("keeps the previous tab's text when another tab is selected", () => {
+    const props = {
+      wsId: "ws-1",
+      chat,
+      userId: "user-1",
+      notes: [weekly, plan],
+      onSelectDetails: vi.fn(),
+      onSelectNote: vi.fn(),
+      onCloseNote: vi.fn(),
+    };
+    const view = renderWithI18n(<ChatSidePanel {...props} activePath={null} />);
+    fireEvent.change(screen.getByRole("textbox", { name: "details c1" }), { target: { value: "群公告" } });
+
+    view.rerender(<ChatSidePanel {...props} activePath={weekly.path} />);
+    fireEvent.change(screen.getByRole("textbox", { name: "edit Work/周报.md" }), { target: { value: "还在写" } });
+    expect(screen.getByRole("textbox", { name: "details c1", hidden: true })).toHaveValue("群公告");
+
+    view.rerender(<ChatSidePanel {...props} activePath={plan.path} />);
+    expect(screen.getByRole("textbox", { name: "edit Work/计划.md" })).toBeVisible();
+    expect(screen.getByRole("textbox", { name: "edit Work/周报.md", hidden: true })).toHaveValue("还在写");
+    expect(screen.getByRole("textbox", { name: "edit Work/周报.md", hidden: true })).not.toBeVisible();
+
+    view.rerender(<ChatSidePanel {...props} activePath={weekly.path} />);
+    expect(screen.getByRole("textbox", { name: "edit Work/周报.md" })).toHaveValue("还在写");
+
+    const standup = { ...chat, id: "c2", title: "Standup" } as GroupChat;
+    view.rerender(<ChatSidePanel {...props} chat={standup} notes={[]} activePath={null} />);
+    expect(screen.queryByRole("textbox", { name: "edit Work/周报.md", hidden: true })).not.toBeNull();
+
+    view.rerender(<ChatSidePanel {...props} notes={[weekly]} activePath={weekly.path} />);
+    expect(screen.getByRole("textbox", { name: "edit Work/周报.md" })).toHaveValue("还在写");
+
+    view.rerender(<ChatSidePanel {...props} notes={[]} activePath={null} />);
+    expect(screen.queryByRole("textbox", { name: "edit Work/周报.md", hidden: true })).toBeNull();
   });
 
   it("leaves the stored width alone when a document opens full screen", () => {

@@ -25,6 +25,30 @@ export function knowledgeNoteTabsFor(byChat: KnowledgeNoteTabsByChat, chatId: st
   return byChat[chatId] ?? EMPTY_KNOWLEDGE_NOTE_TABS;
 }
 
+/**
+ * Notes whose editors stay mounted. The parent only sends the open chat's
+ * tabs; other chats keep the trees they already have, and closing the last
+ * note of a chat drops that chat.
+ */
+export function retainOpenNotes(
+  retained: Readonly<Record<string, readonly KnowledgeNoteTab[]>>,
+  chatId: string,
+  notes: readonly KnowledgeNoteTab[],
+): Record<string, readonly KnowledgeNoteTab[]> {
+  const current = retained[chatId] ?? [];
+  const same =
+    current.length === notes.length &&
+    current.every((note, index) => note.path === notes[index]?.path && note.name === notes[index]?.name);
+  if (same) return retained;
+  if (notes.length === 0) {
+    if (current.length === 0) return retained;
+    const next = { ...retained };
+    delete next[chatId];
+    return next;
+  }
+  return { ...retained, [chatId]: notes };
+}
+
 /** Updates one chat's tabs and leaves every other chat untouched. */
 export function updateKnowledgeNoteTabs(
   byChat: KnowledgeNoteTabsByChat,

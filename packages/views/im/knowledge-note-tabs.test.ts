@@ -6,6 +6,7 @@ import {
   EMPTY_KNOWLEDGE_NOTE_TABS,
   knowledgeNoteTabsFor,
   openKnowledgeNote,
+  retainOpenNotes,
   updateKnowledgeNoteTabs,
 } from "./knowledge-note-tabs";
 
@@ -51,5 +52,15 @@ describe("knowledge note tabs per chat", () => {
   it("drops a chat once its last note closes", () => {
     const opened = updateKnowledgeNoteTabs({}, "launch", (tabs) => openKnowledgeNote(tabs, weekly));
     expect(updateKnowledgeNoteTabs(opened, "launch", (tabs) => closeKnowledgeNote(tabs, weekly.path))).toEqual({});
+  });
+});
+
+describe("retainOpenNotes", () => {
+  it("keeps other chats mounted and drops a chat whose notes are all closed", () => {
+    const launch = retainOpenNotes({}, "launch", [weekly]);
+    const both = retainOpenNotes(launch, "standup", [plan]);
+    expect(both).toEqual({ launch: [weekly], standup: [plan] });
+    expect(retainOpenNotes(both, "standup", [plan])).toBe(both);
+    expect(retainOpenNotes(both, "launch", [])).toEqual({ standup: [plan] });
   });
 });
