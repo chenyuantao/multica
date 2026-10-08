@@ -968,14 +968,14 @@ func writeInlineBlocksPolicy(b *strings.Builder) {
 	b.WriteString("\n**Charts and diagrams:** put them in the text as a fenced `html` or `mermaid` code block — it renders in place (name it with `title=\"...\"` after the language). An attached file, HTML included, shows as a card instead. Theming and sizing: the multica-platform issues reference.\n")
 }
 
-// writeObsidianNotePolicy tells the same web-rendered surfaces how to report
-// a knowledge note the agent created or modified. The web turns a closed
-// `obsidian` fence holding this JSON into a note card that opens the note in
-// knowledge. Knowledge is made of machine shares only, and the docs API
-// addresses a note by its knowledge path, `<machine>/<path inside the share>`
-// — a path without the machine prefix, or an absolute one, cannot be opened.
-func writeObsidianNotePolicy(b *strings.Builder) {
-	b.WriteString("\n**Knowledge notes:** for each note you create or modify in a shared directory, add one fenced `obsidian` code block to your reply holding only this JSON: `{\"name\": \"<file name without .md>\", \"summary\": \"<first 50 characters of the note body, frontmatter and Markdown markup removed>\", \"path\": \"<knowledge path>\"}`. It renders as a note card that opens the note. The knowledge path is the machine name, then the path inside that machine's shared directory, ending in .md — `multica-file write` prints it, and `multica-file path <local-file>` maps a file on disk to it; `path` is never absolute and never starts with `/`. Where a file belongs in the first place: the multica-platform files reference.\n")
+// writeDocsNotePolicy tells the same web-rendered surfaces how to report a
+// doc the agent created or modified. The web turns a closed `docs` fence
+// holding this JSON into a card that opens the doc. Knowledge is made of
+// machine shares only. The docs API addresses a note by `<machine>/<path
+// inside the share>`; opening a card also matches when the machine prefix
+// is left off.
+func writeDocsNotePolicy(b *strings.Builder) {
+	b.WriteString("\n**Docs:** for each doc you create or modify in a shared directory, add one fenced `docs` code block to your reply holding only this JSON: `{\"name\": \"<file name without .md>\", \"summary\": \"<first 50 characters of the note body, frontmatter and Markdown markup removed>\", \"path\": \"<knowledge path>\"}`. It renders as a card that opens the doc. The knowledge path is the machine name, then the path inside that machine's shared directory, ending in .md — `multica-file write` prints it, and `multica-file path <local-file>` maps a file on disk to it. A card still opens when that machine prefix is left off. `path` is never absolute and never starts with `/`. Where a file belongs in the first place: the multica-platform files reference.\n")
 }
 
 // writeOutput emits the kind-specific Output section: the always-on delivery
@@ -1016,7 +1016,7 @@ func writeOutput(b *strings.Builder, kind taskKind, ctx TaskContextForEnv) {
 		} else {
 			b.WriteString("**Delivering files here:** run `multica attachment upload <local-path>` — it binds the file to your reply and it renders as an attachment card. That command is the ONLY way a file reaches the user; a path written into your reply text is not.\n")
 			writeInlineBlocksPolicy(b)
-			writeObsidianNotePolicy(b)
+			writeDocsNotePolicy(b)
 		}
 	default:
 		if ctx.IsSquadLeader {
@@ -1028,7 +1028,7 @@ func writeOutput(b *strings.Builder, kind taskKind, ctx TaskContextForEnv) {
 		b.WriteString("Keep comments concise and natural — state the outcome, not the process.\n\n")
 		b.WriteString("**Delivering files here:** pass `--attachment <path>` to `multica issue comment add` (repeatable) — the only way a screenshot or artifact reaches the reader.\n")
 		writeInlineBlocksPolicy(b)
-		writeObsidianNotePolicy(b)
+		writeDocsNotePolicy(b)
 	}
 	b.WriteString("\n")
 	writeDeliveryInvariant(b)

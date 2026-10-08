@@ -63,23 +63,23 @@ func deliveryInvariantFixtures() map[string]TaskContextForEnv {
 // a fenced html/mermaid block does not render there.
 const inlineBlocksRule = "fenced `html` or `mermaid` code block"
 
-// obsidianNoteRule is the note-card contract the web parses from an
-// `obsidian` fence. It renders wherever inline blocks render, and nowhere else.
-const obsidianNoteRule = "fenced `obsidian` code block"
+// docsNoteRule is the note-card contract the web parses from a `docs` fence.
+// It renders wherever inline blocks render, and nowhere else.
+const docsNoteRule = "fenced `docs` code block"
 
-func TestBriefObsidianNoteRuleFollowsRenderedSurfaces(t *testing.T) {
+func TestBriefDocsNoteRuleFollowsRenderedSurfaces(t *testing.T) {
 	t.Parallel()
 
 	for name, ctx := range deliveryInvariantFixtures() {
 		out := buildMetaSkillContent("claude", ctx)
 		rendered := strings.Contains(out, inlineBlocksRule)
-		if got := strings.Contains(out, obsidianNoteRule); got != rendered {
-			t.Errorf("kind=%s: obsidian note rule present=%v, inline blocks rule present=%v", name, got, rendered)
+		if got := strings.Contains(out, docsNoteRule); got != rendered {
+			t.Errorf("kind=%s: docs note rule present=%v, inline blocks rule present=%v", name, got, rendered)
 		}
 		if rendered {
 			for _, want := range []string{`"name"`, `"summary"`, `"path"`, "first 50 characters", "the machine name, then the path inside that machine's shared directory", "multica-file path <local-file>", "never absolute"} {
 				if !strings.Contains(out, want) {
-					t.Errorf("kind=%s: obsidian note rule is missing %q", name, want)
+					t.Errorf("kind=%s: docs note rule is missing %q", name, want)
 				}
 			}
 		}

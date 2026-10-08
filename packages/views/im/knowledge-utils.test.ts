@@ -9,6 +9,7 @@ import {
   noteFileName,
   parentDir,
   recentFiles,
+  resolveDocPath,
   splitFrontmatter,
 } from "./knowledge-utils";
 
@@ -99,5 +100,50 @@ describe("flattenFiles / recentFiles", () => {
   it("orders by modification time, undated last, and caps the list", () => {
     expect(recentFiles(tree, 10).map((n) => n.path)).toEqual(["a/new.md", "mid.md", "a/b/old.md", "none.md"]);
     expect(recentFiles(tree, 2).map((n) => n.path)).toEqual(["a/new.md", "mid.md"]);
+  });
+});
+
+describe("resolveDocPath", () => {
+  const file = (path: string, modified_at: string | null = null): DocNode => ({
+    name: path.split("/").pop() ?? path,
+    path,
+    type: "file",
+    child_count: 0,
+    modified_at,
+    children: [],
+    match: "",
+    snippet: "",
+    hits: 0,
+  });
+  const dir = (path: string, children: DocNode[]): DocNode => ({
+    ...file(path),
+    type: "dir",
+    child_count: children.length,
+    children,
+  });
+  const tree = [
+    dir("mbp", [file("mbp/Work/周报.md", "2026-01-01T00:00:00Z")]),
+    dir("other", [file("other/Work/周报.md", "2026-04-01T00:00:00Z")]),
+  ];
+
+  it("keeps an exact path", () => {
+    expect(resolveDocPath("mbp/Work/周报.md", tree)).toBe("mbp/Work/周报.md");
+  });
+
+  it("ignores the knowledge root when the card omitted it", () => {
+    expect(resolveDocPath("Work/周报.md", tree)).toBe("other/Work/周报.md");
+  });
+
+  it("ignores a different root prefix on the card", () => {
+    const moved = [
+      dir("mbp", [file("mbp/Other.md")]),
+      dir("other", [file("other/Work/周报.md")]),
+    ];
+    expect(resolveDocPath("mbp/Work/周报.md", moved)).toBe("other/Work/周报.md");
+  });
+
+  it("returns null when nothing matches", () => {
+    expect(resolveDocPath("Work/没有.md", tree)).toBeNull();
+    expect(resolveDocPath("Work/周报.md", [])).toBeNull();
   });
 });

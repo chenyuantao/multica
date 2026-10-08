@@ -6,6 +6,7 @@ import { FileText } from "lucide-react";
 import { docsKeys } from "@multica/core/docs";
 import { groupChatMessagesOptions } from "@multica/core/group-chats";
 import { paths, useWorkspaceSlug } from "@multica/core/paths";
+import { docPathToOpen, useDocOpenPath } from "./doc-open-path";
 import type { Comment, GroupChat } from "@multica/core/types";
 import { useTimeAgo, useT } from "../i18n";
 import { AppLink } from "../navigation";
@@ -55,15 +56,20 @@ function ChatDocumentRow({ doc }: { doc: ChatDocument }) {
   const qc = useQueryClient();
   const slug = useWorkspaceSlug();
   const openNote = useOpenKnowledgeNote();
+  const openPath = useDocOpenPath(doc.note.path);
   const when = timeAgo(doc.appearedAt);
-  const href = slug ? paths.workspace(slug).knowledgeFile(doc.note.path) : null;
+  const href = slug ? paths.workspace(slug).knowledgeFile(openPath) : null;
 
   const open = (e: MouseEvent) => {
     e.stopPropagation();
     if (!openNote || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
     e.preventDefault();
-    qc.removeQueries({ queryKey: docsKeys.file(doc.note.path), exact: true });
-    openNote({ path: doc.note.path, name: doc.note.name });
+    void (async () => {
+      const path = await docPathToOpen(qc, doc.note.path);
+      qc.removeQueries({ queryKey: docsKeys.file(path), exact: true });
+      if (path !== doc.note.path) qc.removeQueries({ queryKey: docsKeys.file(doc.note.path), exact: true });
+      openNote({ path, name: doc.note.name });
+    })();
   };
 
   const body = (
@@ -72,7 +78,7 @@ function ChatDocumentRow({ doc }: { doc: ChatDocument }) {
       <span className="min-w-0 flex-1">
         <span className="block h-5 truncate text-body font-medium">{doc.note.name}</span>
         <span className="block h-4 truncate text-caption text-muted-foreground">{doc.note.summary}</span>
-        <span className="block h-4 truncate text-caption text-muted-foreground">{doc.note.path}</span>
+        <span className="block h-4 truncate text-caption text-muted-foreground">{openPath}</span>
       </span>
       <time dateTime={doc.appearedAt} className="shrink-0 pt-0.5 text-caption text-muted-foreground">
         {when}

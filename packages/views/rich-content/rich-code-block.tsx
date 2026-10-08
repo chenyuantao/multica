@@ -42,23 +42,28 @@ import {
 } from "../editor/html-block-preview";
 import { highlightCode } from "../editor/syntax-highlight";
 import { LazyRichBlock } from "./lazy-rich-block";
-import { parseObsidianNote } from "./obsidian-note";
-import { ObsidianNoteCard } from "./obsidian-note-card";
+import { parseDocNote } from "./doc-note";
+import { DocNoteCard } from "./doc-note-card";
 
 /**
  * Languages that may become a rich block. Anything else — including unknown
- * and absent languages — renders as static highlighted code. An `obsidian`
+ * and absent languages — renders as static highlighted code. A `docs`
  * fence becomes a note card only when its JSON body parses; otherwise it stays
  * source.
  */
-export type RichFenceLanguage = "mermaid" | "html" | "obsidian";
+export type RichFenceLanguage = "mermaid" | "html" | "docs" | "obsidian";
 
-type DynamicFenceLanguage = Exclude<RichFenceLanguage, "obsidian">;
+type DynamicFenceLanguage = Exclude<RichFenceLanguage, "docs" | "obsidian">;
+
+/** `docs` is the note card. `obsidian` stays so cards already in a chat still open. */
+export function isDocFenceLanguage(language: string | undefined): language is "docs" | "obsidian" {
+  return language === "docs" || language === "obsidian";
+}
 
 export function isRichFenceLanguage(
   language: string | undefined,
 ): language is RichFenceLanguage {
-  return language === "mermaid" || language === "html" || language === "obsidian";
+  return language === "mermaid" || language === "html" || isDocFenceLanguage(language);
 }
 
 /**
@@ -191,20 +196,20 @@ export function RichFenceBlock({
   /** From the fence info string: ```html title="…". */
   title?: string | null;
 }) {
-  if (language === "obsidian") return <ObsidianNoteFence body={body} />;
+  if (isDocFenceLanguage(language)) return <DocNoteFence language={language} body={body} />;
   return <DynamicFenceBlock language={language} body={body} title={title} />;
 }
 
-function ObsidianNoteFence({ body }: { body: string }) {
-  const note = useMemo(() => parseObsidianNote(body), [body]);
+function DocNoteFence({ language, body }: { language: "docs" | "obsidian"; body: string }) {
+  const note = useMemo(() => parseDocNote(body), [body]);
   if (!note) {
     return (
-      <CodeBlockShell language="obsidian" code={body}>
-        <StaticCodeBody language="obsidian" body={body} />
+      <CodeBlockShell language={language} code={body}>
+        <StaticCodeBody language={language} body={body} />
       </CodeBlockShell>
     );
   }
-  return <ObsidianNoteCard note={note} />;
+  return <DocNoteCard note={note} />;
 }
 
 function DynamicFenceBlock({

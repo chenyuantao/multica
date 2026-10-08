@@ -23,7 +23,7 @@ function message(partial: Partial<Comment> & Pick<Comment, "id" | "content" | "c
 }
 
 function fence(note: { name: string; summary: string; path: string }): string {
-  return "```obsidian\n" + JSON.stringify(note) + "\n```";
+  return "```docs\n" + JSON.stringify(note) + "\n```";
 }
 
 describe("documentsInChat", () => {
@@ -74,7 +74,7 @@ describe("documentsInChat", () => {
       message({
         id: "bad",
         created_at: "2026-10-04T00:00:00Z",
-        content: "```obsidian\n{not json}\n```",
+        content: "```docs\n{not json}\n```",
       }),
       message({
         id: "ok",
@@ -111,5 +111,16 @@ describe("documentsInChat", () => {
         appearedAt: "2026-10-02T09:00:00Z",
       },
     ]);
+  });
+
+  it("still reads a card written with the previous fence", () => {
+    const docs = documentsInChat([
+      message({
+        id: "old",
+        created_at: "2026-10-01T00:00:00Z",
+        content: '```obsidian\n{"name":"旧","summary":"","path":"Work/旧.md"}\n```',
+      }),
+    ]);
+    expect(docs.map((doc) => doc.note.path)).toEqual(["Work/旧.md"]);
   });
 });

@@ -34,6 +34,7 @@ function navigation(): NavigationAdapter {
 }
 
 function renderContent(content: string, qc = new QueryClient(), onOpen?: (note: { path: string; name: string }) => void) {
+  if (qc.getQueryData(docsKeys.tree()) === undefined) qc.setQueryData(docsKeys.tree(), []);
   const adapter = navigation();
   const view = (
     <QueryClientProvider client={qc}>
@@ -48,11 +49,11 @@ function renderContent(content: string, qc = new QueryClient(), onOpen?: (note: 
   return adapter;
 }
 
-const fence = (body: string) => `Done.\n\n\`\`\`obsidian\n${body}\n\`\`\`\n`;
+const fence = (body: string) => `Done.\n\n\`\`\`docs\n${body}\n\`\`\`\n`;
 const note = '{"name":"周报","summary":"本周完成了发布","path":"Work/周报.md"}';
 
-describe("obsidian note fence", () => {
-  it("renders a content-sized card that links to the knowledge note", () => {
+describe("docs note fence", () => {
+  it("renders a content-sized card that links to the knowledge note", async () => {
     const adapter = renderContent(fence(note));
     const card = screen.getByRole("link", { name: /周报/ });
     expect(card).toHaveTextContent("本周完成了发布");
@@ -67,12 +68,47 @@ describe("obsidian note fence", () => {
     expect(card).toHaveAttribute("href", "/acme/knowledge?file=Work%2F%E5%91%A8%E6%8A%A5.md");
     expect(screen.queryByRole("dialog")).toBeNull();
 
-    return userEvent.click(card).then(() => {
-      expect(adapter.push).toHaveBeenCalledWith("/acme/knowledge?file=Work%2F%E5%91%A8%E6%8A%A5.md");
-    });
+    await userEvent.click(card);
+    await waitFor(() => expect(adapter.push).toHaveBeenCalledWith("/acme/knowledge?file=Work%2F%E5%91%A8%E6%8A%A5.md"));
   });
 
-  it("opens the note in the chat sidebar instead of navigating", async () => {
+  it("opens the docs path whose root the card left off", async () => {
+    const qc = new QueryClient();
+    qc.setQueryData(docsKeys.tree(), [
+      {
+        name: "mbp",
+        path: "mbp",
+        type: "dir",
+        child_count: 1,
+        modified_at: null,
+        children: [
+          {
+            name: "周报.md",
+            path: "mbp/Work/周报.md",
+            type: "file",
+            child_count: 0,
+            modified_at: "2026-04-01T00:00:00Z",
+            children: [],
+            match: "",
+            snippet: "",
+            hits: 0,
+          },
+        ],
+        match: "",
+        snippet: "",
+        hits: 0,
+      },
+    ]);
+    const adapter = renderContent(fence(note), qc);
+    const card = screen.getByRole("link", { name: /周报/ });
+    expect(card).toHaveAttribute("href", "/acme/knowledge?file=mbp%2FWork%2F%E5%91%A8%E6%8A%A5.md");
+    await userEvent.click(card);
+    await waitFor(() =>
+      expect(adapter.push).toHaveBeenCalledWith("/acme/knowledge?file=mbp%2FWork%2F%E5%91%A8%E6%8A%A5.md"),
+    );
+  });
+
+  it("opens the doc in the chat sidebar instead of navigating", async () => {
     const qc = new QueryClient();
     qc.setQueryData(docsKeys.file("Work/周报.md"), { path: "Work/周报.md", content: "stale" });
     const open = vi.fn();
@@ -80,7 +116,7 @@ describe("obsidian note fence", () => {
 
     await userEvent.click(screen.getByRole("link", { name: /周报/ }));
 
-    expect(open).toHaveBeenCalledWith({ path: "Work/周报.md", name: "周报" });
+    await waitFor(() => expect(open).toHaveBeenCalledWith({ path: "Work/周报.md", name: "周报" }));
     expect(adapter.push).not.toHaveBeenCalled();
     expect(screen.queryByRole("dialog")).toBeNull();
     await waitFor(() => expect(qc.getQueryData(docsKeys.file("Work/周报.md"))).toBeUndefined());

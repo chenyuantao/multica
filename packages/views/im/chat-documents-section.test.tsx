@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { docsKeys } from "@multica/core/docs";
@@ -82,17 +82,23 @@ function renderSection(options?: { isDirect?: boolean; locale?: "en" | "zh-Hans"
   return { adapter, client, unmount: view.unmount };
 }
 
+function mockQueries(messages: unknown[]) {
+  useQueryMock.mockImplementation((options: { queryKey?: readonly unknown[] }) => {
+    const key = options?.queryKey ?? [];
+    if (key.includes("tree")) return { data: [] };
+    return { data: messages };
+  });
+}
+
 describe("ChatDocumentsSection", () => {
-  beforeEach(() => useQueryMock.mockReset().mockReturnValue({ data: [] }));
+  beforeEach(() => useQueryMock.mockReset().mockImplementation(() => ({ data: [] })));
 
   it("lists each note once, newest first, with the card fields and the time it appeared", () => {
-    useQueryMock.mockReturnValue({
-      data: [
-        message("old", 49, { name: "周报", summary: "第一版", path: "Work/周报.md" }),
-        message("new", 10, { name: "计划", summary: "本周安排", path: "Work/计划.md" }),
-        message("mid", 25, { name: "周报", summary: "已发布", path: "Work/周报.md" }),
-      ],
-    });
+    mockQueries([
+      message("old", 49, { name: "周报", summary: "第一版", path: "Work/周报.md" }),
+      message("new", 10, { name: "计划", summary: "本周安排", path: "Work/计划.md" }),
+      message("mid", 25, { name: "周报", summary: "已发布", path: "Work/周报.md" }),
+    ]);
     renderSection();
 
     const items = screen.getAllByRole("link");
@@ -105,14 +111,12 @@ describe("ChatDocumentsSection", () => {
   });
 
   it("shows three rows and scrolls the rest inside the list", () => {
-    useQueryMock.mockReturnValue({
-      data: [
-        message("a", 10, { name: "A", summary: "a", path: "Work/A.md" }),
-        message("b", 25, { name: "B", summary: "b", path: "Work/B.md" }),
-        message("c", 49, { name: "C", summary: "c", path: "Work/C.md" }),
-        message("d", 73, { name: "D", summary: "d", path: "Work/D.md" }),
-      ],
-    });
+    mockQueries([
+      message("a", 10, { name: "A", summary: "a", path: "Work/A.md" }),
+      message("b", 25, { name: "B", summary: "b", path: "Work/B.md" }),
+      message("c", 49, { name: "C", summary: "c", path: "Work/C.md" }),
+      message("d", 73, { name: "D", summary: "d", path: "Work/D.md" }),
+    ]);
     renderSection();
 
     const list = screen.getByRole("list", { name: "Documents in this group" });
@@ -124,17 +128,16 @@ describe("ChatDocumentsSection", () => {
   });
 
   it("opens the note in the chat sidebar", async () => {
-    useQueryMock.mockReturnValue({
-      data: [message("m", 10, { name: "Weekly", summary: "Shipped", path: "Work/Weekly.md" })],
-    });
+    mockQueries([message("m", 10, { name: "Weekly", summary: "Shipped", path: "Work/Weekly.md" })]);
     const open = vi.fn();
     const client = new QueryClient();
     client.setQueryData(docsKeys.file("Work/Weekly.md"), { content: "stale" });
     const { adapter } = renderSection({ onOpen: open, client });
 
+    client.setQueryData(docsKeys.tree(), []);
     await userEvent.click(screen.getByRole("link", { name: /Weekly/ }));
 
-    expect(open).toHaveBeenCalledWith({ path: "Work/Weekly.md", name: "Weekly" });
+    await waitFor(() => expect(open).toHaveBeenCalledWith({ path: "Work/Weekly.md", name: "Weekly" }));
     expect(adapter.push).not.toHaveBeenCalled();
     expect(client.getQueryData(docsKeys.file("Work/Weekly.md"))).toBeUndefined();
   });
@@ -146,9 +149,7 @@ describe("ChatDocumentsSection", () => {
   });
 
   it("names the section for a group and a direct chat", () => {
-    useQueryMock.mockReturnValue({
-      data: [message("m", 10, { name: "备忘", summary: "一条", path: "Notes/备忘.md" })],
-    });
+    mockQueries([message("m", 10, { name: "备忘", summary: "一条", path: "Notes/备忘.md" })]);
     const { unmount } = renderSection({ locale: "zh-Hans" });
     expect(screen.getByRole("heading", { name: "群聊中的文档" })).toBeInTheDocument();
     unmount();

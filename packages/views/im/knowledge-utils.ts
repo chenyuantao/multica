@@ -67,3 +67,40 @@ export function findNode(nodes: DocNode[], path: string): DocNode | null {
   }
   return null;
 }
+
+/** Top-level knowledge roots, such as a machine share. */
+export function knowledgeRoots(nodes: readonly DocNode[]): string[] {
+  const roots: string[] = [];
+  for (const node of nodes) {
+    const root = node.path.split("/")[0];
+    if (root && !roots.includes(root)) roots.push(root);
+  }
+  return roots;
+}
+
+function withoutKnowledgeRoot(path: string, roots: ReadonlySet<string>): string {
+  const slash = path.indexOf("/");
+  if (slash <= 0) return path;
+  const head = path.slice(0, slash);
+  return roots.has(head) ? path.slice(slash + 1) : path;
+}
+
+/**
+ * The docs path to open for a card path. An exact tree path wins. Otherwise
+ * the knowledge root is ignored, so `Work/a.md` opens `machine/Work/a.md`.
+ * Returns null when the tree has no such file.
+ */
+export function resolveDocPath(cardPath: string, nodes: readonly DocNode[]): string | null {
+  const files = flattenFiles(nodes as DocNode[]);
+  const exact = files.find((file) => file.path === cardPath);
+  if (exact) return exact.path;
+  const roots = new Set(knowledgeRoots(nodes));
+  if (roots.size === 0) return null;
+  const wanted = withoutKnowledgeRoot(cardPath, roots);
+  if (!wanted) return null;
+  const matches = files.filter((file) => withoutKnowledgeRoot(file.path, roots) === wanted);
+  if (matches.length === 0) return null;
+  const time = (file: DocNode) => (file.modified_at ? Date.parse(file.modified_at) || 0 : 0);
+  matches.sort((a, b) => time(b) - time(a) || a.path.localeCompare(b.path));
+  return matches[0].path;
+}

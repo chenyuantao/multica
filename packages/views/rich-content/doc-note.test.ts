@@ -1,16 +1,16 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { parseObsidianNote } from "./obsidian-note";
+import { parseDocNote } from "./doc-note";
 
-describe("parseObsidianNote", () => {
-  it("reads name, summary and vault-relative path", () => {
+describe("parseDocNote", () => {
+  it("reads name, summary and a path inside the knowledge root", () => {
     expect(
-      parseObsidianNote('{"name":"周报","summary":"本周  完成\\n发布","path":"Work/周报.md"}'),
+      parseDocNote('{"name":"周报","summary":"本周  完成\\n发布","path":"Work/周报.md"}'),
     ).toEqual({ name: "周报", summary: "本周 完成 发布", path: "Work/周报.md" });
   });
 
   it("falls back to the file name and an empty summary", () => {
-    expect(parseObsidianNote('{"path":" Notes/Plan.md "}')).toEqual({
+    expect(parseDocNote('{"path":" Notes/Plan.md "}')).toEqual({
       name: "Plan",
       summary: "",
       path: "Notes/Plan.md",
@@ -28,6 +28,6 @@ describe("parseObsidianNote", () => {
     ["an empty segment", '{"path":"Notes//a.md"}'],
     ["a non-markdown file", '{"path":"Notes/a.png"}'],
   ])("rejects %s", (_, body) => {
-    expect(parseObsidianNote(body)).toBeNull();
+    expect(parseDocNote(body)).toBeNull();
   });
 });

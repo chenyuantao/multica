@@ -1,5 +1,5 @@
 import type { Comment } from "@multica/core/types";
-import { parseObsidianNote, type ObsidianNote } from "../rich-content/obsidian-note";
+import { parseDocNote, type DocNote } from "../rich-content/doc-note";
 import { parseChatHistory } from "./chat-history";
 
 /** Rows kept in view; further documents scroll inside the section. */
@@ -14,7 +14,7 @@ export function chatDocumentListMaxPx(): number {
 
 /** A knowledge-note card that showed up in the chat, kept once per path. */
 export interface ChatDocument {
-  note: ObsidianNote;
+  note: DocNote;
   /** When the newest message containing this note was sent. */
   appearedAt: string;
 }
@@ -44,10 +44,10 @@ export function documentsInChat(messages: readonly ChatDocumentMessage[]): ChatD
   );
 }
 
-function notesIn(content: string, depth: number): ObsidianNote[] {
-  const notes: ObsidianNote[] = [];
-  for (const match of content.matchAll(/```obsidian[^\n]*\r?\n([\s\S]*?)```/g)) {
-    const note = parseObsidianNote(match[1] ?? "");
+function notesIn(content: string, depth: number): DocNote[] {
+  const notes: DocNote[] = [];
+  for (const match of content.matchAll(/```(?:docs|obsidian)[^\n]*\r?\n([\s\S]*?)```/g)) {
+    const note = parseDocNote(match[1] ?? "");
     if (note) notes.push(note);
   }
   if (depth >= MAX_HISTORY_DEPTH) return notes;
