@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BookOpen } from "lucide-react";
-import { docsKeys, relocatedDocPath } from "@multica/core/docs";
+import { docFileOptions, docsKeys, relocatedDocPath } from "@multica/core/docs";
 import { useWorkspacePaths } from "@multica/core/paths";
 import type { DocFile, DocMoveResult } from "@multica/core/types";
 import { useIsMobile } from "@multica/ui/hooks/use-mobile";
@@ -33,6 +33,14 @@ export function KnowledgePage() {
   const selectedPath = navigation.searchParams.get("file") || null;
   const [createDir, setCreateDir] = useState<string | null>(null);
   const qc = useQueryClient();
+  const opened = useQuery({ ...docFileOptions(selectedPath ?? ""), enabled: !!selectedPath });
+  // A card path often omits the machine root. Once the file loads, follow the
+  // path the server resolved so the tree can select it.
+  useEffect(() => {
+    const canonical = opened.data?.path;
+    if (!selectedPath || !canonical || canonical === selectedPath) return;
+    navigation.replace(paths.knowledgeFile(canonical));
+  }, [opened.data?.path, selectedPath, navigation, paths]);
 
   const select = (path: string) =>
     isMobile ? navigation.push(paths.knowledgeFile(path)) : navigation.replace(paths.knowledgeFile(path));

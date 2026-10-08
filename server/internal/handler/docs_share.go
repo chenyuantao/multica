@@ -24,13 +24,76 @@ type docsTarget struct {
 // connected, or that the caller may not use, reads as not found so a private
 // share's name does not leak.
 func (h *Handler) resolveDocsPath(w http.ResponseWriter, r *http.Request, path string) (docsTarget, bool) {
-	root, rest := fileshare.Cut(path)
-	peer := h.peerFor(r, root)
-	if peer == nil {
-		writeDocsVaultError(w, r, obsidianvault.ErrNotFound)
-		return docsTarget{}, false
+	root, _ := fileshare.Cut(path)
+	if peer := h.peerFor(r, root); peer != nil {
+		_, rest := fileshare.Cut(path)
+		return docsTarget{rel: rest, peer: peer}, true
 	}
-	return docsTarget{rel: rest, peer: peer}, true
+	// A card often stores the path inside the share and leaves off the machine
+	// name. Match that path, or the same path with one other root removed.
+	if path != "" {
+		if peer, rel := h.matchOmittedRoot(r, path); peer != nil {
+			return docsTarget{rel: rel, peer: peer}, true
+		}
+	}
+	writeDocsVaultError(w, r, obsidianvault.ErrNotFound)
+	return docsTarget{}, false
+}
+
+// matchOmittedRoot finds a visible share that contains path. The full path is
+// tried first, so a real directory name is not treated as a machine. A leading
+// segment is dropped only when nothing has the full path.
+func (h *Handler) matchOmittedRoot(r *http.Request, path string) (fileshare.Peer, string) {
+	peers := h.visiblePeers(r)
+	if len(peers) == 0 {
+		return nil, ""
+	}
+	ctx, cancel := h.shareContext(r)
+	defer cancel()
+	candidates := []string{path}
+	if _, rest := fileshare.Cut(path); rest != "" {
+		candidates = append(candidates, rest)
+	}
+	var found fileshare.Peer
+	var rel string
+	var newest time.Time
+	var have bool
+	for _, candidate := range candidates {
+		for _, peer := range peers {
+			when, ok := shareHas(ctx, peer, candidate)
+			if !ok {
+				continue
+			}
+			if !have || when.After(newest) {
+				found, rel, newest, have = peer, candidate, when, true
+			}
+		}
+		if have {
+			return found, rel
+		}
+	}
+	return nil, ""
+}
+
+func shareHas(ctx context.Context, peer fileshare.Peer, rel string) (time.Time, bool) {
+	var file obsidianvault.HierarchyResult
+	err := peer.Call(ctx, fileshare.OpHierarchy, map[string]string{"path": rel}, &file)
+	if err == nil {
+		if file.File.ModifiedAt != nil {
+			if when, parseErr := time.Parse(time.RFC3339, *file.File.ModifiedAt); parseErr == nil {
+				return when, true
+			}
+		}
+		return time.Time{}, true
+	}
+	if !errors.Is(err, obsidianvault.ErrNotFile) {
+		return time.Time{}, false
+	}
+	var children obsidianvault.ChildrenResult
+	if err := peer.Call(ctx, fileshare.OpChildren, map[string]string{"path": rel}, &children); err != nil {
+		return time.Time{}, false
+	}
+	return time.Time{}, true
 }
 
 func (h *Handler) peerFor(r *http.Request, machine string) fileshare.Peer {

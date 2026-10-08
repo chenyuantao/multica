@@ -195,6 +195,53 @@ func TestFileShareHTTPAccessSwitch(t *testing.T) {
 	}
 }
 
+func TestDocsReadOmitsMachineRoot(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "00-自媒体", "草稿")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "笔记.md"), []byte("draft"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	hub := fileshare.NewHub()
+	peer := fileshare.NewLocal(fileshare.ShareMeta{
+		DaemonID:    "daemon-1",
+		Machine:     "mbp",
+		OwnerUserID: "owner-1",
+		Visibility:  fileshare.VisibilityPrivate,
+		Enabled:     true,
+		Dir:         root,
+	}, root)
+	if err := hub.Register(peer); err != nil {
+		t.Fatal(err)
+	}
+	h := &Handler{FileShares: hub}
+
+	for _, path := range []string{"00-自媒体/草稿/笔记.md", "other/00-自媒体/草稿/笔记.md"} {
+		body, err := json.Marshal(map[string]string{"path": path})
+		if err != nil {
+			t.Fatal(err)
+		}
+		req := httptest.NewRequest(http.MethodPost, "/api/docs/files/content", strings.NewReader(string(body)))
+		req.Header.Set("X-User-ID", "owner-1")
+		rec := httptest.NewRecorder()
+		h.PostDocsFileContent(rec, req)
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"content":"draft"`) || !strings.Contains(rec.Body.String(), `"path":"mbp/00-自媒体/草稿/笔记.md"`) {
+			t.Fatalf("path %s status = %d body = %s", path, rec.Code, rec.Body.String())
+		}
+	}
+
+	strangerBody, _ := json.Marshal(map[string]string{"path": "00-自媒体/草稿/笔记.md"})
+	stranger := httptest.NewRequest(http.MethodPost, "/api/docs/files/content", strings.NewReader(string(strangerBody)))
+	stranger.Header.Set("X-User-ID", "someone-else")
+	strangerW := httptest.NewRecorder()
+	h.PostDocsFileContent(strangerW, stranger)
+	if strangerW.Code != http.StatusNotFound {
+		t.Fatalf("stranger status = %d body = %s", strangerW.Code, strangerW.Body.String())
+	}
+}
+
 func withDaemonParam(r *http.Request, daemonID string) *http.Request {
 	route := chi.NewRouteContext()
 	route.URLParams.Add("daemonId", daemonID)
