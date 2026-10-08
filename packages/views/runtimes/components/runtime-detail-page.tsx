@@ -166,6 +166,10 @@ export function RuntimeDetailPage({
     currentMember?.role === "owner" || currentMember?.role === "admin";
   const canAddRuntime =
     isAdmin && machine?.mode === "local" && !!machine.daemonId;
+  const canShareFiles =
+    machine?.mode === "local" &&
+    (machine.isCurrent ||
+      machine.runtimes.some((runtime) => runtime.owner_id === currentUserId));
   const renameTarget = useMemo(() => {
     if (!machine || machine.runtimes.length === 0) return null;
     const editable = isAdmin
@@ -296,7 +300,11 @@ export function RuntimeDetailPage({
 
       <div className="min-h-0 flex-1 overflow-y-auto bg-background">
         <div className={cn(PAGE_RAIL, PAGE_GUTTER, "py-4 sm:py-6")}>
-          <FileShareSection wsId={wsId} machine={machine} />
+          <FileShareSection
+            wsId={wsId}
+            machine={machine}
+            canSetUp={canShareFiles}
+          />
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div className="min-w-0">
               <h2 className="text-body font-semibold">

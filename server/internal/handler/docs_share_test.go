@@ -23,6 +23,7 @@ func TestDocsMachineShareReadWrite(t *testing.T) {
 	}
 	hub := fileshare.NewHub()
 	peer := fileshare.NewLocal(fileshare.ShareMeta{
+		DaemonID:    "daemon-1",
 		Machine:     "mbp",
 		OwnerUserID: "owner-1",
 		Visibility:  fileshare.VisibilityPrivate,
@@ -99,6 +100,7 @@ func TestFileShareSocketServesARead(t *testing.T) {
 	defer conn.Close()
 	if err := conn.WriteJSON(fileshare.Envelope{
 		Type:       "hello",
+		DaemonID:   "daemon-1",
 		Machine:    "mbp",
 		Visibility: fileshare.VisibilityPrivate,
 	}); err != nil {
@@ -130,6 +132,7 @@ func TestFileShareHTTPAccessSwitch(t *testing.T) {
 	root := t.TempDir()
 	hub := fileshare.NewHub()
 	peer := fileshare.NewLocal(fileshare.ShareMeta{
+		DaemonID:    "daemon-1",
 		Machine:     "mbp",
 		OwnerUserID: "owner-1",
 		WorkspaceID: "ws-1",
@@ -147,23 +150,41 @@ func TestFileShareHTTPAccessSwitch(t *testing.T) {
 	list.Header.Set("X-Workspace-ID", "ws-1")
 	listW := httptest.NewRecorder()
 	h.ListFileShares(listW, list)
-	if listW.Code != http.StatusOK || !strings.Contains(listW.Body.String(), root) || !strings.Contains(listW.Body.String(), `"online":true`) {
+	if listW.Code != http.StatusOK || !strings.Contains(listW.Body.String(), root) || !strings.Contains(listW.Body.String(), `"online":true`) || !strings.Contains(listW.Body.String(), `"daemon_id":"daemon-1"`) {
 		t.Fatalf("list status = %d body = %s", listW.Code, listW.Body.String())
 	}
 
-	patch := httptest.NewRequest(http.MethodPatch, "/api/file-shares/mbp", strings.NewReader(`{"visibility":"workspace","enabled":false}`))
+	byName := httptest.NewRequest(http.MethodPatch, "/api/file-shares/mbp", strings.NewReader(`{"enabled":false}`))
+	byName.Header.Set("X-User-ID", "owner-1")
+	byName = withDaemonParam(byName, "mbp")
+	byNameW := httptest.NewRecorder()
+	h.UpdateFileShare(byNameW, byName)
+	if byNameW.Code != http.StatusNotFound {
+		t.Fatalf("patch by path name status = %d body = %s", byNameW.Code, byNameW.Body.String())
+	}
+
+	patch := httptest.NewRequest(http.MethodPatch, "/api/file-shares/daemon-1", strings.NewReader(`{"visibility":"workspace","enabled":false}`))
 	patch.Header.Set("X-User-ID", "owner-1")
 	patch.Header.Set("X-Workspace-ID", "ws-1")
-	patch = withMachineParam(patch, "mbp")
+	patch = withDaemonParam(patch, "daemon-1")
 	patchW := httptest.NewRecorder()
 	h.UpdateFileShare(patchW, patch)
 	if patchW.Code != http.StatusOK || !strings.Contains(patchW.Body.String(), `"enabled":false`) || !strings.Contains(patchW.Body.String(), `"visibility":"workspace"`) {
 		t.Fatalf("patch status = %d body = %s", patchW.Code, patchW.Body.String())
 	}
 
-	pathPatch := httptest.NewRequest(http.MethodPatch, "/api/file-shares/mbp", strings.NewReader(`{"dir":"/tmp/other"}`))
+	stranger := httptest.NewRequest(http.MethodPatch, "/api/file-shares/daemon-1", strings.NewReader(`{"enabled":true}`))
+	stranger.Header.Set("X-User-ID", "someone-else")
+	stranger = withDaemonParam(stranger, "daemon-1")
+	strangerW := httptest.NewRecorder()
+	h.UpdateFileShare(strangerW, stranger)
+	if strangerW.Code != http.StatusNotFound {
+		t.Fatalf("stranger patch status = %d body = %s", strangerW.Code, strangerW.Body.String())
+	}
+
+	pathPatch := httptest.NewRequest(http.MethodPatch, "/api/file-shares/daemon-1", strings.NewReader(`{"dir":"/tmp/other"}`))
 	pathPatch.Header.Set("X-User-ID", "owner-1")
-	pathPatch = withMachineParam(pathPatch, "mbp")
+	pathPatch = withDaemonParam(pathPatch, "daemon-1")
 	pathW := httptest.NewRecorder()
 	h.UpdateFileShare(pathW, pathPatch)
 	if pathW.Code != http.StatusBadRequest {
@@ -174,8 +195,8 @@ func TestFileShareHTTPAccessSwitch(t *testing.T) {
 	}
 }
 
-func withMachineParam(r *http.Request, machine string) *http.Request {
+func withDaemonParam(r *http.Request, daemonID string) *http.Request {
 	route := chi.NewRouteContext()
-	route.URLParams.Add("machine", machine)
+	route.URLParams.Add("daemonId", daemonID)
 	return r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, route))
 }

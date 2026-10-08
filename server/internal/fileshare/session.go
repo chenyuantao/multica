@@ -18,6 +18,7 @@ type Envelope struct {
 	Type        string          `json:"type"`
 	ID          string          `json:"id,omitempty"`
 	Op          string          `json:"op,omitempty"`
+	DaemonID    string          `json:"daemon_id,omitempty"`
 	Machine     string          `json:"machine,omitempty"`
 	WorkspaceID string          `json:"workspace_id,omitempty"`
 	Visibility  string          `json:"visibility,omitempty"`
@@ -241,6 +242,10 @@ func AcceptHello(env Envelope, ownerUserID string) (ShareMeta, error) {
 	if env.Type != "hello" {
 		return ShareMeta{}, obsidianvault.ErrInvalidPath
 	}
+	daemonID, err := SanitizeDaemonID(env.DaemonID)
+	if err != nil {
+		return ShareMeta{}, err
+	}
 	machine, err := SanitizeMachine(env.Machine)
 	if err != nil {
 		return ShareMeta{}, err
@@ -257,6 +262,7 @@ func AcceptHello(env Envelope, ownerUserID string) (ShareMeta, error) {
 		enabled = *env.Enabled
 	}
 	return ShareMeta{
+		DaemonID:    daemonID,
 		Machine:     machine,
 		OwnerUserID: ownerUserID,
 		WorkspaceID: env.WorkspaceID,

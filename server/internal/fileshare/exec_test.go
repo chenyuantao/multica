@@ -50,7 +50,7 @@ func TestHubReadUsesCachedBody(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "note.md"), []byte("hello"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	peer := NewLocal(ShareMeta{Machine: "mbp", OwnerUserID: "user-1", Visibility: VisibilityPrivate, Enabled: true}, root)
+	peer := NewLocal(ShareMeta{DaemonID: "daemon-1", Machine: "mbp", OwnerUserID: "user-1", Visibility: VisibilityPrivate, Enabled: true}, root)
 	hub := NewHub()
 	if err := hub.Register(peer); err != nil {
 		t.Fatal(err)

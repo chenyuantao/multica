@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/multica-ai/multica/server/internal/cli"
+	"github.com/multica-ai/multica/server/internal/daemon"
 	"github.com/multica-ai/multica/server/internal/fileshare"
 )
 
@@ -18,6 +19,9 @@ type shareConfig struct {
 	Machine     string `json:"machine"`
 	Visibility  string `json:"visibility"`
 	WorkspaceID string `json:"workspace_id,omitempty"`
+	// ServerURL lets `path` pick this machine's share for the server an
+	// agent task talks to when several profiles share directories.
+	ServerURL string `json:"server_url,omitempty"`
 	// Enabled is nil for configs written before the runtime switch existed.
 	// Nil means remote access is on.
 	Enabled *bool `json:"enabled,omitempty"`
@@ -33,11 +37,11 @@ func (c shareConfig) accessEnabled() bool {
 func newShareCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "share [dir]",
-		Short: "Publish a directory, or the current directory",
+		Short: "Publish a directory, or the current directory, as this machine's share",
 		Args:  cobra.MaximumNArgs(1),
 		RunE:  runShare,
 	}
-	cmd.Flags().String("machine", "", "Path prefix for this machine (default: host name)")
+	cmd.Flags().String("machine", "", "Knowledge path prefix for this machine (default: host name)")
 	cmd.Flags().String("visibility", "", "private or workspace; omit to keep the current setting")
 	return cmd
 }
@@ -131,11 +135,16 @@ func runShare(cmd *cobra.Command, args []string) error {
 		Machine:     machine,
 		Visibility:  visibility,
 		WorkspaceID: login.WorkspaceID,
+		ServerURL:   strings.TrimRight(login.ServerURL, "/"),
+	}
+	daemonID, err := localDaemonID(profile)
+	if err != nil {
+		return fmt.Errorf("read this machine's daemon id: %w", err)
 	}
 	if err := saveShare(profile, cfg); err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "sharing %s as %s/ (%s)\n", cfg.Dir, cfg.Machine, cfg.Visibility)
+	fmt.Fprintf(os.Stderr, "sharing %s as %s/ (%s) for machine %s\n", cfg.Dir, cfg.Machine, cfg.Visibility, daemonID)
 	fmt.Fprintf(os.Stderr, "run `multica-file daemon start` if the daemon is not already running\n")
 	return nil
 }
@@ -192,6 +201,9 @@ func runVisibility(cmd *cobra.Command, args []string) error {
 
 func runStatus(cmd *cobra.Command, _ []string) error {
 	profile := profileOf(cmd)
+	if daemonID, err := localDaemonID(profile); err == nil {
+		fmt.Fprintf(os.Stdout, "machine: %s\n", daemonID)
+	}
 	cfg, err := loadShare(profile)
 	if err != nil {
 		fmt.Fprintln(os.Stdout, "share: none")
@@ -211,6 +223,43 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
+// localDaemonID is the id this machine's multica daemon registers its runtimes
+// under. The share is bound to it, so the runtime page shows it on this
+// machine and each machine carries one share.
+func localDaemonID(profile string) (string, error) {
+	if id := strings.TrimSpace(os.Getenv("MULTICA_DAEMON_ID")); id != "" {
+		return id, nil
+	}
+	if inTaskContext() {
+		// The task's config root is private; read the machine's id without
+		// minting one there.
+		dir, err := hostMulticaDir()
+		if err != nil {
+			return "", err
+		}
+		data, err := os.ReadFile(filepath.Join(dir, "daemon.id"))
+		if err != nil {
+			return "", err
+		}
+		return strings.TrimSpace(string(data)), nil
+	}
+	return daemon.EnsureDaemonID(profile)
+}
+
+func inTaskContext() bool {
+	return strings.TrimSpace(os.Getenv(cli.TaskConfigRootEnv)) != ""
+}
+
+// hostMulticaDir is ~/.multica of the machine's user, also inside an agent
+// task, where the CLI config itself is redirected to a private directory.
+func hostMulticaDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".multica"), nil
+}
+
 func shareConfigPath(profile string) (string, error) {
 	configPath, err := cli.CLIConfigPathForProfile(profile)
 	if err != nil {
@@ -224,6 +273,10 @@ func loadShare(profile string) (shareConfig, error) {
 	if err != nil {
 		return shareConfig{}, err
 	}
+	return loadShareFile(path)
+}
+
+func loadShareFile(path string) (shareConfig, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return shareConfig{}, err

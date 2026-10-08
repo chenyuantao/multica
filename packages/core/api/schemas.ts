@@ -1235,6 +1235,7 @@ export const DocNodeSchema: z.ZodType<DocNode> = z.lazy(() =>
 );
 
 export const FileShareSchema: z.ZodType<FileShare> = z.object({
+  daemon_id: z.string().default("").catch(""),
   machine: z.string(),
   dir: z.string().default("").catch(""),
   visibility: z.enum(["private", "workspace"]).catch("private"),

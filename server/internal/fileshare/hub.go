@@ -3,14 +3,19 @@ package fileshare
 import (
 	"context"
 	"encoding/json"
+	"sort"
 	"sync"
 
 	"github.com/multica-ai/multica/server/internal/obsidianvault"
 )
 
-// ShareMeta is what the server remembers about a share. Dir is the absolute
-// path reported by the machine, shown in the runtime UI and never written back.
+// ShareMeta is what the server remembers about a share. A share belongs to one
+// owner on one machine, identified by the multica daemon id the machine's
+// runtimes register under. Machine is the knowledge path prefix. Dir is the
+// absolute path reported by the machine, shown in the runtime UI and never
+// written back.
 type ShareMeta struct {
+	DaemonID    string
 	Machine     string
 	OwnerUserID string
 	WorkspaceID string
@@ -42,20 +47,30 @@ type shareSlot struct {
 }
 
 type Hub struct {
-	mu    sync.Mutex
+	mu sync.Mutex
+	// slots is keyed by owner and daemon id: one share per user per machine.
 	slots map[string]*shareSlot
+	// names maps a knowledge path prefix to the slot that holds it.
+	names map[string]string
 	cache *contentCache
 }
 
 func NewHub() *Hub {
 	return &Hub{
 		slots: map[string]*shareSlot{},
+		names: map[string]string{},
 		cache: newContentCache(16),
 	}
 }
 
-// Register adds a machine. The same owner reconnecting replaces the previous
-// session. A different owner cannot take a name that is already remembered.
+func slotKey(ownerUserID, daemonID string) string {
+	return ownerUserID + "\x00" + daemonID
+}
+
+// Register adds a machine's share. The same owner reconnecting from the same
+// daemon replaces the previous session, even under a new path name. A path
+// name stays with its share: another user can never take it, and the same
+// user can only move it to another machine once the old one is offline.
 // A pending access change from the runtime UI wins over the daemon's hello,
 // and the path always comes from the machine.
 func (h *Hub) Register(peer Peer) error {
@@ -64,14 +79,25 @@ func (h *Hub) Register(peer Peer) error {
 	if err != nil {
 		return err
 	}
+	daemonID, err := SanitizeDaemonID(meta.DaemonID)
+	if err != nil {
+		return err
+	}
 	meta.Machine = name
+	meta.DaemonID = daemonID
 	meta.Online = true
+	key := slotKey(meta.OwnerUserID, daemonID)
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if prev, ok := h.slots[name]; ok && prev.meta.OwnerUserID != meta.OwnerUserID {
-		return ErrMachineTaken
+	if holderKey, ok := h.names[name]; ok && holderKey != key {
+		holder := h.slots[holderKey]
+		if holder != nil && (holder.meta.OwnerUserID != meta.OwnerUserID || holder.peer != nil) {
+			return ErrMachineTaken
+		}
+		delete(h.slots, holderKey)
+		h.cache.dropMachine(name)
 	}
-	slot := h.slots[name]
+	slot := h.slots[key]
 	if slot != nil && slot.peer != nil && slot.peer != peer {
 		if closer, ok := slot.peer.(interface{ Close() }); ok {
 			closer.Close()
@@ -79,8 +105,13 @@ func (h *Hub) Register(peer Peer) error {
 	}
 	if slot == nil {
 		slot = &shareSlot{}
-		h.slots[name] = slot
+		h.slots[key] = slot
 	}
+	if old := slot.meta.Machine; old != "" && old != name {
+		delete(h.names, old)
+		h.cache.dropMachine(old)
+	}
+	h.names[name] = key
 	if slot.pending.Visibility != nil {
 		meta.Visibility = *slot.pending.Visibility
 	}
@@ -100,19 +131,20 @@ func (h *Hub) Register(peer Peer) error {
 // Unregister marks a share offline when its socket drops. The path and access
 // settings stay so the runtime page can still show them.
 func (h *Hub) Unregister(peer Peer) {
+	meta := peer.Meta()
+	daemonID, err := SanitizeDaemonID(meta.DaemonID)
+	if err != nil {
+		return
+	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	name, err := SanitizeMachine(peer.Meta().Machine)
-	if err != nil {
-		name = peer.Meta().Machine
-	}
-	slot := h.slots[name]
+	slot := h.slots[slotKey(meta.OwnerUserID, daemonID)]
 	if slot == nil || slot.peer != peer {
 		return
 	}
 	slot.peer = nil
 	slot.meta.Online = false
-	h.cache.dropMachine(name)
+	h.cache.dropMachine(slot.meta.Machine)
 }
 
 // Get returns a machine that is connected and whose remote access is on.
@@ -142,7 +174,8 @@ func (h *Hub) List() []Peer {
 	return out
 }
 
-// Records lists shares owned by userID in one workspace, online or not.
+// Records lists shares owned by userID in one workspace, online or not, one
+// per machine, ordered by path name.
 func (h *Hub) Records(ownerUserID, workspaceID string) []ShareMeta {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -153,20 +186,22 @@ func (h *Hub) Records(ownerUserID, workspaceID string) []ShareMeta {
 		}
 		out = append(out, slot.meta)
 	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Machine < out[j].Machine })
 	return out
 }
 
 // UpdateAccess changes visibility or the remote-access switch. The directory
 // is left untouched. A connected daemon is told immediately; an offline one
 // receives the change the next time it says hello.
-func (h *Hub) UpdateAccess(ownerUserID, machine string, patch AccessPatch) (ShareMeta, error) {
-	name, err := SanitizeMachine(machine)
+func (h *Hub) UpdateAccess(ownerUserID, daemonID string, patch AccessPatch) (ShareMeta, error) {
+	daemonID, err := SanitizeDaemonID(daemonID)
 	if err != nil {
-		return ShareMeta{}, err
+		return ShareMeta{}, obsidianvault.ErrNotFound
 	}
+	key := slotKey(ownerUserID, daemonID)
 	h.mu.Lock()
-	slot := h.slots[name]
-	if slot == nil || slot.meta.OwnerUserID != ownerUserID {
+	slot := h.slots[key]
+	if slot == nil {
 		h.mu.Unlock()
 		return ShareMeta{}, obsidianvault.ErrNotFound
 	}
@@ -201,7 +236,7 @@ func (h *Hub) UpdateAccess(ownerUserID, machine string, patch AccessPatch) (Shar
 			}
 		}
 		h.mu.Lock()
-		if current := h.slots[name]; current != nil && current.peer == peer {
+		if current := h.slots[key]; current != nil && current.peer == peer {
 			current.pending = AccessPatch{}
 		}
 		h.mu.Unlock()
@@ -209,6 +244,7 @@ func (h *Hub) UpdateAccess(ownerUserID, machine string, patch AccessPatch) (Shar
 	return meta, nil
 }
 
+// slot finds a share by its knowledge path prefix.
 func (h *Hub) slot(machine string) *shareSlot {
 	name, err := SanitizeMachine(machine)
 	if err != nil {
@@ -216,7 +252,11 @@ func (h *Hub) slot(machine string) *shareSlot {
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	return h.slots[name]
+	key, ok := h.names[name]
+	if !ok {
+		return nil
+	}
+	return h.slots[key]
 }
 
 func applyAccess(peer Peer, visibility string, enabled bool) {

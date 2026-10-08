@@ -2418,7 +2418,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			// /api/file-shares/connect; these routes only read and switch access.
 			r.Route("/api/file-shares", func(r chi.Router) {
 				r.Get("/", h.ListFileShares)
-				r.Patch("/{machine}", h.UpdateFileShare)
+				r.Patch("/{daemonId}", h.UpdateFileShare)
 			})
 
 			// Runtimes

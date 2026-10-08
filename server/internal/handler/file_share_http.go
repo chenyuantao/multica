@@ -12,6 +12,7 @@ import (
 )
 
 type fileShareResponse struct {
+	DaemonID    string `json:"daemon_id"`
 	Machine     string `json:"machine"`
 	Dir         string `json:"dir"`
 	Visibility  string `json:"visibility"`
@@ -20,9 +21,10 @@ type fileShareResponse struct {
 	WorkspaceID string `json:"workspace_id"`
 }
 
-// ListFileShares returns the caller's shared directories in this workspace.
-// The absolute path is included so the runtime page can show it. Other
-// members do not receive someone else's path.
+// ListFileShares returns the caller's shared directories in this workspace,
+// one per machine. daemon_id matches the runtimes' daemon_id so the runtime
+// page can place each share on its machine. The absolute path is included so
+// that page can show it. Other members do not receive someone else's path.
 func (h *Handler) ListFileShares(w http.ResponseWriter, r *http.Request) {
 	if h.FileShares == nil {
 		writeJSON(w, http.StatusOK, map[string]any{"shares": []fileShareResponse{}})
@@ -82,8 +84,8 @@ func (h *Handler) UpdateFileShare(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "nothing to update")
 		return
 	}
-	machine := chi.URLParam(r, "machine")
-	updated, err := h.FileShares.UpdateAccess(userID, machine, fileshare.AccessPatch{
+	daemonID := chi.URLParam(r, "daemonId")
+	updated, err := h.FileShares.UpdateAccess(userID, daemonID, fileshare.AccessPatch{
 		Visibility: patch.Visibility,
 		Enabled:    patch.Enabled,
 	})
@@ -104,6 +106,7 @@ func fileShareView(record fileshare.ShareMeta) fileShareResponse {
 		visibility = fileshare.VisibilityPrivate
 	}
 	return fileShareResponse{
+		DaemonID:    record.DaemonID,
 		Machine:     record.Machine,
 		Dir:         record.Dir,
 		Visibility:  visibility,

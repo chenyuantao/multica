@@ -4743,13 +4743,14 @@ export class ApiClient {
     ).shares;
   }
 
-  async updateFileShare(machine: string, patch: UpdateFileShareRequest): Promise<FileShare> {
-    const raw = await this.fetch<unknown>(`/api/file-shares/${encodeURIComponent(machine)}`, {
+  async updateFileShare(daemonId: string, patch: UpdateFileShareRequest): Promise<FileShare> {
+    const raw = await this.fetch<unknown>(`/api/file-shares/${encodeURIComponent(daemonId)}`, {
       method: "PATCH",
       body: JSON.stringify(patch),
     });
     const fallback: FileShare = {
-      machine,
+      daemon_id: daemonId,
+      machine: "",
       dir: "",
       visibility: patch.visibility ?? "private",
       enabled: patch.enabled ?? true,
@@ -4757,7 +4758,7 @@ export class ApiClient {
       workspace_id: "",
     };
     return parseWithFallback(raw, FileShareSchema, fallback, {
-      endpoint: "PATCH /api/file-shares/{machine}",
+      endpoint: "PATCH /api/file-shares/{daemonId}",
     });
   }
 

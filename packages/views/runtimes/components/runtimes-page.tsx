@@ -27,7 +27,8 @@ import {
 } from "@multica/core/runtimes/queries";
 import { useWSEvent } from "@multica/core/realtime";
 import { agentListOptions } from "@multica/core/workspace/queries";
-import type { AgentRuntime } from "@multica/core/types";
+import { fileShareListOptions } from "@multica/core/file-shares";
+import type { AgentRuntime, FileShare } from "@multica/core/types";
 import { Button } from "@multica/ui/components/ui/button";
 import {
   Dialog,
@@ -61,7 +62,7 @@ import { buildWorkloadIndex, RuntimeList } from "./runtime-list";
 import { pendingRuntimeFromProfile } from "./pending-runtime";
 import { buildRuntimeMachines, type RuntimeMachine } from "./runtime-machines";
 import { HealthDot, HealthIcon, useHealthLabel } from "./shared";
-import { FileShareSection } from "./file-share-section";
+import { FileShareBadge, fileShareForMachine } from "./file-share-section";
 import { useT, useTimeAgo } from "../../i18n";
 import { daemonRuntimesDocsHref } from "./runtime-docs";
 
@@ -119,6 +120,7 @@ export function RuntimesPage({
     agentListOptions(wsId),
   );
   const { data: snapshot = [] } = useQuery(agentTaskSnapshotOptions(wsId));
+  const { data: fileShares = [] } = useQuery(fileShareListOptions(wsId));
   // The Mika entrypoint is per member, not per workspace: the agent alone does
   // not say whether *this* member's conversation was ever opened and kicked
   // off. See memberNeedsMikaSetup.
@@ -207,10 +209,10 @@ export function RuntimesPage({
                 currentUserId={currentUserId ?? null}
               />
             )}
-            <FileShareSection wsId={wsId} />
             {(machines.length > 0 || bootstrapping) && (
               <MachineList
                 machines={machines}
+                fileShares={fileShares}
                 bootstrapping={bootstrapping}
               />
             )}
@@ -448,9 +450,11 @@ function PageHeaderBar({
 
 function MachineList({
   machines,
+  fileShares,
   bootstrapping,
 }: {
   machines: RuntimeMachine[];
+  fileShares: FileShare[];
   bootstrapping?: boolean;
 }) {
   const { t } = useT("runtimes");
@@ -476,14 +480,24 @@ function MachineList({
     <div className="overflow-hidden rounded-lg border bg-card">
       <div className="divide-y">
         {machines.map((machine) => (
-          <MachineRow key={machine.id} machine={machine} />
+          <MachineRow
+            key={machine.id}
+            machine={machine}
+            fileShare={fileShareForMachine(fileShares, machine)}
+          />
         ))}
       </div>
     </div>
   );
 }
 
-function MachineRow({ machine }: { machine: RuntimeMachine }) {
+function MachineRow({
+  machine,
+  fileShare,
+}: {
+  machine: RuntimeMachine;
+  fileShare: FileShare | null;
+}) {
   const { t } = useT("runtimes");
   const healthLabel = useHealthLabel();
   const timeAgo = useTimeAgo();
@@ -516,6 +530,7 @@ function MachineRow({ machine }: { machine: RuntimeMachine }) {
               {t(($) => $.machine.this_machine)}
             </span>
           )}
+          {fileShare && <FileShareBadge share={fileShare} />}
         </span>
       </span>
 

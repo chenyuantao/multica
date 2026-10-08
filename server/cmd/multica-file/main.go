@@ -26,10 +26,14 @@ func newRoot() *cobra.Command {
 
 The command reuses the login saved by "multica login". A daemon stays connected and serves remote reads and writes from this disk, so the files are not copied up front.
 
-Paths show up in knowledge under the machine name. The deployment vault stays under system/. Set visibility to workspace to let every member and agent in the workspace use the directory.`,
+Each machine has one share, bound to the daemon id its multica runtimes register under, and it appears on that machine in the runtimes page. Paths show up in knowledge under the machine name. The deployment vault stays under system/. Set visibility to workspace to let every member and agent in the workspace use the directory.
+
+Agents can run "multica-file path" to read the shared directory and its knowledge prefix, or "multica-file path <file>" to check that a file they wrote shows up in knowledge.`,
 	}
+	// main prints the error once.
+	root.SilenceErrors = true
 	root.PersistentFlags().String("profile", "", "Configuration profile name shared with the multica CLI")
-	root.AddCommand(newLoginCmd(), newShareCmd(), newUnshareCmd(), newVisibilityCmd(), newStatusCmd(), newDaemonCmd())
+	root.AddCommand(newLoginCmd(), newShareCmd(), newUnshareCmd(), newVisibilityCmd(), newStatusCmd(), newPathCmd(), newDaemonCmd())
 	return root
 }
 

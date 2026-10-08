@@ -1,50 +1,101 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Globe, Lock } from "lucide-react";
+import { FolderSymlink, Globe, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { fileShareListOptions, useUpdateFileShare } from "@multica/core/file-shares";
 import type { FileShare, UpdateFileShareRequest } from "@multica/core/types";
 import { Switch } from "@multica/ui/components/ui/switch";
+import { cn } from "@multica/ui/lib/utils";
 import { useT } from "../../i18n";
 import type { RuntimeMachine } from "./runtime-machines";
-import { splitRuntimeName } from "./runtime-machines";
 
-/** True when this share is the directory published by the machine on screen. */
-export function fileShareMatchesMachine(share: FileShare, machine: RuntimeMachine): boolean {
-  const names = new Set<string>();
-  const add = (value: string | null | undefined) => {
-    const trimmed = value?.trim();
-    if (trimmed) names.add(trimmed);
-  };
-  add(machine.title);
-  add(machine.deviceInfo);
-  if (machine.deviceInfo) add(machine.deviceInfo.split(" · ")[0]);
-  for (const runtime of machine.runtimes) {
-    add(runtime.device_info);
-    if (runtime.device_info) add(runtime.device_info.split(" · ")[0]);
-    add(splitRuntimeName(runtime.name).hostname);
-  }
-  return names.has(share.machine);
+const SHARE_COMMAND = "multica-file share <dir>";
+
+/** The share published from this machine, matched by the multica daemon id its runtimes register under. */
+export function fileShareForMachine(
+  shares: FileShare[],
+  machine: Pick<RuntimeMachine, "daemonId">,
+): FileShare | null {
+  if (!machine.daemonId) return null;
+  return shares.find((share) => share.daemon_id === machine.daemonId) ?? null;
 }
 
 export function FileShareSection({
   wsId,
   machine,
+  canSetUp,
 }: {
   wsId: string;
-  /** When set, only the share for this machine is shown. */
-  machine?: RuntimeMachine | null;
+  machine: RuntimeMachine;
+  /** The viewer runs this machine, so an unshared machine shows how to start sharing. */
+  canSetUp: boolean;
 }) {
   const { data: shares = [] } = useQuery(fileShareListOptions(wsId));
-  const visible = machine ? shares.filter((share) => fileShareMatchesMachine(share, machine)) : shares;
-  if (visible.length === 0) return null;
+  const share = fileShareForMachine(shares, machine);
+  if (share) return <FileShareCard wsId={wsId} share={share} />;
+  if (!canSetUp || !machine.daemonId) return null;
+  return <FileShareSetup />;
+}
+
+/** Compact share state for a machine row in the runtime list. */
+export function FileShareBadge({ share }: { share: FileShare }) {
+  const { t } = useT("runtimes");
+  const active = share.enabled && share.online;
   return (
-    <div className="mb-6 space-y-3">
-      {visible.map((share) => (
-        <FileShareCard key={share.machine} wsId={wsId} share={share} />
-      ))}
+    <span
+      title={t(($) => $.file_share.title)}
+      className={cn(
+        "inline-flex min-w-0 shrink items-center gap-1 rounded-xs bg-muted px-1.5 py-0.5 text-micro font-medium",
+        active ? "text-foreground" : "text-muted-foreground",
+      )}
+    >
+      <FolderSymlink aria-hidden="true" className="h-3 w-3 shrink-0" />
+      <span className="truncate">
+        {share.enabled ? `${share.machine}/` : t(($) => $.file_share.badge_off)}
+      </span>
+    </span>
+  );
+}
+
+function SectionHeader({ status }: { status: React.ReactNode }) {
+  const { t } = useT("runtimes");
+  return (
+    <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
+      <h2 className="text-body font-semibold">{t(($) => $.file_share.title)}</h2>
+      <span className="inline-flex items-center gap-1.5 text-caption text-muted-foreground">{status}</span>
     </div>
+  );
+}
+
+function StatusDot({ on }: { on: boolean }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn("h-1.5 w-1.5 rounded-full", on ? "bg-success" : "bg-muted-foreground/50")}
+    />
+  );
+}
+
+function FileShareSetup() {
+  const { t } = useT("runtimes");
+  return (
+    <section className="mb-6 rounded-lg border bg-card">
+      <SectionHeader
+        status={
+          <>
+            <StatusDot on={false} />
+            {t(($) => $.file_share.not_shared)}
+          </>
+        }
+      />
+      <div className="p-4">
+        <p className="text-caption text-muted-foreground">{t(($) => $.file_share.setup_hint)}</p>
+        <code className="mt-2 block break-all rounded-md bg-muted px-2 py-1.5 font-mono text-caption">
+          {SHARE_COMMAND}
+        </code>
+      </div>
+    </section>
   );
 }
 
@@ -53,7 +104,7 @@ function FileShareCard({ wsId, share }: { wsId: string; share: FileShare }) {
   const update = useUpdateFileShare(wsId);
   const patch = (next: UpdateFileShareRequest) => {
     update.mutate(
-      { machine: share.machine, patch: next },
+      { daemonId: share.daemon_id, patch: next },
       {
         onSuccess: () => toast.success(t(($) => $.file_share.saved)),
         onError: () => toast.error(t(($) => $.file_share.failed)),
@@ -62,23 +113,29 @@ function FileShareCard({ wsId, share }: { wsId: string; share: FileShare }) {
   };
 
   return (
-    <section className="rounded-lg border bg-card">
-      <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
-        <h2 className="text-body font-semibold">{t(($) => $.file_share.title)}</h2>
-        <span className="inline-flex items-center gap-1.5 text-caption text-muted-foreground">
-          <span
-            aria-hidden="true"
-            className={`h-1.5 w-1.5 rounded-full ${share.online ? "bg-success" : "bg-muted-foreground/50"}`}
-          />
-          {share.online ? t(($) => $.file_share.online) : t(($) => $.file_share.offline)}
-        </span>
-      </div>
+    <section className="mb-6 rounded-lg border bg-card">
+      <SectionHeader
+        status={
+          <>
+            <StatusDot on={share.online} />
+            {share.online ? t(($) => $.file_share.online) : t(($) => $.file_share.offline)}
+          </>
+        }
+      />
       <div className="space-y-4 p-4">
-        <div>
-          <div className="text-micro uppercase tracking-wider text-muted-foreground">
-            {t(($) => $.file_share.path)}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="min-w-0">
+            <div className="text-micro uppercase tracking-wider text-muted-foreground">
+              {t(($) => $.file_share.knowledge_path)}
+            </div>
+            <p className="mt-1 break-all font-mono text-caption">{share.machine}/</p>
           </div>
-          <p className="mt-1 break-all font-mono text-caption">{share.dir || "—"}</p>
+          <div className="min-w-0">
+            <div className="text-micro uppercase tracking-wider text-muted-foreground">
+              {t(($) => $.file_share.path)}
+            </div>
+            <p className="mt-1 break-all font-mono text-caption">{share.dir || "—"}</p>
+          </div>
         </div>
         <div className="flex items-center justify-between gap-3">
           <span className="text-body">{t(($) => $.file_share.access)}</span>

@@ -165,6 +165,11 @@ func serveOnce(ctx context.Context, profile string) time.Duration {
 		fmt.Fprintf(os.Stderr, "shared directory %s is not available\n", cfg.Dir)
 		return 5 * time.Second
 	}
+	daemonID, err := localDaemonID(profile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "daemon id: %v\n", err)
+		return 5 * time.Second
+	}
 	socketURL, err := shareSocketURL(login.ServerURL)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -186,6 +191,7 @@ func serveOnce(ctx context.Context, profile string) time.Duration {
 	enabled := cfg.accessEnabled()
 	hello := fileshare.Envelope{
 		Type:        "hello",
+		DaemonID:    daemonID,
 		Machine:     cfg.Machine,
 		WorkspaceID: cfg.WorkspaceID,
 		Visibility:  cfg.Visibility,
@@ -285,20 +291,20 @@ func removePID(profile string) error {
 	return err
 }
 
-func readPID(profile string) (int, error) {
+func daemonAlive(profile string) (int, bool) {
 	path, err := pidPath(profile)
 	if err != nil {
-		return 0, err
+		return 0, false
 	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return 0, err
-	}
-	return strconv.Atoi(strings.TrimSpace(string(data)))
+	return daemonAliveAt(path)
 }
 
-func daemonAlive(profile string) (int, bool) {
-	pid, err := readPID(profile)
+func daemonAliveAt(pidFile string) (int, bool) {
+	data, err := os.ReadFile(pidFile)
+	if err != nil {
+		return 0, false
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
 	if err != nil || pid <= 0 {
 		return 0, false
 	}

@@ -6,8 +6,8 @@ import { fileShareKeys } from "./queries";
 export function useUpdateFileShare(wsId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ machine, patch }: { machine: string; patch: UpdateFileShareRequest }) =>
-      api.updateFileShare(machine, patch),
+    mutationFn: ({ daemonId, patch }: { daemonId: string; patch: UpdateFileShareRequest }) =>
+      api.updateFileShare(daemonId, patch),
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: fileShareKeys.all(wsId) });
     },

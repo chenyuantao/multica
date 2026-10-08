@@ -64,6 +64,22 @@ func SanitizeMachine(name string) (string, error) {
 	return name, nil
 }
 
+// SanitizeDaemonID checks the id the multica daemon registers its runtimes
+// under. A share is bound to it, so each machine on the runtime page has at
+// most one share per user. It travels in a URL segment, so slashes are refused.
+func SanitizeDaemonID(id string) (string, error) {
+	id = strings.TrimSpace(id)
+	if id == "" || len(id) > 128 || strings.ContainsAny(id, `/\`) {
+		return "", errBadDaemon
+	}
+	for _, r := range id {
+		if unicode.IsControl(r) {
+			return "", errBadDaemon
+		}
+	}
+	return id, nil
+}
+
 // NormalizeVisibility accepts the two published modes. Anything else is private
 // only when the caller asked for the default; an explicit unknown value errors.
 func NormalizeVisibility(value string) (string, error) {

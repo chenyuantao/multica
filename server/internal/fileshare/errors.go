@@ -9,7 +9,8 @@ import (
 var (
 	errBadMachine    = errors.New("invalid machine name")
 	errBadVisibility = errors.New("visibility must be private or workspace")
-	ErrMachineTaken  = errors.New("machine name is already shared by another user")
+	errBadDaemon     = errors.New("daemon id is missing or invalid")
+	ErrMachineTaken  = errors.New("machine name is already used by another shared machine; pick one with --machine")
 )
 
 // ShareDirs is the directory names a machine share does not walk. The bytes
