@@ -967,4 +967,98 @@ describe("ChatThread older messages", () => {
     fireEvent.scroll(scroller);
     expect(fetchOlder).toHaveBeenCalledTimes(1);
   });
+
+  it("opens at the latest message and stays there while the thread grows", () => {
+    vi.useFakeTimers();
+    let height = 900;
+    const previous = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollHeight");
+    Object.defineProperty(HTMLElement.prototype, "scrollHeight", {
+      configurable: true,
+      get: () => height,
+    });
+    try {
+      renderThread();
+      const scroller = screen.getByRole("list").parentElement as HTMLDivElement;
+      expect(scroller.scrollTop).toBe(900);
+
+      height = 1400;
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+      expect(scroller.scrollTop).toBe(1400);
+
+      scroller.scrollTop = 20;
+      fireEvent.scroll(scroller);
+      height = 1800;
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+      expect(scroller.scrollTop).toBe(20);
+    } finally {
+      if (previous) Object.defineProperty(HTMLElement.prototype, "scrollHeight", previous);
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("ChatThread phone keyboard", () => {
+  class FakeVisualViewport extends EventTarget {
+    height: number;
+    offsetTop = 0;
+    scale = 1;
+    constructor(height: number) {
+      super();
+      this.height = height;
+    }
+  }
+
+  beforeEach(() => {
+    messages = [message("m-1", "latest line")];
+    vi.mocked(useQuery).mockImplementation(() => ({ data: messages, isError: false }) as never);
+    Object.defineProperty(document.documentElement, "clientHeight", { configurable: true, value: 800 });
+  });
+
+  afterEach(() => {
+    Reflect.deleteProperty(document.documentElement, "clientHeight");
+    Reflect.deleteProperty(window, "visualViewport");
+  });
+
+  it("lifts the thread onto the keyboard and scrolls to the latest message", () => {
+    const vv = new FakeVisualViewport(800);
+    Object.defineProperty(window, "visualViewport", { configurable: true, value: vv });
+    const view = renderWithI18n(
+      <ChatThread
+        wsId="ws-1"
+        chat={chat}
+        userId="user-1"
+        panelOpen={false}
+        onTogglePanel={() => {}}
+        mobileNav={{ backHref: "/im", settingsHref: "/im/settings", onOpenProfile: () => {} }}
+      />,
+    );
+    const section = document.querySelector("section") as HTMLElement;
+    expect(section.style.position).toBe("");
+
+    const scroller = screen.getByRole("list").parentElement as HTMLDivElement;
+    Object.defineProperty(scroller, "scrollHeight", { configurable: true, value: 900 });
+    scroller.scrollTop = 40;
+
+    act(() => {
+      vv.height = 480;
+      vv.dispatchEvent(new Event("resize"));
+    });
+
+    expect(section.style.position).toBe("fixed");
+    expect(section.style.bottom).toBe("320px");
+    expect(section.style.height).toBe("480px");
+    expect(scroller.scrollTop).toBe(900);
+
+    view.unmount();
+    renderThread();
+    act(() => {
+      vv.height = 480;
+      vv.dispatchEvent(new Event("resize"));
+    });
+    expect((document.querySelector("section") as HTMLElement).style.position).toBe("");
+  });
 });

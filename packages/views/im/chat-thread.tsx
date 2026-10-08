@@ -27,6 +27,7 @@ import type { Agent, AgentTask, AskAISelection, Comment, FocusNote, GroupChat } 
 import { copyText } from "@multica/ui/lib/clipboard";
 import { cn } from "@multica/ui/lib/utils";
 import { Button } from "@multica/ui/components/ui/button";
+import { useVisualViewportKeyboard } from "../chat/components/use-visual-viewport-keyboard";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -180,6 +181,11 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAsk
   const olderAnchorRef = useRef<{ height: number; top: number } | null>(null);
   const seenChatRef = useRef(chat.id);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  // The phone thread is a fixed svh column, so the page cannot pan and the
+  // first focus leaves the composer under the keyboard. Pin the column to
+  // the visual viewport instead, and keep the latest message in view.
+  const keyboard = useVisualViewportKeyboard();
+  const phoneKeyboard = mobileNav ? keyboard : null;
   const openAgentDetail = useOpenAgentDetail();
   const agentClicks = useAgentClickActions(
     wsId,
@@ -450,6 +456,35 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAsk
     if (stickToBottomRef.current) el.scrollTop = el.scrollHeight;
   }, [messages.length, pending.length, chat.id, isFetchingNextPage]);
 
+  // Opening a chat paints before rich content and the phone column have their
+  // final height, so the one layout pass above lands short of the latest
+  // message. Keep pinning until that settles, or the reader scrolls away.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const pin = () => {
+      if (!stickToBottomRef.current || olderAnchorRef.current) return;
+      el.scrollTop = el.scrollHeight;
+    };
+    pin();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(pin);
+    observer?.observe(el);
+    for (const child of el.children) observer?.observe(child);
+    const timers = [0, 50, 150, 400].map((ms) => window.setTimeout(pin, ms));
+    return () => {
+      observer?.disconnect();
+      for (const id of timers) window.clearTimeout(id);
+    };
+  }, [chat.id, messages.length, pending.length]);
+
+  useLayoutEffect(() => {
+    if (!phoneKeyboard) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    stickToBottomRef.current = true;
+    el.scrollTop = el.scrollHeight;
+  }, [phoneKeyboard]);
+
   const loadOlder = useCallback(() => {
     const el = scrollRef.current;
     if (!el || !hasNextPage || isFetchingNextPage || olderAnchorRef.current) return;
@@ -584,7 +619,20 @@ export function ChatThread({ wsId, chat, userId, panelOpen, onTogglePanel, onAsk
         };
 
   return (
-    <section className="flex h-full min-w-0 flex-1 flex-col bg-background">
+    <section
+      className="flex h-full min-w-0 flex-1 flex-col bg-background"
+      style={
+        phoneKeyboard
+          ? {
+              position: "fixed",
+              left: 0,
+              right: 0,
+              bottom: phoneKeyboard.occludedBottom,
+              height: phoneKeyboard.viewportHeight,
+            }
+          : undefined
+      }
+    >
       {mobileNav ? (
         <MobileLevelHeader
           title={title}
