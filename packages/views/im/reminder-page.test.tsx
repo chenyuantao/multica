@@ -409,30 +409,6 @@ describe("ReminderPage", () => {
     expect(screen.getByLabelText("4 unread messages")).toHaveTextContent("4");
   });
 
-  it("shows the unread badge again while the reminder page is held off screen", () => {
-    reminderSource.items = [reminder("r1", "Ship it", "2026-10-08", { unread_count: 4 })];
-    function Harness({ active }: { active: boolean }) {
-      const navigation: NavigationAdapter = {
-        push: vi.fn(),
-        replace: vi.fn(),
-        back: vi.fn(),
-        pathname: "/acme/reminder",
-        searchParams: new URLSearchParams(),
-        hash: "",
-        getShareableUrl: (path) => path,
-      };
-      return (
-        <NavigationProvider value={navigation}>
-          <ReminderPage active={active} />
-        </NavigationProvider>
-      );
-    }
-    const view = renderWithI18n(<Harness active />);
-    expect(screen.queryByLabelText("4 unread messages")).not.toBeInTheDocument();
-    view.rerender(<Harness active={false} />);
-    expect(screen.getByLabelText("4 unread messages")).toHaveTextContent("4");
-  });
-
   it("opens today's incomplete reminder and scrolls it into view", () => {
     const scroll = vi.fn();
     const original = Element.prototype.scrollIntoView;
@@ -492,38 +468,6 @@ describe("ReminderPage", () => {
     const closed = renderPage();
     expect(closed.navigation.replace).not.toHaveBeenCalled();
     expect(screen.queryByTestId("thread")).not.toBeInTheDocument();
-  });
-
-  it("keeps the opened conversation mounted while another section is showing", () => {
-    function Harness({ active }: { active: boolean }) {
-      const navigation: NavigationAdapter = {
-        push: vi.fn(),
-        replace: vi.fn(),
-        back: vi.fn(),
-        pathname: active ? "/acme/reminder" : "/acme/im",
-        searchParams: new URLSearchParams(),
-        hash: "",
-        getShareableUrl: (path) => path,
-      };
-      return (
-        <NavigationProvider value={navigation}>
-          <ReminderPage active={active} />
-        </NavigationProvider>
-      );
-    }
-    const view = renderWithI18n(<Harness active />);
-    expect(screen.getByTestId("thread")).toHaveTextContent("Ship it");
-
-    view.rerender(<Harness active={false} />);
-    expect(screen.getByTestId("thread")).toHaveTextContent("Ship it");
-
-    reminderSource.items = [
-      reminder("r1", "Ship it", "2026-10-08", { status: "done" }),
-      reminder("closer", "Closer", "2026-10-08"),
-    ];
-    view.rerender(<Harness active />);
-    expect(screen.getByTestId("thread")).toHaveTextContent("Ship it");
-    expect(screen.getByTestId("thread")).not.toHaveTextContent("Closer");
   });
 
   it("does not open a reminder level on a phone", () => {

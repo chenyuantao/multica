@@ -85,13 +85,13 @@ function isTyping(el: Element | null): boolean {
  * a phone keeps the list inside Me and opens a reminder as its own level.
  *
  * The first visit lands on today's incomplete reminder, or the nearest other
- * day's. That choice stays in memory: switching sections keeps this tree
- * mounted, and a later visit reopens the same conversation.
+ * day's. That open conversation is kept in memory for the tab, so leaving and
+ * returning reopens it instead of choosing again.
  * Creating a reminder opens its conversation at once, focuses the composer,
  * and brings that row into view, moving the week or filter when the row
  * would otherwise be hidden.
  */
-export function ReminderPage({ active = true }: { active?: boolean }) {
+export function ReminderPage() {
   const { t } = useT("im");
   const wsId = useWorkspaceId();
   const userId = useAuthStore((s) => s.user?.id ?? "");
@@ -119,18 +119,17 @@ export function ReminderPage({ active = true }: { active?: boolean }) {
   const view = useMemo(() => viewReminders(all, filter, anchor, todayKey), [all, filter, anchor, todayKey]);
   const stats = useMemo(() => tagStats(view), [view]);
   const items = useMemo(() => filterByTags(view, activeTags, editingId), [view, activeTags, editingId]);
-  const requestedId = active ? navigation.searchParams.get("item") : null;
+  const requestedId = navigation.searchParams.get("item");
   const rememberedId = reminderOpenId(wsId);
   const openId = requestedId ?? (rememberedId || null);
   const listed = openId ? all.find((r) => r.id === openId) ?? null : null;
   if (listed && pendingCreated.current?.id === listed.id) pendingCreated.current = null;
   const selected = listed ?? (openId && pendingCreated.current?.id === openId ? pendingCreated.current : null);
   // The open conversation is read while it is on screen, so its badge would
-  // only flash. A phone list after leaving the thread, a hidden page, and a
-  // backgrounded window keep the stored count.
+  // only flash. A phone list after leaving the thread, and a backgrounded
+  // window, keep the stored count.
   const foreground = useAppForeground();
-  const readingId =
-    active && foreground && selected && (!isMobile || requestedId !== null) ? selected.id : null;
+  const readingId = foreground && selected && (!isMobile || requestedId !== null) ? selected.id : null;
   useForegroundChat(readingId);
 
   const navRef = useRef(navigation);
@@ -139,7 +138,6 @@ export function ReminderPage({ active = true }: { active?: boolean }) {
   pathsRef.current = paths;
   const itemInUrl = requestedId ?? "";
   useEffect(() => {
-    if (!active) return;
     const nav = navRef.current;
     const urlId = nav.searchParams.get("item");
     if (openingId.current) {
@@ -178,7 +176,7 @@ export function ReminderPage({ active = true }: { active?: boolean }) {
       if (key < monday || key > sunday) setAnchor(fromDateKey(key));
     }
     nav.replace(pathsRef.current.reminderItem(target.id));
-  }, [active, all, isMobile, itemInUrl, list.isPending, today, todayKey, wsId]);
+  }, [all, isMobile, itemInUrl, list.isPending, today, todayKey, wsId]);
 
   const { data: agents = EMPTY_AGENTS } = useQuery(agentListOptions(wsId));
   const mentionCandidates = useMemo<ComposerMention[]>(
@@ -246,7 +244,6 @@ export function ReminderPage({ active = true }: { active?: boolean }) {
     pasteRef.current = { all, create: actions.create, todayKey, candidates: mentionCandidates };
   });
   useEffect(() => {
-    if (!active) return;
     const onPaste = (e: ClipboardEvent) => {
       if (isTyping(document.activeElement)) return;
       const text = e.clipboardData?.getData("text/plain").trim();
@@ -258,7 +255,7 @@ export function ReminderPage({ active = true }: { active?: boolean }) {
     };
     document.addEventListener("paste", onPaste);
     return () => document.removeEventListener("paste", onPaste);
-  }, [active]);
+  }, []);
 
   const chooseFilter = (next: ReminderFilter) => {
     setFilter(next);
@@ -284,7 +281,6 @@ export function ReminderPage({ active = true }: { active?: boolean }) {
       readingId={readingId}
       scrollToId={scrollToId}
       draggable={!isMobile}
-      active={active}
       mentionCandidates={mentionCandidates}
       onEditingChange={setEditingId}
       actions={actions}
@@ -440,7 +436,6 @@ export function ReminderPage({ active = true }: { active?: boolean }) {
           reminder={selected}
           userId={userId}
           mentionCandidates={mentionCandidates}
-          live={active}
           focusComposer={composerFocusId === selected.id}
           onClose={close}
         />
@@ -615,7 +610,6 @@ function ReminderThreadColumn({
   reminder,
   userId,
   mentionCandidates,
-  live,
   focusComposer,
   onClose,
 }: {
@@ -623,7 +617,6 @@ function ReminderThreadColumn({
   reminder: Reminder;
   userId: string;
   mentionCandidates: ComposerMention[];
-  live: boolean;
   focusComposer: boolean;
   onClose: () => void;
 }) {
@@ -640,7 +633,6 @@ function ReminderThreadColumn({
         panelOpen={false}
         onTogglePanel={() => {}}
         mentionCandidates={mentionCandidates}
-        live={live}
         focusComposer={focusComposer}
         onClose={onClose}
       />

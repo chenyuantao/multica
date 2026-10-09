@@ -86,8 +86,6 @@ interface ReminderListProps {
   scrollToId: string | null;
   /** Rows reorder and change day by dragging; off on phones, where a long press opens the menu. */
   draggable: boolean;
-  /** False while the page is held hidden. Document listeners stay off so another section keeps the keys. */
-  active: boolean;
   /** Agents a title can @. Naming one in the title assigns the reminder. */
   mentionCandidates: ComposerMention[];
   onEditingChange: (id: string | null) => void;
@@ -111,7 +109,6 @@ export function ReminderList({
   readingId,
   scrollToId,
   draggable,
-  active,
   mentionCandidates,
   onEditingChange,
   actions,
@@ -191,7 +188,6 @@ export function ReminderList({
   };
 
   useEffect(() => {
-    if (!active) return;
     const onKeyDown = (e: globalThis.KeyboardEvent) => {
       if (e.key === "Escape") setSelected(new Set());
     };
@@ -207,7 +203,7 @@ export function ReminderList({
       document.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("click", onClick);
     };
-  }, [active]);
+  }, []);
 
   useEffect(() => {
     commitLock.current = false;

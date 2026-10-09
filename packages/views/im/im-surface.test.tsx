@@ -10,9 +10,7 @@ vi.mock("./im-page", () => ({
 }));
 vi.mock("./knowledge-page", () => ({ KnowledgePage: () => <div>surface-knowledge</div> }));
 vi.mock("./collect-page", () => ({ CollectPage: () => <div>surface-collect</div> }));
-vi.mock("./reminder-page", () => ({
-  ReminderPage: ({ active }: { active?: boolean }) => <div>surface-reminder:{String(active)}</div>,
-}));
+vi.mock("./reminder-page", () => ({ ReminderPage: () => <div>surface-reminder</div> }));
 vi.mock("../modals/registry", () => ({ ModalRegistry: () => <div>modals</div> }));
 
 import { ImSurface } from "./im-surface";
@@ -35,7 +33,7 @@ function renderAt(pathname: string) {
 }
 
 describe("ImSurface", () => {
-  it("renders chats, contacts, notes, and favorites from the path", () => {
+  it("renders chats, contacts, notes, reminders, and favorites from the path", () => {
     const first = renderAt("/acme/im");
     expect(screen.getByText("surface-im:chats")).toBeInTheDocument();
     first.unmount();
@@ -48,36 +46,11 @@ describe("ImSurface", () => {
     expect(screen.getByText("surface-knowledge")).toBeInTheDocument();
     notes.unmount();
 
+    const reminder = renderAt("/acme/reminder");
+    expect(screen.getByText("surface-reminder")).toBeInTheDocument();
+    reminder.unmount();
+
     renderAt("/acme/collect");
     expect(screen.getByText("surface-collect")).toBeInTheDocument();
-  });
-
-  it("keeps the reminder page mounted when another section is shown", () => {
-    function Harness({ pathname }: { pathname: string }) {
-      const navigation: NavigationAdapter = {
-        push: vi.fn(),
-        replace: vi.fn(),
-        back: vi.fn(),
-        pathname,
-        searchParams: new URLSearchParams(),
-        hash: "",
-        getShareableUrl: (path) => path,
-      };
-      return (
-        <NavigationProvider value={navigation}>
-          <ImSurface />
-        </NavigationProvider>
-      );
-    }
-    const view = renderWithI18n(<Harness pathname="/acme/reminder" />);
-    expect(screen.getByText("surface-reminder:true")).toBeInTheDocument();
-
-    view.rerender(<Harness pathname="/acme/im" />);
-    expect(screen.getByText("surface-im:chats")).toBeInTheDocument();
-    expect(screen.getByText("surface-reminder:false", { hidden: true })).toBeInTheDocument();
-    expect(screen.queryByText("surface-reminder:true")).not.toBeInTheDocument();
-
-    view.rerender(<Harness pathname="/acme/reminder" />);
-    expect(screen.getByText("surface-reminder:true")).toBeInTheDocument();
   });
 });
