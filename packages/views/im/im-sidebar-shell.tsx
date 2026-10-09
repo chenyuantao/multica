@@ -1,19 +1,19 @@
 "use client";
 
 import { Search } from "lucide-react";
-import { useLayoutEffect, useRef, useState } from "react";
 import { useIsMobile } from "@multica/ui/hooks/use-mobile";
 import {
   SIDEBAR_WIDTH_DEFAULT,
-  clampSidebarWidth,
-  sidebarSplitWidth,
-  sidebarWidthBounds,
+  SIDEBAR_WIDTH_MAX,
+  SIDEBAR_WIDTH_MIN,
   useSidebarWidth,
 } from "@multica/ui/hooks/use-sidebar-width";
 import { cn } from "@multica/ui/lib/utils";
 import { useT } from "../i18n";
 import { DragStrip } from "../platform";
 import { ColumnResizeHandle } from "./resizable-column";
+
+const WIDTH_OPTIONS = { defaultWidth: SIDEBAR_WIDTH_DEFAULT, min: SIDEBAR_WIDTH_MIN, max: SIDEBAR_WIDTH_MAX };
 
 interface ImSidebarShellProps {
   className?: string;
@@ -24,32 +24,9 @@ interface ImSidebarShellProps {
 export function ImSidebarShell({ className, children }: ImSidebarShellProps) {
   const { t } = useT("im");
   const isMobile = useIsMobile();
-  const asideRef = useRef<HTMLElement>(null);
-  const { width: preferred, commitWidth } = useSidebarWidth();
-  const [split, setSplit] = useState(0);
-  useLayoutEffect(() => {
-    if (isMobile) return;
-    const column = asideRef.current;
-    if (!column) return;
-    const measure = () => setSplit(sidebarSplitWidth(column));
-    measure();
-    const parent = column.parentElement;
-    const observer = new ResizeObserver(measure);
-    if (parent) observer.observe(parent);
-    return () => observer.disconnect();
-  }, [isMobile]);
-  const bounds = sidebarWidthBounds(split);
-  const width = clampSidebarWidth(preferred, split);
-  // Until the row is measured, keep keyboard steps working. A real layout
-  // replaces this with 3:7 and 7:3 before the user can drag.
-  const options = {
-    defaultWidth: SIDEBAR_WIDTH_DEFAULT,
-    min: bounds?.min ?? 1,
-    max: bounds?.max ?? 100_000,
-  };
+  const { width, commitWidth } = useSidebarWidth();
   return (
     <aside
-      ref={asideRef}
       className={cn("relative flex h-full shrink-0 flex-col border-r bg-sidebar", className)}
       style={isMobile ? undefined : { width }}
     >
@@ -58,7 +35,7 @@ export function ImSidebarShell({ className, children }: ImSidebarShellProps) {
         <ColumnResizeHandle
           edge="right"
           width={width}
-          options={options}
+          options={WIDTH_OPTIONS}
           onCommit={commitWidth}
           label={t(($) => $.sidebar.resize)}
         />

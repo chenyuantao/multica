@@ -16,8 +16,8 @@ import { ContentEditor } from "../editor";
 import { useT } from "../i18n";
 import { useOpenAgentDetail } from "../modals/agent-detail";
 import { AddMemberDialog } from "./add-member-dialog";
-import { CHAT_PANEL_WIDTH } from "./chat-panel-width";
-import { ColumnResizeHandle, useColumnWidth } from "./resizable-column";
+import { ColumnResizeHandle } from "./resizable-column";
+import { useDetailsColumnWidth } from "./use-details-column-width";
 import { ChatDocumentsSection } from "./chat-documents-section";
 import { ContactProfile } from "./contact-card";
 import { useAgentClickActions } from "./use-agent-click-actions";
@@ -59,7 +59,8 @@ export function ChatDetailsPanel({ wsId, chat, userId, variant = "aside", onOpen
   const { data: runtimes = EMPTY_RUNTIMES } = useQuery(runtimeListOptions(wsId));
   const removeMember = useRemoveGroupChatMember(wsId, chat.id);
   const openAgentDetail = useOpenAgentDetail();
-  const { width, commit, options } = useColumnWidth("details", CHAT_PANEL_WIDTH);
+  const columnRef = useRef<HTMLDivElement>(null);
+  const { width, commit, options } = useDetailsColumnWidth(columnRef);
 
   const isCreator = chat.creator_type === "member" && chat.creator_id === userId;
   const agentMembers = chat.members.filter((m) => m.member_type === "agent");
@@ -174,7 +175,7 @@ export function ChatDetailsPanel({ wsId, chat, userId, variant = "aside", onOpen
 
   if (variant === "page") return panel;
   return (
-    <div className="relative h-full shrink-0 border-l" style={{ width }}>
+    <div ref={columnRef} className="relative h-full shrink-0 border-l" style={{ width }}>
       {panel}
       <ColumnResizeHandle
         edge="left"

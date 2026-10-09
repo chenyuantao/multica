@@ -36,7 +36,7 @@ import { cn } from "@multica/ui/lib/utils";
 import { useT } from "../i18n";
 import { useNavigation } from "../navigation";
 import { DragStrip } from "../platform";
-import { CHAT_PANEL_WIDTH } from "./chat-panel-width";
+import { useDetailsColumnWidth } from "./use-details-column-width";
 import { ChatProgressRoute } from "./chat-progress-view";
 import { ChatThread } from "./chat-thread";
 import { ImRail } from "./im-rail";
@@ -53,7 +53,7 @@ import {
 } from "./reminder-board";
 import { addDays, startOfWeek, toDateKey, weekCode } from "./reminder-dates";
 import { ReminderList, type ReminderListActions } from "./reminder-list";
-import { ColumnResizeHandle, useColumnWidth } from "./resizable-column";
+import { ColumnResizeHandle } from "./resizable-column";
 
 const EMPTY_REMINDERS: Reminder[] = [];
 const EMPTY_AGENTS: Agent[] = [];
@@ -515,9 +515,10 @@ function ReminderThreadColumn({
   onClose: () => void;
 }) {
   const { t } = useT("im");
-  const { width, commit, options } = useColumnWidth("details", CHAT_PANEL_WIDTH);
+  const columnRef = useRef<HTMLDivElement>(null);
+  const { width, commit, options } = useDetailsColumnWidth(columnRef);
   return (
-    <div className="relative flex h-full shrink-0 flex-col border-l" style={{ width }}>
+    <div ref={columnRef} className="relative flex h-full shrink-0 flex-col border-l" style={{ width }}>
       <ChatThread
         key={reminder.id}
         wsId={wsId}

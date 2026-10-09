@@ -9,10 +9,10 @@ import { cn } from "@multica/ui/lib/utils";
 import { useT } from "../i18n";
 import { ChatDetailsPanel } from "./chat-details-panel";
 import { DocumentVoiceAsk } from "./document-voice-ask";
-import { CHAT_PANEL_WIDTH } from "./chat-panel-width";
 import { useInsertDocExcerpt } from "./doc-excerpt-insert";
 import { retainOpenNotes, type KnowledgeNoteTab } from "./knowledge-note-tabs";
-import { ColumnResizeHandle, useColumnWidth } from "./resizable-column";
+import { ColumnResizeHandle } from "./resizable-column";
+import { useDetailsColumnWidth } from "./use-details-column-width";
 
 const KnowledgeDocument = lazy(() =>
   import("./knowledge-document").then((m) => ({ default: m.KnowledgeDocument })),
@@ -59,18 +59,20 @@ export function ChatSidePanel({
   const { t } = useT("im");
   const insertExcerpt = useInsertDocExcerpt();
   const { getActorName } = useActorName();
-  const { width, commit, options } = useColumnWidth("details", CHAT_PANEL_WIDTH);
+  const columnRef = useRef<HTMLDivElement>(null);
+  const { width, commit, options, bounded } = useDetailsColumnWidth(columnRef);
   const expandedFor = useRef<string | null>(null);
-  // Opening a document uses the full column. A later drag stays until the next open.
+  // Opening a document uses the widest allowed column. A later drag stays until the next open.
   useEffect(() => {
     if (chrome === "page" || !activePath) {
       expandedFor.current = null;
       return;
     }
+    if (!bounded) return;
     if (expandedFor.current === activePath) return;
     expandedFor.current = activePath;
-    commit(CHAT_PANEL_WIDTH.max);
-  }, [activePath, chrome, commit]);
+    commit(options.max);
+  }, [activePath, bounded, chrome, commit, options.max]);
   const noteKey = `${chat.id}:${notes.map((note) => `${note.path}\n${note.name}`).join("\0")}`;
   const [appliedNoteKey, setAppliedNoteKey] = useState(noteKey);
   const [retained, setRetained] = useState<Record<string, readonly KnowledgeNoteTab[]>>(() =>
@@ -159,7 +161,7 @@ export function ChatSidePanel({
 
   if (chrome === "page") return <div className="flex min-h-0 w-full flex-1 flex-col">{body}</div>;
   return (
-    <div className="relative flex h-full shrink-0 flex-col border-l" style={{ width }}>
+    <div ref={columnRef} className="relative flex h-full shrink-0 flex-col border-l" style={{ width }}>
       {body}
       <ColumnResizeHandle edge="left" width={width} options={options} onCommit={commit} label={t(($) => $.panel.resize)} />
     </div>

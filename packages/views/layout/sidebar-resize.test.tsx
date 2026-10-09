@@ -7,22 +7,7 @@ import {
   SidebarRail,
   useSidebar,
 } from "@multica/ui/components/ui/sidebar";
-import { sidebarSplitWidth } from "@multica/ui/hooks/use-sidebar-width";
 import { renderWithI18n } from "../test/i18n";
-
-function box(width: number, left: number): DOMRect {
-  return {
-    x: left,
-    y: 0,
-    width,
-    height: 800,
-    top: 0,
-    bottom: 800,
-    left,
-    right: left + width,
-    toJSON: () => ({}),
-  };
-}
 
 describe("left sidebar resizing", () => {
   beforeEach(() => {
@@ -120,51 +105,6 @@ describe("left sidebar resizing", () => {
 
     fireEvent.click(rail);
     expect(sidebar).toHaveAttribute("data-state", "expanded");
-  });
-
-  it("stops a drag at 3:7 and 7:3 of the shell, ignoring a leading rail", () => {
-    localStorage.setItem("sidebar_width", "900");
-    let containerWidth = 256;
-    const rects = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
-      if (this.dataset.slot === "sidebar-wrapper") return box(1060, 0);
-      if (this.dataset.slot === "sidebar-gap") return box(containerWidth, 60);
-      if (this.dataset.slot === "sidebar-container") return box(containerWidth, 60);
-      return box(0, 0);
-    });
-
-    const { container } = renderWithI18n(
-      <SidebarProvider>
-        <Sidebar>
-          <SidebarRail />
-        </Sidebar>
-      </SidebarProvider>,
-    );
-    const wrapper = container.querySelector<HTMLElement>("[data-slot='sidebar-wrapper']")!;
-    const sidebarGap = container.querySelector<HTMLElement>("[data-slot='sidebar-gap']")!;
-    const rail = container.querySelector<HTMLButtonElement>("[data-slot='sidebar-rail']")!;
-    rail.setPointerCapture = vi.fn();
-    rail.hasPointerCapture = vi.fn(() => true);
-    rail.releasePointerCapture = vi.fn();
-
-    expect(sidebarSplitWidth(sidebarGap, wrapper)).toBe(1000);
-    expect(wrapper.style.getPropertyValue("--sidebar-width")).toBe("700px");
-    expect(localStorage.getItem("sidebar_width")).toBe("900");
-
-    fireEvent.pointerDown(rail, { button: 0, clientX: 256, isPrimary: true, pointerId: 9 });
-    fireEvent.pointerMove(document, { buttons: 1, clientX: 2000, pointerId: 9 });
-    expect(sidebarGap.style.width).toBe("700px");
-    fireEvent.pointerUp(document, { pointerId: 9 });
-    expect(wrapper.style.getPropertyValue("--sidebar-width")).toBe("700px");
-    expect(localStorage.getItem("sidebar_width")).toBe("700");
-
-    containerWidth = 700;
-    fireEvent.pointerDown(rail, { button: 0, clientX: 700, isPrimary: true, pointerId: 10 });
-    fireEvent.pointerMove(document, { buttons: 1, clientX: -400, pointerId: 10 });
-    expect(sidebarGap.style.width).toBe("300px");
-    fireEvent.pointerUp(document, { pointerId: 10 });
-    expect(localStorage.getItem("sidebar_width")).toBe("300");
-
-    rects.mockRestore();
   });
 
   it("restores the committed width and cursor state when pointer capture is cancelled", () => {

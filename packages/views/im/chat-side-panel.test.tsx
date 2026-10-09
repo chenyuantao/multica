@@ -53,21 +53,50 @@ const chat = {
 const weekly = { path: "Work/周报.md", name: "周报" };
 const plan = { path: "Work/计划.md", name: "计划" };
 
+function box(width: number): DOMRect {
+  return {
+    x: 0,
+    y: 0,
+    width,
+    height: 10,
+    top: 0,
+    bottom: 10,
+    left: 0,
+    right: width,
+    toJSON: () => ({}),
+  };
+}
+
+/** Middle content is 680px and the panel is 320px, so the pair is 1000px. A leading list is wider and must not count. */
+function mockContentPair() {
+  const rects = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+    if (this.dataset.middle != null) return box(680);
+    if (this.dataset.list != null) return box(900);
+    if (this.querySelector("[role='separator']")) return box(320);
+    return box(0);
+  });
+  return () => rects.mockRestore();
+}
+
 function renderPanel(notes: { path: string; name: string }[] = [], activePath: string | null = null) {
   const onSelectDetails = vi.fn();
   const onSelectNote = vi.fn();
   const onCloseNote = vi.fn();
   renderWithI18n(
-    <ChatSidePanel
-      wsId="ws-1"
-      chat={chat}
-      userId="user-1"
-      notes={notes}
-      activePath={activePath}
-      onSelectDetails={onSelectDetails}
-      onSelectNote={onSelectNote}
-      onCloseNote={onCloseNote}
-    />,
+    <>
+      <div data-list="" />
+      <div data-middle="" />
+      <ChatSidePanel
+        wsId="ws-1"
+        chat={chat}
+        userId="user-1"
+        notes={notes}
+        activePath={activePath}
+        onSelectDetails={onSelectDetails}
+        onSelectNote={onSelectNote}
+        onCloseNote={onCloseNote}
+      />
+    </>,
   );
   return { onSelectDetails, onSelectNote, onCloseNote };
 }
@@ -99,19 +128,24 @@ describe("ChatSidePanel", () => {
     expect(screen.queryByRole("button", { name: "Close Launch" })).toBeNull();
   });
 
-  it("caps the details column at 520px", () => {
+  it("caps the details column at 7:3 of the middle content, ignoring the list", () => {
+    const restore = mockContentPair();
     renderPanel();
     const handle = screen.getByRole("separator", { name: "Resize panel" });
-    expect(handle).toHaveAttribute("aria-valuemax", "520");
+    expect(handle).toHaveAttribute("aria-valuemin", "300");
+    expect(handle).toHaveAttribute("aria-valuemax", "700");
     expect(handle).toHaveAttribute("aria-valuenow", "320");
+    restore();
   });
 
-  it("widens to 520px when a document opens", () => {
+  it("widens to 7:3 of the middle content when a document opens", () => {
+    const restore = mockContentPair();
     renderPanel([weekly], weekly.path);
     const handle = screen.getByRole("separator", { name: "Resize panel" });
-    expect(handle).toHaveAttribute("aria-valuenow", "520");
-    expect(handle.parentElement).toHaveStyle({ width: "520px" });
-    expect(localStorage.getItem("multica:im-column-width:details")).toBe("520");
+    expect(handle).toHaveAttribute("aria-valuenow", "700");
+    expect(handle.parentElement).toHaveStyle({ width: "700px" });
+    expect(localStorage.getItem("multica:im-column-width:details")).toBe("700");
+    restore();
   });
 
   it("keeps a manual width until another document opens", () => {
@@ -124,16 +158,36 @@ describe("ChatSidePanel", () => {
       onSelectNote: vi.fn(),
       onCloseNote: vi.fn(),
     };
-    const view = renderWithI18n(<ChatSidePanel {...props} activePath={weekly.path} />);
+    const restore = mockContentPair();
+    const view = renderWithI18n(
+      <>
+        <div data-list="" />
+        <div data-middle="" />
+        <ChatSidePanel {...props} activePath={weekly.path} />
+      </>,
+    );
     const handle = () => screen.getByRole("separator", { name: "Resize panel" });
     fireEvent.keyDown(handle(), { key: "ArrowRight" });
-    expect(handle()).toHaveAttribute("aria-valuenow", "504");
+    expect(handle()).toHaveAttribute("aria-valuenow", "684");
 
-    view.rerender(<ChatSidePanel {...props} activePath={weekly.path} />);
-    expect(handle()).toHaveAttribute("aria-valuenow", "504");
+    view.rerender(
+      <>
+        <div data-list="" />
+        <div data-middle="" />
+        <ChatSidePanel {...props} activePath={weekly.path} />
+      </>,
+    );
+    expect(handle()).toHaveAttribute("aria-valuenow", "684");
 
-    view.rerender(<ChatSidePanel {...props} activePath={plan.path} />);
-    expect(handle()).toHaveAttribute("aria-valuenow", "520");
+    view.rerender(
+      <>
+        <div data-list="" />
+        <div data-middle="" />
+        <ChatSidePanel {...props} activePath={plan.path} />
+      </>,
+    );
+    expect(handle()).toHaveAttribute("aria-valuenow", "700");
+    restore();
   });
 
   it("keeps the previous tab's text when another tab is selected", () => {
