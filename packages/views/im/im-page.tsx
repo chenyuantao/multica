@@ -46,6 +46,7 @@ import {
 } from "./knowledge-note-tabs";
 import { useAskAILauncher } from "./use-ask-ai-launcher";
 import { entryKey, useChatDirectory, type DirectoryEntry } from "./use-chat-directory";
+import { useForegroundChat } from "./use-foreground-chat";
 
 const EMPTY_CHATS: GroupChat[] = [];
 
@@ -91,6 +92,8 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
   const memberChatId = view === "contacts" ? navigation.searchParams.get("chat") : null;
   const memberChat = memberChatId ? chats.find((c) => c.id === memberChatId) ?? null : null;
   const sessionId = view === "chats" ? selected?.id ?? null : null;
+  const visibleChatId = view === "chats" ? (isMobile ? requested?.id ?? null : selected?.id ?? null) : null;
+  useForegroundChat(visibleChatId);
   const noteTabs = knowledgeNoteTabsFor(noteTabsByChat, sessionId);
   const focusedNote = noteTabs.notes.find((note) => note.path === noteTabs.activePath) ?? null;
   const patchNoteTabs = useCallback(

@@ -21,6 +21,7 @@ import type {
   InboxItem,
   Workspace,
 } from "../types";
+import { setForegroundChatId } from "../platform/system-notification";
 import {
   applyChatCancelFinalizedToCache,
   applyChatDoneToCache,
@@ -811,6 +812,7 @@ describe("handleInboxNew", () => {
       slug: "",
       itemId: "item-1",
       issueKey: "issue-1",
+      url: "",
       title: "Mentioned you",
       body: "in a comment",
     });
@@ -989,6 +991,82 @@ describe("handleInboxNew", () => {
     await handleInboxNew(qc, inboxItem());
 
     expect(webBanners).toHaveLength(0);
+  });
+
+  function withFocus(focused: boolean): () => void {
+    const previous = Object.getOwnPropertyDescriptor(globalThis, "document");
+    Object.defineProperty(globalThis, "document", {
+      configurable: true,
+      value: { hasFocus: () => focused },
+    });
+    return () => {
+      if (previous) Object.defineProperty(globalThis, "document", previous);
+      else delete (globalThis as { document?: Document }).document;
+    };
+  }
+
+  function chatItem() {
+    return inboxItem({
+      type: "new_comment",
+      issue_id: "chat-1",
+      title: "Launch",
+      body: "hey [@Ada](mention://member/abc)\n\nship it",
+      details: { surface: "im", comment_id: "c1" },
+    });
+  }
+
+  it("banners a chat message while the window is focused on a different conversation", async () => {
+    const restore = withFocus(true);
+    setForegroundChatId("other-chat");
+    try {
+      const qc = createQueryClient();
+      qc.setQueryData<Workspace[]>(workspaceKeys.list(), [workspace()]);
+      qc.setQueryData(notificationPreferenceKeys.all("ws-a"), {
+        preferences: { system_notifications: "all" },
+      });
+      installBrowserNotification("granted");
+
+      await handleInboxNew(qc, chatItem());
+
+      expect(webBanners).toHaveLength(1);
+      expect(webBanners[0]?.title).toBe("Launch");
+      expect(webBanners[0]?.options?.body).toBe("hey @Ada ship it");
+    } finally {
+      setForegroundChatId(null);
+      restore();
+    }
+  });
+
+  it("stays quiet while the focused window is already on that conversation", async () => {
+    const restore = withFocus(true);
+    setForegroundChatId("chat-1");
+    try {
+      const qc = createQueryClient();
+      qc.setQueryData<Workspace[]>(workspaceKeys.list(), [workspace()]);
+      installBrowserNotification("granted");
+
+      await handleInboxNew(qc, chatItem());
+
+      expect(webBanners).toHaveLength(0);
+    } finally {
+      setForegroundChatId(null);
+      restore();
+    }
+  });
+
+  it("stays quiet for an ordinary inbox row while the window is focused", async () => {
+    const restore = withFocus(true);
+    try {
+      const qc = createQueryClient();
+      qc.setQueryData<Workspace[]>(workspaceKeys.list(), [workspace()]);
+      installBrowserNotification("granted");
+
+      await handleInboxNew(qc, inboxItem());
+
+      expect(webBanners).toHaveLength(0);
+    } finally {
+      restore();
+    }
   });
 });
 

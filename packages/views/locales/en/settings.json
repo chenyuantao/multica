@@ -687,9 +687,9 @@
     },
     "browser": {
       "label": "Browser notifications",
-      "hint": "Allow notification banners for new inbox items and the unread count on the installed app's icon.",
+      "hint": "Show a banner for unread messages while this site is open. Turning this on also subscribes this device to push, so a notification still arrives after the site is closed.",
       "enable": "Enable",
-      "granted": "This browser can show notification banners.",
+      "granted": "This browser can show notification banners. Push while the site is closed is the switch below.",
       "denied": "Blocked by your browser. Enable notifications for this site in your browser settings.",
       "enabled_badge": "Enabled"
     },

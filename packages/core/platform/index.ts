@@ -12,6 +12,10 @@ export {
   getWebNotificationPermission,
   requestWebNotificationPermission,
   showWebNotification,
+  setForegroundChatId,
+  clearForegroundChatId,
+  getForegroundChatId,
+  summarizeNotificationText,
   type SystemNotificationPayload,
   type WebNotificationPermission,
 } from "./system-notification";

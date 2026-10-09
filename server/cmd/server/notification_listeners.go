@@ -661,6 +661,38 @@ func notifyMentionedMembers(
 	}
 }
 
+// notificationSurface classifies an issue that has members. Reminders stay on
+// their own page; every other member issue is a group chat.
+func notificationSurface(hasMembers bool, origin string) string {
+	if !hasMembers {
+		return ""
+	}
+	if origin == "reminder" {
+		return "reminder"
+	}
+	return "im"
+}
+
+func commentNotificationSurface(ctx context.Context, queries *db.Queries, issueID string) string {
+	if issueID == "" {
+		return ""
+	}
+	id := parseUUID(issueID)
+	has, err := queries.IssueHasMembers(ctx, id)
+	if err != nil || !has {
+		return ""
+	}
+	issue, err := queries.GetIssue(ctx, id)
+	if err != nil {
+		return ""
+	}
+	origin := ""
+	if issue.OriginType.Valid {
+		origin = issue.OriginType.String
+	}
+	return notificationSurface(true, origin)
+}
+
 // notifyNewComment notifies the issue's subscribers and the @mentioned members
 // about a comment carried in a comment event payload.
 func notifyNewComment(ctx context.Context, queries *db.Queries, bus *events.Bus, e events.Event, payload map[string]any) {
@@ -698,12 +730,17 @@ func notifyNewComment(ctx context.Context, queries *db.Queries, bus *events.Bus,
 	issueTitle, _ := payload["issue_title"].(string)
 	issueStatus, _ := payload["issue_status"].(string)
 
-	commentDetails := emptyDetails
+	detailsMap := map[string]string{}
 	if commentID != "" {
-		commentDetails, _ = json.Marshal(map[string]string{
-			"comment_id": commentID,
-		})
+		detailsMap["comment_id"] = commentID
 	}
+	// Group chats and reminders are issues with members. The surface tells
+	// browsers and Web Push to open the conversation and to phrase the banner
+	// as that conversation, instead of an inbox row.
+	if surface := commentNotificationSurface(ctx, queries, issueID); surface != "" {
+		detailsMap["surface"] = surface
+	}
+	commentDetails, _ := json.Marshal(detailsMap)
 
 	notifySubscribers(ctx, queries, bus, issueID, issueStatus, e.WorkspaceID, e,
 		nil, "new_comment", "info",

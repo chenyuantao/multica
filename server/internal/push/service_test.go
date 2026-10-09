@@ -2,6 +2,7 @@ package push
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -122,6 +123,26 @@ func TestServiceDeliversInboxItemToOfflineUser(t *testing.T) {
 	}
 	if got != want {
 		t.Fatalf("message = %+v, want %+v", got, want)
+	}
+}
+
+func TestServiceOpensChatAndSummarizesMessage(t *testing.T) {
+	q := &fakeQuerier{subs: []db.PushSubscription{webPushSub()}, slug: "acme", badges: []int64{1}}
+	sender := &fakeSender{}
+	event := inboxEvent("member")
+	item := event.Payload.(map[string]any)["item"].(map[string]any)
+	item["title"] = "Launch"
+	body := "hey [@Ada](mention://member/11111111-1111-1111-1111-111111111111)\n\nship it"
+	item["body"] = &body
+	item["details"] = json.RawMessage(`{"surface":"im","comment_id":"c1"}`)
+	newTestService(q, &fakePresence{}, sender).handleInboxNew(event)
+
+	if len(sender.sent) != 1 {
+		t.Fatalf("sent %d messages, want 1", len(sender.sent))
+	}
+	got := sender.sent[0]
+	if got.Title != "Launch" || got.Body != "hey @Ada ship it" || got.URL != "/acme/im?chat="+testIssueID {
+		t.Fatalf("message = %+v", got)
 	}
 }
 

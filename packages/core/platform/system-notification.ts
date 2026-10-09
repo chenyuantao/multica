@@ -25,11 +25,48 @@ export interface SystemNotificationPayload {
   itemId: string;
   /** `?issue=<…>` selector for the inbox page (issue id, else the item id). */
   issueKey: string;
+  /**
+   * App path opened when the banner is clicked. Empty when the source
+   * workspace is unknown. Chat messages point at the conversation; other
+   * inbox rows point at the inbox.
+   */
+  url: string;
   title: string;
   body: string;
 }
 
 type ClickHandler = (payload: SystemNotificationPayload) => void;
+
+// The conversation currently on screen. The IM and reminder pages report it
+// so a banner is skipped only while the user is already looking at that chat.
+let foregroundChatId: string | null = null;
+
+/** Remember which conversation is open. Pass null when none is. */
+export function setForegroundChatId(id: string | null): void {
+  foregroundChatId = id;
+}
+
+/**
+ * Clear the remembered conversation only when it is still `id`. A newer
+ * report must survive the previous page's unmount cleanup.
+ */
+export function clearForegroundChatId(id: string | null): void {
+  if (foregroundChatId === id) foregroundChatId = null;
+}
+
+export function getForegroundChatId(): string | null {
+  return foregroundChatId;
+}
+
+const MENTION_LINK = /\[([^[\]]+)\]\(mention:\/\/[^)\s]+\)/g;
+
+/** Plain-text preview of a chat message for a notification body. */
+export function summarizeNotificationText(text: string, max = 240): string {
+  const plain = text.replace(MENTION_LINK, "$1").replace(/\s+/g, " ").trim();
+  const chars = Array.from(plain);
+  if (chars.length <= max) return plain;
+  return chars.slice(0, max - 1).join("") + "…";
+}
 
 // Module-level singleton — mirrors how the desktop preload registers its
 // behavior once at boot. The web shell registers a router-aware handler; while
@@ -91,24 +128,51 @@ export async function requestWebNotificationPermission(): Promise<WebNotificatio
  * Show a native browser notification for a new inbox item. No-op unless the
  * Notification API is supported AND permission is "granted" — the caller
  * (`handleInboxNew`) owns the WHETHER (focus + mute gating); this owns only the
- * rendering. Clicking the banner focuses the tab and routes via the registered
- * click handler.
+ * rendering.
+ *
+ * Prefers the service worker, the same display path Web Push uses, so a
+ * background tab and a closed app share one click target. Falls back to the
+ * page Notification constructor where no worker can be registered. The page
+ * click focuses the tab and routes via the registered click handler; a
+ * worker-shown banner is opened by `sw.js` from `data.url`.
  */
-export function showWebNotification(payload: SystemNotificationPayload): void {
+export async function showWebNotification(payload: SystemNotificationPayload): Promise<void> {
   const ctor = getNotificationCtor();
   if (!ctor || ctor.permission !== "granted") return;
+  if (await showWithServiceWorker(payload)) return;
+  showWithConstructor(ctor, payload);
+}
+
+async function showWithServiceWorker(payload: SystemNotificationPayload): Promise<boolean> {
+  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return false;
+  try {
+    const existing = await navigator.serviceWorker.getRegistration("/");
+    const registration = existing ?? await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+    await registration.showNotification(payload.title, {
+      body: payload.body,
+      // Same collapse key as a Web Push for this issue, so the two paths
+      // replace each other instead of stacking.
+      tag: payload.issueKey || payload.itemId,
+      icon: "/icons/icon-192.png",
+      data: { url: payload.url || "/inbox" },
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function showWithConstructor(ctor: typeof Notification, payload: SystemNotificationPayload): void {
   let notification: Notification;
   try {
     notification = new ctor(payload.title, {
       body: payload.body,
-      // Collapse repeat banners for the same inbox row (e.g. a reconnect
-      // replays the `inbox:new` event).
-      tag: payload.itemId,
+      tag: payload.issueKey || payload.itemId,
     });
   } catch {
     // Some engines require an active ServiceWorkerRegistration to construct a
-    // Notification (notably Chrome on Android). Degrade silently — the in-app
-    // inbox and unread badge still surface the new item.
+    // Notification (notably Chrome on Android). The worker path above already
+    // failed, so stop here — the in-app inbox and unread badge still show it.
     return;
   }
   notification.onclick = () => {

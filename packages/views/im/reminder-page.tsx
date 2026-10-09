@@ -59,6 +59,7 @@ import {
 import { addDays, fromDateKey, startOfWeek, toDateKey, weekCode } from "./reminder-dates";
 import { ReminderList, type ReminderListActions } from "./reminder-list";
 import { rememberReminderOpen, reminderOpenId } from "./reminder-session";
+import { useForegroundChat } from "./use-foreground-chat";
 import { ColumnResizeHandle } from "./resizable-column";
 
 const EMPTY_REMINDERS: Reminder[] = [];
@@ -130,6 +131,7 @@ export function ReminderPage({ active = true }: { active?: boolean }) {
   const foreground = useAppForeground();
   const readingId =
     active && foreground && selected && (!isMobile || requestedId !== null) ? selected.id : null;
+  useForegroundChat(readingId);
 
   const navRef = useRef(navigation);
   navRef.current = navigation;

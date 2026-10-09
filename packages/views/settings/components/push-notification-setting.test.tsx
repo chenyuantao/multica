@@ -14,6 +14,7 @@ const api = vi.hoisted(() => ({
 vi.mock("@multica/core/api", () => ({ api }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
 
+import { BrowserNotificationSetting } from "./browser-notification-setting";
 import { PushNotificationSetting } from "./push-notification-setting";
 
 const IPHONE_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1";
@@ -116,5 +117,23 @@ describe("PushNotificationSetting", () => {
       token: ENDPOINT,
       keys: { p256dh: "p", auth: "a" },
     });
+  });
+});
+
+describe("BrowserNotificationSetting", () => {
+  it("subscribes this device to push when browser notifications are enabled", async () => {
+    installBrowser(ANDROID_UA, { pushApi: true });
+    render(<BrowserNotificationSetting />, { wrapper });
+
+    const enable = await screen.findByRole("button", { name: "Enable" });
+    await waitFor(() => expect(enable).toBeEnabled());
+    fireEvent.click(enable);
+
+    await waitFor(() => expect(api.registerPushSubscription).toHaveBeenCalledWith({
+      platform: "webpush",
+      token: ENDPOINT,
+      keys: { p256dh: "p", auth: "a" },
+    }));
+    expect(screen.getByText("Enabled")).toBeInTheDocument();
   });
 });

@@ -1,4 +1,4 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
 import {
   getWebPushSubscription,
@@ -9,6 +9,7 @@ import {
   requestWebNotificationPermission,
   type WebNotificationPermission,
 } from "../platform/system-notification";
+import { pushKeys } from "./queries";
 
 export class WebPushPermissionError extends Error {
   constructor(readonly permission: WebNotificationPermission) {
@@ -23,6 +24,7 @@ export class WebPushPermissionError extends Error {
  * gesture.
  */
 export function useEnableWebPush() {
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: async (publicKey: string) => {
       const permission = await requestWebNotificationPermission();
@@ -37,17 +39,24 @@ export function useEnableWebPush() {
       }
       return subscription;
     },
+    onSuccess: () => {
+      qc.setQueryData(pushKeys.webSubscription(), true);
+    },
   });
 }
 
 /** Unregister first so a failed request leaves the device consistently enabled. */
 export function useDisableWebPush() {
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: async () => {
       const subscription = await getWebPushSubscription();
       if (!subscription) return;
       await api.deletePushSubscription({ platform: "webpush", token: subscription.endpoint });
       await subscription.unsubscribe();
+    },
+    onSuccess: () => {
+      qc.setQueryData(pushKeys.webSubscription(), false);
     },
   });
 }

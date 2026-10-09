@@ -687,9 +687,9 @@
     },
     "browser": {
       "label": "Notifications du navigateur",
-      "hint": "Autoriser les bannières de notification pour les nouveaux éléments de la boîte de réception et le nombre de non-lus sur l'icône de l'app installée.",
+      "hint": "Afficher une bannière pour les messages non lus tant que ce site est ouvert. L'activation abonne aussi cet appareil au push, pour qu'une notification arrive encore une fois le site fermé.",
       "enable": "Activer",
-      "granted": "Ce navigateur peut afficher des bannières de notification.",
+      "granted": "Ce navigateur peut afficher des bannières. Le push une fois le site fermé se gère avec l'interrupteur ci-dessous.",
       "denied": "Bloqué par votre navigateur. Activez les notifications pour ce site dans ses réglages.",
       "enabled_badge": "Activé"
     },

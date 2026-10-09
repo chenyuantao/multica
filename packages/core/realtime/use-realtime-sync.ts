@@ -53,8 +53,11 @@ import {
 } from "../notification-preferences/queries";
 import { workspaceKeys, workspaceListOptions } from "../workspace/queries";
 import { isWorkspaceDeletePending } from "../workspace/pending-delete";
+import { paths } from "../paths";
 import {
+  getForegroundChatId,
   showWebNotification,
+  summarizeNotificationText,
   type SystemNotificationPayload,
 } from "../platform/system-notification";
 import type { Workspace } from "../types/workspace";
@@ -568,11 +571,11 @@ export async function handleInboxNew(
   // A new item in ANY workspace can light the workspace-switcher dot, so
   // refresh the cross-workspace summary regardless of the active workspace.
   void onInboxSummaryInvalidate(qc);
-  // Fire a native OS notification only when the app isn't focused. When
-  // the user is already looking at Multica, the inbox sidebar's unread
-  // styling is enough — no need to interrupt with a banner. `desktopAPI`
-  // is injected by the preload script; its absence (web app) skips silently.
-  if (typeof document !== "undefined" && document.hasFocus()) return;
+  // A focused window stays quiet for ordinary inbox rows — the unread
+  // styling is enough. A chat message still banners on the web when the
+  // open conversation is a different one. Desktop OS banners stay quiet
+  // whenever a window is focused; the main process drops them anyway.
+  if (typeof document !== "undefined" && document.hasFocus() && !notifyFocusedChat(item)) return;
   // Resolve the source workspace's slug once: it pins BOTH the mute check
   // and the deep link to the workspace the inbox item BELONGS to, never the
   // currently active one. Reading `getCurrentSlug()` here was the source of
@@ -610,12 +613,17 @@ export async function handleInboxNew(
   // client can't see) still shows the banner — the user should learn about
   // the inbox item — but with an empty slug so the click is a no-op
   // (the inbox bridge ignores empty slugs) instead of routing wrong.
+  const issueKey = item.issue_id ?? item.id;
+  const chat = isChatNotification(item);
   const payload: SystemNotificationPayload = {
     slug: slug ?? "",
     itemId: item.id,
-    issueKey: item.issue_id ?? item.id,
+    issueKey,
+    url: notificationURL(slug ?? "", issueKey, item.details?.surface),
     title: item.title,
-    body: item.body ?? "",
+    // Chat banners lead with the conversation name and a plain-text preview,
+    // not the raw comment markdown stored on the inbox row.
+    body: chat ? summarizeNotificationText(item.body ?? "") : (item.body ?? ""),
   };
   const desktopAPI = (
     globalThis as unknown as {
@@ -629,9 +637,32 @@ export async function handleInboxNew(
     desktopAPI.showNotification(payload);
     return;
   }
-  // Web: the browser Notification API. No-op without granted permission or on
-  // SSR — the in-app inbox + unread badge still reflect the new item.
-  showWebNotification(payload);
+  // Web: the browser Notification API, shown through the service worker when
+  // one is available so it matches a Web Push. No-op without granted
+  // permission or on SSR — the in-app inbox + unread badge still reflect
+  // the new item.
+  await showWebNotification(payload);
+}
+
+function isChatNotification(item: InboxItem): boolean {
+  return (item.details?.surface === "im" || item.details?.surface === "reminder") && !!item.issue_id;
+}
+
+function hasDesktopNotification(): boolean {
+  return typeof (globalThis as { desktopAPI?: { showNotification?: unknown } }).desktopAPI?.showNotification === "function";
+}
+
+/** True when a focused web window should still banner this chat message. */
+function notifyFocusedChat(item: InboxItem): boolean {
+  if (!isChatNotification(item) || hasDesktopNotification()) return false;
+  return getForegroundChatId() !== item.issue_id;
+}
+
+function notificationURL(slug: string, issueKey: string, surface: string | undefined): string {
+  if (!slug) return "";
+  if (surface === "im") return paths.workspace(slug).imChat(issueKey);
+  if (surface === "reminder") return paths.workspace(slug).reminderItem(issueKey);
+  return `${paths.workspace(slug).inbox()}?issue=${encodeURIComponent(issueKey)}`;
 }
 
 /**

@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   getWebNotificationPermission,
-  getWebPushSubscription,
   getWebPushSupport,
   type WebPushSupport,
 } from "@multica/core/platform";
@@ -13,6 +12,7 @@ import {
   useDisableWebPush,
   useEnableWebPush,
   WebPushPermissionError,
+  webPushSubscriptionOptions,
 } from "@multica/core/push";
 import { Button } from "@multica/ui/components/ui/button";
 import { toast } from "sonner";
@@ -29,10 +29,13 @@ import { SettingsCard, SettingsRow } from "./settings-layout";
 export function PushNotificationSetting() {
   const { t } = useT("settings");
   const [support, setSupport] = useState<WebPushSupport | null>(null);
-  const [subscribed, setSubscribed] = useState(false);
   const [denied, setDenied] = useState(false);
   const desktop = isDesktopShell();
   const { data: config } = useQuery({ ...pushConfigOptions(), enabled: !desktop });
+  const { data: subscribed = false } = useQuery({
+    ...webPushSubscriptionOptions(),
+    enabled: support === "supported",
+  });
   const enable = useEnableWebPush();
   const disable = useDisableWebPush();
 
@@ -40,16 +43,6 @@ export function PushNotificationSetting() {
     const next = getWebPushSupport();
     setSupport(next);
     setDenied(getWebNotificationPermission() === "denied");
-    if (next !== "supported") return;
-    let cancelled = false;
-    void getWebPushSubscription()
-      .then((subscription) => {
-        if (!cancelled) setSubscribed(subscription !== null);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   const publicKey = config?.web_push_public_key ?? "";
@@ -57,7 +50,6 @@ export function PushNotificationSetting() {
 
   const handleEnable = () => {
     enable.mutate(publicKey, {
-      onSuccess: () => setSubscribed(true),
       onError: (err) => {
         if (err instanceof WebPushPermissionError) {
           setDenied(err.permission === "denied");
@@ -70,7 +62,6 @@ export function PushNotificationSetting() {
 
   const handleDisable = () => {
     disable.mutate(undefined, {
-      onSuccess: () => setSubscribed(false),
       onError: () => toast.error(t(($) => $.notifications.push.toast_disable_failed)),
     });
   };

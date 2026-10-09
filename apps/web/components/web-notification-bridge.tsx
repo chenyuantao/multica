@@ -9,16 +9,14 @@ import { paths } from "@multica/core/paths";
 import { useNavigation } from "@multica/views/navigation";
 
 /**
- * Routes browser notification clicks to the source workspace's inbox, focused
- * on the clicked item. The web counterpart of the desktop `DesktopInboxBridge`:
- * desktop receives the click via Electron IPC, web wires it through the
- * Notification API's `onclick` (registered here into the core singleton).
+ * Routes a page-shown browser notification click. The web counterpart of the
+ * desktop `DesktopInboxBridge`. A service-worker banner is opened by `sw.js`
+ * from the same `url`; this handler covers the page Notification fallback.
  *
- * The route uses the `slug` the notification was emitted with — the SOURCE
- * workspace — not the active one, so a click always opens the right inbox even
- * after the user switches workspaces (#3766). An empty slug (unresolved
- * source) is ignored. Marking the row read is handled by InboxPage's
- * selected-item effect, which covers the `?issue=` URL-param path.
+ * `url` is built from the SOURCE workspace (#3766). Chat messages open that
+ * conversation; other rows open the inbox focused on the item. An empty url
+ * (unresolved source) is ignored. Marking an inbox row read is handled by
+ * InboxPage's selected-item effect, which covers the `?issue=` path.
  */
 export function WebNotificationBridge() {
   const { push } = useNavigation();
@@ -31,7 +29,11 @@ export function WebNotificationBridge() {
 
   useEffect(() => {
     registerSystemNotificationClickHandler(
-      ({ slug, issueKey }: SystemNotificationPayload) => {
+      ({ slug, issueKey, url }: SystemNotificationPayload) => {
+        if (url) {
+          pushRef.current(url);
+          return;
+        }
         if (!slug) return;
         const inboxPath = `${paths.workspace(slug).inbox()}?issue=${encodeURIComponent(issueKey)}`;
         pushRef.current(inboxPath);

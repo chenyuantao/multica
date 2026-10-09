@@ -8,6 +8,8 @@ import (
 	"errors"
 	"log/slog"
 	"net/url"
+	"regexp"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -173,12 +175,21 @@ func (s *Service) buildMessage(ctx context.Context, recipientID, workspaceID pgt
 		issueKey = stringField(item, "id")
 	}
 	// "/inbox" resolves to the user's last workspace, the best guess when
-	// the slug is unavailable.
+	// the slug is unavailable. A chat message opens the conversation.
+	surface := detailField(item, "surface")
 	link := "/inbox"
 	if ws, err := s.q.GetWorkspace(ctx, workspaceID); err == nil && ws.Slug != "" {
-		link = "/" + url.PathEscape(ws.Slug) + "/inbox"
-		if issueKey != "" {
-			link += "?issue=" + url.QueryEscape(issueKey)
+		base := "/" + url.PathEscape(ws.Slug)
+		switch {
+		case issueKey != "" && surface == "im":
+			link = base + "/im?chat=" + url.QueryEscape(issueKey)
+		case issueKey != "" && surface == "reminder":
+			link = base + "/reminder?item=" + url.QueryEscape(issueKey)
+		default:
+			link = base + "/inbox"
+			if issueKey != "" {
+				link += "?issue=" + url.QueryEscape(issueKey)
+			}
 		}
 	}
 
@@ -189,13 +200,50 @@ func (s *Service) buildMessage(ctx context.Context, recipientID, workspaceID pgt
 		}
 	}
 
+	body := stringField(item, "body")
+	if surface == "im" || surface == "reminder" {
+		body = summarizeMessage(body)
+	}
+
 	return Message{
 		Title: truncateRunes(stringField(item, "title"), maxTitleRunes),
-		Body:  truncateRunes(stringField(item, "body"), maxBodyRunes),
+		Body:  truncateRunes(body, maxBodyRunes),
 		URL:   link,
 		Tag:   issueKey,
 		Badge: badge,
 	}
+}
+
+var mentionLink = regexp.MustCompile(`\[([^\[\]]+)\]\(mention://[^)\s]+\)`)
+
+func summarizeMessage(s string) string {
+	return strings.Join(strings.Fields(mentionLink.ReplaceAllString(s, "$1")), " ")
+}
+
+func detailField(item map[string]any, key string) string {
+	switch details := item["details"].(type) {
+	case map[string]string:
+		return details[key]
+	case map[string]any:
+		value, _ := details[key].(string)
+		return value
+	case json.RawMessage:
+		return detailFieldFromJSON(details, key)
+	case []byte:
+		return detailFieldFromJSON(details, key)
+	case string:
+		return detailFieldFromJSON([]byte(details), key)
+	default:
+		return ""
+	}
+}
+
+func detailFieldFromJSON(raw []byte, key string) string {
+	var details map[string]string
+	if err := json.Unmarshal(raw, &details); err != nil {
+		return ""
+	}
+	return details[key]
 }
 
 func stringField(m map[string]any, key string) string {
