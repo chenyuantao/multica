@@ -172,7 +172,9 @@ describe("ReminderPage", () => {
     expect(screen.queryByRole("navigation", { name: "Group chats" })).not.toBeInTheDocument();
 
     expect(screen.queryByRole("navigation", { name: "Reminder filters" })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "This week" }));
+    const weekFilter = screen.getByRole("button", { name: "This week" });
+    expect(weekFilter).not.toHaveTextContent("This week");
+    fireEvent.click(weekFilter);
     expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual([
       "This week",
       "Today",

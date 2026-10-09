@@ -454,15 +454,35 @@ function FilterMenu({ filter, onChange }: { filter: ReminderFilter; onChange: (f
   const { t } = useT("im");
   const current = FILTERS.find((item) => item.id === filter) ?? FILTERS[0];
   const CurrentIcon = current.icon;
+  const label = t(($) => $.reminder[current.id]);
+  // The week view already names itself in the heading, so the trigger stays
+  // an icon. Other views have no heading and keep the label on the button.
+  const iconOnly = filter === "week";
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        render={<Button variant="outline" size="sm" className="max-w-56 gap-2" />}
+        render={
+          <Button
+            variant={iconOnly ? "ghost" : "outline"}
+            size="sm"
+            aria-label={iconOnly ? label : undefined}
+            className={iconOnly ? "gap-0.5 px-1.5" : "max-w-56 gap-2"}
+          />
+        }
       >
-        <span className={cn("size-2.5 shrink-0 rounded-full", current.dot)} />
-        <CurrentIcon />
-        <span className="truncate">{t(($) => $.reminder[current.id])}</span>
-        <ChevronDown className="text-muted-foreground" />
+        {iconOnly ? (
+          <>
+            <CurrentIcon className="text-brand" />
+            <ChevronDown className="size-3.5 text-muted-foreground" />
+          </>
+        ) : (
+          <>
+            <span className={cn("size-2.5 shrink-0 rounded-full", current.dot)} />
+            <CurrentIcon />
+            <span className="truncate">{label}</span>
+            <ChevronDown className="text-muted-foreground" />
+          </>
+        )}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-56">
         {FILTERS.map(({ id, icon: Icon, dot }) => {
