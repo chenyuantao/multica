@@ -77,8 +77,17 @@ interface ReminderListProps {
   todayKey: string;
   hideCompleted: boolean;
   openId: string | null;
+  /**
+   * Reminder whose conversation is on screen. Its badge stays clear while the
+   * user is looking; a remembered id with the thread closed does not.
+   */
+  readingId: string | null;
+  /** Scroll this reminder into view once. Later visits keep the list where it was. */
+  scrollToId: string | null;
   /** Rows reorder and change day by dragging; off on phones, where a long press opens the menu. */
   draggable: boolean;
+  /** False while the page is held hidden. Document listeners stay off so another section keeps the keys. */
+  active: boolean;
   /** Agents a title can @. Naming one in the title assigns the reminder. */
   mentionCandidates: ComposerMention[];
   onEditingChange: (id: string | null) => void;
@@ -99,7 +108,10 @@ export function ReminderList({
   todayKey,
   hideCompleted,
   openId,
+  readingId,
+  scrollToId,
   draggable,
+  active,
   mentionCandidates,
   onEditingChange,
   actions,
@@ -179,6 +191,7 @@ export function ReminderList({
   };
 
   useEffect(() => {
+    if (!active) return;
     const onKeyDown = (e: globalThis.KeyboardEvent) => {
       if (e.key === "Escape") setSelected(new Set());
     };
@@ -194,17 +207,37 @@ export function ReminderList({
       document.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("click", onClick);
     };
-  }, []);
+  }, [active]);
 
   useEffect(() => {
     commitLock.current = false;
   }, [editing]);
 
   const anchorKey = anchor.toDateString();
+  const seenAnchor = useRef<string | null>(null);
+  const landed = useRef<string | null>(null);
   useEffect(() => {
+    const weekChanged = filter === "week" && seenAnchor.current !== null && seenAnchor.current !== anchorKey;
+    if (filter === "week") seenAnchor.current = anchorKey;
+    // Moving to another week starts over, so a row from the previous week
+    // does not keep the list from showing today when that row is absent.
+    if (weekChanged) landed.current = null;
+
+    if (scrollToId && landed.current !== scrollToId) {
+      const row = scrollRef.current?.querySelector(`[data-reminder-id="${scrollToId}"]`);
+      if (row) {
+        row.scrollIntoView?.({ block: "center" });
+        landed.current = scrollToId;
+        return;
+      }
+      if (!weekChanged) return;
+    }
+
     if (filter !== "week") return;
+    if (landed.current === todayKey || landed.current === scrollToId) return;
     scrollRef.current?.querySelector(`[data-day="${todayKey}"]`)?.scrollIntoView?.({ block: "start" });
-  }, [filter, anchorKey, todayKey]);
+    landed.current = todayKey;
+  }, [filter, anchorKey, todayKey, scrollToId, groups]);
 
   /** Saves what is being typed before another edit starts. False when the title cannot be saved yet. */
   const flushEditing = () => {
@@ -397,6 +430,7 @@ export function ReminderList({
         onToggle={() => actions.update([{ id: r.id, patch: { done: !isDone(r) } }])}
         onDelete={() => actions.remove([r.id])}
         onTag={(tag) => startDraft(dueKey(r) ?? todayKey, `#${tag} `)}
+        unread={r.id === readingId ? 0 : r.unread_count}
       />
     );
   };
@@ -578,6 +612,7 @@ function ReminderRow({
   onToggle,
   onDelete,
   onTag,
+  unread,
 }: {
   reminder: Reminder;
   sortable: boolean;
@@ -594,6 +629,7 @@ function ReminderRow({
   onToggle: () => void;
   onDelete: () => void;
   onTag: (tag: string) => void;
+  unread: number;
 }) {
   const { t } = useT("im");
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition } = useSortable({
@@ -614,6 +650,7 @@ function ReminderRow({
       }}
       style={{ transform: CSS.Transform.toString(transform), transition, visibility: hidden ? "hidden" : undefined }}
       data-reminder-row
+      data-reminder-id={reminder.id}
       {...(sortable ? { ...dragAttributes, ...listeners } : {})}
       className="group/row outline-none"
     >
@@ -691,10 +728,7 @@ function ReminderRow({
                     ))}
                   </span>
                 )}
-                <UnreadBadge
-                  count={reminder.unread_count}
-                  label={t(($) => $.sidebar.unread, { count: reminder.unread_count })}
-                />
+                <UnreadBadge count={unread} label={t(($) => $.sidebar.unread, { count: unread })} />
               </div>
               <button
                 type="button"

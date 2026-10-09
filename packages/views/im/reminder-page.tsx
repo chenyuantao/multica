@@ -33,6 +33,7 @@ import { agentListOptions } from "@multica/core/workspace/queries";
 import { Button } from "@multica/ui/components/ui/button";
 import { useIsMobile } from "@multica/ui/hooks/use-mobile";
 import { cn } from "@multica/ui/lib/utils";
+import { useAppForeground } from "../common/use-app-foreground";
 import { useT } from "../i18n";
 import { useNavigation } from "../navigation";
 import { DragStrip } from "../platform";
@@ -44,15 +45,20 @@ import { ImSidebarHeader, ImSidebarShell } from "./im-sidebar-shell";
 import { resolveTitleMentions, type ComposerMention } from "./im-utils";
 import { MobileContactDetail, MobileLevel, MobileTabScreen, parseContactParam } from "./mobile-shell";
 import {
+  boardAfterCreate,
+  dueKey,
   endPosition,
   filterByTags,
+  focusOpenReminder,
+  reminderTags,
   tagStats,
   viewReminders,
   type ReminderFilter,
   type TagStat,
 } from "./reminder-board";
-import { addDays, startOfWeek, toDateKey, weekCode } from "./reminder-dates";
+import { addDays, fromDateKey, startOfWeek, toDateKey, weekCode } from "./reminder-dates";
 import { ReminderList, type ReminderListActions } from "./reminder-list";
+import { rememberReminderOpen, reminderOpenId } from "./reminder-session";
 import { ColumnResizeHandle } from "./resizable-column";
 
 const EMPTY_REMINDERS: Reminder[] = [];
@@ -76,8 +82,15 @@ function isTyping(el: Element | null): boolean {
  * assigns an agent without a separate hand-off.
  * Desktop opens a reminder's messages in a resizable column on the right;
  * a phone keeps the list inside Me and opens a reminder as its own level.
+ *
+ * The first visit lands on today's incomplete reminder, or the nearest other
+ * day's. That choice stays in memory: switching sections keeps this tree
+ * mounted, and a later visit reopens the same conversation.
+ * Creating a reminder opens its conversation at once, focuses the composer,
+ * and brings that row into view, moving the week or filter when the row
+ * would otherwise be hidden.
  */
-export function ReminderPage() {
+export function ReminderPage({ active = true }: { active?: boolean }) {
   const { t } = useT("im");
   const wsId = useWorkspaceId();
   const userId = useAuthStore((s) => s.user?.id ?? "");
@@ -91,14 +104,79 @@ export function ReminderPage() {
   const [hideCompleted, setHideCompleted] = useState(false);
   const [activeTags, setActiveTags] = useState<ReadonlySet<string>>(() => new Set());
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [scrollToId, setScrollToId] = useState<string | null>(() => reminderOpenId(wsId) || null);
+  /** The conversation whose composer should take focus. Only a just-created reminder. */
+  const [composerFocusId, setComposerFocusId] = useState<string | null>(null);
+  const choseFocus = useRef(false);
+  /** Set while a conversation open is waiting for the URL to catch up. */
+  const openingId = useRef<string | null>(null);
+  /** The reminder just created, so its conversation can open before the list query includes it. */
+  const pendingCreated = useRef<Reminder | null>(null);
 
   const list = useQuery(reminderListOptions(wsId, {}));
   const all = list.data ?? EMPTY_REMINDERS;
   const view = useMemo(() => viewReminders(all, filter, anchor, todayKey), [all, filter, anchor, todayKey]);
   const stats = useMemo(() => tagStats(view), [view]);
   const items = useMemo(() => filterByTags(view, activeTags, editingId), [view, activeTags, editingId]);
-  const requestedId = navigation.searchParams.get("item");
-  const selected = requestedId ? all.find((r) => r.id === requestedId) ?? null : null;
+  const requestedId = active ? navigation.searchParams.get("item") : null;
+  const rememberedId = reminderOpenId(wsId);
+  const openId = requestedId ?? (rememberedId || null);
+  const listed = openId ? all.find((r) => r.id === openId) ?? null : null;
+  if (listed && pendingCreated.current?.id === listed.id) pendingCreated.current = null;
+  const selected = listed ?? (openId && pendingCreated.current?.id === openId ? pendingCreated.current : null);
+  // The open conversation is read while it is on screen, so its badge would
+  // only flash. A phone list after leaving the thread, a hidden page, and a
+  // backgrounded window keep the stored count.
+  const foreground = useAppForeground();
+  const readingId =
+    active && foreground && selected && (!isMobile || requestedId !== null) ? selected.id : null;
+
+  const navRef = useRef(navigation);
+  navRef.current = navigation;
+  const pathsRef = useRef(paths);
+  pathsRef.current = paths;
+  const itemInUrl = requestedId ?? "";
+  useEffect(() => {
+    if (!active) return;
+    const nav = navRef.current;
+    const urlId = nav.searchParams.get("item");
+    if (openingId.current) {
+      if (urlId !== openingId.current) return;
+      openingId.current = null;
+    }
+    if (urlId) {
+      rememberReminderOpen(wsId, urlId);
+      setScrollToId((current) => current ?? urlId);
+      return;
+    }
+    const remembered = reminderOpenId(wsId);
+    if (remembered !== undefined) {
+      if (list.isPending) return;
+      if (!isMobile && remembered && all.some((r) => r.id === remembered)) {
+        setScrollToId((current) => current ?? remembered);
+        nav.replace(pathsRef.current.reminderItem(remembered));
+      }
+      return;
+    }
+    if (list.isPending || choseFocus.current) return;
+    choseFocus.current = true;
+    const target = focusOpenReminder(all, todayKey);
+    if (isMobile) {
+      if (target) setScrollToId(target.id);
+      return;
+    }
+    rememberReminderOpen(wsId, target?.id ?? null);
+    if (!target) return;
+    setScrollToId(target.id);
+    const key = dueKey(target);
+    if (key) {
+      const weekStart = startOfWeek(today);
+      const monday = toDateKey(weekStart);
+      const sunday = toDateKey(addDays(weekStart, 6));
+      if (key < monday || key > sunday) setAnchor(fromDateKey(key));
+    }
+    nav.replace(pathsRef.current.reminderItem(target.id));
+  }, [active, all, isMobile, itemInUrl, list.isPending, today, todayKey, wsId]);
 
   const { data: agents = EMPTY_AGENTS } = useQuery(agentListOptions(wsId));
   const mentionCandidates = useMemo<ComposerMention[]>(
@@ -113,9 +191,21 @@ export function ReminderPage() {
   useGroupChatRealtime(wsId);
   useReminderRealtime(wsId);
 
-  const close = () => navigation.replace(paths.reminder());
+  const close = () => {
+    openingId.current = null;
+    rememberReminderOpen(wsId, null);
+    navigation.replace(paths.reminder());
+  };
+  const openConversation = (id: string, opts?: { focusComposer?: boolean }) => {
+    openingId.current = id;
+    rememberReminderOpen(wsId, id);
+    setScrollToId(id);
+    setComposerFocusId(opts?.focusComposer ? id : null);
+    if (isMobile) navigation.push(paths.reminderItem(id));
+    else navigation.replace(paths.reminderItem(id));
+  };
   const actions: ReminderListActions = {
-    open: (id) => (isMobile ? navigation.push(paths.reminderItem(id)) : navigation.replace(paths.reminderItem(id))),
+    open: openConversation,
     update: (updates) => update.mutate(updates, { onError: () => toast.error(t(($) => $.reminder.update_failed)) }),
     setPending: (ids, pending) =>
       setPending.mutate({ ids, pending }, { onError: () => toast.error(t(($) => $.reminder.update_failed)) }),
@@ -127,9 +217,19 @@ export function ReminderPage() {
         },
         onError: () => toast.error(t(($) => $.reminder.delete_failed)),
       }),
-    create: (title, dueKey, position) =>
-      create.mutateAsync({ title, due_date: dueKey, position }).then(
-        () => true,
+    create: (title, due, position) =>
+      create.mutateAsync({ title, due_date: due, position }).then(
+        (created) => {
+          const next = boardAfterCreate(filter, anchor, todayKey, due);
+          if (next.filter !== filter) setFilter(next.filter);
+          if (toDateKey(next.anchor) !== toDateKey(anchor)) setAnchor(next.anchor);
+          if (activeTags.size > 0 && !reminderTags(created.title).some((tag) => activeTags.has(tag))) {
+            setActiveTags(new Set());
+          }
+          pendingCreated.current = created;
+          openConversation(created.id, { focusComposer: true });
+          return true;
+        },
         () => {
           toast.error(t(($) => $.reminder.create_failed));
           return false;
@@ -144,6 +244,7 @@ export function ReminderPage() {
     pasteRef.current = { all, create: actions.create, todayKey, candidates: mentionCandidates };
   });
   useEffect(() => {
+    if (!active) return;
     const onPaste = (e: ClipboardEvent) => {
       if (isTyping(document.activeElement)) return;
       const text = e.clipboardData?.getData("text/plain").trim();
@@ -155,7 +256,7 @@ export function ReminderPage() {
     };
     document.addEventListener("paste", onPaste);
     return () => document.removeEventListener("paste", onPaste);
-  }, []);
+  }, [active]);
 
   const chooseFilter = (next: ReminderFilter) => {
     setFilter(next);
@@ -178,7 +279,10 @@ export function ReminderPage() {
       todayKey={todayKey}
       hideCompleted={(filter === "week" || filter === "today") && hideCompleted}
       openId={selected?.id ?? null}
+      readingId={readingId}
+      scrollToId={scrollToId}
       draggable={!isMobile}
+      active={active}
       mentionCandidates={mentionCandidates}
       onEditingChange={setEditingId}
       actions={actions}
@@ -264,6 +368,7 @@ export function ReminderPage() {
             panelOpen={false}
             onTogglePanel={() => {}}
             mentionCandidates={mentionCandidates}
+            focusComposer={composerFocusId === selected.id}
             mobileNav={{
               backHref: paths.reminder(),
               backLabel: t(($) => $.reminder.back),
@@ -333,6 +438,8 @@ export function ReminderPage() {
           reminder={selected}
           userId={userId}
           mentionCandidates={mentionCandidates}
+          live={active}
+          focusComposer={composerFocusId === selected.id}
           onClose={close}
         />
       ) : null}
@@ -506,12 +613,16 @@ function ReminderThreadColumn({
   reminder,
   userId,
   mentionCandidates,
+  live,
+  focusComposer,
   onClose,
 }: {
   wsId: string;
   reminder: Reminder;
   userId: string;
   mentionCandidates: ComposerMention[];
+  live: boolean;
+  focusComposer: boolean;
   onClose: () => void;
 }) {
   const { t } = useT("im");
@@ -527,6 +638,8 @@ function ReminderThreadColumn({
         panelOpen={false}
         onTogglePanel={() => {}}
         mentionCandidates={mentionCandidates}
+        live={live}
+        focusComposer={focusComposer}
         onClose={onClose}
       />
       <ColumnResizeHandle edge="left" width={width} options={options} onCommit={commit} label={t(($) => $.reminder.resize)} />

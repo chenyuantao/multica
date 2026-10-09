@@ -1,5 +1,5 @@
 import type { Reminder } from "@multica/core/types";
-import { addDays, startOfWeek, toDateKey } from "./reminder-dates";
+import { addDays, fromDateKey, startOfWeek, toDateKey } from "./reminder-dates";
 
 export type ReminderFilter = "week" | "today" | "open" | "done";
 
@@ -138,6 +138,53 @@ export function dropPosition(orderedIds: string[], id: string, byId: Map<string,
   const before = open(orderedIds.slice(0, index)).at(-1)?.position;
   const after = open(orderedIds.slice(index + 1))[0]?.position;
   return positionBetween(before, after);
+}
+
+/** Whole days from `todayKey` to `key`. Negative when `key` is earlier. */
+function daySpan(key: string, todayKey: string): number {
+  return Math.round((fromDateKey(key).getTime() - fromDateKey(todayKey).getTime()) / 86_400_000);
+}
+
+/**
+ * The board that still shows a reminder just created.
+ * Open already lists every dated reminder. Today stays when the new one is
+ * due today. Any other view lands on the week that contains its due date.
+ */
+export function boardAfterCreate(
+  filter: ReminderFilter,
+  anchor: Date,
+  todayKey: string,
+  due: string | null,
+): { filter: ReminderFilter; anchor: Date } {
+  if (filter === "open" && due) return { filter, anchor };
+  if (filter === "today" && due === todayKey) return { filter, anchor };
+  if (!due) return { filter: filter === "done" ? "week" : filter, anchor };
+  if (filter === "week") {
+    const monday = toDateKey(startOfWeek(anchor));
+    const sunday = toDateKey(addDays(startOfWeek(anchor), 6));
+    if (due >= monday && due <= sunday) return { filter, anchor };
+  }
+  return { filter: "week", anchor: fromDateKey(due) };
+}
+
+/**
+ * The incomplete reminder to land on when the page is first opened: one due
+ * today, otherwise the nearest other day. The same distance prefers the
+ * earlier day. Within a day, the first open reminder in list order wins.
+ * Pinned reminders still count; a finished one does not.
+ */
+export function focusOpenReminder(all: Reminder[], todayKey: string): Reminder | null {
+  const open = all.filter((r) => !isDone(r) && dueKey(r));
+  open.sort((a, b) => {
+    const ak = dueKey(a)!;
+    const bk = dueKey(b)!;
+    const ad = Math.abs(daySpan(ak, todayKey));
+    const bd = Math.abs(daySpan(bk, todayKey));
+    if (ad !== bd) return ad - bd;
+    if (ak !== bk) return ak < bk ? -1 : 1;
+    return a.position - b.position || a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id);
+  });
+  return open[0] ?? null;
 }
 
 /** Days the move menu offers: today, tomorrow, the coming Friday, and next Monday. */

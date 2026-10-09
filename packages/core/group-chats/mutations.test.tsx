@@ -10,11 +10,23 @@ import { setApiInstance } from "../api";
 import type { ApiClient } from "../api/client";
 import { inboxKeys } from "../inbox/queries";
 import { createQueryClient } from "../query-client";
-import type { GroupChat } from "../types";
+import type { GroupChat, Reminder } from "../types";
+import { reminderKeys } from "../reminders/queries";
 import { useAskAI, useForwardChatHistory, useMarkGroupChatRead, useSendGroupChatMessage, useSetGroupChatPinned } from "./mutations";
 import { countUnreadGroupChatMessages, groupChatKeys } from "./queries";
 
 const WS = "ws-1";
+
+function reminder(id: string, unread: number): Reminder {
+  return {
+    ...chat(id, unread),
+    status: "todo",
+    due_date: "2026-10-08",
+    position: 0,
+    updated_at: "2026-10-01T00:00:00Z",
+    pending: false,
+  };
+}
 
 function chat(id: string, unread: number): GroupChat {
   return {
@@ -49,6 +61,8 @@ describe("useMarkGroupChatRead", () => {
   function setup(markGroupChatRead: ReturnType<typeof vi.fn>) {
     const qc = createQueryClient();
     qc.setQueryData(groupChatKeys.list(WS), [chat("a", 3), chat("b", 2)]);
+    qc.setQueryData(reminderKeys.list(WS, {}), [reminder("a", 3), reminder("b", 2)]);
+    qc.setQueryData(reminderKeys.list(WS, { status: "open" }), [reminder("a", 3)]);
     qc.setQueryData(inboxKeys.unreadSummary(), [{ workspace_id: WS, count: 2, badge_count: 5 }]);
     setApiInstance({
       markGroupChatRead,
@@ -62,17 +76,24 @@ describe("useMarkGroupChatRead", () => {
     const { result } = renderHook(() => useMarkGroupChatRead(WS, "a"), { wrapper });
     const unreadOf = (id: string) =>
       qc.getQueryData<GroupChat[]>(groupChatKeys.list(WS))?.find((c) => c.id === id)?.unread_count;
-    return { qc, result, unreadOf };
+    const reminderUnread = (id: string, status?: "open") =>
+      qc
+        .getQueryData<Reminder[]>(reminderKeys.list(WS, status ? { status } : {}))
+        ?.find((r) => r.id === id)?.unread_count;
+    return { qc, result, unreadOf, reminderUnread };
   }
 
   it("clears the chat at once and refreshes the app badge from the server", async () => {
     let resolve!: () => void;
     const markGroupChatRead = vi.fn(() => new Promise<void>((r) => (resolve = r)));
-    const { qc, result, unreadOf } = setup(markGroupChatRead);
+    const { qc, result, unreadOf, reminderUnread } = setup(markGroupChatRead);
 
     act(() => result.current.mutate());
     await waitFor(() => expect(unreadOf("a")).toBe(0));
     expect(unreadOf("b")).toBe(2);
+    expect(reminderUnread("a")).toBe(0);
+    expect(reminderUnread("b")).toBe(2);
+    expect(reminderUnread("a", "open")).toBe(0);
     expect(markGroupChatRead).toHaveBeenCalledWith("a");
 
     await act(async () => resolve());
@@ -82,11 +103,13 @@ describe("useMarkGroupChatRead", () => {
   });
 
   it("restores the count when the request fails", async () => {
-    const { result, unreadOf } = setup(vi.fn(async () => Promise.reject(new Error("offline"))));
+    const { result, unreadOf, reminderUnread } = setup(vi.fn(async () => Promise.reject(new Error("offline"))));
 
     act(() => result.current.mutate());
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(unreadOf("a")).toBe(3);
+    expect(reminderUnread("a")).toBe(3);
+    expect(reminderUnread("a", "open")).toBe(3);
   });
 });
 

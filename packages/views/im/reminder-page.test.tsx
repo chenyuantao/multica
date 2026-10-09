@@ -6,8 +6,10 @@ import type { Agent, Reminder } from "@multica/core/types";
 import { renderWithI18n } from "../test/i18n";
 import { NavigationProvider, type NavigationAdapter } from "../navigation";
 import { ReminderPage } from "./reminder-page";
+import { rememberReminderOpen, resetReminderOpenMemory } from "./reminder-session";
 
 const isMobile = vi.hoisted(() => ({ current: false }));
+const appForeground = vi.hoisted(() => ({ value: true }));
 const updateMutate = vi.hoisted(() => vi.fn());
 const pendingMutate = vi.hoisted(() => vi.fn());
 const deleteMutate = vi.hoisted(() => vi.fn());
@@ -40,12 +42,15 @@ function reminder(id: string, title: string, dueDate: string | null, extra: Part
   };
 }
 
-const reminders: Reminder[] = [
+const reminderSource = vi.hoisted(() => ({ items: undefined as Reminder[] | undefined }));
+
+const seedReminders = (): Reminder[] => [
   reminder("r1", "Ship it", "2026-10-08"),
   reminder("r2", "Plan week", "2026-10-05", { status: "done" }),
   reminder("r3", "Write #docs", "2026-10-09"),
   reminder("r4", "Old task", "2026-09-20"),
 ];
+let reminders = seedReminders();
 const agents = [
   { id: "a1", name: "Jev", archived_at: null },
   { id: "a2", name: "Old", archived_at: "2026-01-01T00:00:00Z" },
@@ -58,10 +63,17 @@ vi.mock("@tanstack/react-query", async () => {
     useQuery: (options: { queryKey: readonly unknown[] }) =>
       options.queryKey[0] === "agents"
         ? { data: agents, isPending: false, isError: false }
-        : { data: reminders, isPending: false, isError: false, isFetching: false, refetch: vi.fn() },
+        : {
+            data: reminderSource.items ?? reminders,
+            isPending: false,
+            isError: false,
+            isFetching: false,
+            refetch: vi.fn(),
+          },
   };
 });
 vi.mock("@multica/ui/hooks/use-mobile", () => ({ useIsMobile: () => isMobile.current }));
+vi.mock("../common/use-app-foreground", () => ({ useAppForeground: () => appForeground.value }));
 vi.mock("@multica/core/hooks", () => ({ useWorkspaceId: () => "ws-1" }));
 vi.mock("@multica/core/group-chats", () => ({ useGroupChatRealtime: () => {} }));
 vi.mock("@multica/core/workspace/queries", () => ({ agentListOptions: () => ({ queryKey: ["agents"] }) }));
@@ -128,11 +140,15 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date(2026, 9, 8, 10));
   isMobile.current = false;
+  appForeground.value = true;
   threadProps.current = null;
   updateMutate.mockReset();
   pendingMutate.mockReset();
   deleteMutate.mockReset();
   createMutateAsync.mockReset();
+  reminderSource.items = undefined;
+  reminders = seedReminders();
+  resetReminderOpenMemory();
 });
 
 afterEach(() => {
@@ -188,9 +204,13 @@ describe("ReminderPage", () => {
     expect(screen.queryByRole("button", { name: "Ship it" })).not.toBeInTheDocument();
   });
 
-  it("adds under a day, renames on double click, and adds pasted text for today", async () => {
-    createMutateAsync.mockResolvedValue(reminder("r9", "Call Ada", "2026-10-08"));
-    renderPage();
+  it("adds under a day, opens that conversation, renames on double click, and adds pasted text for today", async () => {
+    const { navigation } = renderPage();
+    createMutateAsync.mockImplementation(async (input: { title: string; due_date: string }) => {
+      const created = reminder("r9", input.title, input.due_date);
+      reminders = [...reminders, created];
+      return created;
+    });
     const today = day("Today");
     fireEvent.click(within(today).getByRole("button", { name: "Add more" }));
     const field = within(today).getByRole("textbox", { name: "Reminder title" });
@@ -200,6 +220,10 @@ describe("ReminderPage", () => {
     });
     expect(createMutateAsync).toHaveBeenCalledWith({ title: "Call Ada", due_date: "2026-10-08", position: 2 });
     expect(within(today).queryByRole("textbox")).not.toBeInTheDocument();
+    expect(navigation.replace).toHaveBeenCalledWith("/acme/reminder?item=r9");
+    expect(screen.getByTestId("thread")).toHaveTextContent("Call Ada");
+    expect(threadProps.current?.focusComposer).toBe(true);
+    expect(within(today).getByRole("button", { name: "Call Ada" })).toHaveAttribute("aria-current", "true");
 
     fireEvent.doubleClick(within(today).getByRole("button", { name: "Ship it" }));
     const rename = within(today).getByRole("textbox", { name: "Reminder title" });
@@ -213,6 +237,80 @@ describe("ReminderPage", () => {
       document.dispatchEvent(paste);
     });
     expect(createMutateAsync).toHaveBeenLastCalledWith({ title: "Pasted note", due_date: "2026-10-08", position: 2 });
+  });
+
+  it("opens the new conversation before the list query includes the reminder", async () => {
+    const { navigation } = renderPage();
+    createMutateAsync.mockResolvedValue(reminder("r10", "Before the list", "2026-10-08"));
+    const today = day("Today");
+    fireEvent.click(within(today).getByRole("button", { name: "Add more" }));
+    const field = within(today).getByRole("textbox", { name: "Reminder title" });
+    fireEvent.change(field, { target: { value: "Before the list" } });
+    await act(async () => {
+      fireEvent.keyDown(field, { key: "Enter" });
+    });
+    expect(navigation.replace).toHaveBeenCalledWith("/acme/reminder?item=r10");
+    expect(screen.getByTestId("thread")).toHaveTextContent("Before the list");
+    expect(threadProps.current?.focusComposer).toBe(true);
+  });
+
+  it("opens a new reminder when the current week, filter, or phone list would hide it", async () => {
+    const paste = (text: string) => {
+      const event = new Event("paste", { bubbles: true, cancelable: true }) as ClipboardEvent;
+      Object.defineProperty(event, "clipboardData", { value: { getData: () => text } });
+      document.dispatchEvent(event);
+    };
+    createMutateAsync.mockImplementation(async (input: { title: string; due_date: string }) => {
+      const created = reminder(`new-${reminders.length}`, input.title, input.due_date);
+      reminders = [...reminders, created];
+      return created;
+    });
+
+    const nextWeek = renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Next week" }));
+    await act(async () => {
+      paste("From next week");
+    });
+    expect(nextWeek.navigation.replace).toHaveBeenCalledWith("/acme/reminder?item=new-4");
+    expect(screen.getByRole("heading", { name: "Y2026M10W2" })).toBeInTheDocument();
+    expect(screen.getByTestId("thread")).toHaveTextContent("From next week");
+    expect(screen.getByRole("button", { name: "From next week" })).toHaveAttribute("aria-current", "true");
+    nextWeek.unmount();
+
+    reminders = seedReminders();
+    resetReminderOpenMemory();
+    const completed = renderPage();
+    fireEvent.click(within(screen.getByRole("navigation", { name: "Reminder filters" })).getByRole("button", { name: "Completed" }));
+    await act(async () => {
+      paste("From completed");
+    });
+    expect(completed.navigation.replace).toHaveBeenCalledWith("/acme/reminder?item=new-4");
+    expect(screen.getByRole("heading", { name: "Y2026M10W2" })).toBeInTheDocument();
+    expect(screen.getByTestId("thread")).toHaveTextContent("From completed");
+    completed.unmount();
+
+    reminders = seedReminders();
+    resetReminderOpenMemory();
+    const tagged = renderPage();
+    fireEvent.click(within(screen.getByRole("group", { name: "Tags" })).getByRole("button", { name: /#docs/ }));
+    expect(screen.queryByRole("button", { name: "Ship it" })).not.toBeInTheDocument();
+    await act(async () => {
+      paste("Untagged");
+    });
+    expect(tagged.navigation.replace).toHaveBeenCalledWith("/acme/reminder?item=new-4");
+    expect(screen.getByRole("button", { name: "Ship it" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Untagged" })).toHaveAttribute("aria-current", "true");
+    tagged.unmount();
+
+    reminders = seedReminders();
+    resetReminderOpenMemory();
+    isMobile.current = true;
+    const phone = renderPage();
+    await act(async () => {
+      paste("On phone");
+    });
+    expect(phone.navigation.push).toHaveBeenCalledWith("/acme/reminder?item=new-4");
+    expect(phone.navigation.replace).not.toHaveBeenCalled();
   });
 
   it("assigns an agent from @ in the title, without a separate message", async () => {
@@ -285,6 +383,155 @@ describe("ReminderPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Hide completed" }));
     expect(screen.queryByRole("button", { name: "Plan week" })).not.toBeInTheDocument();
     expect(within(day("Mon (10/05)")).getByLabelText("1 completed")).toBeInTheDocument();
+  });
+
+  it("clears the unread badge on the open conversation and keeps the others", () => {
+    reminderSource.items = [
+      reminder("r1", "Ship it", "2026-10-08", { unread_count: 4 }),
+      reminder("r3", "Write #docs", "2026-10-09", { unread_count: 2 }),
+    ];
+    const view = renderPage();
+    expect(screen.queryByLabelText("4 unread messages")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("2 unread messages")).toHaveTextContent("2");
+    view.unmount();
+
+    appForeground.value = false;
+    renderPage();
+    expect(screen.getByLabelText("4 unread messages")).toHaveTextContent("4");
+  });
+
+  it("keeps the badge on the phone list after the conversation was left", () => {
+    isMobile.current = true;
+    rememberReminderOpen("ws-1", "r1");
+    reminderSource.items = [reminder("r1", "Ship it", "2026-10-08", { unread_count: 4 })];
+    renderPage();
+    expect(screen.queryByTestId("thread")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("4 unread messages")).toHaveTextContent("4");
+  });
+
+  it("shows the unread badge again while the reminder page is held off screen", () => {
+    reminderSource.items = [reminder("r1", "Ship it", "2026-10-08", { unread_count: 4 })];
+    function Harness({ active }: { active: boolean }) {
+      const navigation: NavigationAdapter = {
+        push: vi.fn(),
+        replace: vi.fn(),
+        back: vi.fn(),
+        pathname: "/acme/reminder",
+        searchParams: new URLSearchParams(),
+        hash: "",
+        getShareableUrl: (path) => path,
+      };
+      return (
+        <NavigationProvider value={navigation}>
+          <ReminderPage active={active} />
+        </NavigationProvider>
+      );
+    }
+    const view = renderWithI18n(<Harness active />);
+    expect(screen.queryByLabelText("4 unread messages")).not.toBeInTheDocument();
+    view.rerender(<Harness active={false} />);
+    expect(screen.getByLabelText("4 unread messages")).toHaveTextContent("4");
+  });
+
+  it("opens today's incomplete reminder and scrolls it into view", () => {
+    const scroll = vi.fn();
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scroll;
+    try {
+      const { navigation } = renderPage();
+      expect(navigation.replace).toHaveBeenCalledWith("/acme/reminder?item=r1");
+      expect(screen.getByTestId("thread")).toHaveTextContent("Ship it");
+      expect(threadProps.current?.focusComposer).toBe(false);
+      const row = document.querySelector('[data-reminder-id="r1"]');
+      expect(scroll.mock.instances).toContain(row);
+      expect(scroll).toHaveBeenCalledWith({ block: "center" });
+    } finally {
+      Element.prototype.scrollIntoView = original;
+    }
+  });
+
+  it("opens the nearest incomplete reminder when today has none, including a later week", () => {
+    reminderSource.items = [
+      reminder("y", "Yesterday", "2026-10-07"),
+      reminder("t", "Today done", "2026-10-08", { status: "done" }),
+      reminder("n", "Tomorrow", "2026-10-09"),
+    ];
+    const nearest = renderPage();
+    expect(nearest.navigation.replace).toHaveBeenCalledWith("/acme/reminder?item=y");
+    expect(screen.getByTestId("thread")).toHaveTextContent("Yesterday");
+    nearest.unmount();
+    resetReminderOpenMemory();
+
+    reminderSource.items = [reminder("far", "Later", "2026-10-20")];
+    const { navigation } = renderPage();
+    expect(navigation.replace).toHaveBeenCalledWith("/acme/reminder?item=far");
+    expect(screen.getByRole("heading", { name: "Y2026M10W3" })).toBeInTheDocument();
+  });
+
+  it("reopens the same conversation after the page remounts, and stays closed once dismissed", () => {
+    const first = renderPage();
+    expect(first.navigation.replace).toHaveBeenCalledWith("/acme/reminder?item=r1");
+    first.unmount();
+
+    reminderSource.items = [
+      reminder("r1", "Ship it", "2026-10-08", { status: "done" }),
+      reminder("closer", "Closer", "2026-10-08"),
+    ];
+    const again = renderPage();
+    expect(again.navigation.replace).toHaveBeenCalledWith("/acme/reminder?item=r1");
+    expect(again.navigation.replace).not.toHaveBeenCalledWith("/acme/reminder?item=closer");
+    expect(screen.getByTestId("thread")).toHaveTextContent("Ship it");
+    again.unmount();
+    resetReminderOpenMemory();
+
+    const opened = renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "close thread" }));
+    expect(opened.navigation.replace).toHaveBeenLastCalledWith("/acme/reminder");
+    opened.unmount();
+
+    const closed = renderPage();
+    expect(closed.navigation.replace).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("thread")).not.toBeInTheDocument();
+  });
+
+  it("keeps the opened conversation mounted while another section is showing", () => {
+    function Harness({ active }: { active: boolean }) {
+      const navigation: NavigationAdapter = {
+        push: vi.fn(),
+        replace: vi.fn(),
+        back: vi.fn(),
+        pathname: active ? "/acme/reminder" : "/acme/im",
+        searchParams: new URLSearchParams(),
+        hash: "",
+        getShareableUrl: (path) => path,
+      };
+      return (
+        <NavigationProvider value={navigation}>
+          <ReminderPage active={active} />
+        </NavigationProvider>
+      );
+    }
+    const view = renderWithI18n(<Harness active />);
+    expect(screen.getByTestId("thread")).toHaveTextContent("Ship it");
+
+    view.rerender(<Harness active={false} />);
+    expect(screen.getByTestId("thread")).toHaveTextContent("Ship it");
+
+    reminderSource.items = [
+      reminder("r1", "Ship it", "2026-10-08", { status: "done" }),
+      reminder("closer", "Closer", "2026-10-08"),
+    ];
+    view.rerender(<Harness active />);
+    expect(screen.getByTestId("thread")).toHaveTextContent("Ship it");
+    expect(screen.getByTestId("thread")).not.toHaveTextContent("Closer");
+  });
+
+  it("does not open a reminder level on a phone", () => {
+    isMobile.current = true;
+    const { navigation } = renderPage();
+    expect(navigation.push).not.toHaveBeenCalled();
+    expect(navigation.replace).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("thread")).not.toBeInTheDocument();
   });
 
   it("opens the reminder's messages in a resizable column that mentions any active agent", () => {

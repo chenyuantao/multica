@@ -2,10 +2,12 @@
 import { describe, expect, it } from "vitest";
 import type { Reminder } from "@multica/core/types";
 import {
+  boardAfterCreate,
   dayGroups,
   dropPosition,
   endPosition,
   filterByTags,
+  focusOpenReminder,
   moveTargets,
   pinnedReminders,
   reminderTags,
@@ -129,6 +131,44 @@ describe("reminder board", () => {
     expect(dropPosition(["a", "c", "b"], "c", byId)).toBe(2.5);
     expect(dropPosition(["c", "a", "b"], "c", byId)).toBe(0);
     expect(dropPosition(["a", "b", "c"], "c", byId)).toBe(5);
+  });
+
+  it("keeps a new reminder on screen by staying, or moving to its week", () => {
+    const anchor = today;
+    const nextWeek = new Date(2026, 9, 12);
+    expect(boardAfterCreate("week", anchor, todayKey, todayKey)).toEqual({ filter: "week", anchor });
+    expect(boardAfterCreate("week", nextWeek, todayKey, todayKey)).toMatchObject({ filter: "week" });
+    expect(boardAfterCreate("week", nextWeek, todayKey, todayKey).anchor).toEqual(new Date(2026, 9, 8));
+    expect(boardAfterCreate("today", anchor, todayKey, todayKey)).toEqual({ filter: "today", anchor });
+    expect(boardAfterCreate("today", anchor, todayKey, "2026-10-09")).toMatchObject({ filter: "week" });
+    expect(boardAfterCreate("today", anchor, todayKey, "2026-10-09").anchor).toEqual(new Date(2026, 9, 9));
+    expect(boardAfterCreate("done", anchor, todayKey, "2026-10-12")).toMatchObject({ filter: "week" });
+    expect(boardAfterCreate("done", anchor, todayKey, "2026-10-12").anchor).toEqual(new Date(2026, 9, 12));
+    expect(boardAfterCreate("open", nextWeek, todayKey, "2026-10-20")).toEqual({ filter: "open", anchor: nextWeek });
+    expect(boardAfterCreate("done", anchor, todayKey, null)).toEqual({ filter: "week", anchor });
+  });
+
+  it("lands on today's incomplete reminder, otherwise the nearest earlier day", () => {
+    expect(focusOpenReminder([r("y", "2026-10-07"), r("t", todayKey), r("n", "2026-10-09")], todayKey)?.id).toBe("t");
+    expect(
+      focusOpenReminder(
+        [
+          r("y", "2026-10-07"),
+          r("done", todayKey, { status: "done" }),
+          r("n", "2026-10-09"),
+        ],
+        todayKey,
+      )?.id,
+    ).toBe("y");
+    expect(focusOpenReminder([r("n", "2026-10-09"), r("far", "2026-10-20")], todayKey)?.id).toBe("n");
+    expect(
+      focusOpenReminder(
+        [r("b", todayKey, { position: 2 }), r("a", todayKey, { position: 1 })],
+        todayKey,
+      )?.id,
+    ).toBe("a");
+    expect(focusOpenReminder([r("pin", todayKey, { pending: true }), r("n", "2026-10-09")], todayKey)?.id).toBe("pin");
+    expect(focusOpenReminder([r("none", null), r("done", todayKey, { status: "done" })], todayKey)).toBeNull();
   });
 
   it("offers today, tomorrow, the coming Friday, and next Monday", () => {

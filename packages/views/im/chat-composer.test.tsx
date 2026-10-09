@@ -61,6 +61,19 @@ function pickFile(file: File) {
   fireEvent.change(input, { target: { files: [file] } });
 }
 
+describe("ChatComposer focus", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it("focuses the text box when a new conversation opens", () => {
+    renderWithI18n(
+      <ChatComposer chatId="chat-9" chatTitle="Call Ada" candidates={[]} onSend={vi.fn()} autoFocus />,
+    );
+    expect(document.activeElement).toBe(screen.getByRole("textbox", { name: /Message Call Ada/ }));
+  });
+});
+
 describe("ChatComposer attachments", () => {
   beforeEach(() => {
     localStorage.clear();

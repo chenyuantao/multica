@@ -39,6 +39,8 @@ interface ChatComposerProps {
   /** The message the next send quotes, as a one-line summary. */
   quote?: ComposerQuote | null;
   onCancelQuote?: () => void;
+  /** Puts the caret in the box when this conversation is the one just opened. */
+  autoFocus?: boolean;
 }
 
 export interface ComposerQuote {
@@ -79,7 +81,15 @@ function useCoarsePointer() {
   );
 }
 
-export function ChatComposer({ chatId, chatTitle, candidates, onSend, quote, onCancelQuote }: ChatComposerProps) {
+export function ChatComposer({
+  chatId,
+  chatTitle,
+  candidates,
+  onSend,
+  quote,
+  onCancelQuote,
+  autoFocus = false,
+}: ChatComposerProps) {
   const { t } = useT("im");
   const { t: tEditor } = useT("editor");
   const isMobile = useIsMobile();
@@ -104,12 +114,14 @@ export function ChatComposer({ chatId, chatTitle, candidates, onSend, quote, onC
     setText(serializeComposer(el));
     setCaret(caretOffset(el));
   }, [setText]);
+  const focusOnOpen = useRef(autoFocus);
   useLayoutEffect(() => {
     const draft = getChatDraft(chatId);
     const el = ref.current;
     if (el) renderComposer(el, draft);
     setTextState(draft);
     setCaret(draft.length);
+    if (focusOnOpen.current) el?.focus();
   }, [chatId]);
 
   const mention = activeMentionQuery(text, caret);

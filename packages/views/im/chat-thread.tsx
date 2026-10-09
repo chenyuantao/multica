@@ -121,6 +121,13 @@ interface ChatThreadProps {
   mentionCandidates?: ComposerMention[];
   /** Shows a close button in place of the details toggle, for a thread opened as a side panel. */
   onClose?: () => void;
+  /** Focus the composer on mount. Used when a new reminder opens its conversation. */
+  focusComposer?: boolean;
+  /**
+   * False while the thread stays mounted on a hidden page. Read receipts and
+   * the find shortcut belong to the page the user is looking at.
+   */
+  live?: boolean;
   /** Mobile stacked layout: back to the chat list, on to chat settings, and profiles as page levels. */
   mobileNav?: {
     backHref: string;
@@ -165,7 +172,9 @@ export function ChatThread({
   focusNote,
   mentionCandidates,
   onClose,
+  focusComposer = false,
   mobileNav,
+  live = true,
 }: ChatThreadProps) {
   const { t } = useT("im");
   const { getActorName } = useActorName();
@@ -247,6 +256,7 @@ export function ChatThread({
 
   // Same Mod+F chord as issue find (`findInIssue`); only this mounted thread intercepts it.
   useEffect(() => {
+    if (!live) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.repeat || isImeComposing(e)) return;
       if (!shortcutMatchesEvent(getShortcut("findInIssue"), e)) return;
@@ -255,7 +265,7 @@ export function ChatThread({
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [toggleSearch]);
+  }, [live, toggleSearch]);
 
   // An open chat reads everything that lands in it while the app is in front.
   // Messages that arrive while it is backgrounded stay unread until the user
@@ -267,13 +277,13 @@ export function ChatThread({
   const readKey = `${chat.last_comment_at ?? ""}:${unread}`;
   const attemptedReadRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!foreground || unread <= 0 || attemptedReadRef.current === readKey) return;
+    if (!live || !foreground || unread <= 0 || attemptedReadRef.current === readKey) return;
     const timer = setTimeout(() => {
       attemptedReadRef.current = readKey;
       markRead();
     }, 0);
     return () => clearTimeout(timer);
-  }, [foreground, unread, readKey, markRead]);
+  }, [live, foreground, unread, readKey, markRead]);
 
   const loaded = useMemo(
     () => messagePages?.pages.slice().reverse().flatMap((page) => page.comments) ?? EMPTY_COMMENTS,
@@ -866,6 +876,7 @@ export function ChatThread({
           onSend={onSend}
           quote={composerQuote}
           onCancelQuote={() => setQuoteId(null)}
+          autoFocus={focusComposer}
         />
           </>
         )}

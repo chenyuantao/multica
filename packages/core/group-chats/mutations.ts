@@ -10,9 +10,11 @@ import type {
   GroupChat,
   GroupChatMemberRef,
   GroupChatMemberType,
+  Reminder,
   UpdateGroupChatRequest,
 } from "../types";
 import { onInboxInvalidate, onInboxSummaryInvalidate } from "../inbox/ws-updaters";
+import { reminderKeys } from "../reminders/queries";
 import { groupChatKeys } from "./queries";
 
 function upsertChat(list: GroupChat[] | undefined, chat: GroupChat): GroupChat[] {
@@ -228,23 +230,30 @@ export function useSendGroupChatMessage(wsId: string, chatId: string) {
 }
 
 /**
- * Read every unread message of a chat. The chat's own count drops at once; the
- * inbox and the app badge follow the server's answer.
+ * Read every unread message of a chat. The chat list and the reminder list
+ * (a reminder is that same chat) drop the count at once; the inbox and the
+ * app badge follow the server's answer.
  */
 export function useMarkGroupChatRead(wsId: string, chatId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => api.markGroupChatRead(chatId),
     onMutate: async () => {
-      await qc.cancelQueries({ queryKey: groupChatKeys.list(wsId) });
+      await Promise.all([
+        qc.cancelQueries({ queryKey: groupChatKeys.list(wsId) }),
+        qc.cancelQueries({ queryKey: reminderKeys.all(wsId) }),
+      ]);
       const prev = qc.getQueryData<GroupChat[]>(groupChatKeys.list(wsId));
-      qc.setQueryData<GroupChat[]>(groupChatKeys.list(wsId), (old) =>
-        old?.map((c) => (c.id === chatId ? { ...c, unread_count: 0 } : c)),
-      );
-      return { prev };
+      const prevReminders = qc.getQueriesData<Reminder[]>({ queryKey: reminderKeys.all(wsId) });
+      const clear = <T extends { id: string; unread_count: number }>(item: T): T =>
+        item.id === chatId ? { ...item, unread_count: 0 } : item;
+      qc.setQueryData<GroupChat[]>(groupChatKeys.list(wsId), (old) => old?.map(clear));
+      qc.setQueriesData<Reminder[]>({ queryKey: reminderKeys.all(wsId) }, (old) => old?.map(clear));
+      return { prev, prevReminders };
     },
     onError: (_err, _vars, ctx) => {
       if (ctx?.prev) qc.setQueryData(groupChatKeys.list(wsId), ctx.prev);
+      for (const [key, data] of ctx?.prevReminders ?? []) qc.setQueryData(key, data);
     },
     onSettled: () => {
       void onInboxInvalidate(qc, wsId);
