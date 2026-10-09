@@ -29,6 +29,21 @@ describe("ImSidebarShell", () => {
     expect(localStorage.getItem("sidebar_width")).toBe("316");
   });
 
+  it("keeps a phone header action on the left and the title centered", () => {
+    const previous = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
+    renderWithI18n(
+      <ImSidebarHeader title="Chats" leading={<a href="/acme/reminder">Reminders</a>}>
+        <button type="button">New chat</button>
+      </ImSidebarHeader>,
+    );
+    const title = screen.getByRole("heading", { name: "Chats" });
+    const entry = screen.getByRole("link", { name: "Reminders" });
+    expect(title.compareDocumentPosition(entry) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+    expect(title.parentElement?.className).toContain("grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]");
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: previous });
+  });
+
   it("centers one Search label on a phone and opens the search page", () => {
     const previous = window.innerWidth;
     Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });

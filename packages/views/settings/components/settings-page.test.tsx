@@ -175,7 +175,7 @@ describe("SettingsPage phone tab bar", () => {
     const tabs = screen.getByRole("navigation", { name: "Sections" });
     expect([...tabs.querySelectorAll("a")].map((link) => link.textContent)).toEqual([
       "Chats",
-      "Reminders",
+      "Contacts",
       "Knowledge",
       "Settings",
     ]);

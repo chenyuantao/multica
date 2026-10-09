@@ -28,7 +28,6 @@ import { ChatThread } from "./chat-thread";
 import { ContactCard } from "./contact-card";
 import { ContactList } from "./contact-list";
 import { ImRail, type ImView } from "./im-rail";
-import { MeSectionTabs } from "./me-section-tabs";
 import { ImSearchDialog } from "./im-search-dialog";
 import { MobileContactDetail, MobileLevel, MobileTabScreen, parseContactParam } from "./mobile-shell";
 import { chatDisplayTitle, sortChats } from "./im-utils";
@@ -53,8 +52,9 @@ const EMPTY_CHATS: GroupChat[] = [];
 /**
  * Full-window group chat surface. Deliberately outside the dashboard shell:
  * it owns its own sidebar, thread and details columns. The rail section is
- * route-driven: chats (`/im`) and contacts (`/member`). On phones each
- * section is a bottom tab whose list is the root, and the columns become
+ * route-driven: chats (`/im`) and contacts (`/member`). On phones the bottom
+ * tabs are chats, contacts, knowledge and settings; reminders open from the
+ * chats header. Each tab's list is the root, and the columns become
  * route-driven levels: thread (`?chat=`), settings (`&view=settings`), a
  * run log (`&view=progress`), and a profile (`&contact=type:id`) opened
  * from either. On `/member` a profile is one level, and a group (`?chat=`)
@@ -270,11 +270,8 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
         );
       } else {
         contactLevel = (
-          <MobileTabScreen active="settings">
-            <div className="flex min-w-0 flex-1 flex-col">
-              <MeSectionTabs active="contacts" />
-              {contactList("min-w-0 flex-1 border-r-0")}
-            </div>
+          <MobileTabScreen active="contacts">
+            {contactList("min-w-0 flex-1 border-r-0")}
           </MobileTabScreen>
         );
       }
@@ -301,6 +298,14 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
             onSetPinned={setChatPinned}
             onOpenSearch={() => navigation.push(paths.imSearch())}
             iosMenu
+            leading={
+              <AppLink
+                href={paths.reminder()}
+                className="flex h-9 max-w-full items-center truncate rounded-md px-1.5 text-label font-medium text-foreground transition-colors hover:bg-foreground/5 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              >
+                {t(($) => $.rail.reminder)}
+              </AppLink>
+            }
             className="min-w-0 flex-1 border-r-0"
           />
         </MobileTabScreen>

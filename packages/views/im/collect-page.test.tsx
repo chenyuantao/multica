@@ -130,7 +130,7 @@ describe("CollectPage", () => {
     const bottom = screen.getByRole("navigation", { name: "Sections" });
     expect([...bottom.querySelectorAll("a")].map((link) => link.textContent)).toEqual([
       "Chats",
-      "Reminders",
+      "Contacts",
       "Knowledge",
       "Settings",
     ]);

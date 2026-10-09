@@ -30,6 +30,8 @@ interface ChatSidebarProps {
   onOpenSearch?: () => void;
   /** Phones get the iOS menu look on long press. */
   iosMenu?: boolean;
+  /** Phone-only control in the top-left of the list header. */
+  leading?: React.ReactNode;
   className?: string;
 }
 
@@ -44,6 +46,7 @@ export function ChatSidebar({
   onSetPinned,
   onOpenSearch,
   iosMenu,
+  leading,
   className,
 }: ChatSidebarProps) {
   const { t } = useT("im");
@@ -58,6 +61,7 @@ export function ChatSidebar({
         title={t(($) => $.tabs.chats)}
         onOpenSearch={onOpenSearch}
         desktopSearch={<ImSidebarSearch priority="chats" onOpenChat={onSelect} />}
+        leading={leading}
       >
         <button
           type="button"

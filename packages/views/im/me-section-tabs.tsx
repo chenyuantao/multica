@@ -5,7 +5,7 @@ import { cn } from "@multica/ui/lib/utils";
 import { useT } from "../i18n";
 import { AppLink } from "../navigation";
 
-/** Phone switcher at the top of Settings. The settings page is the tab itself; members and favorites are the other pages. */
+/** Phone switcher on Settings. Favorites stay here; contacts is also its own bottom tab. */
 export function MeSectionTabs({ active }: { active: "settings" | "contacts" | "collect" }) {
   const { t } = useT("im");
   const paths = useWorkspacePaths();

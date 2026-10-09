@@ -493,12 +493,13 @@ describe("ReminderPage", () => {
     expect(navigation.replace).toHaveBeenCalledWith("/acme/reminder");
   });
 
-  it("is its own tab on phones and opens a reminder as its own level", () => {
+  it("is a page above chats on phones, with a way back, and opens a reminder as its own level", () => {
     isMobile.current = true;
     const list = renderPage();
-    const tabs = screen.getByRole("navigation", { name: "Sections" });
-    expect(within(tabs).getByRole("link", { name: "Reminders" })).toHaveAttribute("aria-current", "page");
-    expect(screen.queryByRole("navigation", { name: "Contacts and favorites" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Sections" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Reminders" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Back to chats" }));
+    expect(list.navigation.replace).toHaveBeenCalledWith("/acme/im");
     fireEvent.click(screen.getByRole("button", { name: "Ship it" }));
     expect(list.navigation.push).toHaveBeenCalledWith("/acme/reminder?item=r1");
     list.unmount();

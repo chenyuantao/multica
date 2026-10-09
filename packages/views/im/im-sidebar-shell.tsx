@@ -51,20 +51,22 @@ interface ImSidebarHeaderProps {
   onOpenSearch?: () => void;
   /** Desktop field. Focusing it opens the shared search dropdown. */
   desktopSearch?: React.ReactNode;
+  /** Phone-only control in the top-left, opposite the header action. */
+  leading?: React.ReactNode;
   children?: React.ReactNode;
 }
 
-export function ImSidebarHeader({ title, onOpenSearch, desktopSearch, children }: ImSidebarHeaderProps) {
+export function ImSidebarHeader({ title, onOpenSearch, desktopSearch, leading, children }: ImSidebarHeaderProps) {
   const { t } = useT("im");
   const isMobile = useIsMobile();
 
   if (isMobile) {
     return (
       <div className="shrink-0">
-        <div className="grid h-12 grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center px-1">
-          <span />
+        <div className="grid h-12 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center px-1">
+          <div className="flex min-w-0 items-center justify-self-start">{leading}</div>
           <h1 className="truncate text-center text-body-lg font-semibold">{title}</h1>
-          <div className="flex justify-center">{children}</div>
+          <div className="flex items-center justify-self-end">{children}</div>
         </div>
         {onOpenSearch && (
           <div className="px-3 pb-2">

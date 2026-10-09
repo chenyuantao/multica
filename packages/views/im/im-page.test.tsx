@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, screen, within } from "@testing-library/react";
 import type { GroupChat } from "@multica/core/types";
@@ -75,12 +75,15 @@ vi.mock("./chat-sidebar", () => ({
     onSelect,
     onOpenSearch,
     onNewChat,
+    leading,
   }: {
     onSelect: (id: string) => void;
     onOpenSearch?: () => void;
     onNewChat: () => void;
+    leading?: ReactNode;
   }) => (
     <>
+      {leading}
       <button type="button" onClick={onNewChat}>
         New chat
       </button>
@@ -207,11 +210,20 @@ describe("ImPage tab roots on mobile", () => {
 
     expect(links).toEqual([
       ["Chats", "/acme/im"],
-      ["Reminders", "/acme/reminder"],
+      ["Contacts", "/acme/member"],
       ["Knowledge", "/acme/knowledge"],
       ["Settings", "/acme/settings"],
     ]);
     expect(screen.getByRole("link", { name: "Chats" })).toHaveAttribute("aria-current", "page");
+    expect(within(tabs).queryByRole("link", { name: "Reminders" })).not.toBeInTheDocument();
+  });
+
+  it("opens reminders from the top-left of chats", () => {
+    const navigation = renderPage("chats");
+    const entry = screen.getByRole("link", { name: "Reminders" });
+    expect(entry).toHaveAttribute("href", "/acme/reminder");
+    fireEvent.click(entry);
+    expect(navigation.push).toHaveBeenCalledWith("/acme/reminder");
   });
 
   it("badges the Chats tab with the unread message total", () => {
@@ -243,13 +255,13 @@ describe("ImPage tab roots on mobile", () => {
     expect(navigation.push).toHaveBeenCalledWith("/acme/member?view=search");
   });
 
-  it("keeps contacts inside Settings, next to favorites", () => {
+  it("makes contacts its own tab, without the settings switcher", () => {
     renderPage("contacts");
     const tabs = screen.getByRole("navigation", { name: "Sections" });
-    expect(within(tabs).getByRole("link", { name: "Settings" })).toHaveAttribute("aria-current", "page");
-    const mine = screen.getByRole("navigation", { name: "Contacts and favorites" });
-    expect(within(mine).getByRole("link", { name: "Contacts" })).toHaveAttribute("aria-current", "page");
-    expect(within(mine).getByRole("link", { name: "Favorites" })).toHaveAttribute("href", "/acme/collect");
+    expect(within(tabs).getByRole("link", { name: "Contacts" })).toHaveAttribute("aria-current", "page");
+    expect(within(tabs).getByRole("link", { name: "Contacts" })).toHaveAttribute("href", "/acme/member");
+    expect(screen.queryByRole("navigation", { name: "Contacts and favorites" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Contacts" })).toBeInTheDocument();
   });
 
   it("pushes new chat as its own page", () => {

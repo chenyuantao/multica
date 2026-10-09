@@ -49,7 +49,7 @@ import { ChatProgressRoute } from "./chat-progress-view";
 import { ChatThread } from "./chat-thread";
 import { ImRail } from "./im-rail";
 import { resolveTitleMentions, type ComposerMention } from "./im-utils";
-import { MobileContactDetail, MobileLevel, MobileTabScreen, parseContactParam } from "./mobile-shell";
+import { MobileContactDetail, MobileLevel, parseContactParam } from "./mobile-shell";
 import {
   boardAfterCreate,
   dueKey,
@@ -384,8 +384,8 @@ export function ReminderPage() {
       );
     }
     return (
-      <MobileTabScreen active="reminder">
-        <div className="flex min-w-0 flex-1 flex-col">
+      <MobileLevel title={t(($) => $.rail.reminder)} backHref={paths.im()} backLabel={t(($) => $.thread.back)}>
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <FilterTabs filter={filter} onChange={chooseFilter} />
           <div className="flex shrink-0 flex-col gap-2 border-b px-3 py-2">
             <div className="flex min-w-0 items-center gap-2">
@@ -395,7 +395,7 @@ export function ReminderPage() {
           </div>
           {board}
         </div>
-      </MobileTabScreen>
+      </MobileLevel>
     );
   }
 
