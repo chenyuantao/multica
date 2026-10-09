@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Calendar,
   CalendarClock,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Eye,
@@ -31,6 +32,12 @@ import {
 import type { Agent, Reminder } from "@multica/core/types";
 import { agentListOptions } from "@multica/core/workspace/queries";
 import { Button } from "@multica/ui/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@multica/ui/components/ui/dropdown-menu";
 import { useIsMobile } from "@multica/ui/hooks/use-mobile";
 import { cn } from "@multica/ui/lib/utils";
 import { useAppForeground } from "../common/use-app-foreground";
@@ -41,7 +48,6 @@ import { useDetailsColumnWidth } from "./use-details-column-width";
 import { ChatProgressRoute } from "./chat-progress-view";
 import { ChatThread } from "./chat-thread";
 import { ImRail } from "./im-rail";
-import { ImSidebarHeader, ImSidebarShell } from "./im-sidebar-shell";
 import { resolveTitleMentions, type ComposerMention } from "./im-utils";
 import { MobileContactDetail, MobileLevel, MobileTabScreen, parseContactParam } from "./mobile-shell";
 import {
@@ -396,21 +402,6 @@ export function ReminderPage() {
   return (
     <div className="flex h-svh w-full overflow-hidden bg-background text-foreground">
       <ImRail active="reminder" />
-      <ImSidebarShell>
-        <ImSidebarHeader title={t(($) => $.reminder.title)}>
-          <h1 className="min-w-0 flex-1 truncate px-1 text-body-lg font-semibold">{t(($) => $.reminder.title)}</h1>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={() => void list.refetch()}
-            disabled={list.isFetching}
-            aria-label={t(($) => $.reminder.refresh)}
-          >
-            <RefreshCw className={cn(list.isFetching && "animate-spin")} />
-          </Button>
-        </ImSidebarHeader>
-        <FilterList filter={filter} onChange={chooseFilter} />
-      </ImSidebarShell>
       <main className="flex min-w-0 flex-1 flex-col">
         <header className="relative flex h-14 shrink-0 items-center gap-3 border-b px-6">
           <div className="absolute inset-0">
@@ -420,8 +411,22 @@ export function ReminderPage() {
             className="relative flex min-w-0 flex-1 items-center justify-between gap-3"
             style={{ WebkitAppRegion: "no-drag" } as CSSProperties}
           >
-            <div className="flex min-w-0 shrink-0 items-center">{heading}</div>
-            {tools}
+            <div className="flex min-w-0 items-center gap-3">
+              <FilterMenu filter={filter} onChange={chooseFilter} />
+              {filter === "week" ? heading : null}
+            </div>
+            <div className="flex shrink-0 items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => void list.refetch()}
+                disabled={list.isFetching}
+                aria-label={t(($) => $.reminder.refresh)}
+              >
+                <RefreshCw className={cn(list.isFetching && "animate-spin")} />
+              </Button>
+              {tools}
+            </div>
           </div>
         </header>
         {list.isError ? (
@@ -444,27 +449,42 @@ export function ReminderPage() {
   );
 }
 
-function FilterList({ filter, onChange }: { filter: ReminderFilter; onChange: (filter: ReminderFilter) => void }) {
+/** The four reminder views, opened from the top bar instead of a sidebar column. */
+function FilterMenu({ filter, onChange }: { filter: ReminderFilter; onChange: (filter: ReminderFilter) => void }) {
   const { t } = useT("im");
+  const current = FILTERS.find((item) => item.id === filter) ?? FILTERS[0];
+  const CurrentIcon = current.icon;
   return (
-    <nav aria-label={t(($) => $.reminder.filters)} className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-3 py-2">
-      {FILTERS.map(({ id, icon: Icon, dot }) => (
-        <button
-          key={id}
-          type="button"
-          onClick={() => onChange(id)}
-          aria-current={filter === id ? "true" : undefined}
-          className={cn(
-            "flex h-9 items-center gap-3 rounded-lg px-3 text-left text-body transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
-            filter === id ? "bg-brand text-brand-foreground hover:bg-brand" : "text-foreground hover:bg-foreground/5",
-          )}
-        >
-          <span className={cn("size-3 shrink-0 rounded-full", dot, filter === id && "ring-2 ring-brand-foreground/60")} />
-          <Icon className="size-5 shrink-0" />
-          <span className="flex-1 truncate">{t(($) => $.reminder[id])}</span>
-        </button>
-      ))}
-    </nav>
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={<Button variant="outline" size="sm" className="max-w-56 gap-2" />}
+      >
+        <span className={cn("size-2.5 shrink-0 rounded-full", current.dot)} />
+        <CurrentIcon />
+        <span className="truncate">{t(($) => $.reminder[current.id])}</span>
+        <ChevronDown className="text-muted-foreground" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-56">
+        {FILTERS.map(({ id, icon: Icon, dot }) => {
+          const selected = filter === id;
+          return (
+            <DropdownMenuItem
+              key={id}
+              onClick={() => onChange(id)}
+              aria-current={selected ? "true" : undefined}
+              className={cn(
+                "h-9 gap-3 rounded-lg px-3",
+                selected && "bg-brand text-brand-foreground focus:bg-brand focus:text-brand-foreground data-highlighted:bg-brand data-highlighted:text-brand-foreground",
+              )}
+            >
+              <span className={cn("size-3 shrink-0 rounded-full", dot, selected && "ring-2 ring-brand-foreground/60")} />
+              <Icon className="size-5" />
+              <span className="flex-1 truncate">{t(($) => $.reminder[id])}</span>
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

@@ -171,8 +171,9 @@ describe("ReminderPage", () => {
     expect(rail.querySelector('[href="/acme/reminder"]')).toHaveAttribute("aria-current", "page");
     expect(screen.queryByRole("navigation", { name: "Group chats" })).not.toBeInTheDocument();
 
-    const filters = screen.getByRole("navigation", { name: "Reminder filters" });
-    expect(within(filters).getAllByRole("button").map((b) => b.textContent)).toEqual([
+    expect(screen.queryByRole("navigation", { name: "Reminder filters" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "This week" }));
+    expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual([
       "This week",
       "Today",
       "Open",
@@ -196,10 +197,11 @@ describe("ReminderPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Back to this week" }));
     expect(screen.getByRole("heading", { name: "Y2026M10W2" })).toBeInTheDocument();
 
-    fireEvent.click(within(filters).getByRole("button", { name: "Open" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Open" }));
     expect(screen.getByRole("button", { name: "Old task" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Plan week" })).not.toBeInTheDocument();
-    fireEvent.click(within(filters).getByRole("button", { name: "Completed" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Completed" }));
     expect(screen.getByRole("button", { name: "Plan week" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Ship it" })).not.toBeInTheDocument();
   });
@@ -280,7 +282,8 @@ describe("ReminderPage", () => {
     reminders = seedReminders();
     resetReminderOpenMemory();
     const completed = renderPage();
-    fireEvent.click(within(screen.getByRole("navigation", { name: "Reminder filters" })).getByRole("button", { name: "Completed" }));
+    fireEvent.click(screen.getByRole("button", { name: "This week" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Completed" }));
     await act(async () => {
       paste("From completed");
     });
