@@ -59,7 +59,7 @@ export function MobileLevelHeader({
   action?: React.ReactNode;
 }) {
   return (
-    <header className="grid h-12 shrink-0 grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center border-b bg-sidebar px-1">
+    <header className="grid h-12 shrink-0 grid-cols-[2.75rem_minmax(0,1fr)_minmax(2.75rem,auto)] items-center border-b bg-sidebar px-1">
       <MobileBackButton fallback={backHref} label={backLabel} />
       <div className="min-w-0 text-center">
         <h1 className="truncate text-body-lg font-semibold">{title}</h1>

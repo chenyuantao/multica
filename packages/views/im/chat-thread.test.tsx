@@ -16,6 +16,7 @@ const deleteMessage = vi.hoisted(() => ({ mutate: vi.fn(), isPending: false }));
 const copyText = vi.hoisted(() => vi.fn());
 const currentMember = vi.hoisted(() => ({ role: "member" as string | null }));
 const markRead = vi.hoisted(() => vi.fn());
+const setTaskDone = vi.hoisted(() => vi.fn());
 const appForeground = vi.hoisted(() => ({ value: true }));
 
 vi.mock("../common/use-app-foreground", () => ({ useAppForeground: () => appForeground.value }));
@@ -38,6 +39,7 @@ vi.mock("@multica/core/group-chats", async () => ({
   useSendGroupChatMessage: () => ({ mutateAsync: sendMutateAsync }),
   useDeleteGroupChatMessage: () => deleteMessage,
   useMarkGroupChatRead: () => ({ mutate: markRead }),
+  useSetTaskChatDone: () => ({ mutate: setTaskDone, isPending: false }),
 }));
 
 vi.mock("@multica/core/collections", () => ({
@@ -172,6 +174,7 @@ function renderThread() {
 
 beforeEach(() => {
   fetchOlder.mockReset();
+  setTaskDone.mockReset();
   vi.mocked(useInfiniteQuery).mockImplementation(
     () =>
       ({
@@ -908,6 +911,54 @@ describe("ChatThread forward and multi-select", () => {
     fireEvent.click(screen.getByRole("button", { name: /Chat History for Ada/ }));
     expect(onOpenHistory).toHaveBeenCalledWith("m-1");
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+});
+
+describe("ChatThread task status", () => {
+  beforeEach(() => {
+    messages = [message("m-1", "alpha release notes")];
+    vi.mocked(useQuery).mockImplementation(() => ({ data: messages, isError: false }) as never);
+  });
+
+  it("hides the completion button on an ordinary chat", () => {
+    renderThread();
+    expect(screen.queryByRole("button", { name: "Mark as done" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Mark as not done" })).toBeNull();
+  });
+
+  it("checks off an open task from the button left of search", () => {
+    renderWithI18n(
+      <ChatThread
+        wsId="ws-1"
+        chat={{ ...chat, task: true, status: "todo" }}
+        userId="user-1"
+        panelOpen={false}
+        onTogglePanel={() => {}}
+      />,
+    );
+    const mark = screen.getByRole("button", { name: "Mark as done" });
+    const search = screen.getByRole("button", { name: /Search messages/ });
+    expect(mark).toHaveAttribute("aria-pressed", "false");
+    expect(mark.compareDocumentPosition(search) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(mark);
+    expect(setTaskDone).toHaveBeenCalledWith({ chatId: "chat-1", done: true }, expect.any(Object));
+  });
+
+  it("reopens a finished task from the same button", () => {
+    renderWithI18n(
+      <ChatThread
+        wsId="ws-1"
+        chat={{ ...chat, task: true, status: "done" }}
+        userId="user-1"
+        panelOpen={false}
+        onTogglePanel={() => {}}
+      />,
+    );
+    const mark = screen.getByRole("button", { name: "Mark as not done" });
+    expect(mark).toHaveAttribute("aria-pressed", "true");
+    expect(mark.querySelector("svg")).toHaveClass("text-info");
+    fireEvent.click(mark);
+    expect(setTaskDone).toHaveBeenCalledWith({ chatId: "chat-1", done: false }, expect.any(Object));
   });
 });
 

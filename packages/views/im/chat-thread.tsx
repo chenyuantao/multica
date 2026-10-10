@@ -2,7 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Bookmark, Brain, Check, Copy, Forward, Info, ListChecks, Loader2, MoreHorizontal, PanelRight, Quote, RotateCw, Search, Sparkles, Trash2, X } from "lucide-react";
+import { AlertTriangle, Bookmark, Brain, Check, Circle, Copy, Forward, Info, ListChecks, Loader2, MoreHorizontal, PanelRight, Quote, RotateCw, Search, Sparkles, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { configuredConversationStarters } from "@multica/core/agents";
 import { useCreateMessageCollection } from "@multica/core/collections";
@@ -15,6 +15,7 @@ import {
   useForwardChatHistory,
   useMarkGroupChatRead,
   useSendGroupChatMessage,
+  useSetTaskChatDone,
 } from "@multica/core/group-chats";
 import { useCancelIssueRun } from "@multica/core/issues/mutations";
 import { issueTasksOptions } from "@multica/core/issues/queries";
@@ -187,6 +188,7 @@ export function ChatThread({
   } = useInfiniteQuery(groupChatMessagesPageOptions(wsId, chat.id));
   const { data: agentList = EMPTY_AGENTS } = useQuery(agentListOptions(wsId));
   const send = useSendGroupChatMessage(wsId, chat.id);
+  const setTaskDone = useSetTaskChatDone(wsId);
   const forward = useForwardChatHistory(wsId);
   const collect = useCreateMessageCollection(wsId);
   const remove = useDeleteGroupChatMessage(wsId, chat.id);
@@ -468,6 +470,32 @@ export function ChatThread({
       <Search />
     </Button>
   );
+  const taskDone = chat.task && chat.status === "done";
+  const taskStatusLabel = taskDone ? t(($) => $.sidebar.mark_open) : t(($) => $.sidebar.mark_done);
+  const taskStatusButton = chat.task ? (
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      className="relative"
+      style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+      onClick={() =>
+        setTaskDone.mutate(
+          { chatId: chat.id, done: !taskDone },
+          {
+            onError: (err) =>
+              toast.error(err instanceof Error ? err.message : t(($) => $.sidebar.task_status_failed)),
+          },
+        )
+      }
+      disabled={setTaskDone.isPending}
+      aria-busy={setTaskDone.isPending}
+      aria-pressed={taskDone}
+      aria-label={taskStatusLabel}
+      title={taskStatusLabel}
+    >
+      {taskDone ? <Check className="text-info" /> : <Circle className="text-muted-foreground" />}
+    </Button>
+  ) : null;
 
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -673,6 +701,7 @@ export function ChatThread({
           backLabel={mobileNav.backLabel ?? t(($) => $.thread.back)}
           action={
             <div className="flex items-center gap-0.5">
+              {taskStatusButton}
               {searchButton}
               {mobileNav.settingsHref && (
                 <Button
@@ -698,6 +727,7 @@ export function ChatThread({
             <p className="truncate text-caption text-muted-foreground">{subtitle}</p>
           </div>
           {onAskAI && <AskAIBadge onClick={() => onAskAI()} />}
+          {taskStatusButton}
           {searchButton}
           {onClose ? (
             <Button
