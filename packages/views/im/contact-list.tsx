@@ -52,7 +52,8 @@ export function ContactList({
       return next;
     });
 
-  const visibleChats = chats.filter((c) => !directChatPeer(c, userId));
+  // Task chats are reminders with messages, not rooms people created.
+  const visibleChats = chats.filter((c) => !c.task && !directChatPeer(c, userId));
   const visiblePeople = people;
   const visibleAgents = agents;
 
