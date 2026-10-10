@@ -5,10 +5,10 @@ import type { ReminderFilter } from "./reminder-board";
  * Absence means the page has not chosen yet. `null` means the user closed it.
  * Kept in memory for the tab, so leaving and returning does not start over.
  *
- * The board view is kept the same way: Today (or another filter) and the week
- * being shown survive leaving the page and switching filters. Absence means
- * the page is still on this week, so the first visit can still choose where
- * to land.
+ * The board view is kept the same way: a chosen week, including this week, and
+ * the other filters survive leaving the page. Absence means the page is still
+ * on Today, the first-visit default, so that visit can still choose which
+ * conversation to land on.
  *
  * Hiding completed reminders and the active tags are kept apart from the
  * board, so they never stop the first visit from choosing where to land.

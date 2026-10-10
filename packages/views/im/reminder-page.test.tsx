@@ -137,6 +137,15 @@ function renderPage(search = "") {
 
 const day = (name: string) => screen.getByRole("region", { name });
 
+function filterMenu() {
+  return document.querySelector<HTMLButtonElement>('[data-slot="dropdown-menu-trigger"]')!;
+}
+
+function chooseFilter(name: string) {
+  fireEvent.click(filterMenu());
+  fireEvent.click(screen.getByRole("menuitem", { name }));
+}
+
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date(2026, 9, 8, 10));
@@ -157,7 +166,7 @@ afterEach(() => {
 });
 
 describe("ReminderPage", () => {
-  it("sits between chats and knowledge and lists the week by day, without the chat list", () => {
+  it("sits between chats and knowledge, opens on today, and lists the week by day", () => {
     const { navigation } = renderPage();
     const rail = screen.getByRole("navigation", { name: "Sections" });
     expect([...rail.querySelectorAll("a")].map((link) => link.getAttribute("href"))).toEqual([
@@ -173,15 +182,19 @@ describe("ReminderPage", () => {
     expect(screen.queryByRole("navigation", { name: "Group chats" })).not.toBeInTheDocument();
 
     expect(screen.queryByRole("navigation", { name: "Reminder filters" })).not.toBeInTheDocument();
-    const weekFilter = screen.getByRole("button", { name: "This week" });
-    expect(weekFilter).not.toHaveTextContent("This week");
-    fireEvent.click(weekFilter);
+    expect(filterMenu()).toHaveTextContent("Today");
+    expect(screen.queryByRole("heading", { name: /Y2026/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ship it" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Write #docs" })).not.toBeInTheDocument();
+    fireEvent.click(filterMenu());
     expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual([
       "Today",
       "This week",
       "Open",
       "Completed",
     ]);
+    fireEvent.click(screen.getByRole("menuitem", { name: "This week" }));
+    expect(filterMenu()).not.toHaveTextContent("This week");
     expect(screen.getByRole("heading", { name: "Y2026M10W2" })).toBeInTheDocument();
     expect(within(day("Mon (10/05)")).getByRole("checkbox", { name: 'Mark "Plan week" as not completed' })).toBeChecked();
     expect(day("Sun (10/11)")).toBeInTheDocument();
@@ -200,6 +213,7 @@ describe("ReminderPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Back to this week" }));
     expect(screen.getByRole("heading", { name: "Y2026M10W2" })).toBeInTheDocument();
 
+    fireEvent.click(filterMenu());
     fireEvent.click(screen.getByRole("menuitem", { name: "Open" }));
     expect(screen.getByRole("button", { name: "Old task" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Plan week" })).not.toBeInTheDocument();
@@ -276,6 +290,7 @@ describe("ReminderPage", () => {
     });
 
     const nextWeek = renderPage();
+    chooseFilter("This week");
     fireEvent.click(screen.getByRole("button", { name: "Next week" }));
     await act(async () => {
       paste("From next week");
@@ -289,8 +304,7 @@ describe("ReminderPage", () => {
     reminders = seedReminders();
     resetReminderOpenMemory();
     const completed = renderPage();
-    fireEvent.click(screen.getByRole("button", { name: "This week" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Completed" }));
+    chooseFilter("Completed");
     await act(async () => {
       paste("From completed");
     });
@@ -302,6 +316,7 @@ describe("ReminderPage", () => {
     reminders = seedReminders();
     resetReminderOpenMemory();
     const tagged = renderPage();
+    chooseFilter("This week");
     fireEvent.click(within(screen.getByRole("group", { name: "Tags" })).getByRole("button", { name: /#docs/ }));
     expect(screen.queryByRole("button", { name: "Ship it" })).not.toBeInTheDocument();
     await act(async () => {
@@ -380,6 +395,7 @@ describe("ReminderPage", () => {
 
   it("filters by tag and hides completed reminders behind a count", () => {
     renderPage();
+    chooseFilter("This week");
     const tags = screen.getByRole("group", { name: "Tags" });
     const docs = within(tags).getByRole("button", { name: /#docs/ });
     expect(docs).toHaveTextContent("0/1");
@@ -397,6 +413,7 @@ describe("ReminderPage", () => {
 
   it("keeps the tag filter and hidden completed reminders after leaving the page", () => {
     const page = renderPage();
+    chooseFilter("This week");
     fireEvent.click(within(screen.getByRole("group", { name: "Tags" })).getByRole("button", { name: /#docs/ }));
     fireEvent.click(screen.getByRole("button", { name: "Hide completed" }));
     page.unmount();
@@ -423,6 +440,7 @@ describe("ReminderPage", () => {
       reminder("r3", "Write #docs", "2026-10-09", { unread_count: 2 }),
     ];
     const view = renderPage();
+    chooseFilter("This week");
     expect(screen.queryByLabelText("4 unread messages")).not.toBeInTheDocument();
     expect(screen.getByLabelText("2 unread messages")).toHaveTextContent("2");
     view.unmount();
@@ -473,29 +491,33 @@ describe("ReminderPage", () => {
     reminderSource.items = [reminder("far", "Later", "2026-10-20")];
     const { navigation } = renderPage();
     expect(navigation.replace).toHaveBeenCalledWith("/acme/reminder?item=far");
-    expect(screen.getByRole("heading", { name: "Y2026M10W3" })).toBeInTheDocument();
+    expect(filterMenu()).toHaveTextContent("Today");
+    expect(screen.queryByRole("heading", { name: /Y2026/ })).not.toBeInTheDocument();
   });
 
   it("keeps the open week and the today view after switching away", () => {
-    const filterMenu = () => document.querySelector<HTMLButtonElement>('[data-slot="dropdown-menu-trigger"]')!;
     const page = renderPage();
+    chooseFilter("This week");
     fireEvent.click(screen.getByRole("button", { name: "Next week" }));
-    fireEvent.click(filterMenu());
-    fireEvent.click(screen.getByRole("menuitem", { name: "Today" }));
-    fireEvent.click(filterMenu());
-    fireEvent.click(screen.getByRole("menuitem", { name: "This week" }));
+    chooseFilter("Today");
+    chooseFilter("This week");
     expect(screen.getByRole("heading", { name: "Y2026M10W3" })).toBeInTheDocument();
     page.unmount();
 
     const returned = renderPage();
     expect(screen.getByRole("heading", { name: "Y2026M10W3" })).toBeInTheDocument();
-    fireEvent.click(filterMenu());
-    fireEvent.click(screen.getByRole("menuitem", { name: "Today" }));
+    chooseFilter("Today");
     returned.unmount();
 
-    renderPage();
+    const today = renderPage();
     expect(filterMenu()).toHaveTextContent("Today");
     expect(screen.queryByRole("heading", { name: /Y2026/ })).not.toBeInTheDocument();
+    chooseFilter("This week");
+    expect(screen.getByRole("heading", { name: "Y2026M10W2" })).toBeInTheDocument();
+    today.unmount();
+
+    renderPage();
+    expect(screen.getByRole("heading", { name: "Y2026M10W2" })).toBeInTheDocument();
   });
 
   it("reopens the same conversation after the page remounts, and stays closed once dismissed", () => {

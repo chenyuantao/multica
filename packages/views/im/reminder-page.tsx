@@ -99,12 +99,12 @@ function isTyping(el: Element | null): boolean {
  * Desktop opens a reminder's messages in a resizable column on the right;
  * a phone keeps the list inside Me and opens a reminder as its own level.
  *
- * The first visit lands on today's incomplete reminder, or the nearest other
- * day's. That open conversation is kept in memory for the tab, so leaving and
- * returning reopens it instead of choosing again. Today, and the week being
- * shown, are kept the same way: leaving for chats or switching filters and
- * coming back does not jump to this week. Hidden completed reminders and
- * the tag filter come back too.
+ * The first visit shows Today and opens today's incomplete reminder, or the
+ * nearest other day's conversation. That open conversation is kept in memory
+ * for the tab, so leaving and returning reopens it instead of choosing again.
+ * A chosen week, including this week, and the other filters are kept the same
+ * way. Today itself is the unset default, so a visit with no chosen view stays
+ * on Today. Hidden completed reminders and the tag filter come back too.
  * Creating a reminder opens its conversation at once, focuses the composer,
  * and brings that row into view, moving the week or filter when the row
  * would otherwise be hidden.
@@ -118,7 +118,7 @@ export function ReminderPage() {
   const isMobile = useIsMobile();
   const today = useMemo(() => new Date(), []);
   const todayKey = toDateKey(today);
-  const [filter, setFilter] = useState<ReminderFilter>(() => reminderBoard(wsId)?.filter ?? "week");
+  const [filter, setFilter] = useState<ReminderFilter>(() => reminderBoard(wsId)?.filter ?? "today");
   const [anchor, setAnchor] = useState<Date>(() => {
     const key = reminderBoard(wsId)?.anchorKey;
     return key ? fromDateKey(key) : new Date();
@@ -131,7 +131,7 @@ export function ReminderPage() {
   if (boardWsId !== wsId) {
     setBoardWsId(wsId);
     const remembered = reminderBoard(wsId);
-    setFilter(remembered?.filter ?? "week");
+    setFilter(remembered?.filter ?? "today");
     setAnchor(remembered ? fromDateKey(remembered.anchorKey) : new Date());
     const rememberedList = reminderListMemory(wsId);
     setHideCompleted(rememberedList?.hideCompleted ?? false);
@@ -191,8 +191,8 @@ export function ReminderPage() {
       }
       return;
     }
-    // A chosen week or Today is already restored. Landing again would pull
-    // the week back to whichever reminder is nearest.
+    // A chosen filter is already restored. Landing again would reopen whichever
+    // reminder is nearest, and a Today list must not slide the week under it.
     if (reminderBoard(wsId)) return;
     if (list.isPending || choseFocus.current) return;
     choseFocus.current = true;
@@ -205,23 +205,25 @@ export function ReminderPage() {
     if (!target) return;
     setScrollToId(target.id);
     const key = dueKey(target);
-    if (key) {
+    if (filter === "week" && key) {
       const weekStart = startOfWeek(today);
       const monday = toDateKey(weekStart);
       const sunday = toDateKey(addDays(weekStart, 6));
       if (key < monday || key > sunday) setAnchor(fromDateKey(key));
     }
     nav.replace(pathsRef.current.reminderItem(target.id));
-  }, [all, isMobile, itemInUrl, list.isPending, today, todayKey, wsId]);
+  }, [all, filter, isMobile, itemInUrl, list.isPending, today, todayKey, wsId]);
 
   useEffect(() => {
     if (!wsId) return;
-    if (filter === "week" && toDateKey(anchor) === todayKey) {
+    // Today is the unset default. Forgetting it keeps the next visit on Today
+    // and leaves a chosen week, including this week, in memory.
+    if (filter === "today") {
       forgetReminderBoard(wsId);
       return;
     }
     rememberReminderBoard(wsId, { filter, anchorKey: toDateKey(anchor) });
-  }, [anchor, filter, todayKey, wsId]);
+  }, [anchor, filter, wsId]);
 
   useEffect(() => {
     if (wsId) rememberReminderList(wsId, { hideCompleted, tags: activeTags });
