@@ -687,7 +687,7 @@ function ProgressRing({ rate }: { rate: number }) {
   );
 }
 
-/** The reminder's messages, sized and dragged like the chat details column. */
+/** The reminder's messages. Dragging matches the chat details column, with its own stored width. */
 function ReminderThreadColumn({
   wsId,
   reminder,
@@ -705,7 +705,7 @@ function ReminderThreadColumn({
 }) {
   const { t } = useT("im");
   const columnRef = useRef<HTMLDivElement>(null);
-  const { width, commit, options } = useDetailsColumnWidth(columnRef);
+  const { width, commit, options } = useDetailsColumnWidth(columnRef, "reminder");
   return (
     <div ref={columnRef} className="relative flex h-full shrink-0 flex-col border-l" style={{ width }}>
       <ChatThread

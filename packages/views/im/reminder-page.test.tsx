@@ -532,6 +532,24 @@ describe("ReminderPage", () => {
     expect(screen.queryByTestId("thread")).not.toBeInTheDocument();
   });
 
+  it("remembers the message column width apart from the chat details column", () => {
+    localStorage.setItem("multica:im-column-width:details", "480");
+    const first = renderPage("item=r1");
+    const handle = () => screen.getByRole("separator", { name: "Resize reminder messages" });
+    expect(handle()).toHaveAttribute("aria-valuenow", "320");
+
+    fireEvent.keyDown(handle(), { key: "ArrowLeft" });
+    expect(handle()).toHaveAttribute("aria-valuenow", "336");
+    expect(localStorage.getItem("multica:im-column-width:reminder")).toBe("336");
+    expect(localStorage.getItem("multica:im-column-width:details")).toBe("480");
+
+    first.unmount();
+    renderPage("item=r1");
+    expect(handle()).toHaveAttribute("aria-valuenow", "336");
+    localStorage.removeItem("multica:im-column-width:details");
+    localStorage.removeItem("multica:im-column-width:reminder");
+  });
+
   it("opens the reminder's messages in a resizable column that mentions any active agent", () => {
     const { navigation } = renderPage("item=r1");
     expect(screen.getByTestId("thread")).toHaveTextContent("Ship it");
