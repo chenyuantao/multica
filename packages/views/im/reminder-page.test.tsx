@@ -176,8 +176,8 @@ describe("ReminderPage", () => {
     expect(weekFilter).not.toHaveTextContent("This week");
     fireEvent.click(weekFilter);
     expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual([
-      "This week",
       "Today",
+      "This week",
       "Open",
       "Completed",
     ]);
@@ -390,6 +390,28 @@ describe("ReminderPage", () => {
     expect(within(day("Mon (10/05)")).getByLabelText("1 completed")).toBeInTheDocument();
   });
 
+  it("keeps the tag filter and hidden completed reminders after leaving the page", () => {
+    const page = renderPage();
+    fireEvent.click(within(screen.getByRole("group", { name: "Tags" })).getByRole("button", { name: /#docs/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Hide completed" }));
+    page.unmount();
+
+    const returned = renderPage();
+    expect(within(screen.getByRole("group", { name: "Tags" })).getByRole("button", { name: /#docs/ })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.queryByRole("button", { name: "Ship it" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Show completed" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Clear tag filter" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show completed" }));
+    returned.unmount();
+
+    renderPage();
+    expect(screen.getByRole("button", { name: "Ship it" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Hide completed" })).toBeInTheDocument();
+  });
+
   it("clears the unread badge on the open conversation and keeps the others", () => {
     reminderSource.items = [
       reminder("r1", "Ship it", "2026-10-08", { unread_count: 4 }),
@@ -447,6 +469,28 @@ describe("ReminderPage", () => {
     const { navigation } = renderPage();
     expect(navigation.replace).toHaveBeenCalledWith("/acme/reminder?item=far");
     expect(screen.getByRole("heading", { name: "Y2026M10W3" })).toBeInTheDocument();
+  });
+
+  it("keeps the open week and the today view after switching away", () => {
+    const filterMenu = () => document.querySelector<HTMLButtonElement>('[data-slot="dropdown-menu-trigger"]')!;
+    const page = renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Next week" }));
+    fireEvent.click(filterMenu());
+    fireEvent.click(screen.getByRole("menuitem", { name: "Today" }));
+    fireEvent.click(filterMenu());
+    fireEvent.click(screen.getByRole("menuitem", { name: "This week" }));
+    expect(screen.getByRole("heading", { name: "Y2026M10W3" })).toBeInTheDocument();
+    page.unmount();
+
+    const returned = renderPage();
+    expect(screen.getByRole("heading", { name: "Y2026M10W3" })).toBeInTheDocument();
+    fireEvent.click(filterMenu());
+    fireEvent.click(screen.getByRole("menuitem", { name: "Today" }));
+    returned.unmount();
+
+    renderPage();
+    expect(filterMenu()).toHaveTextContent("Today");
+    expect(screen.queryByRole("heading", { name: /Y2026/ })).not.toBeInTheDocument();
   });
 
   it("reopens the same conversation after the page remounts, and stays closed once dismissed", () => {

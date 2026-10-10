@@ -64,7 +64,15 @@ import {
 } from "./reminder-board";
 import { addDays, fromDateKey, startOfWeek, toDateKey, weekCode } from "./reminder-dates";
 import { ReminderList, type ReminderListActions } from "./reminder-list";
-import { rememberReminderOpen, reminderOpenId } from "./reminder-session";
+import {
+  forgetReminderBoard,
+  rememberReminderBoard,
+  rememberReminderList,
+  rememberReminderOpen,
+  reminderBoard,
+  reminderListMemory,
+  reminderOpenId,
+} from "./reminder-session";
 import { useForegroundChat } from "./use-foreground-chat";
 import { ColumnResizeHandle } from "./resizable-column";
 
@@ -72,8 +80,8 @@ const EMPTY_REMINDERS: Reminder[] = [];
 const EMPTY_AGENTS: Agent[] = [];
 
 const FILTERS = [
-  { id: "week", icon: List, dot: "bg-info" },
   { id: "today", icon: Calendar, dot: "bg-warning" },
+  { id: "week", icon: List, dot: "bg-info" },
   { id: "open", icon: CalendarClock, dot: "bg-brand" },
   { id: "done", icon: Flag, dot: "bg-destructive" },
 ] as const;
@@ -92,7 +100,10 @@ function isTyping(el: Element | null): boolean {
  *
  * The first visit lands on today's incomplete reminder, or the nearest other
  * day's. That open conversation is kept in memory for the tab, so leaving and
- * returning reopens it instead of choosing again.
+ * returning reopens it instead of choosing again. Today, and the week being
+ * shown, are kept the same way: leaving for chats or switching filters and
+ * coming back does not jump to this week. Hidden completed reminders and
+ * the tag filter come back too.
  * Creating a reminder opens its conversation at once, focuses the composer,
  * and brings that row into view, moving the week or filter when the row
  * would otherwise be hidden.
@@ -106,10 +117,25 @@ export function ReminderPage() {
   const isMobile = useIsMobile();
   const today = useMemo(() => new Date(), []);
   const todayKey = toDateKey(today);
-  const [filter, setFilter] = useState<ReminderFilter>("week");
-  const [anchor, setAnchor] = useState<Date>(today);
-  const [hideCompleted, setHideCompleted] = useState(false);
-  const [activeTags, setActiveTags] = useState<ReadonlySet<string>>(() => new Set());
+  const [filter, setFilter] = useState<ReminderFilter>(() => reminderBoard(wsId)?.filter ?? "week");
+  const [anchor, setAnchor] = useState<Date>(() => {
+    const key = reminderBoard(wsId)?.anchorKey;
+    return key ? fromDateKey(key) : new Date();
+  });
+  const [hideCompleted, setHideCompleted] = useState(() => reminderListMemory(wsId)?.hideCompleted ?? false);
+  const [activeTags, setActiveTags] = useState<ReadonlySet<string>>(
+    () => reminderListMemory(wsId)?.tags ?? new Set(),
+  );
+  const [boardWsId, setBoardWsId] = useState(wsId);
+  if (boardWsId !== wsId) {
+    setBoardWsId(wsId);
+    const remembered = reminderBoard(wsId);
+    setFilter(remembered?.filter ?? "week");
+    setAnchor(remembered ? fromDateKey(remembered.anchorKey) : new Date());
+    const rememberedList = reminderListMemory(wsId);
+    setHideCompleted(rememberedList?.hideCompleted ?? false);
+    setActiveTags(rememberedList?.tags ?? new Set());
+  }
   const [editingId, setEditingId] = useState<string | null>(null);
   const [scrollToId, setScrollToId] = useState<string | null>(() => reminderOpenId(wsId) || null);
   /** The conversation whose composer should take focus. Only a just-created reminder. */
@@ -164,6 +190,9 @@ export function ReminderPage() {
       }
       return;
     }
+    // A chosen week or Today is already restored. Landing again would pull
+    // the week back to whichever reminder is nearest.
+    if (reminderBoard(wsId)) return;
     if (list.isPending || choseFocus.current) return;
     choseFocus.current = true;
     const target = focusOpenReminder(all, todayKey);
@@ -183,6 +212,19 @@ export function ReminderPage() {
     }
     nav.replace(pathsRef.current.reminderItem(target.id));
   }, [all, isMobile, itemInUrl, list.isPending, today, todayKey, wsId]);
+
+  useEffect(() => {
+    if (!wsId) return;
+    if (filter === "week" && toDateKey(anchor) === todayKey) {
+      forgetReminderBoard(wsId);
+      return;
+    }
+    rememberReminderBoard(wsId, { filter, anchorKey: toDateKey(anchor) });
+  }, [anchor, filter, todayKey, wsId]);
+
+  useEffect(() => {
+    if (wsId) rememberReminderList(wsId, { hideCompleted, tags: activeTags });
+  }, [activeTags, hideCompleted, wsId]);
 
   const { data: agents = EMPTY_AGENTS } = useQuery(agentListOptions(wsId));
   const mentionCandidates = useMemo<ComposerMention[]>(
@@ -263,9 +305,9 @@ export function ReminderPage() {
     return () => document.removeEventListener("paste", onPaste);
   }, []);
 
+  // The week stays where it was. "Back to this week" is what jumps to today.
   const chooseFilter = (next: ReminderFilter) => {
     setFilter(next);
-    if (next === "week") setAnchor(today);
   };
   const toggleTag = (tag: string) =>
     setActiveTags((prev) => {
