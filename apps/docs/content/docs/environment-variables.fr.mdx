@@ -233,8 +233,11 @@ Pour un message sans destinataire, le planificateur reçoit les agents du groupe
 | `TYPESAFE_API_KEY` | vide | Clé pour `POST /v1/systemone`. Vide : pas de planification. Un message sans destinataire ne réveille personne, et plusieurs agents nommés répondent dans l'ordre des mentions |
 | `TYPESAFE_BASE_URL` | `https://api.typesafe.ai` | Origine System One. Le chemin `/v1/systemone` est ajouté |
 | `TYPESAFE_MODEL` | `jev-latest` | Identifiant de modèle envoyé à chaque requête de planification |
+| `TYPESAFE_PROXY_URL` | vide | Proxy facultatif pour System One. Vide : connexion directe. Formes ci-dessous |
 
 Laissez `TYPESAFE_API_KEY` vide si ce déploiement ne doit pas envoyer l'historique du groupe ni le contenu de page de Demander à l'IA à TypeSafe ; Demander à l'IA ne peut alors pas choisir entre plusieurs agents. Un `@` direct vers un agent démarre toujours cet agent. La clé est lue uniquement par le processus API et n'est pas transmise aux runtimes des agents.
+
+`TYPESAFE_PROXY_URL` est facultative et n'est lue que par le processus API. Laissez-la vide pour joindre TypeSafe directement. `http://127.0.0.1:7890` (hôte et port seuls, sans chemin ni query) est un proxy HTTP, par exemple le port mixed de Clash. `socks5://` et `socks5h://` sont du SOCKS5. Une URL `https`, ou une URL `http` avec un chemin ou une query, est un abonnement Clash : le processus le télécharge avec `User-Agent: clash.meta` et ouvre System One à travers un nœud Shadowsocks AEAD (`aes-128-gcm`, `aes-256-gcm` ou `chacha20-ietf-poly1305`) sans plugin. Les nœuds VLESS, Reality et ceux qui ont un plugin dans le même abonnement sont ignorés. Les nœuds utilisables sont mis en cache 10 minutes, et l'appel suivant essaie d'abord le nœud qui a établi le tunnel. Si la variable est définie et que le proxy ou l'abonnement est inutilisable, l'appel de planification échoue et la requête n'est pas envoyée directement à TypeSafe. Une URL d'abonnement contient un jeton d'accès : gardez-la dans l'environnement, pas dans le dépôt.
 
 ## Configuration du daemon
 

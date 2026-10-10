@@ -451,9 +451,10 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 	h := handler.New(queries, pool, hub, bus, emailSvc, store, cfSigner, analyticsClient, signupConfig, daemonHub)
 	h.FileShares = fileshare.NewHub()
 	h.GroupChatDecider = typesafe.New(typesafe.Config{
-		APIKey:  strings.TrimSpace(os.Getenv("TYPESAFE_API_KEY")),
-		BaseURL: strings.TrimSpace(os.Getenv("TYPESAFE_BASE_URL")),
-		Model:   strings.TrimSpace(os.Getenv("TYPESAFE_MODEL")),
+		APIKey:   strings.TrimSpace(os.Getenv("TYPESAFE_API_KEY")),
+		BaseURL:  strings.TrimSpace(os.Getenv("TYPESAFE_BASE_URL")),
+		Model:    strings.TrimSpace(os.Getenv("TYPESAFE_MODEL")),
+		ProxyURL: strings.TrimSpace(os.Getenv("TYPESAFE_PROXY_URL")),
 	})
 	invitationRateLimits := handler.DefaultInvitationRateLimits()
 	invitationRateLimits.Actor.Limit = envNonNegativeInt("RATE_LIMIT_INVITATION_ACTOR_10M", invitationRateLimits.Actor.Limit)

@@ -236,8 +236,11 @@ API key와 base URL이 모두 비어 있으면 이 레이어가 꺼지고 업스
 | `TYPESAFE_API_KEY` | 비어 있음 | `POST /v1/systemone` API 키. 비우면 계획이 꺼집니다. 지목이 없는 메시지는 에이전트를 깨우지 않고, 여러 명을 지목하면 등장 순서대로 답합니다 |
 | `TYPESAFE_BASE_URL` | `https://api.typesafe.ai` | System One 오리진. 경로 `/v1/systemone`이 붙습니다 |
 | `TYPESAFE_MODEL` | `jev-latest` | 각 계획 요청의 모델 id |
+| `TYPESAFE_PROXY_URL` | 비어 있음 | System One 요청의 선택적 프록시. 비우면 직접 연결. 형식은 아래 참고 |
 
 그룹 기록이나 AI에게 질문의 페이지 내용을 TypeSafe로 보내면 안 되면 `TYPESAFE_API_KEY`를 비워 둡니다. 이때 AI에게 질문은 여러 에이전트 중에서 고르지 못합니다. 에이전트 한 명을 직접 `@`하면 그 에이전트는 그대로 시작됩니다. 이 키는 API 프로세스만 읽고 에이전트 런타임으로는 전달되지 않습니다.
+
+`TYPESAFE_PROXY_URL` 은 선택 사항이며 API 프로세스만 읽습니다. 비우면 TypeSafe 에 직접 연결합니다. `http://127.0.0.1:7890` 처럼 호스트와 포트만 있고 경로와 쿼리가 없는 주소는 HTTP 프록시이며, Clash 의 mixed 포트가 여기 해당합니다. `socks5://` 와 `socks5h://` 는 SOCKS5 입니다. `https` URL 이나 경로 또는 쿼리가 있는 `http` URL 은 Clash 구독입니다. 프로세스는 `User-Agent: clash.meta` 로 가져온 뒤, plugin 이 없는 Shadowsocks AEAD 노드(`aes-128-gcm`, `aes-256-gcm`, `chacha20-ietf-poly1305`)를 통해 System One 에 연결합니다. 같은 구독의 VLESS, Reality, plugin 노드는 건너뜁니다. 사용할 수 있는 노드는 10분간 캐시하며, 다음 호출은 직전에 연결된 노드를 먼저 시도합니다. 변수가 설정된 상태에서 프록시나 구독을 쓸 수 없으면 계획 호출은 실패하고, 요청은 TypeSafe 로 직접 보내지 않습니다. 구독 URL 에는 액세스 token 이 있으므로 환경 변수에만 두고 저장소에는 넣지 마세요.
 
 ## 데몬 설정
 

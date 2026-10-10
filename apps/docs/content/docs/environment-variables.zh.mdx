@@ -236,8 +236,11 @@ API key 与 base URL 都为空时，这一层关闭，不会发出任何上游�
 | `TYPESAFE_API_KEY` | 空 | `POST /v1/systemone` 的 API key。留空则关闭规划：没点名的消息不会叫醒智能体，点了多名则按出现顺序回复 |
 | `TYPESAFE_BASE_URL` | `https://api.typesafe.ai` | System One 源站，请求会拼上 `/v1/systemone` |
 | `TYPESAFE_MODEL` | `jev-latest` | 每次规划请求使用的模型 id |
+| `TYPESAFE_PROXY_URL` | 空 | System One 请求的可选代理。留空则直连。写法见下文 |
 
 不希望把群聊历史或问 AI 的页面内容发到 TypeSafe 时，把 `TYPESAFE_API_KEY` 留空；此时问 AI 无法在多名智能体中做选择。直接 `@` 一个智能体仍然会启动该智能体。这个 key 只由 API 进程读取，不会传给智能体运行时。
+
+`TYPESAFE_PROXY_URL` 可选，只由 API 进程读取。留空则直连 TypeSafe。`http://127.0.0.1:7890` 这种只有主机和端口、没有路径和查询的地址是 HTTP 代理，例如本机 Clash 的 mixed 端口。`socks5://` 和 `socks5h://` 是 SOCKS5。`https` 地址，或带路径、查询的 `http` 地址，当作 Clash 订阅：进程用 `User-Agent: clash.meta` 拉取，再经其中没有 plugin 的 Shadowsocks AEAD 节点（`aes-128-gcm`、`aes-256-gcm`、`chacha20-ietf-poly1305`）连接 System One。同一份订阅里的 VLESS、Reality 和带 plugin 的节点会跳过。可用节点缓存 10 分钟，下一次调用会先试上次连上的节点。变量已设置但代理或订阅不可用时，这次规划调用失败，请求不会改成直连 TypeSafe。订阅地址里有访问 token，放在环境变量里，不要写进仓库。
 
 ## 守护进程配置
 

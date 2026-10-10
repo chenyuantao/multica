@@ -236,8 +236,11 @@ API key と base URL の両方が空の場合、このレイヤーは無効に�
 | `TYPESAFE_API_KEY` | 空 | `POST /v1/systemone` の API キー。空なら計画は無効です。宛先のないメッセージはエージェントを起こさず、複数名指しは出現順に返信します |
 | `TYPESAFE_BASE_URL` | `https://api.typesafe.ai` | System One のオリジン。パス `/v1/systemone` を付けます |
 | `TYPESAFE_MODEL` | `jev-latest` | 各計画リクエストのモデル id |
+| `TYPESAFE_PROXY_URL` | 空 | System One リクエストの任意プロキシ。空なら直接接続。書き方は下記 |
 
 グループ履歴や AI に質問のページ内容を TypeSafe に送らない場合は `TYPESAFE_API_KEY` を空のままにします。このとき AI に質問は複数のエージェントから選べません。エージェント 1 人への直接の `@` はそのエージェントを起動します。このキーは API プロセスだけが読み、エージェントのランタイムには渡しません。
+
+`TYPESAFE_PROXY_URL` は任意で、API プロセスだけが読みます。空なら TypeSafe に直接接続します。`http://127.0.0.1:7890` のようにホストとポートだけで、パスもクエリもないアドレスは HTTP プロキシです。Clash の mixed ポートがこれに当たります。`socks5://` と `socks5h://` は SOCKS5 です。`https` の URL、またはパスかクエリ付きの `http` URL は Clash のサブスクリプションです。プロセスは `User-Agent: clash.meta` で取得し、plugin のない Shadowsocks AEAD ノード（`aes-128-gcm`、`aes-256-gcm`、`chacha20-ietf-poly1305`）経由で System One に接続します。同じサブスクリプション内の VLESS、Reality、plugin 付きノードは使いません。使えるノードは 10 分間キャッシュし、次の呼び出しでは直前に接続できたノードを先に試します。変数が設定されていてプロキシまたはサブスクリプションを使えないとき、計画呼び出しは失敗し、リクエストは TypeSafe へ直接送られません。サブスクリプション URL にはアクセス token が含まれるので、環境変数に置き、リポジトリには書かないでください。
 
 ## デーモン設定
 

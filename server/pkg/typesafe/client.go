@@ -7,7 +7,9 @@
 // has an unfinished request, another call asks whether the newest message
 // supplements it. The API key comes from
 // TYPESAFE_API_KEY. An empty key disables the client: Evaluate returns
-// ErrNotConfigured and does not open a connection.
+// ErrNotConfigured and does not open a connection. TYPESAFE_PROXY_URL, when
+// set, sends that call through an HTTP proxy, a SOCKS5 proxy, or a Clash
+// subscription. An empty proxy URL keeps the default transport.
 package typesafe
 
 import (
@@ -37,16 +39,21 @@ type Config struct {
 	APIKey  string
 	BaseURL string
 	Model   string
+	// ProxyURL is optional. Empty dials BaseURL directly. A value is an
+	// HTTP proxy, a SOCKS5 proxy, or a Clash subscription; see newProxyTransport.
+	// Ignored when HTTPClient is set.
+	ProxyURL string
 	// HTTPClient is optional. Tests inject a client bound to httptest.
 	HTTPClient *http.Client
 }
 
 // Client evaluates a state against typed questions.
 type Client struct {
-	apiKey string
-	base   string
-	model  string
-	http   *http.Client
+	apiKey   string
+	base     string
+	model    string
+	http     *http.Client
+	proxyErr error
 }
 
 // New returns a client. An empty API key yields a disabled client.
@@ -60,14 +67,24 @@ func New(cfg Config) *Client {
 		model = DefaultModel
 	}
 	hc := cfg.HTTPClient
+	var proxyErr error
 	if hc == nil {
 		hc = &http.Client{Timeout: 20 * time.Second}
+		if raw := strings.TrimSpace(cfg.ProxyURL); raw != "" {
+			transport, err := newProxyTransport(raw)
+			if err != nil {
+				proxyErr = err
+			} else {
+				hc.Transport = transport
+			}
+		}
 	}
 	return &Client{
-		apiKey: strings.TrimSpace(cfg.APIKey),
-		base:   base,
-		model:  model,
-		http:   hc,
+		apiKey:   strings.TrimSpace(cfg.APIKey),
+		base:     base,
+		model:    model,
+		http:     hc,
+		proxyErr: proxyErr,
 	}
 }
 
@@ -103,6 +120,9 @@ type evalResponse struct {
 func (c *Client) Evaluate(ctx context.Context, state any, questions map[string]any) (map[string]Answer, error) {
 	if !c.Enabled() {
 		return nil, ErrNotConfigured
+	}
+	if c.proxyErr != nil {
+		return nil, c.proxyErr
 	}
 	if len(questions) == 0 {
 		return nil, errors.New("typesafe: no questions")
