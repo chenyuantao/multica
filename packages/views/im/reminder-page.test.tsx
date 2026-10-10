@@ -34,6 +34,7 @@ function reminder(id: string, title: string, dueDate: string | null, extra: Part
     unread_count: 0,
     is_direct: false,
     pinned: false,
+    task: false,
     status: "todo",
     due_date: dueDate,
     position: 1,

@@ -2087,8 +2087,9 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					r.Delete("/members/{memberType}/{memberId}", h.RemoveGroupChatMember)
 				})
 			})
-			// Reminders are group chats kept off the IM chat list. Messages,
-			// edits, and deletes use the issue and comment routes.
+			// Reminders are group chats. They stay off the IM chat list until
+			// they have a message. Messages, edits, and deletes use the issue
+			// and comment routes.
 			r.Route("/api/reminders", func(r chi.Router) {
 				r.Use(handler.RequireHumanActor)
 				r.Get("/", h.ListReminders)

@@ -58,6 +58,33 @@ func hasReminder(reminders []ReminderResponse, id string) bool {
 	return false
 }
 
+func listChatsAs(t *testing.T, userID string) []GroupChatResponse {
+	t.Helper()
+	var out struct {
+		Chats []GroupChatResponse `json:"chats"`
+	}
+	testutil.Call(t, testHandler.ListGroupChats, groupChatRequestAs(t, userID, "GET", "/api/group-chats", nil)).Want(http.StatusOK).JSON(&out)
+	return out.Chats
+}
+
+func findChat(chats []GroupChatResponse, id string) *GroupChatResponse {
+	for i := range chats {
+		if chats[i].ID == id {
+			return &chats[i]
+		}
+	}
+	return nil
+}
+
+func chatIndex(chats []GroupChatResponse, id string) int {
+	for i := range chats {
+		if chats[i].ID == id {
+			return i
+		}
+	}
+	return -1
+}
+
 func TestReminderListsOnlyOnTheReminderPage(t *testing.T) {
 	other := groupChatWorkspaceMember(t, "Reminder Other", "reminder-other@multica.test")
 	reminder := newReminder(t, "Book the venue", "2026-10-08")
@@ -66,6 +93,9 @@ func TestReminderListsOnlyOnTheReminderPage(t *testing.T) {
 	}
 	if len(reminder.Members) != 1 || reminder.Members[0].MemberType != "member" || reminder.Members[0].MemberID != testUserID {
 		t.Fatalf("members = %+v, want only the creator", reminder.Members)
+	}
+	if findChat(listChatsAs(t, testUserID), reminder.ID) != nil {
+		t.Fatal("reminder without messages appears in the IM chat list")
 	}
 	postReminderMessage(t, reminder.ID, "quasarium venue details").Want(http.StatusCreated)
 
@@ -83,21 +113,26 @@ func TestReminderListsOnlyOnTheReminderPage(t *testing.T) {
 	}
 	testutil.Call(t, testHandler.ListReminders, groupChatRequestAs(t, testUserID, "GET", "/api/reminders?status=later", nil)).Want(http.StatusBadRequest)
 
-	var chats struct {
-		Chats []GroupChatResponse `json:"chats"`
+	listed := findChat(listChatsAs(t, testUserID), reminder.ID)
+	if listed == nil || !listed.Task || listed.Status != "todo" {
+		t.Fatalf("chat list reminder = %+v, want a todo task chat", listed)
 	}
-	testutil.Call(t, testHandler.ListGroupChats, groupChatRequestAs(t, testUserID, "GET", "/api/group-chats", nil)).Want(http.StatusOK).JSON(&chats)
-	for _, c := range chats.Chats {
-		if c.ID == reminder.ID {
-			t.Fatal("reminder appears in the IM chat list")
-		}
+	if findChat(listChatsAs(t, other), reminder.ID) != nil {
+		t.Fatal("another member sees the reminder chat")
 	}
 	var hits struct {
 		Hits []GroupChatSearchHit `json:"hits"`
 	}
 	testutil.Call(t, testHandler.SearchGroupChats, groupChatRequestAs(t, testUserID, "GET", "/api/group-chats/search?q=quasarium", nil)).Want(http.StatusOK).JSON(&hits)
-	if len(hits.Hits) != 0 {
-		t.Fatalf("IM search hits = %+v, want none from the reminder", hits.Hits)
+	if len(hits.Hits) != 1 || hits.Hits[0].ChatID != reminder.ID {
+		t.Fatalf("IM search hits = %+v, want the reminder message", hits.Hits)
+	}
+	testutil.Call(t, testHandler.UpdateIssue, withURLParam(groupChatRequestAs(t, testUserID, "PUT", "/api/issues/"+reminder.ID, map[string]any{
+		"status": "done",
+	}), "id", reminder.ID)).Want(http.StatusOK)
+	done := findChat(listChatsAs(t, testUserID), reminder.ID)
+	if done == nil || !done.Task || done.Status != "done" {
+		t.Fatalf("done reminder chat = %+v, want it to stay listed as done", done)
 	}
 	var issues struct {
 		Issues []IssueResponse `json:"issues"`
@@ -228,5 +263,45 @@ func TestReminderKeepsItsDayOrderAndPendingPin(t *testing.T) {
 		if r.ID == first.ID && r.Pending {
 			t.Fatal("unpinned reminder listed as pending")
 		}
+	}
+}
+
+func TestReminderWithMessagesSortsWithChats(t *testing.T) {
+	ctx := context.Background()
+	var room GroupChatResponse
+	testutil.Call(t, testHandler.CreateGroupChat, groupChatRequestAs(t, testUserID, "POST", "/api/group-chats", map[string]any{
+		"title": "Older room",
+	})).Want(http.StatusCreated).JSON(&room)
+	t.Cleanup(func() {
+		for _, sql := range []string{
+			`DELETE FROM issue_member WHERE issue_id = $1`,
+			`DELETE FROM issue_subscriber WHERE issue_id = $1`,
+			`DELETE FROM comment WHERE issue_id = $1`,
+			`DELETE FROM issue WHERE id = $1`,
+		} {
+			testPool.Exec(ctx, sql, room.ID)
+		}
+	})
+	dbfx.Exec(t, `UPDATE issue SET last_comment_at = now() - interval '2 days' WHERE id = $1`, room.ID)
+
+	reminder := newReminder(t, "Call the venue", "")
+	postReminderMessage(t, reminder.ID, "confirmed for Friday").Want(http.StatusCreated)
+
+	chats := listChatsAs(t, testUserID)
+	roomAt, taskAt := chatIndex(chats, room.ID), chatIndex(chats, reminder.ID)
+	roomChat, taskChat := findChat(chats, room.ID), findChat(chats, reminder.ID)
+	if roomChat == nil || taskChat == nil || roomChat.Task || !taskChat.Task {
+		t.Fatalf("room=%+v task=%+v, want an ordinary chat and a task chat", roomChat, taskChat)
+	}
+	if taskAt < 0 || roomAt < 0 || taskAt >= roomAt {
+		t.Fatalf("order task=%d room=%d, want the newer task chat first", taskAt, roomAt)
+	}
+
+	testutil.Call(t, testHandler.SetGroupChatPinned, withURLParam(groupChatRequestAs(t, testUserID, "PATCH", "/api/group-chats/"+room.ID+"/pin", map[string]any{
+		"pinned": true,
+	}), "id", room.ID)).Want(http.StatusOK)
+	pinned := listChatsAs(t, testUserID)
+	if chatIndex(pinned, room.ID) >= chatIndex(pinned, reminder.ID) {
+		t.Fatal("pinned room should stay ahead of the newer task chat")
 	}
 }

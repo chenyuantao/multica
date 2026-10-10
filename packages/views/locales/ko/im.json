@@ -16,6 +16,15 @@
     "unpin": "고정 해제",
     "pinned": "고정됨",
     "pin_failed": "고정 상태를 변경하지 못했습니다",
+    "task": "작업",
+    "todo": "할 일",
+    "done": "완료",
+    "hide_tasks": "작업 숨기기",
+    "show_tasks": "작업 표시",
+    "tasks_hidden": "작업 채팅이 숨겨져 있습니다",
+    "mark_done": "완료로 표시",
+    "mark_open": "미완료로 표시",
+    "task_status_failed": "작업 상태를 바꾸지 못했습니다",
     "unread_other": "읽지 않은 메시지 {{count}}개"
   },
   "rail": {

@@ -1,6 +1,7 @@
 "use client";
 
-import { CirclePlus, Pin, PinOff } from "lucide-react";
+import { useState } from "react";
+import { Check, CirclePlus, ListFilter, Pin, PinOff } from "lucide-react";
 import { directChatPeer } from "@multica/core/group-chats";
 import type { GroupChat } from "@multica/core/types";
 import { useActorName } from "@multica/core/workspace/hooks";
@@ -26,6 +27,8 @@ interface ChatSidebarProps {
   onSelect: (chatId: string) => void;
   onNewChat: () => void;
   onSetPinned: (chatId: string, pinned: boolean) => void;
+  /** Checks a task chat off, or opens it again. */
+  onSetDone: (chatId: string, done: boolean) => void;
   /** Phones open the shared search page instead of filtering this list. */
   onOpenSearch?: () => void;
   /** Phones get the iOS menu look on long press. */
@@ -44,12 +47,15 @@ export function ChatSidebar({
   onSelect,
   onNewChat,
   onSetPinned,
+  onSetDone,
   onOpenSearch,
   iosMenu,
   leading,
   className,
 }: ChatSidebarProps) {
   const { t } = useT("im");
+  const [hideTasks, setHideTasks] = useState(false);
+  const visible = hideTasks ? chats.filter((chat) => !chat.task) : chats;
   // The open chat is read as soon as it lands while the app is in front, so
   // its badge would only flash; in the background it stays visible.
   const foreground = useAppForeground();
@@ -63,27 +69,51 @@ export function ChatSidebar({
         desktopSearch={<ImSidebarSearch priority="chats" onOpenChat={onSelect} />}
         leading={leading}
       >
-        <button
-          type="button"
-          onClick={onNewChat}
-          aria-label={t(($) => $.sidebar.new_chat)}
-          title={t(($) => $.sidebar.new_chat)}
-          className="flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-        >
-          <CirclePlus className="size-[21px]" strokeWidth={1.7} />
-        </button>
+        <div className="flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            aria-pressed={hideTasks}
+            onClick={() => setHideTasks((on) => !on)}
+            aria-label={hideTasks ? t(($) => $.sidebar.show_tasks) : t(($) => $.sidebar.hide_tasks)}
+            title={hideTasks ? t(($) => $.sidebar.show_tasks) : t(($) => $.sidebar.hide_tasks)}
+            className={cn(
+              "flex size-7 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-foreground/5 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+              hideTasks ? "bg-foreground/8 text-foreground" : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <ListFilter className="size-[18px]" strokeWidth={1.7} />
+          </button>
+          <button
+            type="button"
+            onClick={onNewChat}
+            aria-label={t(($) => $.sidebar.new_chat)}
+            title={t(($) => $.sidebar.new_chat)}
+            className="flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          >
+            <CirclePlus className="size-[21px]" strokeWidth={1.7} />
+          </button>
+        </div>
       </ImSidebarHeader>
 
       <nav className="min-h-0 flex-1 overflow-y-auto pt-1 pb-3" aria-label={t(($) => $.sidebar.chats)}>
         {isError ? (
           <p className="px-3 py-8 text-center text-body text-muted-foreground">{t(($) => $.sidebar.load_failed)}</p>
-        ) : !isLoading && chats.length === 0 ? (
-          <p className="px-3 py-8 text-center text-body text-muted-foreground">{t(($) => $.sidebar.empty)}</p>
+        ) : !isLoading && visible.length === 0 ? (
+          <p className="px-3 py-8 text-center text-body text-muted-foreground">
+            {hideTasks && chats.length > 0 ? t(($) => $.sidebar.tasks_hidden) : t(($) => $.sidebar.empty)}
+          </p>
         ) : (
           <ul className="flex flex-col">
-            {chats.map((chat) => (
+            {visible.map((chat) => (
               <li key={chat.id} className="border-b border-foreground/5 last:border-b-0">
-                <ChatListMenu pinned={chat.pinned} ios={iosMenu} onSetPinned={(pinned) => onSetPinned(chat.id, pinned)}>
+                <ChatListMenu
+                  pinned={chat.pinned}
+                  task={chat.task}
+                  done={chat.status === "done"}
+                  ios={iosMenu}
+                  onSetPinned={(pinned) => onSetPinned(chat.id, pinned)}
+                  onSetDone={(done) => onSetDone(chat.id, done)}
+                >
                   <ChatListItem
                     chat={chat}
                     userId={userId}
@@ -147,18 +177,26 @@ export function ChatAvatar({ chat, userId }: { chat: GroupChat; userId: string }
 /** Right click, or a long press on a touch screen, opens a chat's list actions. */
 function ChatListMenu({
   pinned,
+  task,
+  done,
   ios,
   onSetPinned,
+  onSetDone,
   children,
 }: {
   pinned: boolean;
+  task: boolean;
+  done: boolean;
   ios?: boolean;
   onSetPinned: (pinned: boolean) => void;
+  onSetDone: (done: boolean) => void;
   children: React.ReactNode;
 }) {
   const { t } = useT("im");
-  const Icon = pinned ? PinOff : Pin;
-  const label = pinned ? t(($) => $.sidebar.unpin) : t(($) => $.sidebar.pin);
+  const PinIcon = pinned ? PinOff : Pin;
+  const pinLabel = pinned ? t(($) => $.sidebar.unpin) : t(($) => $.sidebar.pin);
+  const doneLabel = done ? t(($) => $.sidebar.mark_open) : t(($) => $.sidebar.mark_done);
+  const itemClass = cn(ios && "h-11 justify-between rounded-none px-4 text-body-lg [&_svg:not([class*='size-'])]:size-5");
   return (
     <ContextMenu>
       <ContextMenuTrigger className="block [-webkit-touch-callout:none] data-[popup-open]:bg-foreground/5">
@@ -167,24 +205,44 @@ function ChatListMenu({
       <ContextMenuContent
         className={cn(ios && "min-w-56 rounded-[14px] bg-surface-raised/85 p-0 backdrop-blur-xl")}
       >
-        <ContextMenuItem
-          onClick={() => onSetPinned(!pinned)}
-          className={cn(ios && "h-11 justify-between rounded-none px-4 text-body-lg [&_svg:not([class*='size-'])]:size-5")}
-        >
+        {task && (
+          <ContextMenuItem onClick={() => onSetDone(!done)} className={itemClass}>
+            {ios ? (
+              <>
+                {doneLabel}
+                <Check />
+              </>
+            ) : (
+              <>
+                <Check />
+                {doneLabel}
+              </>
+            )}
+          </ContextMenuItem>
+        )}
+        <ContextMenuItem onClick={() => onSetPinned(!pinned)} className={itemClass}>
           {ios ? (
             <>
-              {label}
-              <Icon />
+              {pinLabel}
+              <PinIcon />
             </>
           ) : (
             <>
-              <Icon />
-              {label}
+              <PinIcon />
+              {pinLabel}
             </>
           )}
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
+  );
+}
+
+function ChatTag({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="shrink-0 rounded bg-foreground/8 px-1 py-px text-micro font-medium text-muted-foreground">
+      {children}
+    </span>
   );
 }
 
@@ -233,9 +291,27 @@ function ChatListItem({
     >
       <ChatAvatar chat={chat} userId={userId} />
       <span className="min-w-0 flex-1">
-        <span className="flex items-baseline gap-2">
-          <span className={cn("min-w-0 flex-1 truncate text-body", selected || unread > 0 ? "font-semibold" : "font-medium")}>
-            {chatDisplayTitle(chat, userId, getActorName)}
+        <span className="flex items-center gap-2">
+          <span className="flex min-w-0 flex-1 items-center gap-1">
+            <span className={cn("min-w-0 truncate text-body", selected || unread > 0 ? "font-semibold" : "font-medium")}>
+              {chatDisplayTitle(chat, userId, getActorName)}
+            </span>
+            {chat.task && (
+              <>
+                <ChatTag>{t(($) => $.sidebar.task)}</ChatTag>
+                {chat.status === "done" ? (
+                  <span
+                    role="img"
+                    aria-label={t(($) => $.sidebar.done)}
+                    className="inline-flex size-4 shrink-0 items-center justify-center rounded-full bg-info/15 text-info"
+                  >
+                    <Check className="size-3" strokeWidth={2.5} />
+                  </span>
+                ) : (
+                  <ChatTag>{t(($) => $.sidebar.todo)}</ChatTag>
+                )}
+              </>
+            )}
           </span>
           {chat.pinned && (
             <Pin

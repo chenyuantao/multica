@@ -33,6 +33,7 @@ function r(id: string, due: string | null, extra: Partial<Reminder> = {}): Remin
     unread_count: 0,
     is_direct: false,
     pinned: false,
+    task: false,
     status: "todo",
     due_date: due,
     position: 0,

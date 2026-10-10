@@ -44,6 +44,7 @@ vi.mock("@multica/core/group-chats", async () => ({
   groupChatKeys: { messages: (wsId: string, chatId: string) => ["group-chats", wsId, "messages", chatId] },
   useGroupChatRealtime: () => {},
   useSetGroupChatPinned: () => ({ mutate: vi.fn() }),
+  useSetTaskChatDone: () => ({ mutate: vi.fn() }),
 }));
 const startDirectChat = vi.hoisted(() => vi.fn());
 vi.mock("./use-direct-chat", () => ({ useStartDirectChat: () => ({ start: startDirectChat, isPending: false }) }));

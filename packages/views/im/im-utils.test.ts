@@ -144,7 +144,7 @@ describe("sortChats", () => {
   const chat = (id: string, created: string, last: string | null, pinned = false): GroupChat => ({
     id, workspace_id: "ws", identifier: id, title: id, description: "", creator_type: "member", creator_id: "u",
     created_at: created, last_comment_at: last, last_message: null, members: [], pending_speakers: [], unread_count: 0, is_direct: false,
-    pinned,
+    pinned, task: false, status: "",
   });
 
   it("puts pinned chats first, each group by latest activity", () => {

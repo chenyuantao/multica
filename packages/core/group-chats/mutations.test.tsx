@@ -12,7 +12,7 @@ import { inboxKeys } from "../inbox/queries";
 import { createQueryClient } from "../query-client";
 import type { GroupChat, Reminder } from "../types";
 import { reminderKeys } from "../reminders/queries";
-import { useAskAI, useForwardChatHistory, useMarkGroupChatRead, useSendGroupChatMessage, useSetGroupChatPinned } from "./mutations";
+import { useAskAI, useForwardChatHistory, useMarkGroupChatRead, useSendGroupChatMessage, useSetGroupChatPinned, useSetTaskChatDone } from "./mutations";
 import { countUnreadGroupChatMessages, groupChatKeys } from "./queries";
 
 const WS = "ws-1";
@@ -45,6 +45,8 @@ function chat(id: string, unread: number): GroupChat {
     unread_count: unread,
     is_direct: false,
     pinned: false,
+    task: false,
+    status: "",
   };
 }
 
@@ -110,6 +112,26 @@ describe("useMarkGroupChatRead", () => {
     expect(unreadOf("a")).toBe(3);
     expect(reminderUnread("a")).toBe(3);
     expect(reminderUnread("a", "open")).toBe(3);
+  });
+});
+
+describe("useSetTaskChatDone", () => {
+  it("checks the task off in the chat list and the reminder row", async () => {
+    const qc = createQueryClient();
+    const task = { ...chat("a", 0), task: true, status: "todo" };
+    qc.setQueryData(groupChatKeys.list(WS), [task, chat("b", 0)]);
+    qc.setQueryData(reminderKeys.list(WS, {}), [reminder("a", 0)]);
+    setApiInstance({ updateIssue: vi.fn(() => new Promise(() => {})) } as unknown as ApiClient);
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useSetTaskChatDone(WS), { wrapper });
+
+    act(() => result.current.mutate({ chatId: "a", done: true }));
+
+    await waitFor(() => expect(qc.getQueryData<GroupChat[]>(groupChatKeys.list(WS))?.[0]?.status).toBe("done"));
+    expect(qc.getQueryData<Reminder[]>(reminderKeys.list(WS, {}))?.[0]?.status).toBe("done");
+    expect(qc.getQueryData<GroupChat[]>(groupChatKeys.list(WS))?.[1]?.status).toBe("");
   });
 });
 

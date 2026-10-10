@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { api } from "../api";
+import { groupChatKeys } from "../group-chats/queries";
 import type { CreateReminderRequest, Reminder, ReminderPatch } from "../types";
 import { reminderKeys } from "./queries";
 
@@ -67,7 +68,10 @@ export function useUpdateReminders(wsId: string) {
       return { prev };
     },
     onError: (_err, _vars, ctx) => restore(qc, ctx?.prev),
-    onSettled: () => qc.invalidateQueries({ queryKey: reminderKeys.all(wsId) }),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: reminderKeys.all(wsId) });
+      qc.invalidateQueries({ queryKey: groupChatKeys.list(wsId) });
+    },
   });
 }
 
@@ -102,6 +106,9 @@ export function useDeleteReminders(wsId: string) {
       const gone = new Set(ids);
       qc.setQueriesData<Reminder[]>({ queryKey: reminderKeys.all(wsId) }, (old) => old?.filter((r) => !gone.has(r.id)));
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: reminderKeys.all(wsId) }),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: reminderKeys.all(wsId) });
+      qc.invalidateQueries({ queryKey: groupChatKeys.list(wsId) });
+    },
   });
 }

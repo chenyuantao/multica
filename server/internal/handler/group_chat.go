@@ -54,6 +54,10 @@ type GroupChatResponse struct {
 	UnreadCount int64 `json:"unread_count"`
 	// The requester pinned this chat to the top of their own list.
 	Pinned bool `json:"pinned"`
+	// Task is a to-do that also appears in this list once it has a message.
+	Task bool `json:"task"`
+	// Status is the issue status. Task chats use "done" once checked off.
+	Status string `json:"status"`
 }
 
 type groupChatMemberRef struct {
@@ -90,6 +94,8 @@ func groupChatToResponse(issue db.Issue, prefix string, members []db.IssueMember
 		Members:         make([]GroupChatMemberResponse, 0, len(members)),
 		PendingSpeakers: []string{},
 		IsDirect:        issue.IsDirectChat,
+		Task:            isReminder(issue),
+		Status:          issue.Status,
 	}
 	for _, m := range members {
 		resp.Members = append(resp.Members, groupChatMemberToResponse(m))

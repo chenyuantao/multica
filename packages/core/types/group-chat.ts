@@ -33,6 +33,10 @@ export interface GroupChat {
   is_direct: boolean;
   /** The current user pinned this chat to the top of their own list. */
   pinned: boolean;
+  /** A to-do that also appears in the chat list because it has messages. */
+  task: boolean;
+  /** Issue status. Task chats use `done` once checked off; anything else is open. */
+  status: string;
 }
 
 /** A chat whose messages contain the search keyword. */
@@ -127,9 +131,10 @@ export interface CreateGroupChatRequest {
 }
 
 /**
- * A personal to-do kept as a group chat that stays off the chat list. Its
- * messages are the details; an agent joins when the title or a message
- * mentions it. A title mention assigns the agent without another message.
+ * A personal to-do kept as a group chat. It stays off the chat list until it
+ * has a message, then appears there as a task chat. Its messages are the
+ * details; an agent joins when the title or a message mentions it. A title
+ * mention assigns the agent without another message.
  */
 export interface Reminder extends GroupChat {
   /** `done` once checked off; anything else is open. */

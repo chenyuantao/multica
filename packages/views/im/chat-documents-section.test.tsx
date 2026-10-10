@@ -48,6 +48,8 @@ function chat(isDirect = false): GroupChat {
     unread_count: 0,
     is_direct: isDirect,
     pinned: false,
+    task: false,
+    status: "",
     members: [],
   };
 }

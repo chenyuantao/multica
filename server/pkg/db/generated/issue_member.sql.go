@@ -146,7 +146,10 @@ JOIN issue_member m
  AND m.member_type = $1
  AND m.member_id = $2
 WHERE i.workspace_id = $3
-  AND i.origin_type IS DISTINCT FROM 'reminder'
+  AND (
+    i.origin_type IS DISTINCT FROM 'reminder'
+    OR i.last_comment_at IS NOT NULL
+  )
 ORDER BY (m.pinned_at IS NOT NULL) DESC, COALESCE(i.last_comment_at, i.created_at) DESC, i.id DESC
 LIMIT $4
 `
@@ -516,9 +519,6 @@ JOIN issue_member m
  AND m.workspace_id = c.workspace_id
  AND m.member_type = 'member'
  AND m.member_id = $1
-JOIN issue i
-  ON i.id = c.issue_id
- AND i.origin_type IS DISTINCT FROM 'reminder'
 WHERE c.workspace_id = $2
   AND c.deleted_at IS NULL
   AND c.author_type <> 'system'

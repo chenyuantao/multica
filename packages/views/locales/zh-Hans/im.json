@@ -16,6 +16,15 @@
     "unpin": "取消置顶",
     "pinned": "已置顶",
     "pin_failed": "置顶操作失败",
+    "task": "任务",
+    "todo": "待办",
+    "done": "已完成",
+    "hide_tasks": "隐藏任务",
+    "show_tasks": "显示任务",
+    "tasks_hidden": "任务会话已隐藏",
+    "mark_done": "标记为完成",
+    "mark_open": "标记为未完成",
+    "task_status_failed": "无法更新任务状态",
     "unread_other": "{{count}} 条未读消息"
   },
   "rail": {

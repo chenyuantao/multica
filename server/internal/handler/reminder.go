@@ -19,8 +19,10 @@ import (
 // A reminder is a group chat created on the reminder page: its title is the
 // to-do, its messages are the details, and agents join when someone @mentions
 // them in the title or in a message. A title mention assigns the agent and
-// starts a run, so the person does not send a separate message. It never
-// appears in the IM chat list or the issue lists.
+// starts a run, so the person does not send a separate message. Until it has
+// a message it stays off the IM chat list. Once it has one, it appears there
+// as a task chat and sorts with the other conversations. It never appears in
+// the issue lists.
 
 const (
 	reminderOrigin    = "reminder"

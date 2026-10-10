@@ -27,6 +27,8 @@ const chat = (id: string, members: GroupChatMember[], opts: { direct?: boolean; 
   unread_count: 0,
   is_direct: opts.direct ?? true,
   pinned: false,
+  task: false,
+  status: "",
 });
 
 describe("directChatPeer", () => {

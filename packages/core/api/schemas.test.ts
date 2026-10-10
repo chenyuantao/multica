@@ -1548,6 +1548,26 @@ describe("GroupChatsListSchema unread_count", () => {
     expect(parsed.chats.map((c) => c.is_direct)).toEqual([true, false, false]);
   });
 
+  it("reads a missing or malformed task as an ordinary chat", () => {
+    const parsed = parseWithFallback<{ chats: GroupChat[] }>(
+      {
+        chats: [
+          chat({ task: true, status: "done" }),
+          chat({ id: "chat-2" }),
+          chat({ id: "chat-3", task: "yes", status: 1 }),
+        ],
+      },
+      GroupChatsListSchema,
+      { chats: [] },
+      ENDPOINT,
+    );
+    expect(parsed.chats.map((c) => [c.task, c.status])).toEqual([
+      [true, "done"],
+      [false, ""],
+      [false, ""],
+    ]);
+  });
+
   it("reads a missing or malformed pinned as not pinned", () => {
     const parsed = parseWithFallback<{ chats: GroupChat[] }>(
       { chats: [chat({ pinned: true }), chat({ id: "chat-2" }), chat({ id: "chat-3", pinned: "yes" })] },

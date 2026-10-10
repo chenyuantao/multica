@@ -8,7 +8,7 @@ import { useAuthStore } from "@multica/core/auth";
 import { useWorkspaceId } from "@multica/core/hooks";
 import { useModalStore } from "@multica/core/modals";
 import { useWorkspacePaths } from "@multica/core/paths";
-import { directChatPeer, groupChatKeys, groupChatListOptions, useGroupChatRealtime, useSetGroupChatPinned } from "@multica/core/group-chats";
+import { directChatPeer, groupChatKeys, groupChatListOptions, useGroupChatRealtime, useSetGroupChatPinned, useSetTaskChatDone } from "@multica/core/group-chats";
 import type { Comment, GroupChat } from "@multica/core/types";
 import { useActorName } from "@multica/core/workspace/hooks";
 import { Button } from "@multica/ui/components/ui/button";
@@ -77,10 +77,16 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
   const contactTarget = parseContactParam(navigation.searchParams.get("contact"));
   const directory = useChatDirectory(wsId);
   const setPinned = useSetGroupChatPinned(wsId);
+  const setTaskDone = useSetTaskChatDone(wsId);
   const setChatPinned = (chatId: string, pinned: boolean) =>
     setPinned.mutate(
       { chatId, pinned },
       { onError: (err) => toast.error(err instanceof Error ? err.message : t(($) => $.sidebar.pin_failed)) },
+    );
+  const setChatDone = (chatId: string, done: boolean) =>
+    setTaskDone.mutate(
+      { chatId, done },
+      { onError: (err) => toast.error(err instanceof Error ? err.message : t(($) => $.sidebar.task_status_failed)) },
     );
 
   useGroupChatRealtime(wsId);
@@ -296,6 +302,7 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
             onSelect={select}
             onNewChat={() => navigation.push(paths.imNewChat())}
             onSetPinned={setChatPinned}
+            onSetDone={setChatDone}
             onOpenSearch={() => navigation.push(paths.imSearch())}
             iosMenu
             leading={
@@ -417,6 +424,7 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
             onSelect={select}
             onNewChat={() => setNewChatOpen(true)}
             onSetPinned={setChatPinned}
+            onSetDone={setChatDone}
             onOpenSearch={() => navigation.push(paths.imSearch())}
           />
         )}

@@ -282,6 +282,39 @@ export function useSetGroupChatPinned(wsId: string) {
   });
 }
 
+/** Checks a task chat off, or opens it again. The chat list and the reminder row move together. */
+export function useSetTaskChatDone(wsId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ chatId, done }: { chatId: string; done: boolean }) =>
+      api.updateIssue(chatId, { status: done ? "done" : "todo" }),
+    onMutate: async ({ chatId, done }) => {
+      await Promise.all([
+        qc.cancelQueries({ queryKey: groupChatKeys.list(wsId) }),
+        qc.cancelQueries({ queryKey: reminderKeys.all(wsId) }),
+      ]);
+      const prev = qc.getQueryData<GroupChat[]>(groupChatKeys.list(wsId));
+      const prevReminders = qc.getQueriesData<Reminder[]>({ queryKey: reminderKeys.all(wsId) });
+      const status = done ? "done" : "todo";
+      qc.setQueryData<GroupChat[]>(groupChatKeys.list(wsId), (old) =>
+        old?.map((c) => (c.id === chatId ? { ...c, status } : c)),
+      );
+      qc.setQueriesData<Reminder[]>({ queryKey: reminderKeys.all(wsId) }, (old) =>
+        old?.map((r) => (r.id === chatId ? { ...r, status } : r)),
+      );
+      return { prev, prevReminders };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prev) qc.setQueryData(groupChatKeys.list(wsId), ctx.prev);
+      for (const [key, data] of ctx?.prevReminders ?? []) qc.setQueryData(key, data);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: groupChatKeys.list(wsId) });
+      qc.invalidateQueries({ queryKey: reminderKeys.all(wsId) });
+    },
+  });
+}
+
 export function useDeleteGroupChatMessage(wsId: string, chatId: string) {
   const qc = useQueryClient();
   return useMutation({

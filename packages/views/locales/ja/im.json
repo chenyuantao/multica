@@ -16,6 +16,15 @@
     "unpin": "ピン留めを解除",
     "pinned": "ピン留め済み",
     "pin_failed": "ピン留めを変更できませんでした",
+    "task": "タスク",
+    "todo": "未完了",
+    "done": "完了",
+    "hide_tasks": "タスクを隠す",
+    "show_tasks": "タスクを表示",
+    "tasks_hidden": "タスクのチャットは非表示です",
+    "mark_done": "完了にする",
+    "mark_open": "未完了に戻す",
+    "task_status_failed": "タスクの状態を更新できませんでした",
     "unread_other": "未読メッセージ {{count}} 件"
   },
   "rail": {

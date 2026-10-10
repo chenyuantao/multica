@@ -1183,6 +1183,8 @@ export const GroupChatSchema = z.object({
   unread_count: z.number().default(0).catch(0),
   is_direct: z.boolean().default(false).catch(false),
   pinned: z.boolean().default(false).catch(false),
+  task: z.boolean().default(false).catch(false),
+  status: z.string().default("").catch(""),
 }).loose();
 
 export const GroupChatsListSchema = z.object({

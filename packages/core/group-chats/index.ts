@@ -20,6 +20,7 @@ export {
   useSendGroupChatMessage,
   useMarkGroupChatRead,
   useSetGroupChatPinned,
+  useSetTaskChatDone,
   useDeleteGroupChatMessage,
 } from "./mutations";
 export { useGroupChatRealtime } from "./use-group-chat-realtime";
