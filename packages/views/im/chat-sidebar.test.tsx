@@ -42,6 +42,7 @@ function chat(id: string, unread: number, pinned = false): GroupChat {
 }
 
 function renderSidebar(selectedId: string | null, chats = [chat("a", 3), chat("b", 2), chat("c", 0)]) {
+  const onSelect = vi.fn();
   const onSetPinned = vi.fn();
   const onSetDone = vi.fn();
   renderWithI18n(
@@ -51,13 +52,19 @@ function renderSidebar(selectedId: string | null, chats = [chat("a", 3), chat("b
       isError={false}
       selectedId={selectedId}
       userId="user-1"
-      onSelect={() => {}}
+      onSelect={onSelect}
       onNewChat={() => {}}
       onSetPinned={onSetPinned}
       onSetDone={onSetDone}
     />,
   );
-  return { onSetPinned, onSetDone };
+  return { onSelect, onSetPinned, onSetDone };
+}
+
+function chatRow(name: RegExp) {
+  const row = screen.getByRole("button", { name }).closest("li");
+  if (!row) throw new Error(`missing chat row ${name}`);
+  return row;
 }
 
 function message(content: string): Comment {
@@ -105,18 +112,18 @@ describe("ChatSidebar drafts", () => {
     setChatDraft("a", "not sent\nyet");
     renderSidebar(null, [{ ...chat("a", 0), last_message: message("shipped it") }, chat("b", 0)]);
 
-    const row = screen.getByRole("button", { name: /Room a/ });
+    const row = chatRow(/Room a/);
     expect(row).toHaveTextContent("[Draft] not sent yet");
     expect(row).not.toHaveTextContent("shipped it");
     expect(screen.getByText("[Draft]")).toHaveClass("text-destructive");
-    expect(screen.getByRole("button", { name: /Room b/ })).toHaveTextContent("No messages yet");
+    expect(chatRow(/Room b/)).toHaveTextContent("No messages yet");
   });
 
   it("keeps the last message on the open chat even when a draft is stored", () => {
     setChatDraft("a", "not sent\nyet");
     renderSidebar("a", [{ ...chat("a", 0), last_message: message("shipped it") }, chat("b", 0)]);
 
-    const row = screen.getByRole("button", { name: /Room a/ });
+    const row = chatRow(/Room a/);
     expect(row).toHaveTextContent("shipped it");
     expect(row).not.toHaveTextContent("[Draft]");
     expect(screen.queryByText("[Draft]")).toBeNull();
@@ -125,7 +132,7 @@ describe("ChatSidebar drafts", () => {
   it("keeps the last message when the draft is only whitespace", () => {
     setChatDraft("a", "   \n");
     renderSidebar(null, [chat("a", 0)]);
-    expect(screen.getByRole("button", { name: /Room a/ })).toHaveTextContent("No messages yet");
+    expect(chatRow(/Room a/)).toHaveTextContent("No messages yet");
     expect(screen.queryByText("[Draft]")).toBeNull();
   });
 });
@@ -165,18 +172,30 @@ describe("ChatSidebar task chats", () => {
       { ...chat("b", 0), task: true, status: "todo", title: "Open task" },
       { ...chat("c", 0), task: true, status: "done", title: "Done task" },
     ]);
-    const ordinary = screen.getByRole("button", { name: /Room a/ });
+    const ordinary = chatRow(/Room a/);
     expect(ordinary).not.toHaveTextContent("Task");
-    expect(within(ordinary).queryByRole("img", { name: "To-do" })).toBeNull();
-    const open = screen.getByRole("button", { name: /Open task/ });
-    expect(open).not.toHaveTextContent("Task");
-    expect(open).not.toHaveTextContent("To-do");
-    expect(within(open).getByRole("img", { name: "To-do" })).toBeInTheDocument();
-    expect(within(open).queryByRole("img", { name: "Done" })).toBeNull();
-    const done = screen.getByRole("button", { name: /Done task/ });
-    expect(done).not.toHaveTextContent("Task");
-    expect(within(done).queryByRole("img", { name: "To-do" })).toBeNull();
-    expect(within(done).getByRole("img", { name: "Done" })).toHaveClass("text-info");
+    expect(within(ordinary).queryByRole("button", { name: "Mark as done" })).toBeNull();
+    expect(within(ordinary).queryByRole("button", { name: "Mark as not done" })).toBeNull();
+    const open = within(chatRow(/Open task/)).getByRole("button", { name: "Mark as done" });
+    expect(open).toHaveAttribute("aria-pressed", "false");
+    expect(open.querySelector("svg")).not.toHaveClass("text-info");
+    const done = within(chatRow(/Done task/)).getByRole("button", { name: "Mark as not done" });
+    expect(done).toHaveAttribute("aria-pressed", "true");
+    expect(done.querySelector("svg")).toHaveClass("text-info");
+  });
+
+  it("toggles a task from the list icon without opening the chat", () => {
+    const open = renderSidebar(null, [{ ...chat("b", 0), task: true, status: "todo", title: "Open task" }]);
+    fireEvent.click(screen.getByRole("button", { name: "Mark as done" }));
+    expect(open.onSetDone).toHaveBeenCalledWith("b", true);
+    expect(open.onSelect).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: /Open task/ }));
+    expect(open.onSelect).toHaveBeenCalledWith("b");
+
+    const finished = renderSidebar(null, [{ ...chat("c", 0), task: true, status: "done", title: "Done task" }]);
+    fireEvent.click(screen.getByRole("button", { name: "Mark as not done" }));
+    expect(finished.onSetDone).toHaveBeenCalledWith("c", false);
+    expect(finished.onSelect).not.toHaveBeenCalled();
   });
 
   it("hides task chats while the filter is on", () => {

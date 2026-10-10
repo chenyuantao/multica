@@ -120,6 +120,7 @@ export function ChatSidebar({
                     selected={chat.id === selectedId}
                     unread={chat.id === readingId ? 0 : chat.unread_count}
                     onSelect={() => onSelect(chat.id)}
+                    onSetDone={(done) => onSetDone(chat.id, done)}
                   />
                 </ChatListMenu>
               </li>
@@ -244,12 +245,14 @@ function ChatListItem({
   selected,
   unread,
   onSelect,
+  onSetDone,
 }: {
   chat: GroupChat;
   userId: string;
   selected: boolean;
   unread: number;
   onSelect: () => void;
+  onSetDone: (done: boolean) => void;
 }) {
   const { t } = useT("im");
   const { getActorName } = useActorName();
@@ -269,69 +272,83 @@ function ChatListItem({
     : last.author_type === "system" || directChatPeer(chat, userId)
       ? text
       : t(($) => $.sidebar.preview, { name: getActorName(last.author_type, last.author_id), text });
+  const title = chatDisplayTitle(chat, userId, getActorName);
+  const taskDone = chat.task && chat.status === "done";
+  const taskStatusLabel = taskDone ? t(($) => $.sidebar.mark_open) : t(($) => $.sidebar.mark_done);
 
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      aria-current={selected ? "true" : undefined}
+    <div
       className={cn(
-        "flex h-[66px] w-full items-center gap-[11px] px-4.5 text-left transition-colors",
+        "relative flex h-[66px] w-full items-center gap-[11px] px-4.5 transition-colors",
         selected ? "bg-brand/12 hover:bg-brand/12" : "hover:bg-foreground/5",
-        "focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset",
       )}
     >
-      <ChatAvatar chat={chat} userId={userId} />
-      <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-2">
-          <span className="flex min-w-0 flex-1 items-center gap-1">
-            <span className={cn("min-w-0 truncate text-body", selected || unread > 0 ? "font-semibold" : "font-medium")}>
-              {chatDisplayTitle(chat, userId, getActorName)}
+      <button
+        type="button"
+        onClick={onSelect}
+        aria-current={selected ? "true" : undefined}
+        aria-labelledby={`chat-list-title-${chat.id}`}
+        className="absolute inset-0 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset"
+      />
+      <div className="pointer-events-none relative flex min-w-0 flex-1 items-center gap-[11px]">
+        <ChatAvatar chat={chat} userId={userId} />
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-2">
+            <span className="flex min-w-0 flex-1 items-center gap-1">
+              <span
+                id={`chat-list-title-${chat.id}`}
+                className={cn("min-w-0 truncate text-body", selected || unread > 0 ? "font-semibold" : "font-medium")}
+              >
+                {title}
+              </span>
+              {chat.task && (
+                <button
+                  type="button"
+                  onClick={() => onSetDone(!taskDone)}
+                  aria-pressed={taskDone}
+                  aria-label={taskStatusLabel}
+                  title={taskStatusLabel}
+                  className={cn(
+                    "pointer-events-auto -m-1 inline-flex size-6 shrink-0 items-center justify-center rounded-full focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+                    taskDone ? "text-info" : "text-muted-foreground",
+                  )}
+                >
+                  {taskDone ? (
+                    <span className="inline-flex size-4 items-center justify-center rounded-full bg-info/15">
+                      <Check className="size-3 text-info" strokeWidth={2.5} />
+                    </span>
+                  ) : (
+                    <Circle className="size-4" strokeWidth={1.8} />
+                  )}
+                </button>
+              )}
             </span>
-            {chat.task &&
-              (chat.status === "done" ? (
-                <span
-                  role="img"
-                  aria-label={t(($) => $.sidebar.done)}
-                  className="inline-flex size-4 shrink-0 items-center justify-center rounded-full bg-info/15 text-info"
-                >
-                  <Check className="size-3" strokeWidth={2.5} />
-                </span>
-              ) : (
-                <span
-                  role="img"
-                  aria-label={t(($) => $.sidebar.todo)}
-                  className="inline-flex size-4 shrink-0 items-center justify-center text-muted-foreground"
-                >
-                  <Circle className="size-4" strokeWidth={1.8} />
-                </span>
-              ))}
-          </span>
-          {chat.pinned && (
-            <Pin
-              role="img"
-              aria-label={t(($) => $.sidebar.pinned)}
-              className="size-3 shrink-0 self-center text-muted-foreground"
-            />
-          )}
-          <span className="shrink-0 text-micro text-muted-foreground tabular-nums">
-            {formatStamp(chatActivityAt(chat), new Date(), (time) => t(($) => $.thread.yesterday, { time }))}
-          </span>
-        </span>
-        <span className="mt-[3px] flex items-center gap-2">
-          <span className={cn("min-w-0 flex-1 truncate text-caption", unread > 0 ? "text-foreground" : "text-muted-foreground")}>
-            {draft ? (
-              <>
-                <span className="text-destructive">{t(($) => $.sidebar.draft)}</span>
-                {` ${draft}`}
-              </>
-            ) : (
-              preview
+            {chat.pinned && (
+              <Pin
+                role="img"
+                aria-label={t(($) => $.sidebar.pinned)}
+                className="size-3 shrink-0 self-center text-muted-foreground"
+              />
             )}
+            <span className="shrink-0 text-micro text-muted-foreground tabular-nums">
+              {formatStamp(chatActivityAt(chat), new Date(), (time) => t(($) => $.thread.yesterday, { time }))}
+            </span>
           </span>
-          <UnreadBadge count={unread} label={t(($) => $.sidebar.unread, { count: unread })} />
+          <span className="mt-[3px] flex items-center gap-2">
+            <span className={cn("min-w-0 flex-1 truncate text-caption", unread > 0 ? "text-foreground" : "text-muted-foreground")}>
+              {draft ? (
+                <>
+                  <span className="text-destructive">{t(($) => $.sidebar.draft)}</span>
+                  {` ${draft}`}
+                </>
+              ) : (
+                preview
+              )}
+            </span>
+            <UnreadBadge count={unread} label={t(($) => $.sidebar.unread, { count: unread })} />
+          </span>
         </span>
-      </span>
-    </button>
+      </div>
+    </div>
   );
 }
