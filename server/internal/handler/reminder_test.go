@@ -2,15 +2,21 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"testing"
+	"time"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/multica-ai/multica/server/internal/events"
 	"github.com/multica-ai/multica/server/internal/testutil"
+	"github.com/multica-ai/multica/server/pkg/protocol"
 )
 
-func newReminder(t *testing.T, title, dueDate string) ReminderResponse {
+func newReminder(t *testing.T, note, dueDate string) ReminderResponse {
 	t.Helper()
-	return newReminderWith(t, map[string]any{"title": title, "due_date": dueDate})
+	return newReminderWith(t, map[string]any{"description": note, "due_date": dueDate})
 }
 
 func newReminderWith(t *testing.T, body map[string]any) ReminderResponse {
@@ -88,8 +94,8 @@ func chatIndex(chats []GroupChatResponse, id string) int {
 func TestReminderListsOnlyOnTheReminderPage(t *testing.T) {
 	other := groupChatWorkspaceMember(t, "Reminder Other", "reminder-other@multica.test")
 	reminder := newReminder(t, "Book the venue", "2026-10-08")
-	if reminder.Status != "todo" || reminder.DueDate == nil || *reminder.DueDate != "2026-10-08" || reminder.Description != "" {
-		t.Fatalf("reminder = %+v, want todo due 2026-10-08 with no description", reminder)
+	if reminder.Status != "todo" || reminder.DueDate == nil || *reminder.DueDate != "2026-10-08" || reminder.Title != "" || reminder.Description != "Book the venue" {
+		t.Fatalf("reminder = %+v, want todo due 2026-10-08, an empty title, and the note as the description", reminder)
 	}
 	if len(reminder.Members) != 1 || reminder.Members[0].MemberType != "member" || reminder.Members[0].MemberID != testUserID {
 		t.Fatalf("members = %+v, want only the creator", reminder.Members)
@@ -187,11 +193,14 @@ func TestReminderTitleMentionAssignsWithoutAMessage(t *testing.T) {
 			agentMembers++
 		}
 	}
+	if reminder.Title != "" || reminder.Description != title {
+		t.Fatalf("title=%q description=%q, want the note stored as the description", reminder.Title, reminder.Description)
+	}
 	if agentMembers != 1 {
-		t.Fatalf("members = %+v, want the title mention to add the agent", reminder.Members)
+		t.Fatalf("members = %+v, want the note's mention to add the agent", reminder.Members)
 	}
 	if n := dbfx.Count(t, `SELECT count(*) FROM agent_task_queue WHERE issue_id = $1 AND agent_id = $2`, reminder.ID, agentID); n != 1 {
-		t.Fatalf("tasks = %d, want one run for the agent named in the title", n)
+		t.Fatalf("tasks = %d, want one run for the agent named in the note", n)
 	}
 	if n := dbfx.Count(t, `SELECT count(*) FROM comment WHERE issue_id = $1`, reminder.ID); n != 0 {
 		t.Fatalf("comments = %d, want the title mention to assign without a message", n)
@@ -237,8 +246,8 @@ func TestReminderTitleEditStartsOnlyNewlyMentionedAgents(t *testing.T) {
 }
 
 func TestReminderKeepsItsDayOrderAndPendingPin(t *testing.T) {
-	later := newReminderWith(t, map[string]any{"title": "Second", "due_date": "2026-10-09", "position": 5})
-	first := newReminderWith(t, map[string]any{"title": "First", "due_date": "2026-10-09", "position": 1})
+	later := newReminderWith(t, map[string]any{"description": "Second", "due_date": "2026-10-09", "position": 5})
+	first := newReminderWith(t, map[string]any{"description": "First", "due_date": "2026-10-09", "position": 1})
 	if later.Position != 5 || first.Position != 1 || first.Pending || first.UpdatedAt == "" {
 		t.Fatalf("created = %+v / %+v, want the given positions, not pending, with updated_at", later, first)
 	}
@@ -304,4 +313,275 @@ func TestReminderWithMessagesSortsWithChats(t *testing.T) {
 	if chatIndex(pinned, room.ID) >= chatIndex(pinned, reminder.ID) {
 		t.Fatal("pinned room should stay ahead of the newer task chat")
 	}
+}
+
+func TestReminderRequiresANote(t *testing.T) {
+	testutil.Call(t, testHandler.CreateReminder, groupChatRequestAs(t, testUserID, "POST", "/api/reminders", map[string]any{
+		"description": "  ",
+	})).Want(http.StatusBadRequest)
+}
+
+func TestReminderTitleSourceStripsMentionLinks(t *testing.T) {
+	got := reminderTitleSource("[@Writer](mention://agent/abc) draft the #launch post")
+	if got != "@Writer draft the #launch post" {
+		t.Fatalf("source = %q", got)
+	}
+	if reminderTitleSource("   ") != "" {
+		t.Fatal("a blank note should stay blank")
+	}
+}
+
+func TestReminderTitleIsGeneratedWhileEmpty(t *testing.T) {
+	if testHandler == nil || testPool == nil {
+		t.Skip("database not available")
+	}
+	reminder := newReminder(t, "帮我订下周五的场地，要能坐下二十个人", "")
+	withStubLLM(t, stubLLMCompletion(t, http.StatusOK, "订场地"))
+	title, applied, err := testHandler.generateReminderTitle(
+		context.Background(), parseUUID(reminder.ID), parseUUID(reminder.WorkspaceID), reminderTitleSource(reminder.Description),
+	)
+	if err != nil || !applied || title != "订场地" {
+		t.Fatalf("applied=%v title=%q err=%v", applied, title, err)
+	}
+	var stored string
+	dbfx.QueryRow(t, `SELECT title FROM issue WHERE id = $1`, reminder.ID).Scan(&stored)
+	if stored != "订场地" {
+		t.Fatalf("stored title = %q", stored)
+	}
+}
+
+func TestReminderTitleLeavesATypedTitleAlone(t *testing.T) {
+	if testHandler == nil || testPool == nil {
+		t.Skip("database not available")
+	}
+	reminder := newReminder(t, "帮我订下周五的场地", "")
+	dbfx.Exec(t, `UPDATE issue SET title = '我的标题' WHERE id = $1`, reminder.ID)
+	withStubLLM(t, stubLLMCompletion(t, http.StatusOK, "订场地"))
+	_, applied, err := testHandler.generateReminderTitle(
+		context.Background(), parseUUID(reminder.ID), parseUUID(reminder.WorkspaceID), reminderTitleSource(reminder.Description),
+	)
+	if err != nil || applied {
+		t.Fatalf("applied=%v err=%v, want the typed title left alone", applied, err)
+	}
+	var stored string
+	dbfx.QueryRow(t, `SELECT title FROM issue WHERE id = $1`, reminder.ID).Scan(&stored)
+	if stored != "我的标题" {
+		t.Fatalf("stored title = %q", stored)
+	}
+}
+
+func TestReminderGeneratedTitleIsPublished(t *testing.T) {
+	if testHandler == nil || testPool == nil {
+		t.Skip("database not available")
+	}
+	reminder := newReminder(t, "帮我订下周五的场地，要能坐下二十个人", "")
+	got := make(chan struct{}, 1)
+	testHandler.Bus.Subscribe(protocol.EventGroupChatUpdated, func(e events.Event) {
+		payload, _ := e.Payload.(map[string]any)
+		if payload["issue_id"] == reminder.ID {
+			select {
+			case got <- struct{}{}:
+			default:
+			}
+		}
+	})
+	withStubLLM(t, stubLLMCompletion(t, http.StatusOK, "订场地"))
+	testHandler.maybeGenerateReminderTitleAsync(reminder.WorkspaceID, testUserID, parseUUID(reminder.ID), reminder.Description)
+	select {
+	case <-got:
+	case <-time.After(5 * time.Second):
+		t.Fatal("generated title was not published")
+	}
+}
+
+func TestReminderTodayUsesTheCallersCalendarDay(t *testing.T) {
+	reminderNow = func() time.Time {
+		return time.Date(2026, 10, 10, 23, 30, 0, 0, time.UTC)
+	}
+	t.Cleanup(func() { reminderNow = time.Now })
+
+	ctx := context.Background()
+	var previous *string
+	if err := testPool.QueryRow(ctx, `SELECT timezone FROM "user" WHERE id = $1`, testUserID).Scan(&previous); err != nil {
+		t.Fatalf("lookup timezone: %v", err)
+	}
+	if _, err := testPool.Exec(ctx, `UPDATE "user" SET timezone = 'Asia/Shanghai' WHERE id = $1`, testUserID); err != nil {
+		t.Fatalf("set timezone: %v", err)
+	}
+	t.Cleanup(func() {
+		if previous == nil {
+			testPool.Exec(ctx, `UPDATE "user" SET timezone = NULL WHERE id = $1`, testUserID)
+			return
+		}
+		testPool.Exec(ctx, `UPDATE "user" SET timezone = $2 WHERE id = $1`, testUserID, *previous)
+	})
+
+	shanghai := newReminder(t, "订场地", "today")
+	if shanghai.Title != "" || shanghai.Description != "订场地" || shanghai.DueDate == nil || *shanghai.DueDate != "2026-10-11" {
+		t.Fatalf("reminder = %+v, want an empty title, the note, and 2026-10-11 in Asia/Shanghai", shanghai)
+	}
+
+	var zoned ReminderResponse
+	testutil.Call(t, testHandler.CreateReminder, groupChatRequestAs(t, testUserID, "POST", "/api/reminders?tz=America/Los_Angeles", map[string]any{
+		"description": "Book the room",
+		"due_date":    "Today",
+	})).Want(http.StatusCreated).JSON(&zoned)
+	t.Cleanup(func() {
+		for _, sql := range []string{
+			`DELETE FROM issue_member WHERE issue_id = $1`,
+			`DELETE FROM issue_subscriber WHERE issue_id = $1`,
+			`DELETE FROM comment WHERE issue_id = $1`,
+			`DELETE FROM issue WHERE id = $1`,
+		} {
+			testPool.Exec(ctx, sql, zoned.ID)
+		}
+	})
+	if zoned.DueDate == nil || *zoned.DueDate != "2026-10-10" || zoned.Description != "Book the room" {
+		t.Fatalf("zoned = %+v, want 2026-10-10 from ?tz=", zoned)
+	}
+}
+
+func TestReminderCreateLandsAtTheEndOfTheDay(t *testing.T) {
+	first := newReminderWith(t, map[string]any{"description": "First", "due_date": "2099-03-03", "position": 4})
+	next := newReminder(t, "Second", "2099-03-03")
+	if first.Position != 4 || next.Position != 5 {
+		t.Fatalf("positions = %v, %v, want 4 then 5", first.Position, next.Position)
+	}
+	opening := newReminder(t, "Only", "2099-04-04")
+	if opening.Position != 0 {
+		t.Fatalf("position = %v, want 0 on an empty day", opening.Position)
+	}
+}
+
+func TestReminderTaskTokenListsAndCreatesOnlyTheBoundUser(t *testing.T) {
+	other := groupChatWorkspaceMember(t, "Reminder Token Other", "reminder-token-other@multica.test")
+	r := chi.NewRouter()
+	r.Use(RequireHumanOrTaskToken)
+	r.Get("/api/reminders", testHandler.ListReminders)
+	r.Post("/api/reminders", testHandler.CreateReminder)
+	r.Patch("/api/reminders/{id}", testHandler.UpdateReminder)
+	r.Delete("/api/reminders/{id}", testHandler.DeleteReminder)
+
+	create := groupChatRequestAs(t, testUserID, "POST", "/api/reminders", map[string]any{
+		"description": "Token owner only",
+		"due_date":    "2099-06-06",
+	})
+	create.Header.Set("X-Actor-Source", "task_token")
+	createdRec := httptest.NewRecorder()
+	r.ServeHTTP(createdRec, create)
+	if createdRec.Code != http.StatusCreated {
+		t.Fatalf("create status = %d, body = %s", createdRec.Code, createdRec.Body.String())
+	}
+	var reminder ReminderResponse
+	if err := json.Unmarshal(createdRec.Body.Bytes(), &reminder); err != nil {
+		t.Fatalf("decode create: %v", err)
+	}
+	t.Cleanup(func() {
+		ctx := context.Background()
+		for _, sql := range []string{
+			`DELETE FROM issue_member WHERE issue_id = $1`,
+			`DELETE FROM issue_subscriber WHERE issue_id = $1`,
+			`DELETE FROM comment WHERE issue_id = $1`,
+			`DELETE FROM issue WHERE id = $1`,
+		} {
+			testPool.Exec(ctx, sql, reminder.ID)
+		}
+	})
+	if reminder.Description != "Token owner only" || len(reminder.Members) != 1 || reminder.Members[0].MemberID != testUserID {
+		t.Fatalf("reminder = %+v, want the bound user's note", reminder)
+	}
+
+	listAs := func(userID, source string) []ReminderResponse {
+		t.Helper()
+		req := groupChatRequestAs(t, userID, "GET", "/api/reminders?from=2099-06-06&to=2099-06-06", nil)
+		req.Header.Set("X-Actor-Source", source)
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("list status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+		var out struct {
+			Reminders []ReminderResponse `json:"reminders"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+			t.Fatalf("decode list: %v", err)
+		}
+		return out.Reminders
+	}
+	if !hasReminder(listAs(testUserID, "task_token"), reminder.ID) {
+		t.Fatal("bound user does not see the reminder")
+	}
+	if hasReminder(listAs(other, "task_token"), reminder.ID) {
+		t.Fatal("another user's task token sees the reminder")
+	}
+
+	blocked := groupChatRequestAs(t, testUserID, "POST", "/api/reminders", map[string]any{
+		"description": "cloud node",
+		"due_date":    "2099-06-07",
+	})
+	blocked.Header.Set("X-Actor-Source", "cloud_pat")
+	blockedRec := httptest.NewRecorder()
+	r.ServeHTTP(blockedRec, blocked)
+	if blockedRec.Code != http.StatusForbidden {
+		t.Fatalf("cloud pat status = %d, want 403", blockedRec.Code)
+	}
+	for _, method := range []string{http.MethodPatch, http.MethodDelete} {
+		req := groupChatRequestAs(t, testUserID, method, "/api/reminders/"+reminder.ID, map[string]any{"status": "done"})
+		req.Header.Set("X-Actor-Source", "cloud_pat")
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("cloud pat %s status = %d, want 403", method, rec.Code)
+		}
+	}
+}
+
+func TestReminderUpdateAndDeleteStayOnTheBoundUser(t *testing.T) {
+	other := groupChatWorkspaceMember(t, "Reminder Edit Other", "reminder-edit-other@multica.test")
+	reminder := newReminder(t, "Book the venue", "2099-07-07")
+
+	patch := withURLParam(groupChatRequestAs(t, testUserID, "PATCH", "/api/reminders/"+reminder.ID, map[string]any{
+		"description": "Book the smaller room",
+		"due_date":    "2099-07-08",
+		"status":      "done",
+		"pending":     true,
+	}), "id", reminder.ID)
+	patch.Header.Set("X-Actor-Source", "task_token")
+	var updated ReminderResponse
+	testutil.Call(t, testHandler.UpdateReminder, patch).Want(http.StatusOK).JSON(&updated)
+	if updated.Description != "Book the smaller room" || updated.Status != "done" || updated.DueDate == nil || *updated.DueDate != "2099-07-08" || !updated.Pending {
+		t.Fatalf("updated = %+v", updated)
+	}
+
+	foreign := withURLParam(groupChatRequestAs(t, other, "PATCH", "/api/reminders/"+reminder.ID, map[string]any{
+		"status": "todo",
+	}), "id", reminder.ID)
+	foreign.Header.Set("X-Actor-Source", "task_token")
+	testutil.Call(t, testHandler.UpdateReminder, foreign).Want(http.StatusNotFound)
+	testutil.Call(t, testHandler.UpdateReminder, withURLParam(groupChatRequestAs(t, testUserID, "PATCH", "/api/reminders/"+reminder.ID, map[string]any{
+		"status": "later",
+	}), "id", reminder.ID)).Want(http.StatusBadRequest)
+
+	still := listRemindersAs(t, testUserID, "?from=2099-07-08&to=2099-07-08")
+	if !hasReminder(still, reminder.ID) {
+		t.Fatal("owner no longer sees the edited reminder")
+	}
+
+	denied := withURLParam(groupChatRequestAs(t, other, "DELETE", "/api/reminders/"+reminder.ID, nil), "id", reminder.ID)
+	denied.Header.Set("X-Actor-Source", "task_token")
+	testutil.Call(t, testHandler.DeleteReminder, denied).Want(http.StatusNotFound)
+
+	remove := withURLParam(groupChatRequestAs(t, testUserID, "DELETE", "/api/reminders/"+reminder.ID, nil), "id", reminder.ID)
+	remove.Header.Set("X-Actor-Source", "task_token")
+	testutil.Call(t, testHandler.DeleteReminder, remove).Want(http.StatusNoContent)
+	if hasReminder(listRemindersAs(t, testUserID, ""), reminder.ID) {
+		t.Fatal("deleted reminder is still listed")
+	}
+}
+
+func TestReminderRejectsAnUnknownDueDate(t *testing.T) {
+	testutil.Call(t, testHandler.CreateReminder, groupChatRequestAs(t, testUserID, "POST", "/api/reminders", map[string]any{
+		"description": "note",
+		"due_date":    "tomorrow",
+	})).Want(http.StatusBadRequest)
 }

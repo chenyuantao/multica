@@ -1,18 +1,22 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"strings"
 	"unicode/utf8"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/multica-ai/multica/server/internal/groupchat"
 	"github.com/multica-ai/multica/server/internal/logger"
+	"github.com/multica-ai/multica/server/internal/service"
 	"github.com/multica-ai/multica/server/internal/util"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
 )
@@ -68,11 +72,97 @@ func (h *Handler) AskAI(w http.ResponseWriter, r *http.Request) {
 	}
 	req.Page.Clamp()
 
+	agentID, ok := h.chooseAskAgent(w, r, member, req)
+	if !ok {
+		return
+	}
+	writeJSON(w, http.StatusOK, AskAIResponse{AgentID: agentID})
+}
+
+type AskResponse struct {
+	AgentID string            `json:"agent_id"`
+	Chat    GroupChatResponse `json:"chat"`
+	Message CommentResponse   `json:"message"`
+}
+
+// Ask chooses an agent the same way AskAI does, opens the requester's direct
+// chat with that agent, and posts the query there so the agent starts.
+// A personal access token can call it. A task token cannot: the message has
+// to be the person's.
+func (h *Handler) Ask(w http.ResponseWriter, r *http.Request) {
+	if isMachineCredentialActor(r) {
+		writeError(w, http.StatusForbidden, "this endpoint is only available to human actors")
+		return
+	}
+	r = h.withWakeupActor(r)
+	member, ok := ctxMember(r.Context())
+	if !ok {
+		writeError(w, http.StatusNotFound, "workspace not found")
+		return
+	}
+	userID, ok := requireUserID(w, r)
+	if !ok {
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	var req AskAIRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	req.Query = strings.TrimSpace(sanitizeNullBytes(req.Query))
+	if req.Query == "" {
+		writeError(w, http.StatusBadRequest, "query is required")
+		return
+	}
+	if utf8.RuneCountInString(req.Query) > askAIQueryMaxRunes {
+		writeError(w, http.StatusBadRequest, "query is too long")
+		return
+	}
+	if len(req.Attachments) > 0 {
+		writeError(w, http.StatusBadRequest, "attachments are not supported")
+		return
+	}
+	req.Page.Clamp()
+
+	agentID, ok := h.chooseAskAgent(w, r, member, req)
+	if !ok {
+		return
+	}
+	peerID, ok := parseUUIDOrBadRequest(w, agentID, "agent_id")
+	if !ok {
+		return
+	}
+	issue, _, _, ok := h.openDirectChat(w, r, member, userID, service.IssueMemberRef{Type: "agent", ID: peerID})
+	if !ok {
+		return
+	}
+	message, ok := h.postAskQuery(w, r, uuidToString(issue.ID), req)
+	if !ok {
+		return
+	}
+	fresh, err := h.Queries.GetIssueInWorkspace(r.Context(), db.GetIssueInWorkspaceParams{ID: issue.ID, WorkspaceID: issue.WorkspaceID})
+	if err != nil {
+		fresh = issue
+	}
+	members, err := h.Queries.ListIssueMembers(r.Context(), db.ListIssueMembersParams{IssueID: fresh.ID, WorkspaceID: fresh.WorkspaceID})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load chat members")
+		return
+	}
+	writeJSON(w, http.StatusCreated, AskResponse{
+		AgentID: agentID,
+		Chat:    h.groupChatDetail(r.Context(), fresh, members, userID),
+		Message: message,
+	})
+}
+
+func (h *Handler) chooseAskAgent(w http.ResponseWriter, r *http.Request, member db.Member, req AskAIRequest) (string, bool) {
 	ctx := r.Context()
 	agents, err := h.Queries.ListAgents(ctx, member.WorkspaceID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list agents")
-		return
+		return "", false
 	}
 	state := groupchat.AskState{Query: req.Query, Page: req.Page, Attachments: req.Attachments, Agents: []groupchat.AskAgent{}}
 	workspaceID := uuidToString(member.WorkspaceID)
@@ -86,18 +176,80 @@ func (h *Handler) AskAI(w http.ResponseWriter, r *http.Request) {
 			Description: agent.Description,
 		})
 	}
-
 	agentID, err := groupchat.ChooseAnswerer(ctx, h.GroupChatDecider, state)
 	switch {
 	case errors.Is(err, groupchat.ErrNoAnswerer):
 		writeErrorCode(w, http.StatusUnprocessableEntity, "ask_ai_no_agent", "no agent can answer")
-		return
+		return "", false
 	case err != nil:
 		slog.Warn("ask ai undecided", append(logger.RequestAttrs(r), "error", err)...)
 		writeErrorCode(w, http.StatusServiceUnavailable, "ask_ai_undecided", "couldn't choose an agent")
-		return
+		return "", false
 	}
-	writeJSON(w, http.StatusOK, AskAIResponse{AgentID: agentID})
+	return agentID, true
+}
+
+// postAskQuery sends the question through the ordinary comment path, so the
+// direct chat's single agent is started the same way a typed message is.
+func (h *Handler) postAskQuery(w http.ResponseWriter, r *http.Request, issueID string, req AskAIRequest) (CommentResponse, bool) {
+	raw, err := json.Marshal(CreateCommentRequest{Content: req.Query, AskAI: req.Page})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to send query")
+		return CommentResponse{}, false
+	}
+	ctx := r.Context()
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", issueID)
+	commentReq := r.Clone(ctx)
+	commentReq.Body = io.NopCloser(bytes.NewReader(raw))
+	commentReq.ContentLength = int64(len(raw))
+	commentReq.Method = http.MethodPost
+	commentReq = commentReq.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
+
+	captured := &capturedResponse{header: make(http.Header)}
+	h.CreateComment(captured, commentReq)
+	if captured.code != http.StatusCreated {
+		if captured.code == 0 {
+			captured.code = http.StatusInternalServerError
+		}
+		for key, values := range captured.header {
+			for _, value := range values {
+				w.Header().Add(key, value)
+			}
+		}
+		w.WriteHeader(captured.code)
+		_, _ = w.Write(captured.body.Bytes())
+		return CommentResponse{}, false
+	}
+	var message CommentResponse
+	if err := json.Unmarshal(captured.body.Bytes(), &message); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to send query")
+		return CommentResponse{}, false
+	}
+	return message, true
+}
+
+// capturedResponse records a handler's status and body so one handler can
+// reuse another's response.
+type capturedResponse struct {
+	header http.Header
+	code   int
+	body   bytes.Buffer
+}
+
+func (c *capturedResponse) Header() http.Header { return c.header }
+
+func (c *capturedResponse) WriteHeader(status int) {
+	if c.code == 0 {
+		c.code = status
+	}
+}
+
+func (c *capturedResponse) Write(p []byte) (int, error) {
+	if c.code == 0 {
+		c.code = http.StatusOK
+	}
+	return c.body.Write(p)
 }
 
 // saveAskAIContext stores the page a group chat message was asked from. It

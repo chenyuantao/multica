@@ -137,6 +137,16 @@ func TestComposeMikaInstructions(t *testing.T) {
 	if strings.Contains(system, "Workspace notes below add") {
 		t.Fatalf("the notes rule must not appear when there are no notes:\n%s", system)
 	}
+	for _, want := range []string{
+		"MULTICA_SERVER_URL",
+		"MULTICA_TOKEN",
+		"/api/reminders",
+		"Do not print the token",
+	} {
+		if !strings.Contains(system, want) {
+			t.Fatalf("Mika instructions missing %q", want)
+		}
+	}
 
 	composed := service.ComposeMikaInstructions(service.MikaDefaultName, "Our main repo is acme/platform.")
 	if !strings.HasPrefix(composed, system) {

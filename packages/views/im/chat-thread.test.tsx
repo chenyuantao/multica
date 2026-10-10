@@ -1109,3 +1109,57 @@ describe("ChatThread phone keyboard", () => {
     expect((document.querySelector("section") as HTMLElement).style.position).toBe("");
   });
 });
+
+describe("ChatThread opening note", () => {
+  const task = { ...chat, task: true, title: "订场地", description: "帮我订下周五的场地" };
+
+  beforeEach(() => {
+    messages = [message("m-0", "hello")];
+    vi.mocked(useQuery).mockImplementation(() => ({ data: messages, isError: false }) as never);
+  });
+
+  function renderChat(next: GroupChat = task) {
+    return renderWithI18n(
+      <ChatThread wsId="ws-1" chat={next} userId="user-1" panelOpen={false} onTogglePanel={() => {}} />,
+    );
+  }
+
+  it("shows a task's note at the top, with no sender", () => {
+    renderChat();
+    const note = screen.getByText("帮我订下周五的场地").closest("[data-opening-note]");
+    expect(note).not.toBeNull();
+    expect(note).toHaveClass("text-center");
+    expect(screen.getByRole("heading", { name: "订场地" })).toBeInTheDocument();
+  });
+
+  it("keeps a group announcement out of the thread", () => {
+    renderChat({ ...chat, description: "Ship on Friday" });
+    expect(screen.queryByText("Ship on Friday")).toBeNull();
+  });
+
+  it("waits until the start of the history is loaded", () => {
+    vi.mocked(useInfiniteQuery).mockImplementation(
+      () =>
+        ({
+          data: {
+            pages: [{ comments: messages, limit: 200, has_more: true, next_cursor: "older" }],
+            pageParams: [null],
+          },
+          isError: false,
+          hasNextPage: true,
+          isFetchingNextPage: false,
+          fetchNextPage: fetchOlder,
+        }) as never,
+    );
+    renderChat();
+    expect(screen.queryByText("帮我订下周五的场地")).toBeNull();
+  });
+
+  it("uses the note in place of the empty thread, and as the title until one is written", () => {
+    messages = [];
+    renderChat({ ...task, title: "" });
+    expect(screen.getAllByText("帮我订下周五的场地").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByRole("heading", { name: "帮我订下周五的场地" })).toBeInTheDocument();
+    expect(screen.queryByText("No messages yet")).toBeNull();
+  });
+});

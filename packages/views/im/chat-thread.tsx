@@ -436,6 +436,10 @@ export function ChatThread({
 
   const searchNeedle = searchOpen ? appliedQuery : "";
   const filtering = searchNeedle.length > 0;
+  const openingNote = chat.task ? chat.description.trim() : "";
+  // The note sits at the start of the history, the way a group-created line does.
+  // It stays hidden until that start is loaded, and out of a message search.
+  const showOpening = openingNote !== "" && !hasNextPage && !filtering;
   const filteredMessages = useMemo(
     () => (filtering ? messages.filter((m) => messageMatchesSearch(m.content, searchNeedle)) : messages),
     [messages, filtering, searchNeedle],
@@ -777,12 +781,17 @@ export function ChatThread({
         ) : null}
         {isError ? (
           <p className="py-10 text-center text-body text-muted-foreground">{t(($) => $.thread.load_failed)}</p>
-        ) : messages.length === 0 && visiblePending.length === 0 ? (
+        ) : messages.length === 0 && visiblePending.length === 0 && !showOpening ? (
           <p className="py-10 text-center text-body text-muted-foreground">{t(($) => $.thread.no_messages)}</p>
         ) : searchEmpty ? (
           <p className="py-10 text-center text-body text-muted-foreground">{t(($) => $.thread.search_no_results)}</p>
         ) : (
           <ol className="flex flex-col">
+            {showOpening ? (
+              <li>
+                <OpeningNote content={openingNote} />
+              </li>
+            ) : null}
             {filteredMessages.map((m, i) => {
               const prev = filteredMessages[i - 1];
               const mine = m.author_type === "member" && m.author_id === userId;
@@ -1105,6 +1114,18 @@ function QuotedLine({ quote, onJump }: { quote: ComposerQuote | null; onJump: (i
     >
       <QuoteText quote={quote} />
     </button>
+  );
+}
+
+/**
+ * The to-do note, at the start of its conversation. Same place and voice as a
+ * system line: centered, with no sender.
+ */
+function OpeningNote({ content }: { content: string }) {
+  return (
+    <div data-opening-note className="my-3.5 text-center text-caption text-muted-foreground">
+      <RichContent content={content} density="compact" className="text-center text-caption text-muted-foreground" />
+    </div>
   );
 }
 

@@ -177,6 +177,16 @@ func TestBuildMetaSkillContentSlimKindMatrix(t *testing.T) {
 				t.Errorf("kind=%d: heading %q should NOT be in slim brief (matrix gating regression)", kind, c.heading)
 			}
 		}
+		for _, want := range []string{
+			"never `curl` / `wget`",
+			"The one exception is reminder list, create, update, and delete",
+			"`MULTICA_SERVER_URL` and `MULTICA_TOKEN` already in the environment",
+			"it does not apply when Agent Identity does not grant it",
+		} {
+			if !strings.Contains(out, want) {
+				t.Errorf("kind=%d: brief missing %q", kind, want)
+			}
+		}
 	}
 }
 

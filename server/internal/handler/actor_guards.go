@@ -103,6 +103,24 @@ func RequireHumanActor(next http.Handler) http.Handler {
 	})
 }
 
+// RequireHumanOrTaskToken allows a human session or PAT, and a mat_ task
+// token. A cloud-node PAT stays out.
+//
+// Reminder list, create, update, and delete use this gate. A task token's
+// user id is the user the task belongs to, and those handlers read and write
+// only that user's reminders. Opening the route does not let the agent see
+// anyone else's.
+// Billing and the other human-only groups keep RequireHumanActor.
+func RequireHumanOrTaskToken(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Actor-Source") == "cloud_pat" {
+			writeError(w, http.StatusForbidden, "this endpoint is only available to human actors and task tokens")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // isMachineCredentialActor centralizes the authoritative actor-source check so
 // sensitive handlers can keep a fail-closed backstop in addition to their
 // router middleware. Unknown actor sources intentionally remain human-equivalent

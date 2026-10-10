@@ -522,12 +522,16 @@ func (h *Handler) CreateGroupChat(w http.ResponseWriter, r *http.Request) {
 		refs = append(refs, ref)
 	}
 
-	h.createGroupChat(w, r, member, userID, req.Title, refs, false)
+	issue, members, ok := h.createGroupChat(w, r, member, userID, req.Title, refs, false)
+	if !ok {
+		return
+	}
+	writeJSON(w, http.StatusCreated, groupChatToResponse(issue, h.getIssuePrefix(r.Context(), member.WorkspaceID), members, nil, userID))
 }
 
 // createGroupChat creates the chat with refs as its members (the creator
-// first) and writes it as the 201 response.
-func (h *Handler) createGroupChat(w http.ResponseWriter, r *http.Request, member db.Member, userID, title string, refs []service.IssueMemberRef, direct bool) {
+// first). The caller writes the response.
+func (h *Handler) createGroupChat(w http.ResponseWriter, r *http.Request, member db.Member, userID, title string, refs []service.IssueMemberRef, direct bool) (db.Issue, []db.IssueMember, bool) {
 	prefix := h.getIssuePrefix(r.Context(), member.WorkspaceID)
 	res, err := h.IssueService.Create(r.Context(), service.IssueCreateParams{
 		WorkspaceID:    member.WorkspaceID,
@@ -547,12 +551,12 @@ func (h *Handler) createGroupChat(w http.ResponseWriter, r *http.Request, member
 		},
 	})
 	if writeIssueLimitReached(w, err) {
-		return
+		return db.Issue{}, nil, false
 	}
 	if err != nil {
 		slog.Warn("create group chat failed", append(logger.RequestAttrs(r), "error", err)...)
 		writeError(w, http.StatusInternalServerError, "failed to create chat")
-		return
+		return db.Issue{}, nil, false
 	}
 	for _, ref := range refs {
 		h.subscribeGroupChatMember(r.Context(), res.Issue.ID, ref)
@@ -561,10 +565,10 @@ func (h *Handler) createGroupChat(w http.ResponseWriter, r *http.Request, member
 	members, err := h.Queries.ListIssueMembers(r.Context(), db.ListIssueMembersParams{IssueID: res.Issue.ID, WorkspaceID: res.Issue.WorkspaceID})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to load chat members")
-		return
+		return db.Issue{}, nil, false
 	}
 	h.publishGroupChatUpdated(uuidToString(member.WorkspaceID), userID, res.Issue.ID)
-	writeJSON(w, http.StatusCreated, groupChatToResponse(res.Issue, prefix, members, nil, userID))
+	return res.Issue, members, true
 }
 
 // OpenDirectGroupChat returns the requester's two-person chat with a person
@@ -590,11 +594,24 @@ func (h *Handler) OpenDirectGroupChat(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if peer.Type == "member" && uuidToString(peer.ID) == userID {
-		writeError(w, http.StatusBadRequest, "cannot start a direct chat with yourself")
+	issue, members, created, ok := h.openDirectChat(w, r, member, userID, peer)
+	if !ok {
 		return
 	}
+	if created {
+		writeJSON(w, http.StatusCreated, groupChatToResponse(issue, h.getIssuePrefix(r.Context(), member.WorkspaceID), members, nil, userID))
+		return
+	}
+	writeJSON(w, http.StatusOK, h.groupChatDetail(r.Context(), issue, members, userID))
+}
 
+// openDirectChat returns the requester's two-person chat with peer, creating
+// it when none exists. created is true only for a chat this call inserted.
+func (h *Handler) openDirectChat(w http.ResponseWriter, r *http.Request, member db.Member, userID string, peer service.IssueMemberRef) (db.Issue, []db.IssueMember, bool, bool) {
+	if peer.Type == "member" && uuidToString(peer.ID) == userID {
+		writeError(w, http.StatusBadRequest, "cannot start a direct chat with yourself")
+		return db.Issue{}, nil, false, false
+	}
 	ctx := r.Context()
 	existing, err := h.Queries.FindDirectGroupChat(ctx, db.FindDirectGroupChatParams{
 		WorkspaceID: member.WorkspaceID,
@@ -606,15 +623,14 @@ func (h *Handler) OpenDirectGroupChat(w http.ResponseWriter, r *http.Request) {
 		members, err := h.Queries.ListIssueMembers(ctx, db.ListIssueMembersParams{IssueID: existing.ID, WorkspaceID: existing.WorkspaceID})
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "failed to load chat members")
-			return
+			return db.Issue{}, nil, false, false
 		}
-		writeJSON(w, http.StatusOK, h.groupChatDetail(ctx, existing, members, userID))
-		return
+		return existing, members, false, true
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		slog.Warn("find direct group chat failed", append(logger.RequestAttrs(r), "error", err)...)
 		writeError(w, http.StatusInternalServerError, "failed to open chat")
-		return
+		return db.Issue{}, nil, false, false
 	}
 
 	var title string
@@ -622,14 +638,14 @@ func (h *Handler) OpenDirectGroupChat(w http.ResponseWriter, r *http.Request) {
 		agent, err := h.Queries.GetAgentInWorkspace(ctx, db.GetAgentInWorkspaceParams{ID: peer.ID, WorkspaceID: member.WorkspaceID})
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "failed to load agent")
-			return
+			return db.Issue{}, nil, false, false
 		}
 		title = agent.Name
 	} else {
 		user, err := h.Queries.GetUser(ctx, peer.ID)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "failed to load member")
-			return
+			return db.Issue{}, nil, false, false
 		}
 		title = user.Name
 	}
@@ -637,7 +653,8 @@ func (h *Handler) OpenDirectGroupChat(w http.ResponseWriter, r *http.Request) {
 		title = "Direct chat"
 	}
 	creator := service.IssueMemberRef{Type: "member", ID: parseUUID(userID)}
-	h.createGroupChat(w, r, member, userID, title, []service.IssueMemberRef{creator, peer}, true)
+	issue, members, ok := h.createGroupChat(w, r, member, userID, title, []service.IssueMemberRef{creator, peer}, true)
+	return issue, members, true, ok
 }
 
 // UpdateGroupChatRequest patches the chat name and its announcement, which is

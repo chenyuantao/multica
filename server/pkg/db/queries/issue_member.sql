@@ -121,6 +121,18 @@ WHERE i.workspace_id = @workspace_id
 ORDER BY i.due_date ASC NULLS LAST, i.position ASC, i.created_at ASC, i.id ASC
 LIMIT @row_limit;
 
+-- name: MaxReminderPositionOnDay :one
+-- Highest position among this person's reminders due on the day. -1 when the
+-- day is empty, so the next position is 0 — the same slot the reminder page
+-- uses for the first item.
+SELECT COALESCE(MAX(i.position), -1)::float8 AS position
+FROM issue i
+WHERE i.workspace_id = @workspace_id
+  AND i.origin_type = 'reminder'
+  AND i.creator_type = 'member'
+  AND i.creator_id = @creator_id
+  AND i.due_date = @due_date;
+
 -- name: ListIssueHumanMemberUserIDs :many
 -- Recipients for group chat realtime events.
 SELECT member_id FROM issue_member

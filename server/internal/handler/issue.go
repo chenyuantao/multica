@@ -4096,7 +4096,7 @@ func (h *Handler) UpdateIssue(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if titleChanged && isReminder(issue) {
-		h.dispatchReminderTitleMentions(r, issue, prevIssue.Title)
+		h.dispatchReminderTitleMentions(r, issue, issue.Title, prevIssue.Title)
 	}
 
 	writeJSON(w, http.StatusOK, resp)

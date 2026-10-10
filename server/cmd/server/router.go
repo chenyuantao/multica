@@ -2087,13 +2087,20 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					r.Delete("/members/{memberType}/{memberId}", h.RemoveGroupChatMember)
 				})
 			})
+			// Jev picks the agent, then this opens the caller's direct chat and
+			// sends the query. Human sessions and personal access tokens only.
+			r.With(handler.RequireHumanActor).Post("/api/ask", h.Ask)
+
 			// Reminders are group chats. They stay off the IM chat list until
-			// they have a message. Messages, edits, and deletes use the issue
-			// and comment routes.
+			// they have a message. Messages use the issue comment routes.
+			// List, create, update, and delete accept a task token and stay
+			// limited to the user bound on that token. Cloud-node tokens stay out.
 			r.Route("/api/reminders", func(r chi.Router) {
-				r.Use(handler.RequireHumanActor)
+				r.Use(handler.RequireHumanOrTaskToken)
 				r.Get("/", h.ListReminders)
 				r.Post("/", h.CreateReminder)
+				r.Patch("/{id}", h.UpdateReminder)
+				r.Delete("/{id}", h.DeleteReminder)
 			})
 
 			// Issues

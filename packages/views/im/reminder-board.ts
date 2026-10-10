@@ -80,11 +80,28 @@ export function pinnedReminders(items: Reminder[]): Reminder[] {
   return sortDay(items.filter(isPinned));
 }
 
+/**
+ * What a row shows. A generated or typed title replaces the note; until that
+ * title exists, the note itself is the row.
+ */
+export function reminderListText(r: { title: string; description: string }): string {
+  return r.title.trim() ? r.title : r.description;
+}
+
 /** `#tag` words in a title, in order of first use. */
 export function reminderTags(title: string): string[] {
   const tags: string[] = [];
   for (const match of title.matchAll(/(?:^|\s)#([^\s#]+)/g)) {
     const tag = match[1]!;
+    if (!tags.includes(tag)) tags.push(tag);
+  }
+  return tags;
+}
+
+/** Tags from the note the person wrote, plus any they put in the title. */
+export function reminderTagsOf(r: { title: string; description: string }): string[] {
+  const tags = reminderTags(r.description);
+  for (const tag of reminderTags(r.title)) {
     if (!tags.includes(tag)) tags.push(tag);
   }
   return tags;
@@ -99,7 +116,7 @@ export interface TagStat {
 export function tagStats(items: Reminder[]): TagStat[] {
   const stats = new Map<string, TagStat>();
   for (const r of items) {
-    for (const tag of reminderTags(r.title)) {
+    for (const tag of reminderTagsOf(r)) {
       const stat = stats.get(tag) ?? { tag, total: 0, completed: 0 };
       stat.total += 1;
       if (isDone(r)) stat.completed += 1;
@@ -112,7 +129,7 @@ export function tagStats(items: Reminder[]): TagStat[] {
 /** Reminders carrying any of the tags. The one being edited always stays. */
 export function filterByTags(items: Reminder[], tags: ReadonlySet<string>, keepId: string | null): Reminder[] {
   if (tags.size === 0) return items;
-  return items.filter((r) => r.id === keepId || reminderTags(r.title).some((tag) => tags.has(tag)));
+  return items.filter((r) => r.id === keepId || reminderTagsOf(r).some((tag) => tags.has(tag)));
 }
 
 /** Position after every reminder already on the day, leaving out `moving`. */

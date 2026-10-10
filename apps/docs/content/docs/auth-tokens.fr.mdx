@@ -67,6 +67,26 @@ curl https://api.multica.ai/api/issues \
   -H "X-Workspace-ID: $MULTICA_WORKSPACE_ID"
 ```
 
+Créer la tâche du jour suit le même chemin que la page des rappels. Le texte envoyé est la note ; le titre reste vide jusqu'à sa génération, et les @mentions dans la note assignent des agents. `due_date` à `today` est le jour calendaire de `?tz=`, ou le fuseau du profil si ce paramètre est omis. Un jeton d'accès personnel peut l'appeler. Un jeton de tâche d'agent peut lister, créer, modifier et supprimer les rappels de l'utilisateur lié à cette tâche, et de personne d'autre. Un jeton de nœud cloud ne le peut pas.
+
+```bash
+curl "https://api.multica.ai/api/reminders?tz=Asia/Shanghai" \
+  -H "Authorization: Bearer $MULTICA_TOKEN" \
+  -H "X-Workspace-ID: $MULTICA_WORKSPACE_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"description":"Réserver la salle","due_date":"today"}'
+```
+
+`POST /api/ask` choisit un agent, ouvre votre discussion directe avec lui et envoie `query` comme message. Un jeton d'accès personnel peut l'appeler. Un jeton de tâche ne le peut pas.
+
+```bash
+curl https://api.multica.ai/api/ask \
+  -H "Authorization: Bearer $MULTICA_TOKEN" \
+  -H "X-Workspace-ID: $MULTICA_WORKSPACE_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"query":"Comment publier cette semaine ?"}'
+```
+
 Dans les scripts, récupérez le jeton depuis un gestionnaire de secrets ou une variable d'environnement protégée — ne l'écrivez jamais en dur. Sur les instances auto-hébergées, remplacez le domaine par votre propre adresse d'API publique.
 
 ## Déconnexion et révocation
@@ -79,7 +99,7 @@ Si un jeton a pu fuiter, révoquez-le immédiatement dans **Paramètres → Jeto
 
 Lorsque le daemon prend en charge une exécution, le serveur crée pour celle-ci un jeton temporaire préfixé par `mat_`. Il est lié à l'utilisateur, à l'espace de travail, à l'agent et à l'exécution en cours, reste valide 24 heures au maximum et est supprimé à la fin de l'exécution.
 
-Le daemon injecte ce jeton temporaire dans l'outil de codage IA au lieu de transmettre le PAT de l'utilisateur à l'agent. Les requêtes effectuées par l'agent sont donc enregistrées comme des actions de l'agent, et le jeton ne permet pas d'accéder aux opérations sensibles réservées aux utilisateurs ou aux propriétaires.
+Le daemon injecte ce jeton temporaire dans l'outil de codage IA sous `MULTICA_TOKEN`, avec l'adresse de l'API sous `MULTICA_SERVER_URL`, au lieu de transmettre le PAT de l'utilisateur à l'agent. Les requêtes effectuées par l'agent sont donc enregistrées comme des actions de l'agent. Le jeton peut lister, créer, modifier et supprimer les rappels de l'utilisateur auquel il est lié. Il ne permet toujours pas d'accéder aux autres opérations réservées aux utilisateurs ou aux propriétaires.
 
 Ces jetons sont créés automatiquement par le serveur ; les utilisateurs n'ont jamais besoin de les enregistrer ni de les gérer.
 

@@ -103,7 +103,7 @@ vi.mock("./chat-thread", () => ({
     threadProps.current = props;
     return (
       <div data-testid="thread">
-        {props.chat.title}
+        {props.chat.title || props.chat.description}
         {props.onClose && (
           <button type="button" onClick={props.onClose}>
             close thread
@@ -211,8 +211,8 @@ describe("ReminderPage", () => {
 
   it("adds under a day, opens that conversation, renames on double click, and adds pasted text for today", async () => {
     const { navigation } = renderPage();
-    createMutateAsync.mockImplementation(async (input: { title: string; due_date: string }) => {
-      const created = reminder("r9", input.title, input.due_date);
+    createMutateAsync.mockImplementation(async (input: { description: string; due_date: string }) => {
+      const created = reminder("r9", "", input.due_date, { description: input.description });
       reminders = [...reminders, created];
       return created;
     });
@@ -223,12 +223,16 @@ describe("ReminderPage", () => {
     await act(async () => {
       fireEvent.keyDown(field, { key: "Enter" });
     });
-    expect(createMutateAsync).toHaveBeenCalledWith({ title: "Call Ada", due_date: "2026-10-08", position: 2 });
+    expect(createMutateAsync).toHaveBeenCalledWith({ description: "Call Ada", due_date: "2026-10-08", position: 2 });
     expect(within(today).queryByRole("textbox")).not.toBeInTheDocument();
     expect(navigation.replace).toHaveBeenCalledWith("/acme/reminder?item=r9");
     expect(screen.getByTestId("thread")).toHaveTextContent("Call Ada");
     expect(threadProps.current?.focusComposer).toBe(true);
     expect(within(today).getByRole("button", { name: "Call Ada" })).toHaveAttribute("aria-current", "true");
+
+    fireEvent.doubleClick(within(today).getByRole("button", { name: "Call Ada" }));
+    fireEvent.keyDown(within(today).getByRole("textbox", { name: "Reminder title" }), { key: "Enter" });
+    expect(updateMutate).not.toHaveBeenCalled();
 
     fireEvent.doubleClick(within(today).getByRole("button", { name: "Ship it" }));
     const rename = within(today).getByRole("textbox", { name: "Reminder title" });
@@ -241,12 +245,12 @@ describe("ReminderPage", () => {
       Object.defineProperty(paste, "clipboardData", { value: { getData: () => " Pasted note " } });
       document.dispatchEvent(paste);
     });
-    expect(createMutateAsync).toHaveBeenLastCalledWith({ title: "Pasted note", due_date: "2026-10-08", position: 2 });
+    expect(createMutateAsync).toHaveBeenLastCalledWith({ description: "Pasted note", due_date: "2026-10-08", position: 2 });
   });
 
   it("opens the new conversation before the list query includes the reminder", async () => {
     const { navigation } = renderPage();
-    createMutateAsync.mockResolvedValue(reminder("r10", "Before the list", "2026-10-08"));
+    createMutateAsync.mockResolvedValue(reminder("r10", "", "2026-10-08", { description: "Before the list" }));
     const today = day("Today");
     fireEvent.click(within(today).getByRole("button", { name: "Add more" }));
     const field = within(today).getByRole("textbox", { name: "Reminder title" });
@@ -265,8 +269,8 @@ describe("ReminderPage", () => {
       Object.defineProperty(event, "clipboardData", { value: { getData: () => text } });
       document.dispatchEvent(event);
     };
-    createMutateAsync.mockImplementation(async (input: { title: string; due_date: string }) => {
-      const created = reminder(`new-${reminders.length}`, input.title, input.due_date);
+    createMutateAsync.mockImplementation(async (input: { description: string; due_date: string }) => {
+      const created = reminder(`new-${reminders.length}`, "", input.due_date, { description: input.description });
       reminders = [...reminders, created];
       return created;
     });
@@ -320,7 +324,7 @@ describe("ReminderPage", () => {
   });
 
   it("assigns an agent from @ in the title, without a separate message", async () => {
-    createMutateAsync.mockResolvedValue(reminder("r9", "Ask Jev", "2026-10-08"));
+    createMutateAsync.mockResolvedValue(reminder("r9", "", "2026-10-08", { description: "Ask Jev" }));
     renderPage();
     const today = day("Today");
     fireEvent.click(within(today).getByRole("button", { name: "Add more" }));
@@ -339,7 +343,7 @@ describe("ReminderPage", () => {
       fireEvent.keyDown(field, { key: "Enter" });
     });
     expect(createMutateAsync).toHaveBeenCalledWith({
-      title: "Ask [@Jev](mention://agent/a1)",
+      description: "Ask [@Jev](mention://agent/a1)",
       due_date: "2026-10-08",
       position: 2,
     });
@@ -350,7 +354,7 @@ describe("ReminderPage", () => {
       document.dispatchEvent(paste);
     });
     expect(createMutateAsync).toHaveBeenLastCalledWith({
-      title: "[@Jev](mention://agent/a1) draft the note",
+      description: "[@Jev](mention://agent/a1) draft the note",
       due_date: "2026-10-08",
       position: 2,
     });

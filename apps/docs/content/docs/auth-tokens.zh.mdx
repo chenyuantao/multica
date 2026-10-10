@@ -67,6 +67,26 @@ curl https://api.multica.ai/api/issues \
  -H "X-Workspace-ID: $MULTICA_WORKSPACE_ID"
 ```
 
+创建今天的待办走待办页同一条流程。发出的文字是备注；标题先留空，随后生成。备注里的 @提及会把智能体加进来。`due_date` 为 `today` 时，日期取 `?tz=` 的日历日；省略时用个人资料里的时区。个人访问令牌可以调用。智能体任务令牌可以列出、创建、修改和删除该任务所属用户的待办，看不到别人的。云节点令牌不行。
+
+```bash
+curl "https://api.multica.ai/api/reminders?tz=Asia/Shanghai" \
+ -H "Authorization: Bearer $MULTICA_TOKEN" \
+ -H "X-Workspace-ID: $MULTICA_WORKSPACE_ID" \
+ -H "Content-Type: application/json" \
+ -d '{"description":"订场地","due_date":"today"}'
+```
+
+`POST /api/ask` 会选出智能体，打开你和它的私聊，并把 `query` 作为消息发出去。个人访问令牌可以调用。任务令牌不行。
+
+```bash
+curl https://api.multica.ai/api/ask \
+ -H "Authorization: Bearer $MULTICA_TOKEN" \
+ -H "X-Workspace-ID: $MULTICA_WORKSPACE_ID" \
+ -H "Content-Type: application/json" \
+ -d '{"query":"这周怎么发布？"}'
+```
+
 脚本中的令牌取自 secret manager 或受保护的环境变量，不要硬编码。自托管实例把域名替换为自己的公开 API 地址。
 
 ## 退出登录与吊销
@@ -79,7 +99,7 @@ curl https://api.multica.ai/api/issues \
 
 守护进程领取运行后，服务器会为这次执行创建一个以 `mat_` 开头的临时令牌。它绑定当前用户、工作区、智能体和运行，最长有效 24 小时，并在运行结束时清理。
 
-守护进程把这个临时令牌注入 AI 编程工具，而不是把用户 PAT 交给智能体。因此，智能体发出的请求会记录为智能体行为，也不能借此调用只允许用户或 owner 执行的敏感操作。
+守护进程把这个临时令牌以 `MULTICA_TOKEN` 注入 AI 编程工具，同时注入 API 地址 `MULTICA_SERVER_URL`，而不是把用户 PAT 交给智能体。因此，智能体发出的请求会记录为智能体行为。这个令牌可以列出、创建、修改和删除它所绑定用户的待办，仍然不能借此调用其他只允许用户或 owner 执行的操作。
 
 这类令牌由服务器自动创建，用户不需要保存或管理。
 

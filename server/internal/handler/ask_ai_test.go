@@ -75,6 +75,58 @@ func TestAskAIChoosesAgentFromQueryPageAndRoster(t *testing.T) {
 	}
 }
 
+func TestAskOpensTheDirectChatAndSendsTheQuery(t *testing.T) {
+	ctx := context.Background()
+	agentID := createHandlerTestAgent(t, "ask-dispatch-agent", nil)
+	ev := &askAIEvaluator{choice: agentID}
+	prev := testHandler.GroupChatDecider
+	testHandler.GroupChatDecider = ev
+	t.Cleanup(func() { testHandler.GroupChatDecider = prev })
+
+	var first AskResponse
+	testutil.Call(t, testHandler.Ask, groupChatRequestAs(t, testUserID, "POST", "/api/ask", map[string]any{
+		"query": "  how do we ship this?  ",
+		"page":  map[string]any{"note": map[string]any{"title": "Runbook", "path": "ops/runbook.md", "content": "steps"}},
+	})).Want(http.StatusCreated).JSON(&first)
+	if first.AgentID != agentID || first.Chat.ID == "" || !first.Chat.IsDirect || first.Message.Content != "how do we ship this?" {
+		t.Fatalf("ask = %+v", first)
+	}
+	t.Cleanup(func() {
+		for _, sql := range []string{
+			`DELETE FROM agent_task_queue WHERE issue_id = $1`,
+			`DELETE FROM comment_ask_context WHERE issue_id = $1`,
+			`DELETE FROM issue_member WHERE issue_id = $1`,
+			`DELETE FROM issue_subscriber WHERE issue_id = $1`,
+			`DELETE FROM comment WHERE issue_id = $1`,
+			`DELETE FROM issue WHERE id = $1`,
+		} {
+			testPool.Exec(ctx, sql, first.Chat.ID)
+		}
+	})
+	var tasks int
+	if err := testPool.QueryRow(ctx, `SELECT count(*) FROM agent_task_queue WHERE issue_id = $1 AND agent_id = $2`, first.Chat.ID, agentID).Scan(&tasks); err != nil {
+		t.Fatal(err)
+	}
+	if tasks != 1 {
+		t.Fatalf("queued tasks = %d, want the chosen agent started", tasks)
+	}
+
+	var second AskResponse
+	testutil.Call(t, testHandler.Ask, groupChatRequestAs(t, testUserID, "POST", "/api/ask", map[string]any{
+		"query": "and the rollback?",
+	})).Want(http.StatusCreated).JSON(&second)
+	if second.Chat.ID != first.Chat.ID || second.Message.Content != "and the rollback?" {
+		t.Fatalf("second ask = %+v, want the same chat", second)
+	}
+
+	blocked := groupChatRequestAs(t, testUserID, "POST", "/api/ask", map[string]any{"query": "no"})
+	blocked.Header.Set("X-Actor-Source", "task_token")
+	testutil.Call(t, testHandler.Ask, blocked).Want(http.StatusForbidden)
+	testutil.Call(t, testHandler.Ask, groupChatRequestAs(t, testUserID, "POST", "/api/ask", map[string]any{
+		"query": "",
+	})).Want(http.StatusBadRequest)
+}
+
 func TestAskAIContextReachesTheAnsweringAgentAsXML(t *testing.T) {
 	ctx := context.Background()
 	agentID := createHandlerTestAgent(t, "ask-ai-context-agent", nil)

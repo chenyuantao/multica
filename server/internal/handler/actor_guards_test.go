@@ -159,3 +159,40 @@ func TestRequireHumanActor_AppliedViaChiRouterUse(t *testing.T) {
 		t.Fatalf("status = %d, want 403", w.Code)
 	}
 }
+
+func TestRequireHumanOrTaskToken(t *testing.T) {
+	cases := []struct {
+		name        string
+		actorSource string
+		want        int
+	}{
+		{name: "human", actorSource: "", want: http.StatusOK},
+		{name: "task_token", actorSource: "task_token", want: http.StatusOK},
+		{name: "cloud_pat", actorSource: "cloud_pat", want: http.StatusForbidden},
+		{name: "unknown", actorSource: "future_kind", want: http.StatusOK},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			called := false
+			next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				called = true
+				w.WriteHeader(http.StatusOK)
+			})
+			req := httptest.NewRequest(http.MethodGet, "/api/reminders", nil)
+			if tc.actorSource != "" {
+				req.Header.Set("X-Actor-Source", tc.actorSource)
+			}
+			w := httptest.NewRecorder()
+			RequireHumanOrTaskToken(next).ServeHTTP(w, req)
+			if w.Code != tc.want {
+				t.Fatalf("status = %d, want %d", w.Code, tc.want)
+			}
+			if tc.want == http.StatusOK && !called {
+				t.Fatal("inner handler must run")
+			}
+			if tc.want == http.StatusForbidden && called {
+				t.Fatal("inner handler must not run")
+			}
+		})
+	}
+}

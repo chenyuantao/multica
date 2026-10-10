@@ -239,7 +239,8 @@ export function chatDisplayTitle(
   getActorName: (type: string, id: string) => string,
 ): string {
   const peer = directChatPeer(chat, userId);
-  return peer ? getActorName(peer.member_type, peer.member_id) : chat.title;
+  if (peer) return getActorName(peer.member_type, peer.member_id);
+  return chat.title.trim() || plainTextPreview(chat.description);
 }
 
 /** The time a chat was last active: its latest message, or its creation. */

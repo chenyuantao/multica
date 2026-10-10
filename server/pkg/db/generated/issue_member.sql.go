@@ -163,7 +163,8 @@ type ListGroupChatsForMemberParams struct {
 
 // Group chats the given person/agent belongs to: the ones they pinned first,
 // then newest message first. Chats without messages yet sort by their
-// creation time. Reminders are chats too but live only on the reminder page.
+// creation time. A reminder stays off this list until it has a message;
+// once it does, it sorts with the other chats.
 func (q *Queries) ListGroupChatsForMember(ctx context.Context, arg ListGroupChatsForMemberParams) ([]Issue, error) {
 	rows, err := q.db.Query(ctx, listGroupChatsForMember,
 		arg.MemberType,
@@ -476,6 +477,32 @@ UPDATE issue SET is_direct_chat = true WHERE id = $1
 func (q *Queries) MarkIssueDirectChat(ctx context.Context, id pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, markIssueDirectChat, id)
 	return err
+}
+
+const maxReminderPositionOnDay = `-- name: MaxReminderPositionOnDay :one
+SELECT COALESCE(MAX(i.position), -1)::float8 AS position
+FROM issue i
+WHERE i.workspace_id = $1
+  AND i.origin_type = 'reminder'
+  AND i.creator_type = 'member'
+  AND i.creator_id = $2
+  AND i.due_date = $3
+`
+
+type MaxReminderPositionOnDayParams struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	CreatorID   pgtype.UUID `json:"creator_id"`
+	DueDate     pgtype.Date `json:"due_date"`
+}
+
+// Highest position among this person's reminders due on the day. -1 when the
+// day is empty, so the next position is 0 — the same slot the reminder page
+// uses for the first item.
+func (q *Queries) MaxReminderPositionOnDay(ctx context.Context, arg MaxReminderPositionOnDayParams) (float64, error) {
+	row := q.db.QueryRow(ctx, maxReminderPositionOnDay, arg.WorkspaceID, arg.CreatorID, arg.DueDate)
+	var position float64
+	err := row.Scan(&position)
+	return position, err
 }
 
 const removeIssueMember = `-- name: RemoveIssueMember :execrows

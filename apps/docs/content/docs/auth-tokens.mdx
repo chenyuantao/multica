@@ -67,6 +67,26 @@ curl https://api.multica.ai/api/issues \
   -H "X-Workspace-ID: $MULTICA_WORKSPACE_ID"
 ```
 
+Creating today's to-do uses the same path as the reminder page. The text you send is the note; the title stays empty until it is generated, and @mentions in the note assign agents. `due_date` of `today` is the calendar day in `?tz=`, or the timezone on your profile when that query is omitted. A personal access token can call it. An agent task token can list, create, update, and delete reminders for the user bound to that task, and for nobody else. A cloud-node token cannot.
+
+```bash
+curl "https://api.multica.ai/api/reminders?tz=Asia/Shanghai" \
+  -H "Authorization: Bearer $MULTICA_TOKEN" \
+  -H "X-Workspace-ID: $MULTICA_WORKSPACE_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"description":"Book the room","due_date":"today"}'
+```
+
+`POST /api/ask` chooses an agent, opens your direct chat with that agent, and sends `query` as the message. A personal access token can call it. A task token cannot.
+
+```bash
+curl https://api.multica.ai/api/ask \
+  -H "Authorization: Bearer $MULTICA_TOKEN" \
+  -H "X-Workspace-ID: $MULTICA_WORKSPACE_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"query":"How do we ship this?"}'
+```
+
 In scripts, take the token from a secret manager or a protected environment variable — never hardcode it. On self-hosted instances, replace the domain with your own public API address.
 
 ## Logging out and revocation
@@ -79,7 +99,7 @@ If a token may have leaked, revoke it immediately under **Settings → API Token
 
 When the daemon claims a run, the server creates a temporary token for that run, prefixed with `mat_`. It is bound to the current user, workspace, agent, and run, is valid for at most 24 hours, and is cleaned up when the run ends.
 
-The daemon injects this temporary token into the AI coding tool instead of handing the user's PAT to the agent. Requests made by the agent are therefore recorded as agent actions, and the token can't be used to reach sensitive operations restricted to users or owners.
+The daemon injects this temporary token into the AI coding tool as `MULTICA_TOKEN`, along with the API address as `MULTICA_SERVER_URL`, instead of handing the user's PAT to the agent. Requests made by the agent are therefore recorded as agent actions. The token can list, create, update, and delete reminders for the user it is bound to. It still can't reach other operations restricted to users or owners.
 
 These tokens are created automatically by the server; users never need to save or manage them.
 

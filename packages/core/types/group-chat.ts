@@ -132,9 +132,10 @@ export interface CreateGroupChatRequest {
 
 /**
  * A personal to-do kept as a group chat. It stays off the chat list until it
- * has a message, then appears there as a task chat. Its messages are the
- * details; an agent joins when the title or a message mentions it. A title
- * mention assigns the agent without another message.
+ * has a message, then appears there as a task chat. The note the person writes
+ * is the description; a short title is generated from it. Its messages are the
+ * details. An agent joins when that note, the title, or a message mentions it.
+ * A mention in the note or the title assigns the agent without another message.
  */
 export interface Reminder extends GroupChat {
   /** `done` once checked off; anything else is open. */
@@ -149,7 +150,8 @@ export interface Reminder extends GroupChat {
 }
 
 export interface CreateReminderRequest {
-  title: string;
+  /** The note the person wrote. A short title is generated from it. */
+  description: string;
   due_date?: string | null;
   position?: number;
 }

@@ -932,6 +932,10 @@ func writeAttachments(b *strings.Builder) {
 func writeAlwaysUseCLI(b *strings.Builder) {
 	b.WriteString("## Important: Always Use the `multica` CLI\n\n")
 	b.WriteString("Access Multica platform resources only through the `multica` CLI — never `curl` / `wget`. For anything the CLI doesn't cover, post a comment mentioning the workspace owner rather than working around it.\n\n")
+	// Mika's identity is the only place that grants this. The variables are
+	// already in the process environment; the exception is permission to use
+	// them, not a second injection path.
+	b.WriteString("The one exception is reminder list, create, update, and delete, and only when Agent Identity tells you to call them with `curl`. Those calls use the `MULTICA_SERVER_URL` and `MULTICA_TOKEN` already in the environment, plus `MULTICA_WORKSPACE_ID`. Do not print the token. The exception does not cover any other Multica API, and it does not apply when Agent Identity does not grant it.\n\n")
 }
 
 // writeDeliveryInvariant emits the always-on delivery contract, shared by every

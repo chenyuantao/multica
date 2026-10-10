@@ -45,7 +45,8 @@ import {
   isDone,
   moveTargets,
   pinnedReminders,
-  reminderTags,
+  reminderListText,
+  reminderTagsOf,
   type DayGroup,
   type ReminderFilter,
 } from "./reminder-board";
@@ -124,6 +125,8 @@ export function ReminderList({
   const committing = useRef(false);
   /** Enter commits and then blur commits again as the field unmounts. */
   const commitLock = useRef(false);
+  /** Markdown the open rename field started from. An unchanged field does not write a title. */
+  const editSource = useRef("");
   const [activeId, setActiveId] = useState<string | null>(null);
   const [dragContainers, setDragContainers] = useState<Record<string, string[]> | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -170,8 +173,9 @@ export function ReminderList({
   const applyTitle = (title: string) => {
     if (editing?.kind === "row") {
       const r = byId.get(editing.id);
-      if (r && !title) actions.remove([r.id]);
-      else if (r && title !== r.title) actions.update([{ id: r.id, patch: { title } }]);
+      if (!r) return;
+      if (!title) actions.remove([r.id]);
+      else if (title !== editSource.current) actions.update([{ id: r.id, patch: { title } }]);
       return;
     }
     if (editing?.kind === "draft" && title && !saving && !committing.current) {
@@ -267,7 +271,9 @@ export function ReminderList({
   const startRename = (r: Reminder) => {
     if (editing?.kind === "row" && editing.id === r.id) return;
     if (!flushEditing()) return;
-    const draft = decodeMentionDraft(r.title);
+    const shown = reminderListText(r);
+    const draft = decodeMentionDraft(shown);
+    editSource.current = shown;
     setEditing({ kind: "row", id: r.id }, draft.text, draft.picked);
   };
 
@@ -517,7 +523,7 @@ export function ReminderList({
           <DragOverlay dropAnimation={null}>
             {activeReminder ? (
               <div className="rounded-lg border bg-popover p-3 text-body break-words shadow-xl">
-                {decodeMentionDraft(activeReminder.title).text}
+                {decodeMentionDraft(reminderListText(activeReminder)).text}
               </div>
             ) : null}
           </DragOverlay>
@@ -634,8 +640,9 @@ function ReminderRow({
   });
   const { role: _role, ...dragAttributes } = attributes;
   const done = isDone(reminder);
-  const tags = reminderTags(reminder.title);
-  const titleLabel = decodeMentionDraft(reminder.title).text;
+  const tags = reminderTagsOf(reminder);
+  const shown = reminderListText(reminder);
+  const titleLabel = decodeMentionDraft(shown).text;
   const agents = reminder.members.filter((m) => m.member_type === "agent");
 
   return (
@@ -693,7 +700,7 @@ function ReminderRow({
               />
               <div className="pointer-events-none relative min-w-0 flex-1 transition-colors group-hover/row:text-brand [&_a]:pointer-events-auto">
                 <div className={cn("text-body break-words", done && "text-muted-foreground line-through")}>
-                  <RichContent content={reminder.title} density="compact" />
+                  <RichContent content={shown} density="compact" />
                 </div>
                 {tags.length > 0 && (
                   <div className="mt-1.5 flex flex-wrap gap-1">

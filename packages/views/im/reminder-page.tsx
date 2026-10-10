@@ -56,7 +56,7 @@ import {
   endPosition,
   filterByTags,
   focusOpenReminder,
-  reminderTags,
+  reminderTagsOf,
   tagStats,
   viewReminders,
   type ReminderFilter,
@@ -92,8 +92,9 @@ function isTyping(el: Element | null): boolean {
 }
 
 /**
- * Reminders: each one is a chat that never shows in `/im`. Its title is the
- * to-do, the messages are its details, and an @ in the title or a message
+ * Reminders: each one is a chat. The note someone writes is the description,
+ * and a short title replaces it in the list once that title exists. The
+ * messages are its details, and an @ in the note, the title, or a message
  * assigns an agent without a separate hand-off.
  * Desktop opens a reminder's messages in a resizable column on the right;
  * a phone keeps the list inside Me and opens a reminder as its own level.
@@ -265,13 +266,13 @@ export function ReminderPage() {
         },
         onError: () => toast.error(t(($) => $.reminder.delete_failed)),
       }),
-    create: (title, due, position) =>
-      create.mutateAsync({ title, due_date: due, position }).then(
+    create: (text, due, position) =>
+      create.mutateAsync({ description: text, due_date: due, position }).then(
         (created) => {
           const next = boardAfterCreate(filter, anchor, todayKey, due);
           if (next.filter !== filter) setFilter(next.filter);
           if (toDateKey(next.anchor) !== toDateKey(anchor)) setAnchor(next.anchor);
-          if (activeTags.size > 0 && !reminderTags(created.title).some((tag) => activeTags.has(tag))) {
+          if (activeTags.size > 0 && !reminderTagsOf(created).some((tag) => activeTags.has(tag))) {
             setActiveTags(new Set());
           }
           pendingCreated.current = created;

@@ -10,7 +10,9 @@ import {
   focusOpenReminder,
   moveTargets,
   pinnedReminders,
+  reminderListText,
   reminderTags,
+  reminderTagsOf,
   sortDay,
   tagStats,
   viewReminders,
@@ -120,6 +122,19 @@ describe("reminder board", () => {
     ]);
     expect(ids(filterByTags(tagged, new Set(["web"]), null))).toEqual(["y"]);
     expect(ids(filterByTags(tagged, new Set(["web"]), "z"))).toEqual(["y", "z"]);
+  });
+
+  it("shows the note until a title is written, and keeps the note's tags", () => {
+    const pending = r("p", todayKey, { title: "", description: "#ops book a room for twenty" });
+    const named = r("n", todayKey, { title: "订场地", description: "#ops book a room for twenty" });
+    expect(reminderListText(pending)).toBe("#ops book a room for twenty");
+    expect(reminderListText(named)).toBe("订场地");
+    expect(reminderTagsOf(pending)).toEqual(["ops"]);
+    expect(reminderTagsOf(named)).toEqual(["ops"]);
+    expect(ids(filterByTags([pending, named, r("z", todayKey, { title: "plain" })], new Set(["ops"]), null))).toEqual([
+      "p",
+      "n",
+    ]);
   });
 
   it("places added and dropped reminders between their open neighbours", () => {

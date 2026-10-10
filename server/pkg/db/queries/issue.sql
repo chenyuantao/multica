@@ -778,3 +778,15 @@ FROM (
     WHERE workspace_id = $1
     LIMIT sqlc.arg('limit')::bigint
 ) bounded_issues;
+
+-- name: UpdateIssueTitleIfEmpty :one
+-- Writes a generated reminder title only while the title is still empty, so a
+-- title someone typed in the meantime is left alone. A miss returns no row.
+UPDATE issue
+SET title = @new_title,
+    revision = revision + 1,
+    updated_at = now()
+WHERE id = @id
+  AND workspace_id = @workspace_id
+  AND title = ''
+RETURNING *;
