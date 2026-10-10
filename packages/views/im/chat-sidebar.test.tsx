@@ -159,20 +159,23 @@ describe("ChatSidebar pinning", () => {
 describe("ChatSidebar task chats", () => {
   beforeEach(() => localStorage.clear());
 
-  it("marks an open task with task and to-do tags, and a finished one with a blue check", () => {
+  it("marks an open task with an empty circle, and a finished one with a blue check", () => {
     renderSidebar(null, [
       chat("a", 0),
       { ...chat("b", 0), task: true, status: "todo", title: "Open task" },
       { ...chat("c", 0), task: true, status: "done", title: "Done task" },
     ]);
-    expect(screen.getByRole("button", { name: /Room a/ })).not.toHaveTextContent("Task");
+    const ordinary = screen.getByRole("button", { name: /Room a/ });
+    expect(ordinary).not.toHaveTextContent("Task");
+    expect(within(ordinary).queryByRole("img", { name: "To-do" })).toBeNull();
     const open = screen.getByRole("button", { name: /Open task/ });
-    expect(open).toHaveTextContent("Task");
-    expect(open).toHaveTextContent("To-do");
+    expect(open).not.toHaveTextContent("Task");
+    expect(open).not.toHaveTextContent("To-do");
+    expect(within(open).getByRole("img", { name: "To-do" })).toBeInTheDocument();
     expect(within(open).queryByRole("img", { name: "Done" })).toBeNull();
     const done = screen.getByRole("button", { name: /Done task/ });
-    expect(done).toHaveTextContent("Task");
-    expect(done).not.toHaveTextContent("To-do");
+    expect(done).not.toHaveTextContent("Task");
+    expect(within(done).queryByRole("img", { name: "To-do" })).toBeNull();
     expect(within(done).getByRole("img", { name: "Done" })).toHaveClass("text-info");
   });
 

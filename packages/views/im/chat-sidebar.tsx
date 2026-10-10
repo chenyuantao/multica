@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, CirclePlus, ListFilter, Pin, PinOff } from "lucide-react";
+import { Check, Circle, CirclePlus, ListFilter, Pin, PinOff } from "lucide-react";
 import { directChatPeer } from "@multica/core/group-chats";
 import type { GroupChat } from "@multica/core/types";
 import { useActorName } from "@multica/core/workspace/hooks";
@@ -238,14 +238,6 @@ function ChatListMenu({
   );
 }
 
-function ChatTag({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="shrink-0 rounded bg-foreground/8 px-1 py-px text-micro font-medium text-muted-foreground">
-      {children}
-    </span>
-  );
-}
-
 function ChatListItem({
   chat,
   userId,
@@ -296,22 +288,24 @@ function ChatListItem({
             <span className={cn("min-w-0 truncate text-body", selected || unread > 0 ? "font-semibold" : "font-medium")}>
               {chatDisplayTitle(chat, userId, getActorName)}
             </span>
-            {chat.task && (
-              <>
-                <ChatTag>{t(($) => $.sidebar.task)}</ChatTag>
-                {chat.status === "done" ? (
-                  <span
-                    role="img"
-                    aria-label={t(($) => $.sidebar.done)}
-                    className="inline-flex size-4 shrink-0 items-center justify-center rounded-full bg-info/15 text-info"
-                  >
-                    <Check className="size-3" strokeWidth={2.5} />
-                  </span>
-                ) : (
-                  <ChatTag>{t(($) => $.sidebar.todo)}</ChatTag>
-                )}
-              </>
-            )}
+            {chat.task &&
+              (chat.status === "done" ? (
+                <span
+                  role="img"
+                  aria-label={t(($) => $.sidebar.done)}
+                  className="inline-flex size-4 shrink-0 items-center justify-center rounded-full bg-info/15 text-info"
+                >
+                  <Check className="size-3" strokeWidth={2.5} />
+                </span>
+              ) : (
+                <span
+                  role="img"
+                  aria-label={t(($) => $.sidebar.todo)}
+                  className="inline-flex size-4 shrink-0 items-center justify-center text-muted-foreground"
+                >
+                  <Circle className="size-4" strokeWidth={1.8} />
+                </span>
+              ))}
           </span>
           {chat.pinned && (
             <Pin
