@@ -138,17 +138,19 @@ describe("ChatSidePanel", () => {
     restore();
   });
 
-  it("widens to 7:3 of the middle content when a document opens", () => {
+  it("does not resize the column when a document opens", () => {
     const restore = mockContentPair();
     renderPanel([weekly], weekly.path);
     const handle = screen.getByRole("separator", { name: "Resize panel" });
-    expect(handle).toHaveAttribute("aria-valuenow", "700");
-    expect(handle.parentElement).toHaveStyle({ width: "700px" });
-    expect(localStorage.getItem("multica:im-column-width:details")).toBe("700");
+    expect(handle).toHaveAttribute("aria-valuenow", "320");
+    expect(handle.parentElement).toHaveStyle({ width: "320px" });
+    expect(localStorage.getItem("multica:im-column-width:details")).toBeNull();
+    expect(localStorage.getItem("multica:im-column-width:details-document")).toBeNull();
     restore();
   });
 
-  it("keeps a manual width until another document opens", () => {
+  it("remembers the article column and the details column separately", () => {
+    localStorage.setItem("multica:im-column-width:details", "480");
     const props = {
       wsId: "ws-1",
       chat,
@@ -159,34 +161,36 @@ describe("ChatSidePanel", () => {
       onCloseNote: vi.fn(),
     };
     const restore = mockContentPair();
-    const view = renderWithI18n(
+    const panel = (activePath: string | null, notes = props.notes) => (
       <>
         <div data-list="" />
         <div data-middle="" />
-        <ChatSidePanel {...props} activePath={weekly.path} />
-      </>,
+        <ChatSidePanel {...props} notes={notes} activePath={activePath} />
+      </>
     );
+    const view = renderWithI18n(panel(null, []));
     const handle = () => screen.getByRole("separator", { name: "Resize panel" });
-    fireEvent.keyDown(handle(), { key: "ArrowRight" });
-    expect(handle()).toHaveAttribute("aria-valuenow", "684");
+    expect(handle()).toHaveAttribute("aria-valuenow", "480");
 
-    view.rerender(
-      <>
-        <div data-list="" />
-        <div data-middle="" />
-        <ChatSidePanel {...props} activePath={weekly.path} />
-      </>,
-    );
-    expect(handle()).toHaveAttribute("aria-valuenow", "684");
+    view.rerender(panel(weekly.path));
+    expect(handle()).toHaveAttribute("aria-valuenow", "480");
+    expect(localStorage.getItem("multica:im-column-width:details")).toBe("480");
+    expect(localStorage.getItem("multica:im-column-width:details-document")).toBeNull();
 
-    view.rerender(
-      <>
-        <div data-list="" />
-        <div data-middle="" />
-        <ChatSidePanel {...props} activePath={plan.path} />
-      </>,
-    );
-    expect(handle()).toHaveAttribute("aria-valuenow", "700");
+    fireEvent.keyDown(handle(), { key: "ArrowLeft" });
+    expect(handle()).toHaveAttribute("aria-valuenow", "496");
+    expect(localStorage.getItem("multica:im-column-width:details-document")).toBe("496");
+    expect(localStorage.getItem("multica:im-column-width:details")).toBe("480");
+
+    view.rerender(panel(plan.path));
+    expect(handle()).toHaveAttribute("aria-valuenow", "496");
+
+    view.rerender(panel(null));
+    expect(handle()).toHaveAttribute("aria-valuenow", "480");
+    expect(localStorage.getItem("multica:im-column-width:details")).toBe("480");
+
+    view.rerender(panel(weekly.path));
+    expect(handle()).toHaveAttribute("aria-valuenow", "496");
     restore();
   });
 
@@ -241,6 +245,7 @@ describe("ChatSidePanel", () => {
       />,
     );
     expect(localStorage.getItem("multica:im-column-width:details")).toBeNull();
+    expect(localStorage.getItem("multica:im-column-width:details-document")).toBeNull();
     expect(screen.getByText("voice c1 Work/周报.md")).toBeInTheDocument();
   });
 });

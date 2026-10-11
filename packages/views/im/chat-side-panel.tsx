@@ -1,6 +1,6 @@
 "use client";
 
-import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, useRef, useState, type ReactNode } from "react";
 import { X, Loader2 } from "lucide-react";
 import { directChatPeer } from "@multica/core/group-chats";
 import { useActorName } from "@multica/core/workspace/hooks";
@@ -60,19 +60,10 @@ export function ChatSidePanel({
   const insertExcerpt = useInsertDocExcerpt();
   const { getActorName } = useActorName();
   const columnRef = useRef<HTMLDivElement>(null);
-  const { width, commit, options, bounded } = useDetailsColumnWidth(columnRef);
-  const expandedFor = useRef<string | null>(null);
-  // Opening a document uses the widest allowed column. A later drag stays until the next open.
-  useEffect(() => {
-    if (chrome === "page" || !activePath) {
-      expandedFor.current = null;
-      return;
-    }
-    if (!bounded) return;
-    if (expandedFor.current === activePath) return;
-    expandedFor.current = activePath;
-    commit(options.max);
-  }, [activePath, bounded, chrome, commit, options.max]);
+  // The open note and the details tab remember their widths separately.
+  // Opening a note does not resize the column.
+  const columnId = chrome === "aside" && activePath ? "details-document" : "details";
+  const { width, commit, options } = useDetailsColumnWidth(columnRef, columnId);
   const noteKey = `${chat.id}:${notes.map((note) => `${note.path}\n${note.name}`).join("\0")}`;
   const [appliedNoteKey, setAppliedNoteKey] = useState(noteKey);
   const [retained, setRetained] = useState<Record<string, readonly KnowledgeNoteTab[]>>(() =>

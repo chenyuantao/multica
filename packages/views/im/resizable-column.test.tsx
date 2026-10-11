@@ -40,6 +40,62 @@ describe("resizable IM column", () => {
     expect(screen.getByTestId("column").style.width).toBe("480px");
   });
 
+  it("keeps a separate width for each column id", () => {
+    localStorage.setItem("multica:im-column-width:details", "400");
+
+    function SwitchingColumn({ id }: { id: string }) {
+      const { width, commit } = useColumnWidth(id, OPTIONS);
+      return (
+        <div data-testid="column" style={{ width }}>
+          <button type="button" onClick={() => commit(width + 10)}>
+            grow
+          </button>
+        </div>
+      );
+    }
+
+    const view = render(<SwitchingColumn id="details" />);
+    expect(screen.getByTestId("column").style.width).toBe("400px");
+
+    view.rerender(<SwitchingColumn id="details-document" />);
+    expect(screen.getByTestId("column").style.width).toBe("400px");
+    expect(localStorage.getItem("multica:im-column-width:details-document")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "grow" }));
+    expect(screen.getByTestId("column").style.width).toBe("410px");
+    expect(localStorage.getItem("multica:im-column-width:details-document")).toBe("410");
+    expect(localStorage.getItem("multica:im-column-width:details")).toBe("400");
+
+    view.rerender(<SwitchingColumn id="details" />);
+    expect(screen.getByTestId("column").style.width).toBe("400px");
+
+    view.rerender(<SwitchingColumn id="details-document" />);
+    expect(screen.getByTestId("column").style.width).toBe("410px");
+  });
+
+  it("restores the unsaved column when the other width was dragged", () => {
+    function SwitchingColumn({ id }: { id: string }) {
+      const { width, commit } = useColumnWidth(id, OPTIONS);
+      return (
+        <div data-testid="column" style={{ width }}>
+          <button type="button" onClick={() => commit(width + 10)}>
+            grow
+          </button>
+        </div>
+      );
+    }
+
+    const view = render(<SwitchingColumn id="details" />);
+    expect(screen.getByTestId("column").style.width).toBe("256px");
+    view.rerender(<SwitchingColumn id="details-document" />);
+    expect(screen.getByTestId("column").style.width).toBe("256px");
+    fireEvent.click(screen.getByRole("button", { name: "grow" }));
+    expect(screen.getByTestId("column").style.width).toBe("266px");
+    view.rerender(<SwitchingColumn id="details" />);
+    expect(screen.getByTestId("column").style.width).toBe("256px");
+    expect(localStorage.getItem("multica:im-column-width:details")).toBeNull();
+  });
+
   it("restores the stored width and supports keyboard resizing", () => {
     localStorage.setItem("multica:im-column-width:test", "300");
     render(<Column />);

@@ -26,14 +26,34 @@ function clamp(width: number, { min, max }: ColumnWidthOptions) {
   return Math.max(min, Math.min(max, Math.round(width)));
 }
 
-/** Per-device column width, persisted once a drag or keyboard change settles. */
+function readStoredWidth(id: string, options: ColumnWidthOptions): number | undefined {
+  const raw = getStorage()?.getItem(STORAGE_PREFIX + id);
+  const stored = Number(raw);
+  if (!raw || !Number.isFinite(stored) || stored <= 0) return undefined;
+  return clamp(stored, options);
+}
+
+/**
+ * Per-device column width, persisted once a drag or keyboard change settles.
+ * Switching `id` restores that column's saved width. A column that has never
+ * been saved keeps the width it last showed, so the first visit does not jump.
+ */
 export function useColumnWidth(id: string, options: ColumnWidthOptions) {
   const { defaultWidth, min, max } = options;
   const [width, setWidth] = useState(defaultWidth);
+  const [seenId, setSeenId] = useState(id);
+  const memory = useRef<Record<string, number>>({});
+
+  if (id !== seenId) {
+    memory.current[seenId] = width;
+    const next = readStoredWidth(id, options) ?? memory.current[id] ?? width;
+    setSeenId(id);
+    if (next !== width) setWidth(next);
+  }
 
   useEffect(() => {
-    const stored = Number(getStorage()?.getItem(STORAGE_PREFIX + id));
-    if (stored && Number.isFinite(stored)) setWidth(clamp(stored, { defaultWidth, min, max }));
+    const stored = readStoredWidth(id, { defaultWidth, min, max });
+    if (stored != null) setWidth(stored);
   }, [id, defaultWidth, min, max]);
 
   const commit = useCallback(
