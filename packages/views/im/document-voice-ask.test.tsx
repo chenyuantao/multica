@@ -36,6 +36,9 @@ vi.mock("./voice-hold", () => ({
   },
 }));
 
+vi.mock("./use-mika-for-ask", () => ({
+  useMikaForAsk: () => ({ agentId: "mika-1", ready: true, loading: false }),
+}));
 vi.mock("@multica/core/hooks", () => ({ useWorkspaceId: () => "ws-1" }));
 vi.mock("@multica/core/group-chats", () => ({
   useAskAI: () => ({ mutate: askMutate, isPending: false }),
@@ -94,7 +97,7 @@ describe("DocumentVoiceAsk", () => {
       voice.onSend("总结一下");
     });
 
-    expect(askMutate).toHaveBeenCalledWith({ query: "总结一下", page: notePage }, expect.any(Object));
+    expect(askMutate).toHaveBeenCalledWith({ query: "总结一下", page: notePage, agentId: "mika-1" }, expect.any(Object));
     expect(sendMutateAsync).not.toHaveBeenCalled();
     expect(push).toHaveBeenCalledWith("/acme/im?chat=direct-1");
   });
@@ -130,7 +133,7 @@ describe("DocumentVoiceAsk", () => {
     fireEvent.change(field, { target: { value: "改成三点" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
-    expect(askMutate).toHaveBeenCalledWith({ query: "改成三点", page: notePage }, expect.any(Object));
+    expect(askMutate).toHaveBeenCalledWith({ query: "改成三点", page: notePage, agentId: "mika-1" }, expect.any(Object));
   });
 
   it("reports when no agent can answer", () => {
@@ -143,7 +146,7 @@ describe("DocumentVoiceAsk", () => {
       voice.onSend("总结一下");
     });
 
-    expect(toastError).toHaveBeenCalledWith("There's no agent you can message.");
+    expect(toastError).toHaveBeenCalledWith("Couldn't choose an agent to answer. Try again.");
     expect(push).not.toHaveBeenCalled();
   });
 });

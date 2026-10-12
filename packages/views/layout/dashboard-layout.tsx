@@ -9,6 +9,7 @@ import { DashboardGuard } from "./dashboard-guard";
 import { NavigationProgress } from "./navigation-progress";
 import { WorkspacePresencePrefetch } from "./workspace-presence-prefetch";
 import { GlobalShortcuts } from "./global-shortcuts";
+import { useMikaTaskHandoff } from "../im/use-mika-task-handoff";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -29,6 +30,7 @@ export function DashboardLayout({
   loadingIndicator,
   rail,
 }: DashboardLayoutProps) {
+  useMikaTaskHandoff();
   return (
     <DashboardGuard
       loadingFallback={

@@ -5,6 +5,7 @@ import { ModalRegistry } from "../modals/registry";
 import { useNavigation } from "../navigation";
 import { CollectPage } from "./collect-page";
 import { ImPage } from "./im-page";
+import { useMikaTaskHandoff } from "./use-mika-task-handoff";
 import { KnowledgePage } from "./knowledge-page";
 import { ReminderPage } from "./reminder-page";
 
@@ -16,6 +17,7 @@ import { ReminderPage } from "./reminder-page";
 export function ImSurface() {
   const { pathname } = useNavigation();
   const segment = imSurfaceSegment(pathname);
+  useMikaTaskHandoff();
   return (
     <>
       {segment === "knowledge" ? (

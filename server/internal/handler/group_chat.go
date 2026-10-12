@@ -522,7 +522,7 @@ func (h *Handler) CreateGroupChat(w http.ResponseWriter, r *http.Request) {
 		refs = append(refs, ref)
 	}
 
-	issue, members, ok := h.createGroupChat(w, r, member, userID, req.Title, refs, false)
+	issue, members, ok := h.createGroupChat(w, r, member, userID, req.Title, refs, false, false)
 	if !ok {
 		return
 	}
@@ -531,7 +531,7 @@ func (h *Handler) CreateGroupChat(w http.ResponseWriter, r *http.Request) {
 
 // createGroupChat creates the chat with refs as its members (the creator
 // first). The caller writes the response.
-func (h *Handler) createGroupChat(w http.ResponseWriter, r *http.Request, member db.Member, userID, title string, refs []service.IssueMemberRef, direct bool) (db.Issue, []db.IssueMember, bool) {
+func (h *Handler) createGroupChat(w http.ResponseWriter, r *http.Request, member db.Member, userID, title string, refs []service.IssueMemberRef, direct, task bool) (db.Issue, []db.IssueMember, bool) {
 	prefix := h.getIssuePrefix(r.Context(), member.WorkspaceID)
 	res, err := h.IssueService.Create(r.Context(), service.IssueCreateParams{
 		WorkspaceID:    member.WorkspaceID,
@@ -543,6 +543,7 @@ func (h *Handler) createGroupChat(w http.ResponseWriter, r *http.Request, member
 		AllowDuplicate: true,
 		Members:        refs,
 		DirectChat:     direct,
+		TaskChat:       task && !direct,
 	}, service.IssueCreateOpts{
 		ActorID:  userID,
 		Platform: func() string { p, _, _ := middleware.ClientMetadataFromContext(r.Context()); return p }(),
@@ -653,7 +654,7 @@ func (h *Handler) openDirectChat(w http.ResponseWriter, r *http.Request, member 
 		title = "Direct chat"
 	}
 	creator := service.IssueMemberRef{Type: "member", ID: parseUUID(userID)}
-	issue, members, ok := h.createGroupChat(w, r, member, userID, title, []service.IssueMemberRef{creator, peer}, true)
+	issue, members, ok := h.createGroupChat(w, r, member, userID, title, []service.IssueMemberRef{creator, peer}, true, false)
 	return issue, members, true, ok
 }
 

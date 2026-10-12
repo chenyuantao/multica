@@ -3,7 +3,6 @@
 import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowUp, Loader2, Mic, X } from "lucide-react";
-import { ApiError } from "@multica/core/api";
 import { docFileOptions, docsKeys } from "@multica/core/docs";
 import { useAskAI, useSendGroupChatMessage } from "@multica/core/group-chats";
 import { useWorkspaceId } from "@multica/core/hooks";
@@ -15,6 +14,7 @@ import { useT } from "../i18n";
 import { useNavigation } from "../navigation";
 import { noteAskPage } from "./ask-ai-context";
 import { noteTitle } from "./knowledge-utils";
+import { useMikaForAsk } from "./use-mika-for-ask";
 import { useVoiceHold } from "./voice-hold";
 
 interface DocumentVoiceAskProps {
@@ -47,6 +47,7 @@ export function DocumentVoiceAsk({ path, name, chatId, onSent }: DocumentVoiceAs
   const qc = useQueryClient();
   const fileQuery = useQuery(docFileOptions(path));
   const ask = useAskAI(wsId);
+  const mika = useMikaForAsk(wsId);
   const send = useSendGroupChatMessage(wsId, chatId ?? "");
   const [draft, setDraft] = useState<string | null>(null);
   const busyRef = useRef(false);
@@ -54,18 +55,20 @@ export function DocumentVoiceAsk({ path, name, chatId, onSent }: DocumentVoiceAs
 
   const pageFor = () => noteAskPage(path, qc.getQueryData<DocFile>(docsKeys.file(path)) ?? fileQuery.data);
 
-  const fail = (err: unknown) => {
-    if (!chatId) {
-      const noAgent = err instanceof ApiError && (err.body as { code?: string } | undefined)?.code === "ask_ai_no_agent";
-      toast.error(noAgent ? t(($) => $.search.ask_no_agent) : t(($) => $.search.ask_failed));
-      return;
-    }
-    toast.error(t(($) => $.knowledge.voice_failed));
+  const fail = () => {
+    toast.error(chatId ? t(($) => $.knowledge.voice_failed) : t(($) => $.search.ask_failed));
   };
 
   const submit = (value: string) => {
     const text = spokenText(value);
     if (!text || pending || busyRef.current) return;
+    if (!chatId) {
+      if (mika.loading) return;
+      if (!mika.ready) {
+        toast.error(t(($) => $.search.setup_mika));
+        return;
+      }
+    }
     busyRef.current = true;
     const page = pageFor();
     const done = () => {
@@ -84,7 +87,7 @@ export function DocumentVoiceAsk({ path, name, chatId, onSent }: DocumentVoiceAs
       return;
     }
     ask.mutate(
-      { query: text, page },
+      { query: text, page, agentId: mika.agentId },
       {
         onSuccess: ({ chat }) => {
           setDraft(null);

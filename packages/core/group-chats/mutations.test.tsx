@@ -307,15 +307,15 @@ describe("useAskAI", () => {
     return { qc, api, ...renderHook(() => useAskAI(WS), { wrapper }) };
   }
 
-  it("sends the question to the direct chat of the chosen agent", async () => {
-    const { qc, api, result } = setup(vi.fn(async () => "agent-7"));
+  it("sends the question to Mika's direct chat", async () => {
+    const { qc, api, result } = setup(vi.fn());
     let out: Awaited<ReturnType<typeof result.current.mutateAsync>> | undefined;
     await act(async () => {
-      out = await result.current.mutateAsync({ query: "why?", page: null });
+      out = await result.current.mutateAsync({ query: "why?", page: null, agentId: "mika-1" });
     });
 
-    expect(api.askAI).toHaveBeenCalledWith({ query: "why?", page: null });
-    expect(api.openDirectGroupChat).toHaveBeenCalledWith({ member_type: "agent", member_id: "agent-7" });
+    expect(api.askAI).not.toHaveBeenCalled();
+    expect(api.openDirectGroupChat).toHaveBeenCalledWith({ member_type: "agent", member_id: "mika-1" });
     expect(api.createComment).toHaveBeenCalledWith("direct", "why?", undefined, undefined, [], undefined, undefined, undefined, null);
     expect(api.uploadFile).not.toHaveBeenCalled();
     expect(out?.chat.id).toBe("direct");
@@ -327,17 +327,10 @@ describe("useAskAI", () => {
     const page = { selection: { message_id: "x", time: "t", sender: "Ann", content: "it broke" } };
     const files = [new File(["x"], "shot.png", { type: "image/png" }), new File(["y"], "log.txt", { type: "text/plain" })];
     await act(async () => {
-      await result.current.mutateAsync({ query: "", page, files });
+      await result.current.mutateAsync({ query: "", page, files, agentId: "mika-1" });
     });
 
-    expect(api.askAI).toHaveBeenCalledWith({
-      query: "",
-      page,
-      attachments: [
-        { name: "shot.png", content_type: "image/png" },
-        { name: "log.txt", content_type: "text/plain" },
-      ],
-    });
+    expect(api.askAI).not.toHaveBeenCalled();
     expect(api.uploadFile).toHaveBeenCalledWith(files[0], { issueId: "direct" });
     expect(api.createComment).toHaveBeenCalledWith(
       "direct",
@@ -352,10 +345,10 @@ describe("useAskAI", () => {
     );
   });
 
-  it("opens no chat when no agent was chosen", async () => {
-    const { api, result } = setup(vi.fn(async () => ""));
+  it("opens no chat when Mika is missing", async () => {
+    const { api, result } = setup(vi.fn());
     await act(async () => {
-      await expect(result.current.mutateAsync({ query: "why?", page: null })).rejects.toThrow();
+      await expect(result.current.mutateAsync({ query: "why?", page: null, agentId: "" })).rejects.toThrow();
     });
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(api.openDirectGroupChat).not.toHaveBeenCalled();

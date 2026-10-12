@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isMikaAgent, memberNeedsMikaSetup, workspaceNeedsMika } from "./mika";
+import { isMikaAgent, memberNeedsMikaSetup, mikaCanTakeWork, workspaceNeedsMika } from "./mika";
 
 const mika = { id: "agent-mika", system_key: "mika" };
 const other = { id: "agent-other", system_key: undefined };
@@ -7,6 +7,19 @@ const kicked = {
   agent_id: "agent-mika",
   last_message: { content: "…", role: "user" as const, created_at: "2026-01-01" },
 };
+
+describe("mikaCanTakeWork", () => {
+  const bound = { runtime_id: "rt-1", runtime_bound: true as const };
+
+  it("allows an online or unstable runtime and refuses a missing or offline one", () => {
+    expect(mikaCanTakeWork(undefined)).toBe(false);
+    expect(mikaCanTakeWork({ ...bound, runtime_id: "", runtime_availability: "online" })).toBe(false);
+    expect(mikaCanTakeWork({ ...bound, runtime_availability: "offline" })).toBe(false);
+    expect(mikaCanTakeWork({ ...bound, runtime_availability: "unstable" })).toBe(true);
+    expect(mikaCanTakeWork({ ...bound, runtime_availability: "online" })).toBe(true);
+    expect(mikaCanTakeWork({ runtime_id: "rt-1" })).toBe(true);
+  });
+});
 
 describe("workspaceNeedsMika", () => {
   it("is true for an empty workspace", () => {

@@ -32,6 +32,7 @@ export {
 export {
   MIKA_SYSTEM_KEY,
   isMikaAgent,
+  mikaCanTakeWork,
   memberNeedsMikaSetup,
   workspaceNeedsMika,
 } from "./mika";

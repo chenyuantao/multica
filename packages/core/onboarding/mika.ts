@@ -1,3 +1,4 @@
+import { isAgentRuntimeBound } from "../agents/runtime-binding";
 import type { Agent, ChatSession } from "../types";
 
 /**
@@ -9,6 +10,18 @@ export const MIKA_SYSTEM_KEY = "mika";
 
 export function isMikaAgent(agent: Pick<Agent, "system_key">): boolean {
   return agent.system_key === MIKA_SYSTEM_KEY;
+}
+
+/**
+ * Cmd+O can hand work to Mika only when she exists and her runtime can run.
+ * A missing runtime or an offline one stops here. Unstable still counts as
+ * reachable: the machine was seen recently.
+ */
+export function mikaCanTakeWork(
+  agent: Pick<Agent, "runtime_id" | "runtime_bound" | "runtime_availability"> | undefined,
+): boolean {
+  if (!agent || !isAgentRuntimeBound(agent)) return false;
+  return agent.runtime_availability !== "offline";
 }
 
 /**

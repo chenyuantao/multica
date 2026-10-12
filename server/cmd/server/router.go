@@ -2075,6 +2075,13 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 
 			// Group chats (issues with members). Messages use the issue
 			// comment routes, which enforce chat membership.
+			r.Route("/api/mika", func(r chi.Router) {
+				r.Use(handler.RequireHumanOrTaskToken)
+				r.Get("/agents", h.ListMikaAgents)
+				r.Post("/task-chats/candidates", h.ListMikaTaskChatCandidates)
+				r.Post("/task-chats", h.StartMikaTaskChat)
+			})
+
 			r.Route("/api/group-chats", func(r chi.Router) {
 				r.Use(handler.RequireHumanActor)
 				r.Get("/", h.ListGroupChats)

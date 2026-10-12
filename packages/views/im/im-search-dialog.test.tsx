@@ -82,6 +82,9 @@ vi.mock("./use-chat-directory", async () => {
   return { ...actual, useChatDirectory: () => ({ people, agents, byKey: new Map(), agentList: [] }) };
 });
 vi.mock("../common/actor-avatar", () => ({ ActorAvatar: () => null }));
+vi.mock("./use-mika-for-ask", () => ({
+  useMikaForAsk: () => ({ agentId: "mika-1", ready: true, loading: false }),
+}));
 
 import { ImSearchDialog } from "./im-search-dialog";
 import { useAskAILauncher } from "./use-ask-ai-launcher";
@@ -233,7 +236,7 @@ describe("ImSearchDialog", () => {
     expect(screen.getAllByRole("option")[0]).toHaveTextContent("Ask AIwho deploys?");
     fireEvent.keyDown(input, { key: "Enter" });
 
-    expect(askMutate).toHaveBeenCalledWith({ query: "who deploys?", page, files: [] }, expect.anything());
+    expect(askMutate).toHaveBeenCalledWith({ query: "who deploys?", page, files: [], agentId: "mika-1" }, expect.anything());
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     act(() => askMutate.mock.calls[0]![1].onSuccess({ chat: { id: "c-dm" } }));
     expect(onOpenChat).toHaveBeenCalledWith("c-dm");
@@ -269,7 +272,7 @@ describe("ImSearchDialog", () => {
     const input = await search("status?");
     fireEvent.keyDown(input, { key: "Enter" });
     expect(askMutate).toHaveBeenCalledWith(
-      { query: "status?", page: { chat: { title: "Ops room", agents: [], messages: [{ time: "t", sender: "Ann", content: "hi" }] } }, files: [] },
+      { query: "status?", page: { chat: { title: "Ops room", agents: [], messages: [{ time: "t", sender: "Ann", content: "hi" }] } }, files: [], agentId: "mika-1" },
       expect.anything(),
     );
   });
@@ -362,7 +365,7 @@ describe("ImSearchDialog", () => {
     expect(quote).toHaveTextContent("Ann: step 3");
     const input = await search("why?");
     fireEvent.keyDown(input, { key: "Enter" });
-    expect(askMutate).toHaveBeenCalledWith({ query: "why?", page: { ...page, selection }, files: [] }, expect.anything());
+    expect(askMutate).toHaveBeenCalledWith({ query: "why?", page: { ...page, selection }, files: [], agentId: "mika-1" }, expect.anything());
   });
 
   it("turns into a question once a file is attached, without searching", async () => {
@@ -388,7 +391,7 @@ describe("ImSearchDialog", () => {
     expect(searches.every(([o]) => o.enabled === false)).toBe(true);
 
     fireEvent.keyDown(input, { key: "Enter" });
-    expect(askMutate).toHaveBeenCalledWith({ query: "what failed?", page: null, files: [file] }, expect.anything());
+    expect(askMutate).toHaveBeenCalledWith({ query: "what failed?", page: null, files: [file], agentId: "mika-1" }, expect.anything());
   });
 
   it("fills a phone page with the same switcher and no dialog", async () => {

@@ -23,5 +23,6 @@ export {
   useSetTaskChatDone,
   useDeleteGroupChatMessage,
 } from "./mutations";
+export { expectMikaTaskChat, takeMikaTaskChat } from "./mika-handoff";
 export { useGroupChatRealtime } from "./use-group-chat-realtime";
 export { directChatPeer, findDirectChat } from "./direct";

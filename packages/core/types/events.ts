@@ -236,6 +236,8 @@ export interface CommentUpdatedPayload {
 export interface GroupChatUpdatedPayload {
   issue_id: string;
   recipient_id?: string;
+  /** Set when Mika started this group from a Cmd+O message. Not stored. */
+  ask_comment_id?: string;
 }
 
 export interface CommentDeletedPayload {

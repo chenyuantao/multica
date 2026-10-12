@@ -13,7 +13,6 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { ApiError } from "@multica/core/api";
 import { useAuthStore } from "@multica/core/auth";
 import { MAX_FILE_SIZE } from "@multica/core/constants/upload";
 import { useAskAI } from "@multica/core/group-chats";
@@ -37,6 +36,7 @@ import { useT } from "../i18n";
 import { useNavigation } from "../navigation";
 import { describeElement, elementLabel } from "./ask-ai-element";
 import { cancelledNoticeTrigger } from "./cancelled-notice";
+import { useMikaForAsk } from "./use-mika-for-ask";
 import { isChatHistoryContent } from "./chat-history";
 import { ElementPicker } from "./element-picker";
 import { plainTextPreview } from "./im-utils";
@@ -88,6 +88,7 @@ export function ImSearchDialog({
   const wsId = useWorkspaceId();
   const userId = useAuthStore((s) => s.user?.id ?? "");
   const askAI = useAskAI(wsId);
+  const mika = useMikaForAsk(wsId);
   const inputRef = useRef<HTMLInputElement>(null);
   const [scope, setScope] = useState<SearchScope>("all");
   const [query, setQuery] = useState("");
@@ -198,22 +199,25 @@ export function ImSearchDialog({
 
   // The dialog stays open until the question is sent, so a failure can be retried.
   const ask = () => {
-    if (!canAsk) return;
+    if (!canAsk || mika.loading) return;
+    if (!mika.ready) {
+      toast.error(t(($) => $.search.setup_mika));
+      return;
+    }
     const context: AskAIPage | null =
       selection || element
         ? { ...page, ...(selection ? { selection } : {}), ...(element ? { element } : {}) }
         : page;
     askAI.mutate(
-      { query: trimmed, page: context, files },
+      { query: trimmed, page: context, files, agentId: mika.agentId },
       {
         onSuccess: ({ chat }) => {
           onOpenChange(false);
           if (onOpenChat) onOpenChat(chat.id);
           else navigation.push(paths.imChat(chat.id));
         },
-        onError: (err) => {
-          const noAgent = err instanceof ApiError && (err.body as { code?: string } | undefined)?.code === "ask_ai_no_agent";
-          toast.error(noAgent ? t(($) => $.search.ask_no_agent) : t(($) => $.search.ask_failed));
+        onError: () => {
+          toast.error(t(($) => $.search.ask_failed));
         },
       },
     );

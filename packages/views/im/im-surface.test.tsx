@@ -12,6 +12,7 @@ vi.mock("./knowledge-page", () => ({ KnowledgePage: () => <div>surface-knowledge
 vi.mock("./collect-page", () => ({ CollectPage: () => <div>surface-collect</div> }));
 vi.mock("./reminder-page", () => ({ ReminderPage: () => <div>surface-reminder</div> }));
 vi.mock("../modals/registry", () => ({ ModalRegistry: () => <div>modals</div> }));
+vi.mock("./use-mika-task-handoff", () => ({ useMikaTaskHandoff: () => {} }));
 
 import { ImSurface } from "./im-surface";
 

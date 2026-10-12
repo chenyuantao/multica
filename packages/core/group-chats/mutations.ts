@@ -15,6 +15,7 @@ import type {
 } from "../types";
 import { onInboxInvalidate, onInboxSummaryInvalidate } from "../inbox/ws-updaters";
 import { reminderKeys } from "../reminders/queries";
+import { expectMikaTaskChat } from "./mika-handoff";
 import { groupChatKeys } from "./queries";
 
 function upsertChat(list: GroupChat[] | undefined, chat: GroupChat): GroupChat[] {
@@ -60,25 +61,22 @@ export function useCreateGroupChat(wsId: string) {
 export interface AskAIVariables {
   query: string;
   page: AskAIPage | null;
-  /** Uploaded into the chosen chat once it is known, then attached to the question. */
+  /** Mika's agent id. The caller checks she exists and her runtime is online. */
+  agentId: string;
+  /** Uploaded into Mika's direct chat, then attached to the question. */
   files?: File[];
 }
 
 /**
- * Asks AI: the server picks the agent, then the question and its files go to
- * the user's direct chat with it. The page travels with the message so the
- * answering agent reads the same context. Resolves with that chat.
+ * Cmd+O hands the question to Mika's direct chat. She decides whether to
+ * answer there or start a task group. The page travels with the message.
+ * Resolves with her chat; a later group event opens the task group.
  */
 export function useAskAI(wsId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ query, page, files = [] }: AskAIVariables) => {
-      const agentId = await api.askAI({
-        query,
-        page,
-        ...(files.length ? { attachments: files.map((f) => ({ name: f.name, content_type: f.type })) } : {}),
-      });
-      if (!agentId) throw new Error("No agent was chosen");
+    mutationFn: async ({ query, page, files = [], agentId }: AskAIVariables) => {
+      if (!agentId) throw new Error("Mika is not available");
       const chat = await api.openDirectGroupChat({ member_type: "agent", member_id: agentId });
       const uploaded = await Promise.all(files.map((file) => api.uploadFile(file, { issueId: chat.id })));
       const content = [query, ...uploaded.map(attachmentMarkdown)].filter(Boolean).join("\n\n");
@@ -93,6 +91,7 @@ export function useAskAI(wsId: string) {
         undefined,
         page,
       );
+      expectMikaTaskChat(message.id);
       return { chat, message };
     },
     onSuccess: ({ chat, message }) => {
