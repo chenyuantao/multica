@@ -4,6 +4,7 @@ import { MessageCircle } from "lucide-react";
 import { useAuthStore } from "@multica/core/auth";
 import { useWorkspaceId } from "@multica/core/hooks";
 import { Button } from "@multica/ui/components/ui/button";
+import { cn } from "@multica/ui/lib/utils";
 import { AgentDetail } from "../agents/components/agent-detail-page";
 import { MemberDetailPage } from "../members/member-detail-page";
 import { useBackOrReplace } from "../navigation";
@@ -48,21 +49,29 @@ export function MobileLevel({
 export function MobileLevelHeader({
   title,
   subtitle,
+  wrapTitle = false,
   backHref,
   backLabel,
   action,
 }: {
   title: string;
   subtitle?: string;
+  /** Group titles wrap to two lines. Direct chats stay on one line above their role. */
+  wrapTitle?: boolean;
   backHref: string;
   backLabel: string;
   action?: React.ReactNode;
 }) {
   return (
-    <header className="grid h-12 shrink-0 grid-cols-[2.75rem_minmax(0,1fr)_minmax(2.75rem,auto)] items-center border-b bg-sidebar px-1">
+    <header
+      className={cn(
+        "grid shrink-0 grid-cols-[2.75rem_minmax(0,1fr)_minmax(2.75rem,auto)] items-center border-b bg-sidebar px-1",
+        wrapTitle ? "min-h-14 py-1" : "h-12",
+      )}
+    >
       <MobileBackButton fallback={backHref} label={backLabel} />
       <div className="min-w-0 text-center">
-        <h1 className="truncate text-body-lg font-semibold">{title}</h1>
+        <h1 className={cn("text-body-lg font-semibold", wrapTitle ? "line-clamp-2 break-words" : "truncate")}>{title}</h1>
         {subtitle && <p className="truncate text-micro text-muted-foreground">{subtitle}</p>}
       </div>
       <div className="flex justify-end">{action}</div>

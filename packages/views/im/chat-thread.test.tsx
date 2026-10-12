@@ -81,7 +81,25 @@ vi.mock("../modals/agent-detail", () => ({ useOpenAgentDetail: () => openAgentDe
 vi.mock("./use-direct-chat", () => ({ useStartDirectChat: () => ({ start: startDirectChat, isPending: false }) }));
 vi.mock("../platform", () => ({ DragStrip: () => null }));
 vi.mock("./mobile-shell", () => ({
-  MobileLevelHeader: ({ backLabel }: { backLabel: string }) => <div data-testid="level-header" data-back-label={backLabel} />,
+  MobileLevelHeader: ({
+    backLabel,
+    title,
+    subtitle,
+    wrapTitle,
+  }: {
+    backLabel: string;
+    title: string;
+    subtitle?: string;
+    wrapTitle?: boolean;
+  }) => (
+    <div
+      data-testid="level-header"
+      data-back-label={backLabel}
+      data-title={title}
+      data-subtitle={subtitle ?? ""}
+      data-wrap={wrapTitle ? "true" : "false"}
+    />
+  ),
 }));
 vi.mock("../common/actor-avatar", () => ({
   ActorAvatar: ({ onPickConversationStarter }: { onPickConversationStarter?: (prompt: string) => void }) =>
@@ -188,6 +206,80 @@ beforeEach(() => {
         fetchNextPage: fetchOlder,
       }) as never,
   );
+});
+
+describe("ChatThread header", () => {
+  const agentMember = {
+    member_type: "agent" as const,
+    member_id: "agent-1",
+    added_by_type: null,
+    added_by_id: null,
+    created_at: "2026-09-28T00:00:00Z",
+  };
+  const otherMember = {
+    member_type: "member" as const,
+    member_id: "user-2",
+    added_by_type: null,
+    added_by_id: null,
+    created_at: "2026-09-28T00:00:00Z",
+  };
+
+  beforeEach(() => {
+    messages = [];
+    vi.mocked(useQuery).mockImplementation(() => ({ data: [], isError: false }) as never);
+  });
+
+  it("drops the member count under a group title and lets that title wrap to two lines", () => {
+    renderWithI18n(
+      <ChatThread
+        wsId="ws-1"
+        chat={{ ...chat, title: "Launch room for the very long release name", members: [...chat.members, agentMember] }}
+        userId="user-1"
+        panelOpen={false}
+        onTogglePanel={() => {}}
+      />,
+    );
+
+    const heading = screen.getByRole("heading", { name: "Launch room for the very long release name" });
+    expect(heading).toHaveClass("line-clamp-2");
+    expect(heading.parentElement?.querySelector("p")).toBeNull();
+    expect(screen.queryByText(/Group ·/)).toBeNull();
+  });
+
+  it("keeps a direct chat on one line with the other person's role", () => {
+    renderWithI18n(
+      <ChatThread
+        wsId="ws-1"
+        chat={{ ...chat, is_direct: true, members: [...chat.members, otherMember] }}
+        userId="user-1"
+        panelOpen={false}
+        onTogglePanel={() => {}}
+      />,
+    );
+
+    const heading = screen.getByRole("heading", { name: "name-user-2" });
+    expect(heading).toHaveClass("truncate");
+    expect(heading).not.toHaveClass("line-clamp-2");
+    expect(screen.getByText("Person")).toBeInTheDocument();
+  });
+
+  it("wraps a group title on the phone header and leaves the count off", () => {
+    renderWithI18n(
+      <ChatThread
+        wsId="ws-1"
+        chat={{ ...chat, members: [...chat.members, agentMember] }}
+        userId="user-1"
+        panelOpen={false}
+        onTogglePanel={() => {}}
+        mobileNav={{ backHref: "/im", onOpenProfile: () => {} }}
+      />,
+    );
+
+    const header = screen.getByTestId("level-header");
+    expect(header).toHaveAttribute("data-title", "Launch room");
+    expect(header).toHaveAttribute("data-subtitle", "");
+    expect(header).toHaveAttribute("data-wrap", "true");
+  });
 });
 
 describe("ChatThread pending messages", () => {

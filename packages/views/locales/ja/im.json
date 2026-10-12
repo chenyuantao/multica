@@ -73,9 +73,6 @@
     "back": "連絡先に戻る"
   },
   "thread": {
-    "subtitle": "グループ · {{people}} · {{agents}}",
-    "people_other": "{{count}} 人",
-    "agents_other": "エージェント {{count}} 件",
     "select": "チャットを選択",
     "no_messages": "まだメッセージはありません",
     "yesterday": "昨日 {{time}}",

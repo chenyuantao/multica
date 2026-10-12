@@ -584,7 +584,6 @@ export function ChatThread({
     loadOlder();
   }, [loadOlder, messages.length, searchOpen]);
 
-  const people = chat.members.filter((m) => m.member_type === "member");
   const agents = chat.members.filter((m) => m.member_type === "agent");
   const candidates = useMemo<ComposerMention[]>(
     () =>
@@ -610,14 +609,13 @@ export function ChatThread({
 
   const peer = directChatPeer(chat, userId);
   const title = chatDisplayTitle(chat, userId, getActorName);
+  // Group chats drop the "Group · N people · N agents" line so the title can
+  // use that second line. Direct chats keep the other side's role.
   const subtitle = peer
     ? peer.member_type === "agent"
       ? t(($) => $.contacts.agent)
       : t(($) => $.contacts.person)
-    : t(($) => $.thread.subtitle, {
-        people: t(($) => $.thread.people, { count: people.length }),
-        agents: t(($) => $.thread.agents, { count: agents.length }),
-      });
+    : undefined;
 
   const queue = (content: string, attachmentIds: string[], refMessageId?: string) => {
     const localId = `local-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -716,6 +714,7 @@ export function ChatThread({
         <MobileLevelHeader
           title={title}
           subtitle={subtitle}
+          wrapTitle={!peer}
           backHref={mobileNav.backHref}
           backLabel={mobileNav.backLabel ?? t(($) => $.thread.back)}
           action={
@@ -737,13 +736,13 @@ export function ChatThread({
           }
         />
       ) : (
-        <header className="relative flex h-14 shrink-0 items-center gap-3 border-b px-5">
+        <header className="relative flex min-h-14 shrink-0 items-center gap-3 border-b px-5 py-1.5">
           <div className="absolute inset-0">
             <DragStrip />
           </div>
           <div className="relative min-w-0 flex-1">
-            <h1 className="truncate text-body-lg font-semibold">{title}</h1>
-            <p className="truncate text-caption text-muted-foreground">{subtitle}</p>
+            <h1 className={cn("text-body-lg font-semibold", peer ? "truncate" : "line-clamp-2 break-words")}>{title}</h1>
+            {subtitle ? <p className="truncate text-caption text-muted-foreground">{subtitle}</p> : null}
           </div>
           {onAskAI && <AskAIBadge onClick={() => onAskAI()} />}
           {taskStatusButton}

@@ -75,11 +75,6 @@
     "back": "Retour aux contacts"
   },
   "thread": {
-    "subtitle": "Groupe · {{people}} · {{agents}}",
-    "people_one": "{{count}} personne",
-    "people_other": "{{count}} personnes",
-    "agents_one": "{{count}} agent",
-    "agents_other": "{{count}} agents",
     "select": "Sélectionnez une discussion",
     "no_messages": "Aucun message pour l'instant",
     "yesterday": "Hier {{time}}",

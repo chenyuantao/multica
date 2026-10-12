@@ -73,9 +73,6 @@
     "back": "연락처로 돌아가기"
   },
   "thread": {
-    "subtitle": "그룹 · {{people}} · {{agents}}",
-    "people_other": "{{count}}명",
-    "agents_other": "에이전트 {{count}}개",
     "select": "채팅을 선택하세요",
     "no_messages": "아직 메시지가 없습니다",
     "yesterday": "어제 {{time}}",

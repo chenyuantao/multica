@@ -73,9 +73,6 @@
     "back": "返回通讯录"
   },
   "thread": {
-    "subtitle": "群聊 · {{people}} · {{agents}}",
-    "people_other": "{{count}} 位成员",
-    "agents_other": "{{count}} 个智能体",
     "select": "选择一个群聊",
     "no_messages": "还没有消息",
     "yesterday": "昨天 {{time}}",
