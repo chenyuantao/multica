@@ -12,10 +12,9 @@ export function reminderListOptions(wsId: string, params: ListRemindersParams) {
   return queryOptions({
     queryKey: reminderKeys.list(wsId, params),
     queryFn: () => api.listReminders(params),
-    // The to-do page unmounts on every other IM tab, and nothing else
-    // subscribes to this list while it is gone. The app-wide staleTime is
-    // Infinity, so opening the page again would otherwise keep the last
-    // snapshot until a later websocket event.
+    // Opening the to-do page mounts a new observer. The app-wide staleTime
+    // is Infinity, so a cached list would stay on screen until a later
+    // websocket event. Always refetch when this list is shown again.
     refetchOnMount: "always",
   });
 }
