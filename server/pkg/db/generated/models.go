@@ -848,6 +848,7 @@ type Issue struct {
 	DuplicateOfIssueID pgtype.UUID        `json:"duplicate_of_issue_id"`
 	LastCommentAt      pgtype.Timestamptz `json:"last_comment_at"`
 	IsDirectChat       bool               `json:"is_direct_chat"`
+	IsTaskChat         bool               `json:"is_task_chat"`
 }
 
 type IssueChildEvent struct {

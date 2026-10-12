@@ -3178,6 +3178,35 @@ func duplicateIssueMessage(issue IssueResponse) string {
 	return issueguard.DuplicateMessage(issue.Identifier, issue.Title, issue.Status)
 }
 
+// delegationTaskChatMembers is the roster for an agent handing todo work to
+// another agent. The child is a task group chat — the current to-do — rather
+// than a board issue. A group-chat run does not delegate, and a create with
+// no human originator stays a board issue so it is not filed where nobody
+// can see it. Nil means leave the create as a board issue.
+func (h *Handler) delegationTaskChatMembers(ctx context.Context, task db.AgentTaskQueue, creatorID string, assigneeType pgtype.Text, assigneeID pgtype.UUID) []service.IssueMemberRef {
+	if !assigneeType.Valid || assigneeType.String != "agent" || !assigneeID.Valid || !task.OriginatorUserID.Valid {
+		return nil
+	}
+	if task.IssueID.Valid {
+		has, err := h.Queries.IssueHasMembers(ctx, task.IssueID)
+		if err != nil || has {
+			return nil
+		}
+	}
+	refs := []service.IssueMemberRef{{Type: "member", ID: task.OriginatorUserID}}
+	add := func(id pgtype.UUID) {
+		for _, ref := range refs {
+			if ref.Type == "agent" && sameUUID(ref.ID, id) {
+				return
+			}
+		}
+		refs = append(refs, service.IssueMemberRef{Type: "agent", ID: id})
+	}
+	add(parseUUID(creatorID))
+	add(assigneeID)
+	return refs
+}
+
 func (h *Handler) CreateIssue(w http.ResponseWriter, r *http.Request) {
 	r = h.withWakeupActor(r)
 	var req CreateIssueRequest
@@ -3321,6 +3350,7 @@ func (h *Handler) CreateIssue(w http.ResponseWriter, r *http.Request) {
 	// be provided together.
 	var originType pgtype.Text
 	var originID pgtype.UUID
+	var taskChatMembers []service.IssueMemberRef
 	if req.OriginType != nil || req.OriginID != nil {
 		if req.OriginType == nil || req.OriginID == nil {
 			writeError(w, http.StatusBadRequest, "origin_type and origin_id must be provided together")
@@ -3361,6 +3391,12 @@ func (h *Handler) CreateIssue(w http.ResponseWriter, r *http.Request) {
 				if task, terr := h.Queries.GetAgentTask(r.Context(), taskUUID); terr == nil && uuidToString(task.AgentID) == actualCreatorID {
 					originType = pgtype.Text{String: "agent_create", Valid: true}
 					originID = taskUUID
+					// Todo is the current to-do mode: the child starts now, and
+					// it is filed as a task group chat. Backlog stays a board
+					// issue. A group-chat run does not delegate into one.
+					if status == issuestatus.Todo {
+						taskChatMembers = h.delegationTaskChatMembers(r.Context(), task, actualCreatorID, assigneeType, assigneeID)
+					}
 				}
 			}
 		}
@@ -3419,6 +3455,8 @@ func (h *Handler) CreateIssue(w http.ResponseWriter, r *http.Request) {
 		LabelIDs:       labelIDs,
 		Properties:     properties,
 		AllowDuplicate: req.AllowDuplicate,
+		Members:        taskChatMembers,
+		TaskChat:       len(taskChatMembers) > 0,
 	}, service.IssueCreateOpts{
 		ActorID:          actualCreatorID,
 		AnalyticsAgentID: analyticsAgentID,
@@ -3483,6 +3521,18 @@ func (h *Handler) CreateIssue(w http.ResponseWriter, r *http.Request) {
 	}
 
 	issue := res.Issue
+	if len(taskChatMembers) > 0 {
+		var humanID string
+		for _, ref := range taskChatMembers {
+			if ref.Type == "member" {
+				humanID = uuidToString(ref.ID)
+			}
+			h.subscribeGroupChatMember(r.Context(), issue.ID, ref)
+		}
+		if humanID != "" {
+			h.publishGroupChatUpdated(workspaceID, humanID, issue.ID)
+		}
+	}
 	slog.Info("issue created", append(logger.RequestAttrs(r), "issue_id", uuidToString(issue.ID), "title", issue.Title, "status", issue.Status, "workspace_id", workspaceID)...)
 
 	resp := issueToResponse(issue, prefix)

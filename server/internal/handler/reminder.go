@@ -41,11 +41,18 @@ const (
 	reminderPendingKey = "reminder_pending"
 )
 
-// notReminderIssue keeps reminders out of the workspace issue lists.
-const notReminderIssue = "i.origin_type IS DISTINCT FROM 'reminder'"
+// notReminderIssue keeps personal reminders and agent-delegated task chats
+// out of the workspace issue lists. Both are to-dos in the chat list.
+const notReminderIssue = "i.origin_type IS DISTINCT FROM 'reminder' AND NOT i.is_task_chat"
 
 func isReminder(issue db.Issue) bool {
 	return issue.OriginType.Valid && issue.OriginType.String == reminderOrigin
+}
+
+// isTaskChat reports a to-do that lives in the chat list: a reminder, or an
+// agent-delegated todo filed as a task group chat.
+func isTaskChat(issue db.Issue) bool {
+	return issue.IsTaskChat || isReminder(issue)
 }
 
 type ReminderResponse struct {

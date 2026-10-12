@@ -61,6 +61,9 @@ WHERE issue_id = @issue_id
 -- name: MarkIssueDirectChat :exec
 UPDATE issue SET is_direct_chat = true WHERE id = @id;
 
+-- name: MarkIssueTaskChat :exec
+UPDATE issue SET is_task_chat = true WHERE id = @id;
+
 -- name: FindDirectGroupChat :one
 -- The oldest direct chat between the given person and peer.
 SELECT i.* FROM issue i

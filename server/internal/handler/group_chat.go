@@ -94,7 +94,7 @@ func groupChatToResponse(issue db.Issue, prefix string, members []db.IssueMember
 		Members:         make([]GroupChatMemberResponse, 0, len(members)),
 		PendingSpeakers: []string{},
 		IsDirect:        issue.IsDirectChat,
-		Task:            isReminder(issue),
+		Task:            isTaskChat(issue),
 		Status:          issue.Status,
 	}
 	for _, m := range members {

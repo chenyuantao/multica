@@ -102,6 +102,10 @@ type IssueCreateParams struct {
 	// DirectChat marks the group chat as a two-person direct chat, whose
 	// membership is fixed at creation.
 	DirectChat bool
+	// TaskChat marks an agent-delegated todo as a task group chat. Members
+	// must be set with it. The chat is the to-do: it stays off the issue
+	// board and shows in the chat list.
+	TaskChat bool
 	// Position places the issue in a caller-ordered list. Nil sorts it to the
 	// top of its status column.
 	Position *float64
@@ -449,6 +453,15 @@ func (s *IssueService) Create(ctx context.Context, p IssueCreateParams, opts Iss
 			return IssueCreateResult{}, fmt.Errorf("mark direct chat: %w", err)
 		}
 		issue.IsDirectChat = true
+	}
+	if p.TaskChat {
+		if len(p.Members) == 0 {
+			return IssueCreateResult{}, errors.New("task chat requires members")
+		}
+		if err := qtx.MarkIssueTaskChat(ctx, issue.ID); err != nil {
+			return IssueCreateResult{}, fmt.Errorf("mark task chat: %w", err)
+		}
+		issue.IsTaskChat = true
 	}
 
 	if p.SourceContext != nil {

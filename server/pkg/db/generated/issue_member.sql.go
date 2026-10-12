@@ -39,7 +39,7 @@ func (q *Queries) AddIssueMember(ctx context.Context, arg AddIssueMemberParams) 
 }
 
 const findDirectGroupChat = `-- name: FindDirectGroupChat :one
-SELECT i.id, i.workspace_id, i.title, i.description, i.status, i.priority, i.assignee_type, i.assignee_id, i.creator_type, i.creator_id, i.parent_issue_id, i.acceptance_criteria, i.context_refs, i.position, i.due_date, i.created_at, i.updated_at, i.number, i.project_id, i.origin_type, i.origin_id, i.first_executed_at, i.start_date, i.metadata, i.stage, i.properties, i.revision, i.last_activity_at, i.triage_state, i.duplicate_of_issue_id, i.last_comment_at, i.is_direct_chat FROM issue i
+SELECT i.id, i.workspace_id, i.title, i.description, i.status, i.priority, i.assignee_type, i.assignee_id, i.creator_type, i.creator_id, i.parent_issue_id, i.acceptance_criteria, i.context_refs, i.position, i.due_date, i.created_at, i.updated_at, i.number, i.project_id, i.origin_type, i.origin_id, i.first_executed_at, i.start_date, i.metadata, i.stage, i.properties, i.revision, i.last_activity_at, i.triage_state, i.duplicate_of_issue_id, i.last_comment_at, i.is_direct_chat, i.is_task_chat FROM issue i
 WHERE i.workspace_id = $1
   AND i.is_direct_chat
   AND EXISTS (
@@ -103,6 +103,7 @@ func (q *Queries) FindDirectGroupChat(ctx context.Context, arg FindDirectGroupCh
 		&i.DuplicateOfIssueID,
 		&i.LastCommentAt,
 		&i.IsDirectChat,
+		&i.IsTaskChat,
 	)
 	return i, err
 }
@@ -139,7 +140,7 @@ func (q *Queries) IssueHasMembers(ctx context.Context, issueID pgtype.UUID) (boo
 }
 
 const listGroupChatsForMember = `-- name: ListGroupChatsForMember :many
-SELECT i.id, i.workspace_id, i.title, i.description, i.status, i.priority, i.assignee_type, i.assignee_id, i.creator_type, i.creator_id, i.parent_issue_id, i.acceptance_criteria, i.context_refs, i.position, i.due_date, i.created_at, i.updated_at, i.number, i.project_id, i.origin_type, i.origin_id, i.first_executed_at, i.start_date, i.metadata, i.stage, i.properties, i.revision, i.last_activity_at, i.triage_state, i.duplicate_of_issue_id, i.last_comment_at, i.is_direct_chat FROM issue i
+SELECT i.id, i.workspace_id, i.title, i.description, i.status, i.priority, i.assignee_type, i.assignee_id, i.creator_type, i.creator_id, i.parent_issue_id, i.acceptance_criteria, i.context_refs, i.position, i.due_date, i.created_at, i.updated_at, i.number, i.project_id, i.origin_type, i.origin_id, i.first_executed_at, i.start_date, i.metadata, i.stage, i.properties, i.revision, i.last_activity_at, i.triage_state, i.duplicate_of_issue_id, i.last_comment_at, i.is_direct_chat, i.is_task_chat FROM issue i
 JOIN issue_member m
   ON m.issue_id = i.id
  AND m.workspace_id = i.workspace_id
@@ -212,6 +213,7 @@ func (q *Queries) ListGroupChatsForMember(ctx context.Context, arg ListGroupChat
 			&i.DuplicateOfIssueID,
 			&i.LastCommentAt,
 			&i.IsDirectChat,
+			&i.IsTaskChat,
 		); err != nil {
 			return nil, err
 		}
@@ -387,7 +389,7 @@ func (q *Queries) ListLatestCommentsForIssues(ctx context.Context, arg ListLates
 }
 
 const listRemindersForCreator = `-- name: ListRemindersForCreator :many
-SELECT i.id, i.workspace_id, i.title, i.description, i.status, i.priority, i.assignee_type, i.assignee_id, i.creator_type, i.creator_id, i.parent_issue_id, i.acceptance_criteria, i.context_refs, i.position, i.due_date, i.created_at, i.updated_at, i.number, i.project_id, i.origin_type, i.origin_id, i.first_executed_at, i.start_date, i.metadata, i.stage, i.properties, i.revision, i.last_activity_at, i.triage_state, i.duplicate_of_issue_id, i.last_comment_at, i.is_direct_chat FROM issue i
+SELECT i.id, i.workspace_id, i.title, i.description, i.status, i.priority, i.assignee_type, i.assignee_id, i.creator_type, i.creator_id, i.parent_issue_id, i.acceptance_criteria, i.context_refs, i.position, i.due_date, i.created_at, i.updated_at, i.number, i.project_id, i.origin_type, i.origin_id, i.first_executed_at, i.start_date, i.metadata, i.stage, i.properties, i.revision, i.last_activity_at, i.triage_state, i.duplicate_of_issue_id, i.last_comment_at, i.is_direct_chat, i.is_task_chat FROM issue i
 WHERE i.workspace_id = $1
   AND i.origin_type = 'reminder'
   AND i.creator_type = 'member'
@@ -459,6 +461,7 @@ func (q *Queries) ListRemindersForCreator(ctx context.Context, arg ListReminders
 			&i.DuplicateOfIssueID,
 			&i.LastCommentAt,
 			&i.IsDirectChat,
+			&i.IsTaskChat,
 		); err != nil {
 			return nil, err
 		}
@@ -476,6 +479,15 @@ UPDATE issue SET is_direct_chat = true WHERE id = $1
 
 func (q *Queries) MarkIssueDirectChat(ctx context.Context, id pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, markIssueDirectChat, id)
+	return err
+}
+
+const markIssueTaskChat = `-- name: MarkIssueTaskChat :exec
+UPDATE issue SET is_task_chat = true WHERE id = $1
+`
+
+func (q *Queries) MarkIssueTaskChat(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, markIssueTaskChat, id)
 	return err
 }
 

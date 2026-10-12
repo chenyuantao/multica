@@ -290,6 +290,12 @@ On an agent-assigned issue, create status decides whether the assignee fires
 immediately. A non-backlog status (e.g. `todo`) enqueues the agent at create
 time; `backlog` sets the assignee without triggering.
 
+When an agent creates that `todo` issue for another agent, the platform files
+a task group chat — the current to-do — instead of a board issue. The person
+who started the chain, the assigning agent, and the assignee are members, the
+assignee starts immediately, and the chat shows in the to-do list. `backlog`
+stays a board issue. A run that is already in a group chat does not file one.
+
 Parallel children — all start now:
 
 ```bash
