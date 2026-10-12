@@ -22,7 +22,7 @@
     "filter": "Filter chats",
     "all_chats": "All",
     "only_todos": "Only to-dos",
-    "only_other": "Only non-to-dos",
+    "non_todos": "Only non-to-dos",
     "filter_empty": "No chats match this filter",
     "mark_done": "Mark as done",
     "mark_open": "Mark as not done",

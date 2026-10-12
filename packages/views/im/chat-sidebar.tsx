@@ -172,7 +172,7 @@ function ChatListFilter({
   onChange,
 }: {
   state: ChatListFilterState;
-  reminders: readonly Reminder[];
+  reminders: Reminder[];
   active: boolean;
   onChange: (state: ChatListFilterState) => void;
 }) {
@@ -187,7 +187,7 @@ function ChatListFilter({
     onChange({ ...state, tags });
   };
   const scopeLabel = (scope: ChatScope) =>
-    scope === "todo" ? t(($) => $.sidebar.only_todos) : scope === "other" ? t(($) => $.sidebar.only_other) : t(($) => $.sidebar.all_chats);
+    scope === "todo" ? t(($) => $.sidebar.only_todos) : scope === "other" ? t(($) => $.sidebar.non_todos) : t(($) => $.sidebar.all_chats);
   const showCompletedSwitch = state.view === "today" || state.view === "week";
   return (
     <Popover>

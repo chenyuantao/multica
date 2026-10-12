@@ -27,7 +27,7 @@ export function isChatListFiltered(state: Pick<ChatListFilterState, "scope" | "v
 }
 
 /** Tag totals for the floating filter. A chosen view uses that view's reminders. */
-export function chatFilterTagStats(reminders: readonly Reminder[], state: ChatListFilterState): TagStat[] {
+export function chatFilterTagStats(reminders: Reminder[], state: ChatListFilterState): TagStat[] {
   const source = state.view
     ? viewReminders(reminders, state.view, state.anchor, state.todayKey)
     : reminders;
@@ -39,7 +39,7 @@ export function chatFilterTagStats(reminders: readonly Reminder[], state: ChatLi
  * above the days, and completed rows drop out of Today and This week when
  * that switch is on.
  */
-function shownReminders(reminders: readonly Reminder[], state: ChatListFilterState): Reminder[] {
+function shownReminders(reminders: Reminder[], state: ChatListFilterState): Reminder[] {
   const view = state.view;
   if (!view) return filterByTags(reminders, state.tags, null);
   const viewed = filterByTags(viewReminders(reminders, view, state.anchor, state.todayKey), state.tags, null);
@@ -56,7 +56,7 @@ function shownReminders(reminders: readonly Reminder[], state: ChatListFilterSta
  */
 export function visibleChats<T extends { id: string; task: boolean }>(
   chats: readonly T[],
-  reminders: readonly Reminder[],
+  reminders: Reminder[],
   state: ChatListFilterState,
   remindersReady: boolean,
 ): T[] {

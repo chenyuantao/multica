@@ -22,7 +22,7 @@
     "filter": "Filtrer les discussions",
     "all_chats": "Tout",
     "only_todos": "Seulement à faire",
-    "only_other": "Sans les à faire",
+    "non_todos": "Sans les à faire",
     "filter_empty": "Aucune discussion ne correspond à ce filtre",
     "mark_done": "Marquer comme terminée",
     "mark_open": "Marquer comme non terminée",

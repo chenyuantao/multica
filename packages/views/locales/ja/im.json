@@ -22,7 +22,7 @@
     "filter": "チャットを絞り込む",
     "all_chats": "すべて",
     "only_todos": "To-do のみ",
-    "only_other": "To-do 以外",
+    "non_todos": "To-do 以外",
     "filter_empty": "条件に一致するチャットはありません",
     "mark_done": "完了にする",
     "mark_open": "未完了に戻す",

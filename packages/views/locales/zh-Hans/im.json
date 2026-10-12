@@ -22,7 +22,7 @@
     "filter": "筛选会话",
     "all_chats": "全部",
     "only_todos": "只看待办",
-    "only_other": "只看非待办",
+    "non_todos": "只看非待办",
     "filter_empty": "没有符合筛选的会话",
     "mark_done": "标记为完成",
     "mark_open": "标记为未完成",
