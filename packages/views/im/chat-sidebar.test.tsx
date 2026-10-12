@@ -2,11 +2,25 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, screen, within } from "@testing-library/react";
-import type { GroupChat } from "@multica/core/types";
-import type { Comment } from "@multica/core/types";
+import type { Comment, GroupChat, Reminder } from "@multica/core/types";
 import { renderWithI18n } from "../test/i18n";
 import { setChatDraft } from "./chat-draft";
 import { ChatSidebar } from "./chat-sidebar";
+import { toDateKey } from "./reminder-dates";
+
+const reminders = vi.hoisted(() => ({ items: undefined as Reminder[] | undefined }));
+
+vi.mock("@tanstack/react-query", async () => {
+  const actual = await vi.importActual<typeof import("@tanstack/react-query")>("@tanstack/react-query");
+  return {
+    ...actual,
+    useQuery: () => ({ data: reminders.items }),
+  };
+});
+vi.mock("@multica/core/hooks", () => ({ useWorkspaceId: () => "ws-1" }));
+vi.mock("@multica/core/reminders", () => ({
+  reminderListOptions: () => ({ queryKey: ["reminders"] }),
+}));
 
 const appForeground = vi.hoisted(() => ({ value: true }));
 
@@ -38,6 +52,32 @@ function chat(id: string, unread: number, pinned = false): GroupChat {
     pinned,
     task: false,
     status: "",
+  };
+}
+
+function reminder(id: string, title: string, due: string): Reminder {
+  return {
+    id,
+    workspace_id: "ws-1",
+    identifier: id,
+    title,
+    description: "",
+    creator_type: "member",
+    creator_id: "user-1",
+    created_at: "2026-10-01T00:00:00Z",
+    updated_at: "2026-10-01T00:00:00Z",
+    last_comment_at: null,
+    last_message: null,
+    members: [],
+    pending_speakers: [],
+    unread_count: 0,
+    is_direct: false,
+    pinned: false,
+    task: true,
+    status: "todo",
+    due_date: due,
+    position: 1,
+    pending: false,
   };
 }
 
@@ -164,7 +204,10 @@ describe("ChatSidebar pinning", () => {
 });
 
 describe("ChatSidebar task chats", () => {
-  beforeEach(() => localStorage.clear());
+  beforeEach(() => {
+    localStorage.clear();
+    reminders.items = undefined;
+  });
 
   it("marks an open task with an empty circle, and a finished one with a blue check", () => {
     renderSidebar(null, [
@@ -198,20 +241,60 @@ describe("ChatSidebar task chats", () => {
     expect(finished.onSelect).not.toHaveBeenCalled();
   });
 
-  it("hides task chats while the filter is on", () => {
-    renderSidebar(null, [chat("a", 0), { ...chat("b", 0), task: true, status: "todo" }]);
-    fireEvent.click(screen.getByRole("button", { name: "Hide tasks" }));
-    expect(screen.queryByRole("button", { name: /Room b/ })).toBeNull();
+  it("opens a filter with the to-do views plus only to-dos and only non-to-dos", () => {
+    const today = toDateKey(new Date());
+    reminders.items = [
+      reminder("b", "Open task", today),
+      reminder("c", "Later task", "2020-01-01"),
+      reminder("d", "Write #docs", today),
+    ];
+    renderSidebar(null, [
+      chat("a", 0),
+      { ...chat("b", 0), task: true, status: "todo", title: "Open task" },
+      { ...chat("c", 0), task: true, status: "todo", title: "Later task" },
+      { ...chat("d", 0), task: true, status: "todo", title: "Write #docs" },
+    ]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Filter chats" }));
+    expect(screen.getByRole("button", { name: "Today" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "This week" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Completed" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Only to-dos" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Only non-to-dos" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "This week" }));
+    expect(screen.getByRole("button", { name: "Previous week" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Hide completed" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Next week" }));
+    expect(screen.getByRole("button", { name: "Back to this week" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "This week" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Only non-to-dos" }));
+    expect(screen.queryByRole("button", { name: /Open task/ })).toBeNull();
     expect(screen.getByRole("button", { name: /Room a/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Show tasks" })).toHaveAttribute("aria-pressed", "true");
-    fireEvent.click(screen.getByRole("button", { name: "Show tasks" }));
-    expect(screen.getByRole("button", { name: /Room b/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Filter chats" })).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(screen.getByRole("button", { name: "All" }));
+    fireEvent.click(screen.getByRole("button", { name: "Today" }));
+    expect(screen.getByRole("button", { name: /Open task/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Later task/ })).toBeNull();
+    expect(screen.getByRole("button", { name: /Room a/ })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /^#docs/ }));
+    expect(screen.getByRole("button", { name: /Write #docs/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Open task/ })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Only to-dos" }));
+    expect(screen.queryByRole("button", { name: /Room a/ })).toBeNull();
+    expect(screen.getByRole("button", { name: /Write #docs/ })).toBeInTheDocument();
   });
 
-  it("says so when every visible chat is a hidden task", () => {
+  it("says so when the filter hides every chat", () => {
     renderSidebar(null, [{ ...chat("b", 0), task: true, status: "todo" }]);
-    fireEvent.click(screen.getByRole("button", { name: "Hide tasks" }));
-    expect(screen.getByText("Task chats are hidden")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Filter chats" }));
+    fireEvent.click(screen.getByRole("button", { name: "Only non-to-dos" }));
+    expect(screen.getByText("No chats match this filter")).toBeInTheDocument();
   });
 
   it("marks a task done from the sidebar menu", async () => {
