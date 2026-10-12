@@ -712,22 +712,24 @@ describe("ChatThread opened as a reminder", () => {
     vi.mocked(useQuery).mockImplementation(() => ({ data: messages, isError: false }) as never);
   });
 
-  it("closes instead of toggling details and mentions the given candidates", () => {
+  it("closes the conversation and still toggles details", () => {
     const onClose = vi.fn();
+    const onTogglePanel = vi.fn();
     renderWithI18n(
       <ChatThread
         wsId="ws-1"
         chat={chat}
         userId="user-1"
         panelOpen={false}
-        onTogglePanel={() => {}}
+        onTogglePanel={onTogglePanel}
         mentionCandidates={[{ type: "agent", id: "agent-9", name: "Jev" }]}
         onClose={onClose}
       />,
     );
-    expect(screen.queryByRole("button", { name: "Toggle chat details" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(onClose).toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Toggle chat details" }));
+    expect(onTogglePanel).toHaveBeenCalled();
     expect(screen.getByTestId("composer-candidates")).toHaveTextContent("Jev");
   });
 

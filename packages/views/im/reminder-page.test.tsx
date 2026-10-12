@@ -61,6 +61,7 @@ vi.mock("@tanstack/react-query", async () => {
   const actual = await vi.importActual<typeof import("@tanstack/react-query")>("@tanstack/react-query");
   return {
     ...actual,
+    useQueryClient: () => ({ getQueryData: () => undefined }),
     useQuery: (options: { queryKey: readonly unknown[] }) =>
       options.queryKey[0] === "agents"
         ? { data: agents, isPending: false, isError: false }
@@ -76,7 +77,17 @@ vi.mock("@tanstack/react-query", async () => {
 vi.mock("@multica/ui/hooks/use-mobile", () => ({ useIsMobile: () => isMobile.current }));
 vi.mock("../common/use-app-foreground", () => ({ useAppForeground: () => appForeground.value }));
 vi.mock("@multica/core/hooks", () => ({ useWorkspaceId: () => "ws-1" }));
-vi.mock("@multica/core/group-chats", () => ({ useGroupChatRealtime: () => {} }));
+vi.mock("@multica/core/group-chats", async () => {
+  const actual = await vi.importActual<typeof import("@multica/core/group-chats")>("@multica/core/group-chats");
+  return {
+    directChatPeer: actual.directChatPeer,
+    groupChatKeys: actual.groupChatKeys,
+    useGroupChatRealtime: () => {},
+  };
+});
+vi.mock("@multica/core/workspace/hooks", () => ({
+  useActorName: () => ({ getActorName: () => "Someone" }),
+}));
 vi.mock("@multica/core/workspace/queries", () => ({ agentListOptions: () => ({ queryKey: ["agents"] }) }));
 vi.mock("@multica/core/reminders", () => ({
   reminderListOptions: () => ({ queryKey: ["reminders"] }),
@@ -98,20 +109,71 @@ vi.mock("@multica/core/auth", () => {
     }),
   };
 });
-vi.mock("./chat-thread", () => ({
-  ChatThread: (props: Record<string, unknown> & { chat: Reminder; onClose?: () => void }) => {
-    threadProps.current = props;
-    return (
-      <div data-testid="thread">
-        {props.chat.title || props.chat.description}
-        {props.onClose && (
-          <button type="button" onClick={props.onClose}>
-            close thread
+vi.mock("./chat-thread", async () => {
+  const { useOpenKnowledgeNote } = await import("./knowledge-note-tabs");
+  return {
+    ChatThread: (
+      props: Record<string, unknown> & {
+        chat: Reminder;
+        onClose?: () => void;
+        mobileNav?: {
+          settingsHref?: string;
+          onOpenHistory?: (messageId: string) => void;
+          onOpenProgress?: (taskId: string) => void;
+        };
+      },
+    ) => {
+      threadProps.current = props;
+      const openNote = useOpenKnowledgeNote();
+      return (
+        <div data-testid="thread">
+          {props.chat.title || props.chat.description}
+          {props.onClose && (
+            <button type="button" onClick={props.onClose}>
+              close thread
+            </button>
+          )}
+          <button type="button" onClick={() => openNote?.({ path: `${props.chat.id}.md`, name: props.chat.id })}>
+            open note
           </button>
-        )}
-      </div>
-    );
-  },
+          {props.mobileNav?.settingsHref && <a href={props.mobileNav.settingsHref}>thread settings</a>}
+          <button type="button" onClick={() => props.mobileNav?.onOpenHistory?.("m-1")}>
+            open history
+          </button>
+          <button type="button" onClick={() => props.mobileNav?.onOpenProgress?.("task-1")}>
+            view progress
+          </button>
+        </div>
+      );
+    },
+  };
+});
+vi.mock("./chat-side-panel", () => ({
+  ChatSidePanel: ({
+    chat,
+    notes,
+    activePath,
+  }: {
+    chat: { title?: string };
+    notes: { path: string; name: string }[];
+    activePath: string | null;
+  }) => (
+    <aside aria-label="Chat details">
+      <p>{chat.title}</p>
+      {notes.map((note) => (
+        <button key={note.path} type="button" role="tab" aria-selected={activePath === note.path}>
+          {note.name}
+        </button>
+      ))}
+    </aside>
+  ),
+}));
+vi.mock("./im-search-dialog", () => ({ ImSearchDialog: () => null }));
+vi.mock("./chat-history-view", () => ({
+  ChatHistoryRoute: ({ messageId }: { messageId: string }) => <p>{`history ${messageId}`}</p>,
+}));
+vi.mock("./chat-progress-view", () => ({
+  ChatProgressRoute: ({ taskId }: { taskId: string }) => <p>{`progress ${taskId}`}</p>,
 }));
 vi.mock("./use-group-chat-unread", () => ({ useGroupChatUnreadTotal: () => 0 }));
 vi.mock("../common/actor-avatar", () => ({ ActorAvatar: () => <span /> }));
@@ -554,29 +616,20 @@ describe("ReminderPage", () => {
     expect(screen.queryByTestId("thread")).not.toBeInTheDocument();
   });
 
-  it("remembers the message column width apart from the chat details column", () => {
-    localStorage.setItem("multica:im-column-width:details", "480");
-    const first = renderPage("item=r1");
-    const handle = () => screen.getByRole("separator", { name: "Resize reminder messages" });
-    expect(handle()).toHaveAttribute("aria-valuenow", "320");
-
-    fireEvent.keyDown(handle(), { key: "ArrowLeft" });
-    expect(handle()).toHaveAttribute("aria-valuenow", "336");
-    expect(localStorage.getItem("multica:im-column-width:reminder")).toBe("336");
-    expect(localStorage.getItem("multica:im-column-width:details")).toBe("480");
-
-    first.unmount();
+  it("opens a document in the same details sidebar as a chat", () => {
     renderPage("item=r1");
-    expect(handle()).toHaveAttribute("aria-valuenow", "336");
-    localStorage.removeItem("multica:im-column-width:details");
-    localStorage.removeItem("multica:im-column-width:reminder");
+    expect(screen.getByRole("complementary", { name: "Chat details" })).toHaveTextContent("Ship it");
+    expect(screen.queryByRole("separator", { name: "Resize reminder messages" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "open note" }));
+    expect(screen.getByRole("tab", { name: "r1" })).toHaveAttribute("aria-selected", "true");
   });
 
-  it("opens the reminder's messages in a resizable column that mentions any active agent", () => {
+  it("opens the reminder's messages beside the list and mentions any active agent", () => {
     const { navigation } = renderPage("item=r1");
     expect(screen.getByTestId("thread")).toHaveTextContent("Ship it");
     expect(threadProps.current?.mentionCandidates).toEqual([{ type: "agent", id: "a1", name: "Jev" }]);
-    expect(screen.getByRole("separator", { name: "Resize reminder messages" })).toBeInTheDocument();
+    expect(screen.getByRole("complementary", { name: "Chat details" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "close thread" }));
     expect(navigation.replace).toHaveBeenCalledWith("/acme/reminder");
@@ -593,9 +646,27 @@ describe("ReminderPage", () => {
     expect(list.navigation.push).toHaveBeenCalledWith("/acme/reminder?item=r1");
     list.unmount();
 
-    renderPage("item=r1");
+    const opened = renderPage("item=r1");
     expect(screen.queryByRole("navigation", { name: "Sections" })).not.toBeInTheDocument();
     expect(threadProps.current?.mobileNav).toMatchObject({ backHref: "/acme/reminder", backLabel: "Reminders" });
     expect(threadProps.current?.onClose).toBeUndefined();
+    expect(screen.getByRole("link", { name: "thread settings" })).toHaveAttribute(
+      "href",
+      "/acme/reminder?item=r1&view=settings",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "open note" }));
+    expect(opened.navigation.push).toHaveBeenCalledWith("/acme/reminder?item=r1&view=settings");
+    fireEvent.click(screen.getByRole("button", { name: "open history" }));
+    expect(opened.navigation.push).toHaveBeenCalledWith("/acme/reminder?item=r1&view=history&message=m-1");
+    fireEvent.click(screen.getByRole("button", { name: "view progress" }));
+    expect(opened.navigation.push).toHaveBeenCalledWith("/acme/reminder?item=r1&view=progress&task=task-1");
+    opened.unmount();
+
+    renderPage("item=r1&view=settings");
+    expect(screen.getByRole("complementary", { name: "Chat details" })).toHaveTextContent("Ship it");
+    renderPage("item=r1&view=history&message=m-1");
+    expect(screen.getByText("history m-1")).toBeInTheDocument();
+    renderPage("item=r1&view=progress&task=task-1");
+    expect(screen.getByText("progress task-1")).toBeInTheDocument();
   });
 });

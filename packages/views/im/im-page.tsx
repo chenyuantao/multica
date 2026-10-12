@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState, type CSSProperties } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { MessagesSquare, UsersRound } from "lucide-react";
 import { toast } from "sonner";
@@ -8,7 +8,7 @@ import { useAuthStore } from "@multica/core/auth";
 import { useWorkspaceId } from "@multica/core/hooks";
 import { useModalStore } from "@multica/core/modals";
 import { useWorkspacePaths } from "@multica/core/paths";
-import { directChatPeer, groupChatKeys, groupChatListOptions, useGroupChatRealtime, useSetGroupChatPinned, useSetTaskChatDone } from "@multica/core/group-chats";
+import { groupChatKeys, groupChatListOptions, useGroupChatRealtime, useSetGroupChatPinned, useSetTaskChatDone } from "@multica/core/group-chats";
 import type { Comment, GroupChat } from "@multica/core/types";
 import { useActorName } from "@multica/core/workspace/hooks";
 import { Button } from "@multica/ui/components/ui/button";
@@ -17,14 +17,9 @@ import { AppLink, useNavigation } from "../navigation";
 import { useT } from "../i18n";
 import { DragStrip } from "../platform";
 import { chatAskPage, contactAskPage, visibleMessageIds } from "./ask-ai-context";
-import { DocExcerptInsertProvider } from "./doc-excerpt-insert";
-import { DocExcerptRevealProvider } from "./doc-excerpt-reveal";
+import { ChatConversation, ChatSurfaceProviders, useChatConversation, useOpenChatNote, type ChatConversationRoutes } from "./chat-conversation";
 import { ChatDetailsPanel } from "./chat-details-panel";
-import { ChatSidePanel } from "./chat-side-panel";
-import { ChatHistoryRoute } from "./chat-history-view";
-import { ChatProgressRoute } from "./chat-progress-view";
 import { ChatSidebar } from "./chat-sidebar";
-import { ChatThread } from "./chat-thread";
 import { ContactCard } from "./contact-card";
 import { ContactList } from "./contact-list";
 import { ImRail, type ImView } from "./im-rail";
@@ -33,16 +28,6 @@ import { MobileContactDetail, MobileLevel, MobileTabScreen, parseContactParam } 
 import { chatDisplayTitle, sortChats } from "./im-utils";
 import { NewChatDialog } from "./new-chat-dialog";
 import { CreateAgentModal } from "../modals/create-agent";
-import {
-  closeKnowledgeNote,
-  knowledgeNoteTabsFor,
-  KnowledgeNotesProvider,
-  openKnowledgeNote,
-  updateKnowledgeNoteTabs,
-  type KnowledgeNoteTab,
-  type KnowledgeNoteTabs,
-  type KnowledgeNoteTabsByChat,
-} from "./knowledge-note-tabs";
 import { useAskAILauncher } from "./use-ask-ai-launcher";
 import { entryKey, useChatDirectory, type DirectoryEntry } from "./use-chat-directory";
 import { useForegroundChat } from "./use-foreground-chat";
@@ -71,8 +56,6 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
   const qc = useQueryClient();
   const { getActorName } = useActorName();
   const { data = EMPTY_CHATS, isLoading, isError } = useQuery(groupChatListOptions(wsId));
-  const [panelOpen, setPanelOpen] = useState(true);
-  const [noteTabsByChat, setNoteTabsByChat] = useState<KnowledgeNoteTabsByChat>({});
   const [newChatOpen, setNewChatOpen] = useState(false);
   const contactTarget = parseContactParam(navigation.searchParams.get("contact"));
   const directory = useChatDirectory(wsId);
@@ -100,15 +83,20 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
   const sessionId = view === "chats" ? selected?.id ?? null : null;
   const visibleChatId = view === "chats" ? (isMobile ? requested?.id ?? null : selected?.id ?? null) : null;
   useForegroundChat(visibleChatId);
-  const noteTabs = knowledgeNoteTabsFor(noteTabsByChat, sessionId);
-  const focusedNote = noteTabs.notes.find((note) => note.path === noteTabs.activePath) ?? null;
-  const patchNoteTabs = useCallback(
-    (update: (tabs: KnowledgeNoteTabs) => KnowledgeNoteTabs) => {
-      if (!sessionId) return;
-      setNoteTabsByChat((byChat) => updateKnowledgeNoteTabs(byChat, sessionId, update));
-    },
-    [sessionId],
+  const conversation = useChatConversation(sessionId);
+  const openNote = useOpenChatNote(
+    conversation,
+    view === "chats" && sessionId ? paths.imChatSettings(sessionId) : null,
   );
+  const chatRoutes: ChatConversationRoutes = {
+    list: paths.im,
+    chat: paths.imChat,
+    contact: paths.imChatContact,
+    settings: paths.imChatSettings,
+    settingsContact: paths.imChatSettingsContact,
+    history: paths.imChatHistory,
+    progress: paths.imChatProgress,
+  };
 
   const select = (chatId: string) =>
     isMobile ? navigation.push(paths.imChat(chatId)) : navigation.replace(paths.imChat(chatId));
@@ -130,18 +118,6 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
     return chatAskPage(selected, chatDisplayTitle(selected, userId, getActorName), messages, visibleMessageIds(), getActorName);
   };
   const launcher = useAskAILauncher(askPage);
-  const openNote = useCallback(
-    (note: KnowledgeNoteTab) => {
-      patchNoteTabs((state) => openKnowledgeNote(state, note));
-      setPanelOpen(true);
-      if (!isMobile || view !== "chats") return;
-      const chatId = navigation.searchParams.get("chat");
-      if (chatId && navigation.searchParams.get("view") !== "settings") {
-        navigation.push(paths.imChatSettings(chatId));
-      }
-    },
-    [isMobile, navigation, patchNoteTabs, paths, view],
-  );
 
   const rail = <ImRail active={view} readingChatId={view === "chats" ? selected?.id : null} />;
   const contactList = (className?: string) => (
@@ -179,7 +155,6 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
   );
 
   if (isMobile) {
-    const settingsOpen = navigation.searchParams.get("view") === "settings";
     const searchOpen = navigation.searchParams.get("view") === "search";
     if (searchOpen && !requestedId && !contactTarget && !memberChatId) {
       const backHref = view === "contacts" ? paths.member() : paths.im();
@@ -282,10 +257,10 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
         );
       }
       return (
-        <KnowledgeNotesProvider onOpen={openNote}>
+        <ChatSurfaceProviders onOpen={openNote}>
           {contactLevel}
           {dialogs}
-        </KnowledgeNotesProvider>
+        </ChatSurfaceProviders>
       );
     }
 
@@ -326,90 +301,30 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
           </div>
         </MobileLevel>
       );
-    } else if (contactTarget) {
-      level = settingsOpen ? (
-        <MobileContactDetail
-          contact={contactTarget}
-          backHref={paths.imChatSettings(requested.id)}
-          backLabel={t(($) => $.panel.back_to_settings)}
-        />
-      ) : (
-        <MobileContactDetail contact={contactTarget} backHref={paths.imChat(requested.id)} backLabel={t(($) => $.panel.back)} />
-      );
-    } else if (navigation.searchParams.get("view") === "history") {
-      level = (
-        <ChatHistoryRoute
-          wsId={wsId}
-          chatId={requested.id}
-          messageId={navigation.searchParams.get("message") ?? ""}
-          nest={navigation.searchParams.get("nest")}
-        />
-      );
-    } else if (navigation.searchParams.get("view") === "progress") {
-      level = (
-        <ChatProgressRoute chatId={requested.id} taskId={navigation.searchParams.get("task") ?? ""} />
-      );
-    } else if (settingsOpen) {
-      level = (
-        <MobileLevel title={t(($) => $.thread.settings)} backHref={paths.imChat(requested.id)} backLabel={t(($) => $.panel.back)}>
-          <ChatSidePanel
-            wsId={wsId}
-            chat={requested}
-            userId={userId}
-            notes={noteTabs.notes}
-            activePath={noteTabs.activePath}
-            onSelectDetails={() => patchNoteTabs((state) => ({ ...state, activePath: null }))}
-            onSelectNote={(path) => patchNoteTabs((state) => ({ ...state, activePath: path }))}
-            onCloseNote={(path) => patchNoteTabs((state) => closeKnowledgeNote(state, path))}
-            onReturnToComposer={() => navigation.push(paths.imChat(requested.id))}
-            chrome="page"
-            onOpenMember={(m) => navigation.push(paths.imChatSettingsContact(requested.id, m.member_type, m.member_id))}
-          />
-        </MobileLevel>
-      );
     } else {
-      const peer = directChatPeer(requested, userId);
       level = (
-        <div className="flex h-svh w-full flex-col overflow-hidden bg-background text-foreground">
-          <ChatThread
-            key={requested.id}
-            wsId={wsId}
-            chat={requested}
-            userId={userId}
-            panelOpen={false}
-            onTogglePanel={() => {}}
-            onAskAI={launcher.show}
-            focusNote={focusedNote}
-            mobileNav={{
-              backHref: paths.im(),
-              settingsHref: peer
-                ? paths.imChatContact(requested.id, peer.member_type, peer.member_id)
-                : paths.imChatSettings(requested.id),
-              onOpenProfile: (type, id) => navigation.push(paths.imChatContact(requested.id, type, id)),
-              onOpenHistory: (messageId) => navigation.push(paths.imChatHistory(requested.id, messageId)),
-              onOpenProgress: (taskId) => navigation.push(paths.imChatProgress(requested.id, taskId)),
-            }}
-          />
-        </div>
+        <ChatConversation
+          wsId={wsId}
+          chat={requested}
+          userId={userId}
+          routes={chatRoutes}
+          backLabel={t(($) => $.thread.back)}
+          state={conversation}
+          onAskAI={launcher.show}
+        />
       );
     }
 
     return (
-      <KnowledgeNotesProvider onOpen={openNote}>
-        <DocExcerptInsertProvider>
-          <DocExcerptRevealProvider onOpen={openNote}>
-            {level}
-            {dialogs}
-          </DocExcerptRevealProvider>
-        </DocExcerptInsertProvider>
-      </KnowledgeNotesProvider>
+      <ChatSurfaceProviders onOpen={openNote}>
+        {level}
+        {dialogs}
+      </ChatSurfaceProviders>
     );
   }
 
   return (
-    <KnowledgeNotesProvider onOpen={openNote}>
-      <DocExcerptInsertProvider>
-      <DocExcerptRevealProvider onOpen={openNote}>
+    <ChatSurfaceProviders onOpen={openNote}>
       <div className="flex h-svh w-full overflow-hidden bg-background text-foreground">
         {rail}
         {view === "contacts" ? (
@@ -470,30 +385,15 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
               </div>
             )
           ) : selected ? (
-            <>
-              <ChatThread
-                key={selected.id}
-                wsId={wsId}
-                chat={selected}
-                userId={userId}
-                panelOpen={panelOpen}
-                onTogglePanel={() => setPanelOpen((v) => !v)}
-                onAskAI={launcher.show}
-                focusNote={focusedNote}
-              />
-              {panelOpen && (
-                <ChatSidePanel
-                  wsId={wsId}
-                  chat={selected}
-                  userId={userId}
-                  notes={noteTabs.notes}
-                  activePath={noteTabs.activePath}
-                  onSelectDetails={() => patchNoteTabs((state) => ({ ...state, activePath: null }))}
-                  onSelectNote={(path) => patchNoteTabs((state) => ({ ...state, activePath: path }))}
-                  onCloseNote={(path) => patchNoteTabs((state) => closeKnowledgeNote(state, path))}
-                />
-              )}
-            </>
+            <ChatConversation
+              wsId={wsId}
+              chat={selected}
+              userId={userId}
+              routes={chatRoutes}
+              backLabel={t(($) => $.thread.back)}
+              state={conversation}
+              onAskAI={launcher.show}
+            />
           ) : (
             <div className="flex flex-1 flex-col">
               <DragStrip />
@@ -510,8 +410,6 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
 
         {dialogs}
       </div>
-      </DocExcerptRevealProvider>
-      </DocExcerptInsertProvider>
-    </KnowledgeNotesProvider>
+    </ChatSurfaceProviders>
   );
 }

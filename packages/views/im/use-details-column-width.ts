@@ -11,8 +11,8 @@ const STORED_WIDTH = { defaultWidth: DETAILS_COLUMN_DEFAULT, min: 0, max: 100_00
 /**
  * Width of a trailing column. The limit is its share of the middle content
  * plus itself, from 3:7 to 7:3. The left list is not part of that pair.
- * `id` selects the stored width, so the reminder page does not share the
- * chat details column's memory.
+ * `id` selects the stored width, so the details tab and an open document
+ * remember different widths.
  */
 export function useDetailsColumnWidth(columnRef: RefObject<HTMLElement | null>, id = "details") {
   const stored = useColumnWidth(id, STORED_WIDTH);

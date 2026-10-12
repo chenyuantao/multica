@@ -2,34 +2,39 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { groupChatMessagesOptions } from "@multica/core/group-chats";
-import { useWorkspacePaths } from "@multica/core/paths";
 import { useT } from "../i18n";
 import { useNavigation } from "../navigation";
 import { historyAt, parseChatHistory, parseHistoryNest } from "./chat-history";
 import { ChatHistoryTranscript, useHistoryTitle } from "./chat-history-card";
 import { MobileLevel } from "./mobile-shell";
 
+export interface ChatHistoryHrefs {
+  chat: (chatId: string) => string;
+  history: (chatId: string, messageId: string, nest?: string) => string;
+}
+
 /**
  * Phone level for one forwarded history card. Nested cards push another level
- * instead of opening a dialog.
+ * instead of opening a dialog. `hrefs` keeps the level on the page that
+ * opened it, so a reminder does not jump to `/im`.
  */
-export function ChatHistoryRoute({ wsId, chatId, messageId, nest }: {
+export function ChatHistoryRoute({ wsId, chatId, messageId, nest, hrefs }: {
   wsId: string;
   chatId: string;
   messageId: string;
   nest: string | null;
+  hrefs: ChatHistoryHrefs;
 }) {
   const { t } = useT("im");
   const navigation = useNavigation();
-  const paths = useWorkspacePaths();
   const messages = useQuery(groupChatMessagesOptions(wsId, chatId));
   const root = parseChatHistory(messages.data?.find((message) => message.id === messageId)?.content ?? "");
   const indexes = parseHistoryNest(nest);
   const record = root ? historyAt(root, indexes) : null;
   const title = useHistoryTitle(record);
   const backHref = indexes.length === 0
-    ? paths.imChat(chatId)
-    : paths.imChatHistory(chatId, messageId, indexes.length > 1 ? indexes.slice(0, -1).join(".") : undefined);
+    ? hrefs.chat(chatId)
+    : hrefs.history(chatId, messageId, indexes.length > 1 ? indexes.slice(0, -1).join(".") : undefined);
 
   return (
     <MobileLevel
@@ -42,7 +47,7 @@ export function ChatHistoryRoute({ wsId, chatId, messageId, nest }: {
           <ChatHistoryTranscript
             record={record}
             onOpenNested={(index) =>
-              navigation.push(paths.imChatHistory(chatId, messageId, [...indexes, index].join(".")))
+              navigation.push(hrefs.history(chatId, messageId, [...indexes, index].join(".")))
             }
           />
         </div>

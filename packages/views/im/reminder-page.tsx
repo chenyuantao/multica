@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Calendar,
@@ -44,12 +44,18 @@ import { useAppForeground } from "../common/use-app-foreground";
 import { useT } from "../i18n";
 import { useNavigation } from "../navigation";
 import { DragStrip } from "../platform";
-import { useDetailsColumnWidth } from "./use-details-column-width";
-import { ChatProgressRoute } from "./chat-progress-view";
-import { ChatThread } from "./chat-thread";
+import {
+  ChatConversation,
+  ChatSurfaceProviders,
+  useChatAskLauncher,
+  useChatConversation,
+  useOpenChatNote,
+  type ChatConversationRoutes,
+} from "./chat-conversation";
 import { ImRail } from "./im-rail";
+import { ImSearchDialog } from "./im-search-dialog";
 import { resolveTitleMentions, type ComposerMention } from "./im-utils";
-import { MobileContactDetail, MobileLevel, parseContactParam } from "./mobile-shell";
+import { MobileLevel } from "./mobile-shell";
 import {
   boardAfterCreate,
   dueKey,
@@ -74,7 +80,6 @@ import {
   reminderOpenId,
 } from "./reminder-session";
 import { useForegroundChat } from "./use-foreground-chat";
-import { ColumnResizeHandle } from "./resizable-column";
 
 const EMPTY_REMINDERS: Reminder[] = [];
 const EMPTY_AGENTS: Agent[] = [];
@@ -96,8 +101,10 @@ function isTyping(el: Element | null): boolean {
  * and a short title replaces it in the list once that title exists. The
  * messages are its details, and an @ in the note, the title, or a message
  * assigns an agent without a separate hand-off.
- * Desktop opens a reminder's messages in a resizable column on the right;
- * a phone keeps the list inside Me and opens a reminder as its own level.
+ * Desktop keeps this list on the left. The conversation beside it is the same
+ * as /im: messages, the details sidebar, and a document opened from a card.
+ * A phone keeps the list as its own level and opens a reminder with the same
+ * stacked levels as a chat.
  *
  * The first visit shows Today and opens today's incomplete reminder, or the
  * nearest other day's conversation. That open conversation is kept in memory
@@ -164,6 +171,18 @@ export function ReminderPage() {
   const foreground = useAppForeground();
   const readingId = foreground && selected && (!isMobile || requestedId !== null) ? selected.id : null;
   useForegroundChat(readingId);
+  const conversation = useChatConversation(selected?.id ?? null);
+  const openNote = useOpenChatNote(conversation, selected ? paths.reminderItemSettings(selected.id) : null);
+  const launcher = useChatAskLauncher(selected && (!isMobile || requestedId !== null) ? selected : null, userId);
+  const chatRoutes: ChatConversationRoutes = {
+    list: paths.reminder,
+    chat: paths.reminderItem,
+    contact: paths.reminderItemContact,
+    settings: paths.reminderItemSettings,
+    settingsContact: paths.reminderItemSettingsContact,
+    history: paths.reminderItemHistory,
+    progress: paths.reminderItemProgress,
+  };
 
   const navRef = useRef(navigation);
   navRef.current = navigation;
@@ -376,121 +395,102 @@ export function ReminderPage() {
     </div>
   );
 
+  const conversationPane = selected ? (
+    <ChatConversation
+      wsId={wsId}
+      chat={selected}
+      userId={userId}
+      routes={chatRoutes}
+      backLabel={t(($) => $.reminder.back)}
+      state={conversation}
+      onAskAI={launcher.show}
+      onClose={close}
+      mentionCandidates={mentionCandidates}
+      focusComposer={composerFocusId === selected.id}
+    />
+  ) : null;
+
+  let body: ReactNode;
   if (isMobile) {
-    if (requestedId) {
-      if (!selected) {
-        return (
-          <MobileLevel title="" backHref={paths.reminder()} backLabel={t(($) => $.reminder.back)}>
-            <div className="flex flex-1 flex-col items-center justify-center gap-3 text-muted-foreground">
-              <ListTodo className="size-8" />
-              {!list.isPending && <p className="text-body">{t(($) => $.reminder.not_found)}</p>}
+    if (requestedId && !selected) {
+      body = (
+        <MobileLevel title="" backHref={paths.reminder()} backLabel={t(($) => $.reminder.back)}>
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 text-muted-foreground">
+            <ListTodo className="size-8" />
+            {!list.isPending && <p className="text-body">{t(($) => $.reminder.not_found)}</p>}
+          </div>
+        </MobileLevel>
+      );
+    } else if (requestedId) {
+      body = conversationPane;
+    } else {
+      body = (
+        <MobileLevel title={t(($) => $.rail.reminder)} backHref={paths.im()} backLabel={t(($) => $.thread.back)}>
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <FilterTabs filter={filter} onChange={chooseFilter} />
+            <div className="flex shrink-0 flex-col gap-2 border-b px-3 py-2">
+              <div className="flex min-w-0 items-center gap-2">
+                <div className="min-w-0 flex-1">{heading}</div>
+              </div>
+              {tools}
             </div>
-          </MobileLevel>
-        );
-      }
-      const contact = parseContactParam(navigation.searchParams.get("contact"));
-      if (contact) {
-        return (
-          <MobileContactDetail
-            contact={contact}
-            backHref={paths.reminderItem(selected.id)}
-            backLabel={t(($) => $.panel.back)}
-          />
-        );
-      }
-      if (navigation.searchParams.get("view") === "progress") {
-        return (
-          <ChatProgressRoute
-            chatId={selected.id}
-            taskId={navigation.searchParams.get("task") ?? ""}
-            backHref={paths.reminderItem(selected.id)}
-          />
-        );
-      }
-      return (
-        <div className="flex h-svh w-full flex-col overflow-hidden bg-background text-foreground">
-          <ChatThread
-            key={selected.id}
-            wsId={wsId}
-            chat={selected}
-            userId={userId}
-            panelOpen={false}
-            onTogglePanel={() => {}}
-            mentionCandidates={mentionCandidates}
-            focusComposer={composerFocusId === selected.id}
-            mobileNav={{
-              backHref: paths.reminder(),
-              backLabel: t(($) => $.reminder.back),
-              onOpenProfile: (type, id) => navigation.push(paths.reminderItemContact(selected.id, type, id)),
-              onOpenProgress: (taskId) => navigation.push(paths.reminderItemProgress(selected.id, taskId)),
-            }}
-          />
-        </div>
+            {board}
+          </div>
+        </MobileLevel>
       );
     }
-    return (
-      <MobileLevel title={t(($) => $.rail.reminder)} backHref={paths.im()} backLabel={t(($) => $.thread.back)}>
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <FilterTabs filter={filter} onChange={chooseFilter} />
-          <div className="flex shrink-0 flex-col gap-2 border-b px-3 py-2">
-            <div className="flex min-w-0 items-center gap-2">
-              <div className="min-w-0 flex-1">{heading}</div>
+  } else {
+    body = (
+      <div className="flex h-svh w-full overflow-hidden bg-background text-foreground">
+        <ImRail active="reminder" />
+        <main
+          className={cn(
+            "flex min-h-0 min-w-0 flex-col",
+            selected ? "w-[clamp(18rem,32%,28rem)] shrink-0 border-r" : "flex-1",
+          )}
+        >
+          <header className="relative flex h-14 shrink-0 items-center gap-3 border-b px-6">
+            <div className="absolute inset-0">
+              <DragStrip />
             </div>
-            {tools}
-          </div>
-          {board}
-        </div>
-      </MobileLevel>
+            <div
+              className="relative flex min-w-0 flex-1 items-center justify-between gap-3"
+              style={{ WebkitAppRegion: "no-drag" } as CSSProperties}
+            >
+              <div className="flex min-w-0 items-center gap-3">
+                <FilterMenu filter={filter} onChange={chooseFilter} />
+                {filter === "week" ? heading : null}
+              </div>
+              <div className="flex shrink-0 items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => void list.refetch()}
+                  disabled={list.isFetching}
+                  aria-label={t(($) => $.reminder.refresh)}
+                >
+                  <RefreshCw className={cn(list.isFetching && "animate-spin")} />
+                </Button>
+                {tools}
+              </div>
+            </div>
+          </header>
+          {list.isError ? (
+            <p className="py-8 text-center text-body text-muted-foreground">{t(($) => $.reminder.load_failed)}</p>
+          ) : (
+            board
+          )}
+        </main>
+        {conversationPane}
+      </div>
     );
   }
 
   return (
-    <div className="flex h-svh w-full overflow-hidden bg-background text-foreground">
-      <ImRail active="reminder" />
-      <main className="flex min-w-0 flex-1 flex-col">
-        <header className="relative flex h-14 shrink-0 items-center gap-3 border-b px-6">
-          <div className="absolute inset-0">
-            <DragStrip />
-          </div>
-          <div
-            className="relative flex min-w-0 flex-1 items-center justify-between gap-3"
-            style={{ WebkitAppRegion: "no-drag" } as CSSProperties}
-          >
-            <div className="flex min-w-0 items-center gap-3">
-              <FilterMenu filter={filter} onChange={chooseFilter} />
-              {filter === "week" ? heading : null}
-            </div>
-            <div className="flex shrink-0 items-center gap-1">
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={() => void list.refetch()}
-                disabled={list.isFetching}
-                aria-label={t(($) => $.reminder.refresh)}
-              >
-                <RefreshCw className={cn(list.isFetching && "animate-spin")} />
-              </Button>
-              {tools}
-            </div>
-          </div>
-        </header>
-        {list.isError ? (
-          <p className="py-8 text-center text-body text-muted-foreground">{t(($) => $.reminder.load_failed)}</p>
-        ) : (
-          board
-        )}
-      </main>
-      {selected ? (
-        <ReminderThreadColumn
-          wsId={wsId}
-          reminder={selected}
-          userId={userId}
-          mentionCandidates={mentionCandidates}
-          focusComposer={composerFocusId === selected.id}
-          onClose={close}
-        />
-      ) : null}
-    </div>
+    <ChatSurfaceProviders onOpen={openNote}>
+      {body}
+      <ImSearchDialog {...launcher.dialog} />
+    </ChatSurfaceProviders>
   );
 }
 
@@ -686,42 +686,5 @@ function ProgressRing({ rate }: { rate: number }) {
         className={tone}
       />
     </svg>
-  );
-}
-
-/** The reminder's messages. Dragging matches the chat details column, with its own stored width. */
-function ReminderThreadColumn({
-  wsId,
-  reminder,
-  userId,
-  mentionCandidates,
-  focusComposer,
-  onClose,
-}: {
-  wsId: string;
-  reminder: Reminder;
-  userId: string;
-  mentionCandidates: ComposerMention[];
-  focusComposer: boolean;
-  onClose: () => void;
-}) {
-  const { t } = useT("im");
-  const columnRef = useRef<HTMLDivElement>(null);
-  const { width, commit, options } = useDetailsColumnWidth(columnRef, "reminder");
-  return (
-    <div ref={columnRef} className="relative flex h-full shrink-0 flex-col border-l" style={{ width }}>
-      <ChatThread
-        key={reminder.id}
-        wsId={wsId}
-        chat={reminder}
-        userId={userId}
-        panelOpen={false}
-        onTogglePanel={() => {}}
-        mentionCandidates={mentionCandidates}
-        focusComposer={focusComposer}
-        onClose={onClose}
-      />
-      <ColumnResizeHandle edge="left" width={width} options={options} onCommit={commit} label={t(($) => $.reminder.resize)} />
-    </div>
   );
 }

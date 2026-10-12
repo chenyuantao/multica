@@ -91,11 +91,18 @@ function workspaceScoped(slug: string) {
     collect: () => `${ws}/collect`,
     collectItem: (id: string) => `${ws}/collect?item=${encode(id)}`,
     reminder: () => `${ws}/reminder`,
-    // The open reminder's messages; a phone shows them as their own level,
-    // with a profile and a run log stacked on top.
+    // The open reminder's messages. A phone stacks the same levels as a chat:
+    // settings, a profile, forwarded history, and a run log.
     reminderItem: (id: string) => `${ws}/reminder?item=${encode(id)}`,
     reminderItemContact: (id: string, actorType: string, actorId: string) =>
       `${ws}/reminder?item=${encode(id)}&contact=${encode(`${actorType}:${actorId}`)}`,
+    reminderItemSettings: (id: string) => `${ws}/reminder?item=${encode(id)}&view=settings`,
+    reminderItemSettingsContact: (id: string, actorType: string, actorId: string) =>
+      `${ws}/reminder?item=${encode(id)}&view=settings&contact=${encode(`${actorType}:${actorId}`)}`,
+    reminderItemHistory: (id: string, messageId: string, nest?: string) => {
+      const base = `${ws}/reminder?item=${encode(id)}&view=history&message=${encode(messageId)}`;
+      return nest ? `${base}&nest=${encode(nest)}` : base;
+    },
     reminderItemProgress: (id: string, taskId: string) =>
       `${ws}/reminder?item=${encode(id)}&view=progress&task=${encode(taskId)}`,
     knowledgeSearch: () => `${ws}/knowledge?view=search`,

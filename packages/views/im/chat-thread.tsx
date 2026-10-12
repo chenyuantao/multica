@@ -120,7 +120,7 @@ interface ChatThreadProps {
   focusNote?: FocusNote | null;
   /** Who the composer can @mention. Defaults to the other chat members. */
   mentionCandidates?: ComposerMention[];
-  /** Shows a close button in place of the details toggle, for a thread opened as a side panel. */
+  /** Dismisses the conversation. The details toggle stays beside it. */
   onClose?: () => void;
   /** Focus the composer on mount. Used when a new reminder opens its conversation. */
   focusComposer?: boolean;
@@ -729,7 +729,7 @@ export function ChatThread({
           {onAskAI && <AskAIBadge onClick={() => onAskAI()} />}
           {taskStatusButton}
           {searchButton}
-          {onClose ? (
+          {onClose && (
             <Button
               variant="ghost"
               size="icon-sm"
@@ -740,19 +740,18 @@ export function ChatThread({
             >
               <X />
             </Button>
-          ) : (
-            <Button
-              variant={panelOpen ? "secondary" : "ghost"}
-              size="icon-sm"
-              className="relative"
-              style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-              onClick={onTogglePanel}
-              aria-pressed={panelOpen}
-              aria-label={t(($) => $.thread.toggle_panel)}
-            >
-              <PanelRight />
-            </Button>
           )}
+          <Button
+            variant={panelOpen ? "secondary" : "ghost"}
+            size="icon-sm"
+            className="relative"
+            style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+            onClick={onTogglePanel}
+            aria-pressed={panelOpen}
+            aria-label={t(($) => $.thread.toggle_panel)}
+          >
+            <PanelRight />
+          </Button>
         </header>
       )}
 

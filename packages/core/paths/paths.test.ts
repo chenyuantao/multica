@@ -31,6 +31,14 @@ describe("paths.workspace(slug)", () => {
     expect(ws.reminder()).toBe("/acme/reminder");
     expect(ws.reminderItem("r 1")).toBe("/acme/reminder?item=r%201");
     expect(ws.reminderItemContact("r1", "agent", "a1")).toBe("/acme/reminder?item=r1&contact=agent%3Aa1");
+    expect(ws.reminderItemSettings("r1")).toBe("/acme/reminder?item=r1&view=settings");
+    expect(ws.reminderItemSettingsContact("r1", "agent", "a1")).toBe(
+      "/acme/reminder?item=r1&view=settings&contact=agent%3Aa1",
+    );
+    expect(ws.reminderItemHistory("r1", "m1")).toBe("/acme/reminder?item=r1&view=history&message=m1");
+    expect(ws.reminderItemHistory("r1", "m1", "0.1")).toBe(
+      "/acme/reminder?item=r1&view=history&message=m1&nest=0.1",
+    );
     expect(ws.reminderItemProgress("r1", "t1")).toBe("/acme/reminder?item=r1&view=progress&task=t1");
     expect(ws.knowledgeFile("库/笔记 1.md")).toBe("/acme/knowledge?file=%E5%BA%93%2F%E7%AC%94%E8%AE%B0%201.md");
     expect(ws.usage()).toBe("/acme/usage");
