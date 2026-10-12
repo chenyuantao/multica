@@ -54,6 +54,7 @@ import {
 } from "./chat-conversation";
 import { ImRail } from "./im-rail";
 import { ImSearchDialog } from "./im-search-dialog";
+import { ImSidebarShell } from "./im-sidebar-shell";
 import { resolveTitleMentions, type ComposerMention } from "./im-utils";
 import { MobileLevel } from "./mobile-shell";
 import {
@@ -101,8 +102,10 @@ function isTyping(el: Element | null): boolean {
  * and a short title replaces it in the list once that title exists. The
  * messages are its details, and an @ in the note, the title, or a message
  * assigns an agent without a separate hand-off.
- * Desktop keeps this list on the left. The conversation beside it is the same
- * as /im: messages, the details sidebar, and a document opened from a card.
+ * Desktop keeps this list on the left. While a conversation is open the list
+ * uses the same draggable width as the /im sidebar. The conversation beside
+ * it matches /im: messages, the details sidebar, and a document opened from
+ * a card.
  * A phone keeps the list as its own level and opens a reminder with the same
  * stacked levels as a chat.
  *
@@ -395,6 +398,43 @@ export function ReminderPage() {
     </div>
   );
 
+  const listColumn = (
+    <>
+      <header className="relative flex h-14 shrink-0 items-center gap-3 border-b px-6">
+        <div className="absolute inset-0">
+          <DragStrip />
+        </div>
+        <div
+          className="relative flex min-w-0 flex-1 items-center justify-between gap-3"
+          style={{ WebkitAppRegion: "no-drag" } as CSSProperties}
+        >
+          <div className="flex min-w-0 items-center gap-3">
+            <FilterMenu filter={filter} onChange={chooseFilter} />
+            {filter === "week" ? heading : null}
+          </div>
+          <div className="flex min-w-0 items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="shrink-0"
+              onClick={() => void list.refetch()}
+              disabled={list.isFetching}
+              aria-label={t(($) => $.reminder.refresh)}
+            >
+              <RefreshCw className={cn(list.isFetching && "animate-spin")} />
+            </Button>
+            {tools}
+          </div>
+        </div>
+      </header>
+      {list.isError ? (
+        <p className="py-8 text-center text-body text-muted-foreground">{t(($) => $.reminder.load_failed)}</p>
+      ) : (
+        board
+      )}
+    </>
+  );
+
   const conversationPane = selected ? (
     <ChatConversation
       wsId={wsId}
@@ -443,44 +483,13 @@ export function ReminderPage() {
     body = (
       <div className="flex h-svh w-full overflow-hidden bg-background text-foreground">
         <ImRail active="reminder" />
-        <main
-          className={cn(
-            "flex min-h-0 min-w-0 flex-col",
-            selected ? "w-[clamp(18rem,32%,28rem)] shrink-0 border-r" : "flex-1",
-          )}
-        >
-          <header className="relative flex h-14 shrink-0 items-center gap-3 border-b px-6">
-            <div className="absolute inset-0">
-              <DragStrip />
-            </div>
-            <div
-              className="relative flex min-w-0 flex-1 items-center justify-between gap-3"
-              style={{ WebkitAppRegion: "no-drag" } as CSSProperties}
-            >
-              <div className="flex min-w-0 items-center gap-3">
-                <FilterMenu filter={filter} onChange={chooseFilter} />
-                {filter === "week" ? heading : null}
-              </div>
-              <div className="flex shrink-0 items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => void list.refetch()}
-                  disabled={list.isFetching}
-                  aria-label={t(($) => $.reminder.refresh)}
-                >
-                  <RefreshCw className={cn(list.isFetching && "animate-spin")} />
-                </Button>
-                {tools}
-              </div>
-            </div>
-          </header>
-          {list.isError ? (
-            <p className="py-8 text-center text-body text-muted-foreground">{t(($) => $.reminder.load_failed)}</p>
-          ) : (
-            board
-          )}
-        </main>
+        {selected ? (
+          <ImSidebarShell className="min-h-0">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{listColumn}</div>
+          </ImSidebarShell>
+        ) : (
+          <main className="flex min-h-0 min-w-0 flex-1 flex-col">{listColumn}</main>
+        )}
         {conversationPane}
       </div>
     );

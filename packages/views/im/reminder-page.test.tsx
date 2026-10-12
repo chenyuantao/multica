@@ -614,6 +614,24 @@ describe("ReminderPage", () => {
     expect(navigation.push).not.toHaveBeenCalled();
     expect(navigation.replace).not.toHaveBeenCalled();
     expect(screen.queryByTestId("thread")).not.toBeInTheDocument();
+    expect(screen.queryByRole("separator", { name: "Resize sidebar" })).not.toBeInTheDocument();
+  });
+
+  it("drags the open list with the same width as the chat sidebar", () => {
+    localStorage.setItem("sidebar_width", "300");
+    const open = renderPage("item=r1");
+    const handle = screen.getByRole("separator", { name: "Resize sidebar" });
+    expect(handle.parentElement).toHaveStyle({ width: "300px" });
+    fireEvent.keyDown(handle, { key: "ArrowRight" });
+    expect(handle.parentElement).toHaveStyle({ width: "316px" });
+    expect(localStorage.getItem("sidebar_width")).toBe("316");
+    open.unmount();
+
+    rememberReminderOpen("ws-1", null);
+    renderPage();
+    expect(screen.queryByRole("separator", { name: "Resize sidebar" })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("thread")).not.toBeInTheDocument();
+    localStorage.removeItem("sidebar_width");
   });
 
   it("opens a document in the same details sidebar as a chat", () => {
