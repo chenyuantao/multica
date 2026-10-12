@@ -2236,6 +2236,17 @@ func (h *Handler) triggerTasksForComment(ctx context.Context, issue db.Issue, co
 		AuthoringTaskID:         comment.SourceTaskID,
 		OriginatorUserID:        originatorUserID,
 	})
+	if actorType == "agent" && h.authoringTaskIsGroupChat(ctx, comment.SourceTaskID) {
+		// A group-chat run no longer starts another agent by mentioning them.
+		// The enqueue this comment used to reach:
+		//
+		//	h.enqueueCommentAgentTriggers(ctx, issue, comment.ID, triggers)
+		slog.Info("group chat run skipped comment delegation",
+			"issue_id", uuidToString(issue.ID),
+			"comment_id", uuidToString(comment.ID),
+			"task_id", uuidToString(comment.SourceTaskID))
+		return nil
+	}
 	triggers = filterSuppressedCommentAgentTriggers(triggers, suppressAgentIDs)
 	h.noteBlockedRuntimeTargets(ctx, issue, targets)
 	triggers, steered := h.steerCommentAgentTriggers(ctx, issue, comment, actorType, triggers, steerTaskIDs)

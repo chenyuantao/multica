@@ -523,6 +523,7 @@ func (h *Handler) attachGroupChatTranscript(ctx context.Context, resp *AgentTask
 	if !ok {
 		return
 	}
+	resp.GroupChat = true
 	triggerIDs := uuidsToStrings(task.CoalescedCommentIds)
 	if task.TriggerCommentID.Valid {
 		triggerIDs = append(triggerIDs, uuidToString(task.TriggerCommentID))

@@ -281,9 +281,9 @@ func buildCommentReplyInstructionsSlim(provider, issueID, triggerCommentID strin
 // BuildGroupChatReplyInstructions is the reply block for a group-chat run.
 // Group chat messages are always top-level, so the post carries no --parent.
 func BuildGroupChatReplyInstructions(issueID string, squadLeader bool) string {
-	lead := "Post your reply as a new group message. Do NOT pass --parent: group chat messages are never threaded.\n\n"
+	lead := "Post your reply as a new group message. Do NOT pass --parent: group chat messages are never threaded. Do not create a sub-issue or @mention another agent to hand work off — this chat already chooses who speaks next.\n\n"
 	if squadLeader {
-		lead = "Unless your outcome is `no_action`, post your reply as a new group message. Do NOT pass --parent: group chat messages are never threaded.\n\n"
+		lead = "Unless your outcome is `no_action`, post your reply as a new group message. Do NOT pass --parent: group chat messages are never threaded. Do not create a sub-issue or @mention another agent to hand work off — this chat already chooses who speaks next.\n\n"
 	}
 	return buildReplyPostInstructions(lead, "multica issue comment add "+issueID)
 }

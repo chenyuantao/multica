@@ -116,6 +116,7 @@ type Task struct {
 	CoalescedComments             []CoalescedCommentData `json:"coalesced_comments,omitempty"`               // MUL-4195: full detail of the folded comments (thread_id/author/created_at/content) so the prompt can address each without assuming a shared thread. Empty for old servers / non-merged runs
 	TriggerThreadID               string                 `json:"trigger_thread_id,omitempty"`                // root comment ID for the triggering thread; falls back to trigger_comment_id on old servers
 	TriggerCommentContent         string                 `json:"trigger_comment_content,omitempty"`          // content of the triggering comment
+	GroupChat                     bool                   `json:"group_chat,omitempty"`                       // this issue is a group chat; the brief omits delegation. Absent on old servers, so a non-empty GroupChatTranscript is the same signal
 	GroupChatTranscript           string                 `json:"group_chat_transcript,omitempty"`            // ordered group history; empty unless this issue is a group chat
 	TriggerAuthorType             string                 `json:"trigger_author_type,omitempty"`              // "agent" or "member" — author kind for the triggering comment
 	TriggerAuthorName             string                 `json:"trigger_author_name,omitempty"`              // display name of the triggering comment author

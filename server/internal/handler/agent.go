@@ -495,6 +495,10 @@ type AgentTaskResponse struct {
 	CanSupplement         bool                   `json:"can_supplement,omitempty"`
 	TriggerThreadID       string                 `json:"trigger_thread_id,omitempty"`       // root comment ID for the triggering thread
 	TriggerCommentContent string                 `json:"trigger_comment_content,omitempty"` // content of the triggering comment
+	// GroupChat is true when this issue is a group chat. Daemons use it to
+	// omit delegation from the brief. Empty transcripts still set it; an old
+	// daemon ignores the field.
+	GroupChat bool `json:"group_chat,omitempty"`
 	// GroupChatTranscript is the ordered group history for this turn. Empty
 	// for ordinary issues and for daemons that do not read the field.
 	GroupChatTranscript string  `json:"group_chat_transcript,omitempty"`

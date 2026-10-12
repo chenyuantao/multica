@@ -877,6 +877,17 @@ func (s *IssueService) maybeEnqueueOnAssign(ctx context.Context, issue db.Issue,
 	if issue.TriageState.Valid || issuestatus.Effective(ctx, s.Queries, issue.WorkspaceID, issue.Status) == "backlog" {
 		return pgtype.UUID{}
 	}
+	if s.authoringCreateIsGroupChat(ctx, issue) {
+		// A group-chat run creating this issue must not start the assignee.
+		// The enqueue this function used to perform unconditionally:
+		//
+		//	task, err = s.TaskService.EnqueueTaskForIssue(ctx, issue)
+		//	s.enqueueSquadLeaderTask(ctx, issue, pgtype.UUID{}, creatorType, actorID)
+		slog.Info("group chat run skipped assignee enqueue on create",
+			"issue_id", util.UUIDToString(issue.ID),
+			"origin_task_id", util.UUIDToString(issue.OriginID))
+		return pgtype.UUID{}
+	}
 	verdict, admitted := agentAssigneeVerdict(ctx, s.runtimeLookup(s.Queries), issue)
 	if !admitted && RuntimeBlockedNeedsNotice(verdict.Reason) {
 		// Assignment has no response the assigner reads for this outcome, so the
@@ -906,6 +917,28 @@ func (s *IssueService) maybeEnqueueOnAssign(ctx context.Context, issue db.Issue,
 		s.enqueueSquadLeaderTask(ctx, issue, pgtype.UUID{}, creatorType, actorID)
 	}
 	return pgtype.UUID{}
+}
+
+// authoringCreateIsGroupChat reports whether this issue was created by an
+// agent task that is itself running in a group chat. That run used to start
+// the new issue's assignee immediately; group chat now owns who speaks next.
+func (s *IssueService) authoringCreateIsGroupChat(ctx context.Context, issue db.Issue) bool {
+	if !issue.OriginType.Valid || issue.OriginType.String != "agent_create" || !issue.OriginID.Valid {
+		return false
+	}
+	task, err := s.Queries.GetAgentTask(ctx, issue.OriginID)
+	if err != nil || !task.IssueID.Valid {
+		return false
+	}
+	has, err := s.Queries.IssueHasMembers(ctx, task.IssueID)
+	if err != nil {
+		slog.Warn("group chat delegation check failed",
+			"issue_id", util.UUIDToString(issue.ID),
+			"origin_task_id", util.UUIDToString(issue.OriginID),
+			"error", err)
+		return false
+	}
+	return has
 }
 
 // shouldEnqueueAgentTaskWithQueries returns true when an issue create should

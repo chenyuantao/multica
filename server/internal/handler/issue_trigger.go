@@ -27,6 +27,7 @@ func (h *Handler) issueTriggerWriteProbe(r *http.Request, actorType, actorID str
 		IsSelfLoop: func() bool {
 			return h.isAgentRunningOnIssue(r, actorType, issue)
 		},
+		GroupChatDelegationOff: h.requestAuthoringTaskIsGroupChat(r, actorType),
 		SuppressActiveSelfAssignment: func(agentID pgtype.UUID) bool {
 			suppress := h.shouldSuppressActiveSelfAssignment(r.Context(), actorType, actorID, issue.ID, agentID)
 			if suppress {
@@ -53,10 +54,44 @@ func (h *Handler) issueTriggerPreviewProbe(r *http.Request, actorType, actorID, 
 		IsSelfLoop: func() bool {
 			return h.isAgentRunningOnIssue(r, actorType, issue)
 		},
+		GroupChatDelegationOff: h.requestAuthoringTaskIsGroupChat(r, actorType),
 		SuppressActiveSelfAssignment: func(agentID pgtype.UUID) bool {
 			return h.shouldSuppressActiveSelfAssignment(r.Context(), actorType, actorID, issue.ID, agentID)
 		},
 	}
+}
+
+// requestAuthoringTaskIsGroupChat reports whether this request is an agent
+// acting from a task on a group chat. Members, and agents on ordinary issues,
+// keep today's enqueue.
+func (h *Handler) requestAuthoringTaskIsGroupChat(r *http.Request, actorType string) bool {
+	if actorType != "agent" {
+		return false
+	}
+	taskID, err := util.ParseUUID(r.Header.Get("X-Task-ID"))
+	if err != nil {
+		return false
+	}
+	return h.authoringTaskIsGroupChat(r.Context(), taskID)
+}
+
+// authoringTaskIsGroupChat reports whether the task's issue is a group chat
+// (it has members). A query failure leaves delegation on; the log is the
+// signal, and a blip must not disable ordinary handoffs.
+func (h *Handler) authoringTaskIsGroupChat(ctx context.Context, taskID pgtype.UUID) bool {
+	if !taskID.Valid {
+		return false
+	}
+	task, err := h.Queries.GetAgentTask(ctx, taskID)
+	if err != nil || !task.IssueID.Valid {
+		return false
+	}
+	has, err := h.Queries.IssueHasMembers(ctx, task.IssueID)
+	if err != nil {
+		slog.Warn("group chat delegation check failed", "task_id", uuidToString(taskID), "error", err)
+		return false
+	}
+	return has
 }
 
 // shouldSuppressActiveSelfAssignment prevents a trusted task-scoped agent

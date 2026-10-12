@@ -44,6 +44,12 @@ type IssueTriggerProbe struct {
 	CanAccessAgent               func(agent db.Agent) bool
 	IsSelfLoop                   func() bool
 	SuppressActiveSelfAssignment func(agentID pgtype.UUID) bool
+	// GroupChatDelegationOff refuses every run this write would start. It is
+	// set when the caller is an agent whose current task is a group chat.
+	// Group chat already chooses the next speaker, so that run must not start
+	// another agent by assigning an issue or promoting one out of backlog.
+	// The issue write itself still succeeds.
+	GroupChatDelegationOff bool
 }
 
 // IssueTriggerInput describes one prospective issue write in its post-write
@@ -120,6 +126,14 @@ func (s *IssueService) WillEnqueueRun(ctx context.Context, in IssueTriggerInput,
 	// clears this field and then takes the ordinary create / assign path; there
 	// is no "was in triage" transition for this predicate to recognise.
 	if issue.TriageState.Valid {
+		return IssueRunTrigger{}, false
+	}
+	// Group-chat runs no longer delegate. The assign and backlog-promotion
+	// decisions below are what this function used to return for those writes;
+	// they still run for every other caller.
+	//
+	// return the assign/status trigger from the switch below
+	if probe.GroupChatDelegationOff {
 		return IssueRunTrigger{}, false
 	}
 
