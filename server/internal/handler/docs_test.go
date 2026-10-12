@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -260,5 +261,37 @@ func TestDocsHTTPContentEdit(t *testing.T) {
 	decodeDocs(t, editW, http.StatusOK, &updated)
 	if updated.Content != "hello!" || updated.Path != "mbp/note.md" {
 		t.Fatalf("updated = %#v", updated)
+	}
+}
+
+func TestDocsHTTPAssetUsesVaultRoot(t *testing.T) {
+	root := t.TempDir()
+	png := []byte{0x89, 0x50, 0x4e, 0x47}
+	dir := filepath.Join(root, "Images")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "图01.png"), png, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h := docsShareHandler(t, root)
+
+	okW := httptest.NewRecorder()
+	h.PostDocsFileAsset(okW, docsRequest(http.MethodPost, "/api/docs/files/asset", `{"path":"mbp/Images/图01.png"}`))
+	var asset obsidianvault.Asset
+	decodeDocs(t, okW, http.StatusOK, &asset)
+	if asset.Path != "mbp/Images/图01.png" || asset.ContentType != "image/png" || asset.Name != "图01.png" {
+		t.Fatalf("asset = %#v", asset)
+	}
+	raw, err := base64.StdEncoding.DecodeString(asset.Data)
+	if err != nil || string(raw) != string(png) {
+		t.Fatalf("data = %q, err = %v", raw, err)
+	}
+
+	// The same file is not addressable from a note's directory.
+	missW := httptest.NewRecorder()
+	h.PostDocsFileAsset(missW, docsRequest(http.MethodPost, "/api/docs/files/asset", `{"path":"mbp/日记/Images/图01.png"}`))
+	if missW.Code != http.StatusNotFound {
+		t.Fatalf("note-relative status = %d, body = %s", missW.Code, missW.Body.String())
 	}
 }

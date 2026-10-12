@@ -12,6 +12,7 @@ const (
 	OpChildren  = "children"
 	OpHierarchy = "hierarchy"
 	OpRead      = "read"
+	OpAsset     = "asset"
 	OpWrite     = "write"
 	OpCreate    = "create"
 	OpMove      = "move"
@@ -93,6 +94,12 @@ func Exec(ctx context.Context, root, op string, payload json.RawMessage) (any, e
 			return ReadResult{FileContent: file, NotModified: true}, nil
 		}
 		return ReadResult{FileContent: file}, nil
+	case OpAsset:
+		var req pathPayload
+		if err := json.Unmarshal(payload, &req); err != nil {
+			return nil, obsidianvault.ErrInvalidPath
+		}
+		return obsidianvault.ReadAsset(ctx, root, req.Path)
 	case OpWrite:
 		var req obsidianvault.EditRequest
 		if err := json.Unmarshal(payload, &req); err != nil {

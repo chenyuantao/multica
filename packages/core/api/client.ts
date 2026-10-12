@@ -503,6 +503,7 @@ import {
   RemindersListSchema,
   AskAIResponseSchema,
   DocFileSchema,
+  DocAssetSchema,
   DocMoveResultSchema,
   DocFolderResultSchema,
   DocDeleteResultSchema,
@@ -532,6 +533,7 @@ import type {
   CreateDocFolderRequest,
   DeleteDocRequest,
   DocDeleteResult,
+  DocAsset,
   DocFile,
   DocFolderResult,
   DocMoveResult,
@@ -4837,6 +4839,19 @@ export class ApiClient {
       body: JSON.stringify({ path }),
     });
     return this.requireDocFile(raw, "POST /api/docs/files/content");
+  }
+
+  /** Image bytes for a vault path. `path` includes the machine root. */
+  async getDocAsset(path: string): Promise<DocAsset> {
+    const raw = await this.fetch<unknown>("/api/docs/files/asset", {
+      method: "POST",
+      body: JSON.stringify({ path }),
+    });
+    const asset = parseWithFallback<DocAsset | null>(raw, DocAssetSchema, null, {
+      endpoint: "POST /api/docs/files/asset",
+    });
+    if (!asset) throw new Error("Invalid document response");
+    return asset;
   }
 
   async createDocFile(data: CreateDocFileRequest): Promise<DocFile> {

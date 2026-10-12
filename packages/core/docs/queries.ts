@@ -7,6 +7,7 @@ export const docsKeys = {
   tree: () => [...docsKeys.all(), "tree"] as const,
   search: (q: string) => [...docsKeys.all(), "search", q] as const,
   file: (path: string) => [...docsKeys.all(), "file", path] as const,
+  asset: (path: string) => [...docsKeys.all(), "asset", path] as const,
 };
 
 export function docsTreeOptions() {
@@ -21,6 +22,17 @@ export function docsSearchOptions(q: string) {
     queryKey: docsKeys.search(q),
     queryFn: () => api.searchDocs(q),
     enabled: q.length > 0,
+  });
+}
+
+export function docAssetOptions(path: string) {
+  return queryOptions({
+    queryKey: docsKeys.asset(path),
+    queryFn: () => api.getDocAsset(path),
+    staleTime: Infinity,
+    gcTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    retry: false,
   });
 }
 

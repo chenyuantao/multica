@@ -86,6 +86,26 @@ describe("ApiClient docs", () => {
     expect(nodes[1]).toMatchObject({ type: "file", children: [], child_count: 0 });
   });
 
+  it("loads a vault image from the machine root and rejects a body without bytes", async () => {
+    const fetchMock = respond({
+      path: "mbp/Images/图01.png",
+      name: "图01.png",
+      content_type: "image/png",
+      data: "iVBORw0KGgo=",
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new ApiClient("https://api.example.test");
+    await expect(client.getDocAsset("mbp/Images/图01.png")).resolves.toMatchObject({
+      path: "mbp/Images/图01.png",
+      content_type: "image/png",
+      data: "iVBORw0KGgo=",
+    });
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ path: "mbp/Images/图01.png" });
+
+    vi.stubGlobal("fetch", respond({ path: "mbp/Images/图01.png" }));
+    await expect(client.getDocAsset("mbp/Images/图01.png")).rejects.toThrow(/invalid document response/i);
+  });
+
   it("returns an empty tree for a malformed response", async () => {
     vi.stubGlobal("fetch", respond({ nodes: "invalid" }));
     expect(await new ApiClient("https://api.example.test").getDocsTree()).toEqual([]);

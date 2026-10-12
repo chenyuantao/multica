@@ -1726,6 +1726,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			r.Post("/delete", h.PostDocsDelete)
 			r.Post("/files/hierarchy", h.PostDocsFileHierarchy)
 			r.Post("/files/content", h.PostDocsFileContent)
+			r.Post("/files/asset", h.PostDocsFileAsset)
 			r.Patch("/files/content", h.PatchDocsFileContent)
 		})
 

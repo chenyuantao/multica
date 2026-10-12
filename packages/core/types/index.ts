@@ -378,6 +378,7 @@ export type {
   DocNodeType,
   DocSearchResult,
   DocFile,
+  DocAsset,
   SaveDocFileRequest,
   CreateDocFileRequest,
   MoveDocRequest,

@@ -13,6 +13,7 @@ import { useT } from "../i18n";
 import { DragStrip } from "../platform";
 import { AskAIBadge } from "./ask-ai-badge";
 import { useExcerptReveal } from "./doc-excerpt-reveal";
+import { collapseVaultImages, expandVaultImages } from "./knowledge-images";
 import { joinFrontmatter, noteTitle, parentDir, splitFrontmatter } from "./knowledge-utils";
 
 interface KnowledgeDocumentProps {
@@ -86,7 +87,10 @@ function NoteEditor({
   const qc = useQueryClient();
   const save = useSaveDocFile();
   const editorRef = useRef<ContentEditorRef>(null);
-  const [initial] = useState(() => splitFrontmatter(file.content));
+  const [initial] = useState(() => {
+    const split = splitFrontmatter(file.content);
+    return { frontmatter: split.frontmatter, body: expandVaultImages(file.path, split.body) };
+  });
   const frontmatterRef = useRef(initial.frontmatter);
   // The server text this editor last agreed with; every save is based on it.
   const baseRef = useRef({ revision: file.revision, content: file.content });
@@ -132,7 +136,7 @@ function NoteEditor({
   const flush = async () => {
     if (discardedRef.current || savingRef.current || pendingRef.current === null) return;
     const body = pendingRef.current;
-    const content = joinFrontmatter(frontmatterRef.current, body);
+    const content = joinFrontmatter(frontmatterRef.current, collapseVaultImages(body));
     pendingRef.current = null;
     const base = baseRef.current;
     if (content === base.content) return;
@@ -151,7 +155,7 @@ function NoteEditor({
       if (saved.content !== content && pendingRef.current === null) {
         const next = splitFrontmatter(saved.content);
         frontmatterRef.current = next.frontmatter;
-        editorRef.current?.adoptContent(next.body);
+        editorRef.current?.adoptContent(expandVaultImages(file.path, next.body));
       }
       report({ kind: "saved" });
     } catch (err) {

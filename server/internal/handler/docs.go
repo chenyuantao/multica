@@ -119,6 +119,29 @@ func (h *Handler) PostDocsFileContent(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, prefixFile(target.peer.Meta().Machine, file))
 }
 
+// PostDocsFileAsset returns one image from a shared vault. The path is the
+// machine name plus a path from that machine's vault root, so a note in a
+// subfolder still addresses ![[Images/a.png]] as <machine>/Images/a.png.
+func (h *Handler) PostDocsFileAsset(w http.ResponseWriter, r *http.Request) {
+	var req docsPathRequest
+	if !decodeDocsBody(w, r, &req) {
+		return
+	}
+	target, ok := h.resolveDocsPath(w, r, req.Path)
+	if !ok {
+		return
+	}
+	ctx, cancel := h.shareContext(r)
+	defer cancel()
+	var result obsidianvault.Asset
+	if err := target.peer.Call(ctx, fileshare.OpAsset, map[string]string{"path": target.rel}, &result); err != nil {
+		writeShareError(w, r, err)
+		return
+	}
+	result.Path = fileshare.Join(target.peer.Meta().Machine, result.Path)
+	writeJSON(w, http.StatusOK, result)
+}
+
 // PatchDocsFileContent writes a note. Range edits use changes; op overwrite,
 // append, or prepend follows the Obsidian CLI write commands. The disk write
 // is always a full replacement of the file.

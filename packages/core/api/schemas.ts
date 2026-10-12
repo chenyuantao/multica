@@ -38,6 +38,7 @@ import type {
   DocMoveResult,
   DocFolderResult,
   DocDeleteResult,
+  DocAsset,
   DocNode,
   FileShare,
   ListDingTalkInstallationsResponse,
@@ -1298,6 +1299,14 @@ export const DocFileSchema = z.object({
   content: z.string(),
   modified_at: z.string().default(""),
   revision: z.string(),
+}).loose();
+
+// Bytes are required: a body without them must not become an empty image.
+export const DocAssetSchema: z.ZodType<DocAsset> = z.object({
+  path: z.string(),
+  name: z.string().default("").catch(""),
+  content_type: z.string().default("application/octet-stream").catch("application/octet-stream"),
+  data: z.string(),
 }).loose();
 
 const CommentTriggerPreviewAgentSchema = z.object({

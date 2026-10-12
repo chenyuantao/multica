@@ -23,6 +23,15 @@ export interface DocSearchResult {
   truncated: boolean;
 }
 
+/** One image stored in a vault. `data` is standard base64. */
+export interface DocAsset {
+  path: string;
+  name: string;
+  content_type: string;
+  /** Standard base64 of the file bytes. */
+  data: string;
+}
+
 /** Full text of one markdown note. `revision` guards concurrent writes. */
 export interface DocFile {
   path: string;
