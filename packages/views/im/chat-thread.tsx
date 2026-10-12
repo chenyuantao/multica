@@ -206,6 +206,7 @@ export function ChatThread({
   const isAdmin = role === "owner" || role === "admin";
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
+  const lastScrollTopRef = useRef(0);
   const olderAnchorRef = useRef<{ height: number; top: number } | null>(null);
   const seenChatRef = useRef(chat.id);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -497,6 +498,13 @@ export function ChatThread({
     </Button>
   ) : null;
 
+  const tailId = messages[messages.length - 1]?.id ?? "";
+
+  const pinToBottom = useCallback((el: HTMLElement) => {
+    el.scrollTop = el.scrollHeight;
+    lastScrollTopRef.current = el.scrollTop;
+  }, []);
+
   useLayoutEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
@@ -504,26 +512,29 @@ export function ChatThread({
       seenChatRef.current = chat.id;
       olderAnchorRef.current = null;
       stickToBottomRef.current = true;
+      lastScrollTopRef.current = 0;
     }
     const anchor = olderAnchorRef.current;
     if (anchor) {
       if (isFetchingNextPage) return;
       olderAnchorRef.current = null;
       el.scrollTop = anchor.top + (el.scrollHeight - anchor.height);
+      lastScrollTopRef.current = el.scrollTop;
       return;
     }
-    if (stickToBottomRef.current) el.scrollTop = el.scrollHeight;
-  }, [messages.length, pending.length, chat.id, isFetchingNextPage]);
+    if (stickToBottomRef.current) pinToBottom(el);
+  }, [messages.length, tailId, pending.length, chat.id, isFetchingNextPage, pinToBottom]);
 
-  // Opening a chat paints before rich content and the phone column have their
-  // final height, so the one layout pass above lands short of the latest
-  // message. Keep pinning until that settles, or the reader scrolls away.
+  // Opening a chat paints the cached page before the phone column and the
+  // network page have their final height. Keep pinning until that settles.
+  // A scroll event while the list is still at the top is not the reader
+  // leaving; only an upward scroll releases the pin.
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
     const pin = () => {
       if (!stickToBottomRef.current || olderAnchorRef.current) return;
-      el.scrollTop = el.scrollHeight;
+      pinToBottom(el);
     };
     pin();
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(pin);
@@ -534,20 +545,23 @@ export function ChatThread({
       observer?.disconnect();
       for (const id of timers) window.clearTimeout(id);
     };
-  }, [chat.id, messages.length, pending.length]);
+  }, [chat.id, messages.length, tailId, pending.length, pinToBottom]);
 
   useLayoutEffect(() => {
     if (!phoneKeyboard) return;
     const el = scrollRef.current;
     if (!el) return;
     stickToBottomRef.current = true;
-    el.scrollTop = el.scrollHeight;
-  }, [phoneKeyboard]);
+    pinToBottom(el);
+  }, [phoneKeyboard, pinToBottom]);
 
   const loadOlder = useCallback(() => {
     const el = scrollRef.current;
     if (!el || !hasNextPage || isFetchingNextPage || olderAnchorRef.current) return;
     if (el.clientHeight === 0) return;
+    // A tall thread still at the top is waiting for the opening pin. The
+    // cached page must not be treated as a request for older history.
+    if (stickToBottomRef.current && el.scrollHeight > el.clientHeight + 1) return;
     if (el.scrollHeight > el.clientHeight + 1 && el.scrollTop > 48) return;
     olderAnchorRef.current = { height: el.scrollHeight, top: el.scrollTop };
     void fetchNextPage();
@@ -556,8 +570,13 @@ export function ChatThread({
   const onScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
-    stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
-    if (el.scrollTop <= 48) loadOlder();
+    const top = el.scrollTop;
+    const delta = top - lastScrollTopRef.current;
+    lastScrollTopRef.current = top;
+    const distance = el.scrollHeight - top - el.clientHeight;
+    if (distance < 80) stickToBottomRef.current = true;
+    else if (delta < -8) stickToBottomRef.current = false;
+    if (!stickToBottomRef.current && top <= 48) loadOlder();
   }, [loadOlder]);
 
   useEffect(() => {

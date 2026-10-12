@@ -1099,6 +1099,42 @@ describe("ChatThread older messages", () => {
       vi.useRealTimers();
     }
   });
+
+  it("follows a cached page that is still at the top until the reader scrolls up", () => {
+    vi.useFakeTimers();
+    let height = 0;
+    const previous = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollHeight");
+    Object.defineProperty(HTMLElement.prototype, "scrollHeight", {
+      configurable: true,
+      get: () => height,
+    });
+    try {
+      const view = renderThread();
+      const scroller = screen.getByRole("list").parentElement as HTMLDivElement;
+      Object.defineProperty(scroller, "clientHeight", { configurable: true, value: 400 });
+
+      height = 1400;
+      scroller.scrollTop = 0;
+      fireEvent.scroll(scroller);
+      expect(fetchOlder).not.toHaveBeenCalled();
+
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+      expect(scroller.scrollTop).toBe(1400);
+
+      messages = [...messages, message("m-3", "fresh from the network")];
+      height = 1800;
+      view.rerender(
+        <ChatThread wsId="ws-1" chat={chat} userId="user-1" panelOpen={false} onTogglePanel={() => {}} />,
+      );
+      expect(scroller.scrollTop).toBe(1800);
+      expect(screen.getByText("fresh from the network")).toBeInTheDocument();
+    } finally {
+      if (previous) Object.defineProperty(HTMLElement.prototype, "scrollHeight", previous);
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe("ChatThread phone keyboard", () => {
