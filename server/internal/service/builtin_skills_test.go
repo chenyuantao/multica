@@ -704,6 +704,12 @@ func TestPlatformSkillCoversPlatformContracts(t *testing.T) {
 				"--base-revision",
 				// The note card opens knowledge paths only.
 				"never absolute",
+				// Without multica-file, the same agent-facing operations go
+				// through the docs API. Delete and share stay off that path.
+				"POST /api/docs/files",
+				"PATCH /api/docs/files/content",
+				"docs_not_found",
+				"Do not call delete",
 			},
 		},
 	}

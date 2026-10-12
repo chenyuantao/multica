@@ -27,7 +27,7 @@ Read the invariants below, then open the reference(s) your task actually needs
 | `references/projects.md` | Projects and their durable resources (`github_repo`, `local_directory`, worktree mode) |
 | `references/runtimes.md` | Runtimes, daemons, `repo checkout`, and the task CLI boundary |
 | `references/skill-import.md` | Importing a skill into this workspace from a URL or a local archive |
-| `references/files.md` | A file you produced: whether it stays in your working directory, goes out as an attachment, or is written to a shared directory (`multica-file`) the reader can open in knowledge |
+| `references/files.md` | A file you produced: whether it stays in your working directory, goes out as an attachment, or is written to a shared directory (`multica-file`, or the same operations over `curl` when that binary is missing) the reader can open in knowledge |
 
 Open what the task needs. A single-domain task usually needs one; a task that
 crosses domains needs each domain it touches — creating a squad, assigning it an
