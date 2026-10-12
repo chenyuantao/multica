@@ -382,5 +382,10 @@ export type {
   CreateDocFileRequest,
   MoveDocRequest,
   DocMoveResult,
+  CreateDocFolderRequest,
+  DocFolderResult,
+  RenameDocRequest,
+  DeleteDocRequest,
+  DocDeleteResult,
 } from "./docs";
 export type { FileShare, UpdateFileShareRequest } from "./file-share";

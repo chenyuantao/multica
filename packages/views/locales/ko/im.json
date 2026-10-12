@@ -218,6 +218,10 @@
     "search": "노트 검색",
     "new_note": "새 노트",
     "new_note_here": "여기에 새 노트",
+    "new_folder_here": "여기에 새 폴더",
+    "rename": "이름 바꾸기",
+    "delete_note": "노트 삭제",
+    "delete_folder": "폴더 삭제",
     "copy_path": "경로 복사",
     "path_copied": "경로를 복사했습니다",
     "move_failed": "이동하지 못했습니다",
@@ -256,6 +260,28 @@
       "failed": "노트를 만들지 못했습니다",
       "create": "만들기",
       "cancel": "취소"
+    },
+    "folder_dialog": {
+      "title": "새 폴더",
+      "placeholder": "제목 없는 폴더",
+      "exists": "같은 이름의 항목이 이미 있습니다",
+      "failed": "폴더를 만들지 못했습니다",
+      "create": "만들기"
+    },
+    "rename_dialog": {
+      "title": "이름 바꾸기",
+      "exists": "같은 이름의 항목이 이미 있습니다",
+      "failed": "이름을 바꾸지 못했습니다",
+      "save": "이름 바꾸기"
+    },
+    "delete_dialog": {
+      "title": "\"{{name}}\"을(를) 삭제할까요?",
+      "note": "이 노트는 공유 폴더에서 제거됩니다.",
+      "folder": "이 폴더와 그 안의 모든 내용이 제거됩니다.",
+      "confirm": "삭제",
+      "cancel": "취소",
+      "deleting": "삭제 중…",
+      "failed": "삭제하지 못했습니다"
     }
   },
   "search": {

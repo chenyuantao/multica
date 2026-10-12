@@ -9,9 +9,17 @@ import { errorCode } from "@multica/core/api";
 import { docsTreeOptions, useMoveDoc } from "@multica/core/docs";
 import type { DocMoveResult, DocNode } from "@multica/core/types";
 import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@multica/ui/components/ui/context-menu";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@multica/ui/components/ui/dropdown-menu";
 import { copyText } from "@multica/ui/lib/clipboard";
@@ -21,6 +29,7 @@ import { formatStamp } from "./im-utils";
 import { ImSidebarSearch } from "./im-sidebar-search";
 import { ImSidebarHeader, ImSidebarShell } from "./im-sidebar-shell";
 import { dropDirectory, FOLDER_EXPAND_DELAY_MS, springOpenFolder, type DragNode } from "./knowledge-drag";
+import { DeleteDocDialog, NewFolderDialog, RenameDocDialog } from "./knowledge-node-dialogs";
 import { ancestorDirs, parentDir } from "./knowledge-utils";
 
 const EMPTY_NODES: DocNode[] = [];
@@ -34,10 +43,23 @@ interface KnowledgeSidebarProps {
   onOpenSearch?: () => void;
   /** A note or folder finished moving. `path` is its new location. */
   onMoved?: (result: DocMoveResult) => void;
+  /** A note or folder was renamed in place. */
+  onRenamed?: (result: DocMoveResult) => void;
+  /** A note or folder was deleted after confirmation. */
+  onDeleted?: (path: string) => void;
   className?: string;
 }
 
-export function KnowledgeSidebar({ selectedPath, onSelect, onCreate, onOpenSearch, onMoved, className }: KnowledgeSidebarProps) {
+export function KnowledgeSidebar({
+  selectedPath,
+  onSelect,
+  onCreate,
+  onOpenSearch,
+  onMoved,
+  onRenamed,
+  onDeleted,
+  className,
+}: KnowledgeSidebarProps) {
   const { t } = useT("im");
   const tree = useQuery(docsTreeOptions());
   const [toggled, setToggled] = useState<ReadonlyMap<string, boolean>>(() => new Map());
@@ -77,6 +99,9 @@ export function KnowledgeSidebar({ selectedPath, onSelect, onCreate, onOpenSearc
     setToggled((prev) => new Map(prev).set(path, !open));
 
   const move = useMoveDoc();
+  const [folderDir, setFolderDir] = useState<string | null>(null);
+  const [renameNode, setRenameNode] = useState<DocNode | null>(null);
+  const [deleteNode, setDeleteNode] = useState<DocNode | null>(null);
   const draggingRef = useRef<DragNode | null>(null);
   const [draggingPath, setDraggingPath] = useState<string | null>(null);
   const [hoverPath, setHoverPath] = useState<string | null>(null);
@@ -208,6 +233,9 @@ export function KnowledgeSidebar({ selectedPath, onSelect, onCreate, onOpenSearc
                   onToggle={toggle}
                   onSelect={onSelect}
                   onCreate={onCreate}
+                  onCreateFolder={setFolderDir}
+                  onRename={setRenameNode}
+                  onDelete={setDeleteNode}
                   draggingPath={draggingPath}
                   hoverPath={hoverPath}
                   dropDest={dropDest}
@@ -221,6 +249,31 @@ export function KnowledgeSidebar({ selectedPath, onSelect, onCreate, onOpenSearc
           </ul>
         )}
       </nav>
+      <NewFolderDialog
+        dir={folderDir}
+        onOpenChange={(open) => {
+          if (!open) setFolderDir(null);
+        }}
+        onCreated={(path) => {
+          const parent = parentDir(path);
+          if (!parent) return;
+          setToggled((prev) => new Map(prev).set(parent, true));
+        }}
+      />
+      <RenameDocDialog
+        node={renameNode}
+        onOpenChange={(open) => {
+          if (!open) setRenameNode(null);
+        }}
+        onRenamed={(result) => onRenamed?.(result)}
+      />
+      <DeleteDocDialog
+        node={deleteNode}
+        onOpenChange={(open) => {
+          if (!open) setDeleteNode(null);
+        }}
+        onDeleted={(path) => onDeleted?.(path)}
+      />
     </ImSidebarShell>
   );
 }
@@ -252,6 +305,9 @@ interface TreeNodeProps {
   onToggle: (path: string, open: boolean) => void;
   onSelect: (path: string) => void;
   onCreate: (dir: string) => void;
+  onCreateFolder: (dir: string) => void;
+  onRename: (node: DocNode) => void;
+  onDelete: (node: DocNode) => void;
   draggingPath: string | null;
   hoverPath: string | null;
   dropDest: string | null;
@@ -285,6 +341,9 @@ function TreeNode(props: TreeNodeProps) {
     onToggle,
     onSelect,
     onCreate,
+    onCreateFolder,
+    onRename,
+    onDelete,
     draggingPath,
     hoverPath,
     dropDest,
@@ -296,10 +355,14 @@ function TreeNode(props: TreeNodeProps) {
   const { t } = useT("im");
   const dragClass = dragRowClass(node, draggingPath, hoverPath, dropDest);
 
+  const menu = nodeMenu(node, t, { onCreate, onCreateFolder, onRename, onDelete });
+
   if (node.type === "file") {
     const selected = node.path === selectedPath;
     return (
-      <div
+      <NodeContextMenu
+        items={menu.items}
+        danger={menu.danger}
         data-path={node.path}
         draggable
         onDragStart={(event) => onNodeDragStart(node, event)}
@@ -310,29 +373,23 @@ function TreeNode(props: TreeNodeProps) {
         // Keeps a revealed note clear of the pinned folders above it.
         style={{ scrollMarginTop: depth * ROW_HEIGHT }}
       >
-        <button
-          type="button"
-          onClick={() => onSelect(node.path)}
-          aria-current={selected ? "page" : undefined}
-          title={node.path}
-          className="flex min-w-0 flex-1 items-center gap-1.5 self-stretch text-left outline-none after:absolute after:inset-0 after:rounded-md focus-visible:after:ring-2 focus-visible:after:ring-ring focus-visible:after:ring-inset"
-        >
-          <span className="size-4 shrink-0" />
-          <FileText className={cn("size-4 shrink-0", selected ? "text-brand" : "text-muted-foreground")} strokeWidth={1.7} />
-          <span className="min-w-0 flex-1">
-            <span className={cn("block truncate text-body", selected && "font-medium text-brand")}>{node.name}</span>
-            {node.snippet && <span className="block truncate text-caption text-muted-foreground">{node.snippet}</span>}
-          </span>
-          {node.modified_at && <DocStamp iso={node.modified_at} />}
-        </button>
-        <RowMenu
-          label={t(($) => $.knowledge.more, { name: node.name })}
-          items={[
-            { label: t(($) => $.knowledge.new_note_here), onSelect: () => onCreate(parentDir(node.path)) },
-            { label: t(($) => $.knowledge.copy_path), onSelect: () => void copyPath(node.path, t) },
-          ]}
-        />
-      </div>
+          <button
+            type="button"
+            onClick={() => onSelect(node.path)}
+            aria-current={selected ? "page" : undefined}
+            title={node.path}
+            className="flex min-w-0 flex-1 items-center gap-1.5 self-stretch text-left outline-none after:absolute after:inset-0 after:rounded-md focus-visible:after:ring-2 focus-visible:after:ring-ring focus-visible:after:ring-inset"
+          >
+            <span className="size-4 shrink-0" />
+            <FileText className={cn("size-4 shrink-0", selected ? "text-brand" : "text-muted-foreground")} strokeWidth={1.7} />
+            <span className="min-w-0 flex-1">
+              <span className={cn("block truncate text-body", selected && "font-medium text-brand")}>{node.name}</span>
+              {node.snippet && <span className="block truncate text-caption text-muted-foreground">{node.snippet}</span>}
+            </span>
+            {node.modified_at && <DocStamp iso={node.modified_at} />}
+          </button>
+          <RowMenu label={t(($) => $.knowledge.more, { name: node.name })} items={menu.items} danger={menu.danger} />
+      </NodeContextMenu>
     );
   }
 
@@ -348,7 +405,9 @@ function TreeNode(props: TreeNodeProps) {
         className={cn(pinned && "sticky z-10 bg-sidebar")}
         style={pinned ? { top: depth * ROW_HEIGHT } : undefined}
       >
-        <div
+        <NodeContextMenu
+          items={menu.items}
+          danger={menu.danger}
           data-path={node.path}
           draggable
           onDragStart={(event) => onNodeDragStart(node, event)}
@@ -357,36 +416,30 @@ function TreeNode(props: TreeNodeProps) {
           onDrop={(event) => onNodeDrop(node, event)}
           className={cn(rowClass, "relative hover:bg-foreground/5", dragClass)}
         >
-          <button
-            type="button"
-            onClick={() => onToggle(node.path, open)}
-            aria-expanded={open}
-            title={node.path}
-            className="flex min-w-0 flex-1 items-center gap-1.5 self-stretch text-left outline-none after:absolute after:inset-0 after:rounded-md focus-visible:after:ring-2 focus-visible:after:ring-ring focus-visible:after:ring-inset"
-          >
-            <ChevronRight
-              className={cn(
-                "size-4 shrink-0 transition-transform",
-                onPath ? "text-brand" : "text-muted-foreground",
-                open && "rotate-90",
-              )}
-            />
-            <Folder className={cn("size-4 shrink-0", onPath ? "text-brand" : "text-muted-foreground")} strokeWidth={1.7} />
-            <span
-              className={cn("min-w-0 truncate text-body", (depth === 0 || onPath) && "font-medium", onPath && "text-brand")}
+            <button
+              type="button"
+              onClick={() => onToggle(node.path, open)}
+              aria-expanded={open}
+              title={node.path}
+              className="flex min-w-0 flex-1 items-center gap-1.5 self-stretch text-left outline-none after:absolute after:inset-0 after:rounded-md focus-visible:after:ring-2 focus-visible:after:ring-ring focus-visible:after:ring-inset"
             >
-              {node.name}
-            </span>
-            <span className="shrink-0 text-caption text-muted-foreground tabular-nums">({node.child_count})</span>
-          </button>
-          <RowMenu
-            label={t(($) => $.knowledge.more, { name: node.name })}
-            items={[
-              { label: t(($) => $.knowledge.new_note_here), onSelect: () => onCreate(node.path) },
-              { label: t(($) => $.knowledge.copy_path), onSelect: () => void copyPath(node.path, t) },
-            ]}
-          />
-        </div>
+              <ChevronRight
+                className={cn(
+                  "size-4 shrink-0 transition-transform",
+                  onPath ? "text-brand" : "text-muted-foreground",
+                  open && "rotate-90",
+                )}
+              />
+              <Folder className={cn("size-4 shrink-0", onPath ? "text-brand" : "text-muted-foreground")} strokeWidth={1.7} />
+              <span
+                className={cn("min-w-0 truncate text-body", (depth === 0 || onPath) && "font-medium", onPath && "text-brand")}
+              >
+                {node.name}
+              </span>
+              <span className="shrink-0 text-caption text-muted-foreground tabular-nums">({node.child_count})</span>
+            </button>
+            <RowMenu label={t(($) => $.knowledge.more, { name: node.name })} items={menu.items} danger={menu.danger} />
+        </NodeContextMenu>
       </div>
       {open && node.children.length > 0 && (
         // The dashed guide sits under this row's chevron (8px padding + half of 16px).
@@ -406,7 +459,72 @@ async function copyPath(path: string, t: Translate) {
   if (await copyText(path)) toast.success(t(($) => $.knowledge.path_copied));
 }
 
-function RowMenu({ label, items }: { label: string; items: { label: string; onSelect: () => void }[] }) {
+interface MenuAction {
+  label: string;
+  onSelect: () => void;
+}
+
+function nodeMenu(
+  node: DocNode,
+  t: Translate,
+  actions: {
+    onCreate: (dir: string) => void;
+    onCreateFolder: (dir: string) => void;
+    onRename: (node: DocNode) => void;
+    onDelete: (node: DocNode) => void;
+  },
+): { items: MenuAction[]; danger: MenuAction | null } {
+  const dir = node.type === "file" ? parentDir(node.path) : node.path;
+  const shareRoot = node.type === "dir" && !node.path.includes("/");
+  return {
+    items: [
+      { label: t(($) => $.knowledge.new_note_here), onSelect: () => actions.onCreate(dir) },
+      { label: t(($) => $.knowledge.new_folder_here), onSelect: () => actions.onCreateFolder(dir) },
+      ...(shareRoot ? [] : [{ label: t(($) => $.knowledge.rename), onSelect: () => actions.onRename(node) }]),
+      { label: t(($) => $.knowledge.copy_path), onSelect: () => void copyPath(node.path, t) },
+    ],
+    danger: shareRoot
+      ? null
+      : {
+          label: node.type === "file" ? t(($) => $.knowledge.delete_note) : t(($) => $.knowledge.delete_folder),
+          onSelect: () => actions.onDelete(node),
+        },
+  };
+}
+
+function NodeContextMenu({
+  items,
+  danger,
+  children,
+  ...rowProps
+}: {
+  items: MenuAction[];
+  danger: MenuAction | null;
+  children: React.ReactNode;
+} & React.ComponentProps<"div">) {
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger {...rowProps}>{children}</ContextMenuTrigger>
+      <ContextMenuContent>
+        {items.map((item) => (
+          <ContextMenuItem key={item.label} onClick={item.onSelect}>
+            {item.label}
+          </ContextMenuItem>
+        ))}
+        {danger && (
+          <>
+            <ContextMenuSeparator />
+            <ContextMenuItem variant="destructive" onClick={danger.onSelect}>
+              {danger.label}
+            </ContextMenuItem>
+          </>
+        )}
+      </ContextMenuContent>
+    </ContextMenu>
+  );
+}
+
+function RowMenu({ label, items, danger }: { label: string; items: MenuAction[]; danger: MenuAction | null }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -423,6 +541,14 @@ function RowMenu({ label, items }: { label: string; items: { label: string; onSe
             {item.label}
           </DropdownMenuItem>
         ))}
+        {danger && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem variant="destructive" onClick={danger.onSelect}>
+              {danger.label}
+            </DropdownMenuItem>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

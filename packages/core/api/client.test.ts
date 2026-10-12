@@ -108,6 +108,38 @@ describe("ApiClient docs", () => {
     await expect(client.moveDoc({ path: "a.md", dest: "库" })).rejects.toThrow(/invalid document response/i);
   });
 
+  it("creates a folder, renames an entry, and deletes one", async () => {
+    const fetchMock = respond({ path: "库/归档", name: "归档", type: "dir" });
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new ApiClient("https://api.example.test");
+    await expect(client.createDocFolder({ path: "库/归档" })).resolves.toEqual({
+      path: "库/归档",
+      name: "归档",
+      type: "dir",
+    });
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ path: "库/归档" });
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/api/docs/folders");
+
+    vi.stubGlobal(
+      "fetch",
+      respond({ from: "库/a.md", path: "库/b.md", name: "b.md", type: "file" }),
+    );
+    await expect(client.renameDoc({ path: "库/a.md", name: "b.md" })).resolves.toMatchObject({
+      from: "库/a.md",
+      path: "库/b.md",
+    });
+
+    const deleteMock = respond({ path: "库/归档" });
+    vi.stubGlobal("fetch", deleteMock);
+    await expect(client.deleteDoc({ path: "库/归档" })).resolves.toEqual({ path: "库/归档" });
+    expect(JSON.parse(String(deleteMock.mock.calls[0]?.[1]?.body))).toEqual({ path: "库/归档" });
+
+    vi.stubGlobal("fetch", respond({}));
+    await expect(client.deleteDoc({ path: "库/归档" })).rejects.toThrow(/invalid document response/i);
+    vi.stubGlobal("fetch", respond({ name: "归档" }));
+    await expect(client.createDocFolder({ path: "库/归档" })).rejects.toThrow(/invalid document response/i);
+  });
+
   it("saves as a mergeable overwrite and refuses a file without a revision", async () => {
     const fetchMock = respond({ path: "a.md", content: "x" });
     vi.stubGlobal("fetch", fetchMock);

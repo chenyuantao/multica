@@ -1,3 +1,3 @@
 export { docsKeys, docsTreeOptions, docsSearchOptions, docFileOptions } from "./queries";
-export { useCreateDocFile, useMoveDoc, useSaveDocFile } from "./mutations";
+export { useCreateDocFile, useCreateDocFolder, useDeleteDoc, useMoveDoc, useRenameDoc, useSaveDocFile } from "./mutations";
 export { relocatedDocPath } from "./move-path";

@@ -504,6 +504,8 @@ import {
   AskAIResponseSchema,
   DocFileSchema,
   DocMoveResultSchema,
+  DocFolderResultSchema,
+  DocDeleteResultSchema,
   DocSearchResultSchema,
   DocTreeSchema,
   FileShareListSchema,
@@ -527,11 +529,16 @@ import type {
 } from "../types/group-chat";
 import type {
   CreateDocFileRequest,
+  CreateDocFolderRequest,
+  DeleteDocRequest,
+  DocDeleteResult,
   DocFile,
+  DocFolderResult,
   DocMoveResult,
   DocNode,
   DocSearchResult,
   MoveDocRequest,
+  RenameDocRequest,
   SaveDocFileRequest,
 } from "../types/docs";
 import type { FileShare, UpdateFileShareRequest } from "../types/file-share";
@@ -4851,6 +4858,45 @@ export class ApiClient {
     });
     if (!moved) throw new Error("Invalid document response");
     return moved;
+  }
+
+  /** Creates one directory. `path` is the new folder, including its parent. */
+  async createDocFolder(data: CreateDocFolderRequest): Promise<DocFolderResult> {
+    const raw = await this.fetch<unknown>("/api/docs/folders", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+    const created = parseWithFallback<DocFolderResult | null>(raw, DocFolderResultSchema, null, {
+      endpoint: "POST /api/docs/folders",
+    });
+    if (!created) throw new Error("Invalid document response");
+    return created;
+  }
+
+  /** Renames a note or folder without moving it to another directory. */
+  async renameDoc(data: RenameDocRequest): Promise<DocMoveResult> {
+    const raw = await this.fetch<unknown>("/api/docs/rename", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+    const renamed = parseWithFallback<DocMoveResult | null>(raw, DocMoveResultSchema, null, {
+      endpoint: "POST /api/docs/rename",
+    });
+    if (!renamed) throw new Error("Invalid document response");
+    return renamed;
+  }
+
+  /** Deletes a note, or a folder and everything inside it. */
+  async deleteDoc(data: DeleteDocRequest): Promise<DocDeleteResult> {
+    const raw = await this.fetch<unknown>("/api/docs/delete", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+    const deleted = parseWithFallback<DocDeleteResult | null>(raw, DocDeleteResultSchema, null, {
+      endpoint: "POST /api/docs/delete",
+    });
+    if (!deleted) throw new Error("Invalid document response");
+    return deleted;
   }
 
   /** Replaces the note, merging with a concurrent change when they don't overlap. */

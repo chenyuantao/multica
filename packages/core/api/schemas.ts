@@ -36,6 +36,8 @@ import type {
   CronPreviewResponse,
   DingTalkInstallation,
   DocMoveResult,
+  DocFolderResult,
+  DocDeleteResult,
   DocNode,
   FileShare,
   ListDingTalkInstallationsResponse,
@@ -1278,6 +1280,16 @@ export const DocMoveResultSchema: z.ZodType<DocMoveResult> = z.object({
   path: z.string(),
   name: z.string().default("").catch(""),
   type: z.enum(["dir", "file"]),
+}).loose();
+
+export const DocFolderResultSchema: z.ZodType<DocFolderResult> = z.object({
+  path: z.string(),
+  name: z.string().default("").catch(""),
+  type: z.enum(["dir", "file"]),
+}).loose();
+
+export const DocDeleteResultSchema: z.ZodType<DocDeleteResult> = z.object({
+  path: z.string(),
 }).loose();
 
 export const DocFileSchema = z.object({

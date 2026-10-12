@@ -32,6 +32,17 @@ export function noteFileName(input: string): string | null {
   return file.length > 3 ? file : null;
 }
 
+/** A single visible folder name, or null when it cannot be created. */
+export function folderName(input: string): string | null {
+  const name = input.trim();
+  if (!name || name.startsWith(".") || /[\\/\0]/.test(name)) return null;
+  return name;
+}
+
+export function joinDocPath(dir: string, name: string): string {
+  return dir ? `${dir}/${name}` : name;
+}
+
 export function parentDir(path: string): string {
   const at = path.lastIndexOf("/");
   return at < 0 ? "" : path.slice(0, at);

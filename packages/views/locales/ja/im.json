@@ -218,6 +218,10 @@
     "search": "ノートを検索",
     "new_note": "新しいノート",
     "new_note_here": "ここに新しいノート",
+    "new_folder_here": "ここに新しいフォルダ",
+    "rename": "名前を変更",
+    "delete_note": "ノートを削除",
+    "delete_folder": "フォルダを削除",
     "copy_path": "パスをコピー",
     "path_copied": "パスをコピーしました",
     "move_failed": "移動できませんでした",
@@ -256,6 +260,28 @@
       "failed": "ノートを作成できませんでした",
       "create": "作成",
       "cancel": "キャンセル"
+    },
+    "folder_dialog": {
+      "title": "新しいフォルダ",
+      "placeholder": "無題のフォルダ",
+      "exists": "同じ名前の項目がすでにあります",
+      "failed": "フォルダを作成できませんでした",
+      "create": "作成"
+    },
+    "rename_dialog": {
+      "title": "名前を変更",
+      "exists": "同じ名前の項目がすでにあります",
+      "failed": "名前を変更できませんでした",
+      "save": "名前を変更"
+    },
+    "delete_dialog": {
+      "title": "「{{name}}」を削除しますか？",
+      "note": "このノートは共有フォルダから削除されます。",
+      "folder": "このフォルダと中のすべての内容が削除されます。",
+      "confirm": "削除",
+      "cancel": "キャンセル",
+      "deleting": "削除しています…",
+      "failed": "削除できませんでした"
     }
   },
   "search": {

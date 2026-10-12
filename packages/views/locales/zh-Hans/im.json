@@ -218,6 +218,10 @@
     "search": "搜索笔记",
     "new_note": "新建笔记",
     "new_note_here": "在此新建笔记",
+    "new_folder_here": "在此新建文件夹",
+    "rename": "重命名",
+    "delete_note": "删除笔记",
+    "delete_folder": "删除文件夹",
     "copy_path": "复制路径",
     "path_copied": "已复制路径",
     "move_failed": "移动失败",
@@ -256,6 +260,28 @@
       "failed": "笔记创建失败",
       "create": "创建",
       "cancel": "取消"
+    },
+    "folder_dialog": {
+      "title": "新建文件夹",
+      "placeholder": "未命名文件夹",
+      "exists": "同名项目已存在",
+      "failed": "文件夹创建失败",
+      "create": "创建"
+    },
+    "rename_dialog": {
+      "title": "重命名",
+      "exists": "同名项目已存在",
+      "failed": "重命名失败",
+      "save": "重命名"
+    },
+    "delete_dialog": {
+      "title": "删除“{{name}}”？",
+      "note": "这篇笔记会从共享文件夹里移除。",
+      "folder": "这个文件夹和里面的内容都会被移除。",
+      "confirm": "删除",
+      "cancel": "取消",
+      "deleting": "删除中…",
+      "failed": "删除失败"
     }
   },
   "search": {

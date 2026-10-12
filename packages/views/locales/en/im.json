@@ -222,6 +222,10 @@
     "search": "Search notes",
     "new_note": "New note",
     "new_note_here": "New note here",
+    "new_folder_here": "New folder here",
+    "rename": "Rename",
+    "delete_note": "Delete note",
+    "delete_folder": "Delete folder",
     "copy_path": "Copy path",
     "path_copied": "Path copied",
     "move_failed": "Couldn't move",
@@ -260,6 +264,28 @@
       "failed": "Couldn't create the note",
       "create": "Create",
       "cancel": "Cancel"
+    },
+    "folder_dialog": {
+      "title": "New folder",
+      "placeholder": "Untitled folder",
+      "exists": "Something with this name already exists",
+      "failed": "Couldn't create the folder",
+      "create": "Create"
+    },
+    "rename_dialog": {
+      "title": "Rename",
+      "exists": "Something with this name already exists",
+      "failed": "Couldn't rename",
+      "save": "Rename"
+    },
+    "delete_dialog": {
+      "title": "Delete \"{{name}}\"?",
+      "note": "This note will be removed from the shared folder.",
+      "folder": "This folder and everything in it will be removed.",
+      "confirm": "Delete",
+      "cancel": "Cancel",
+      "deleting": "Deleting…",
+      "failed": "Couldn't delete"
     }
   },
   "search": {

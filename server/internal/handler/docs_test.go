@@ -184,6 +184,60 @@ func TestDocsHTTPMove(t *testing.T) {
 	}
 }
 
+func TestDocsHTTPFolderRenameDelete(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "笔记.md"), []byte("正文"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h := docsShareHandler(t, root)
+
+	folderW := httptest.NewRecorder()
+	h.PostDocsFolder(folderW, docsRequest(http.MethodPost, "/api/docs/folders", `{"path":"mbp/归档"}`))
+	var folder obsidianvault.Entry
+	decodeDocs(t, folderW, http.StatusCreated, &folder)
+	if folder.Path != "mbp/归档" || folder.Name != "归档" || folder.Type != obsidianvault.TypeDir {
+		t.Fatalf("folder = %#v", folder)
+	}
+
+	dup := httptest.NewRecorder()
+	h.PostDocsFolder(dup, docsRequest(http.MethodPost, "/api/docs/folders", `{"path":"mbp/归档"}`))
+	var conflict map[string]string
+	decodeDocs(t, dup, http.StatusConflict, &conflict)
+	if conflict["code"] != "docs_exists" {
+		t.Fatalf("duplicate = %#v", conflict)
+	}
+
+	rootW := httptest.NewRecorder()
+	h.PostDocsDelete(rootW, docsRequest(http.MethodPost, "/api/docs/delete", `{"path":"mbp"}`))
+	var refused map[string]string
+	decodeDocs(t, rootW, http.StatusBadRequest, &refused)
+	if refused["code"] != "invalid_docs_path" {
+		t.Fatalf("share root = %#v", refused)
+	}
+
+	renameW := httptest.NewRecorder()
+	h.PostDocsRename(renameW, docsRequest(http.MethodPost, "/api/docs/rename", `{"path":"mbp/笔记.md","name":"方案.md"}`))
+	var renamed obsidianvault.MoveResult
+	decodeDocs(t, renameW, http.StatusOK, &renamed)
+	if renamed.From != "mbp/笔记.md" || renamed.Path != "mbp/方案.md" || renamed.Type != obsidianvault.TypeFile {
+		t.Fatalf("renamed = %#v", renamed)
+	}
+
+	deleteW := httptest.NewRecorder()
+	h.PostDocsDelete(deleteW, docsRequest(http.MethodPost, "/api/docs/delete", `{"path":"mbp/归档"}`))
+	var deleted map[string]string
+	decodeDocs(t, deleteW, http.StatusOK, &deleted)
+	if deleted["path"] != "mbp/归档" {
+		t.Fatalf("deleted = %#v", deleted)
+	}
+	if _, err := os.Stat(filepath.Join(root, "归档")); !os.IsNotExist(err) {
+		t.Fatalf("folder still present: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "方案.md")); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestDocsHTTPContentEdit(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "note.md"), []byte("hello"), 0o644); err != nil {

@@ -15,6 +15,9 @@ const (
 	OpWrite     = "write"
 	OpCreate    = "create"
 	OpMove      = "move"
+	OpMkdir     = "mkdir"
+	OpRename    = "rename"
+	OpDelete    = "delete"
 	OpSearch    = "search"
 )
 
@@ -43,6 +46,11 @@ type createPayload struct {
 type movePayload struct {
 	Path string `json:"path"`
 	Dest string `json:"dest"`
+}
+
+type renamePayload struct {
+	Path string `json:"path"`
+	Name string `json:"name"`
 }
 
 type searchPayload struct {
@@ -103,6 +111,24 @@ func Exec(ctx context.Context, root, op string, payload json.RawMessage) (any, e
 			return nil, obsidianvault.ErrInvalidPath
 		}
 		return obsidianvault.Move(ctx, root, req.Path, req.Dest)
+	case OpMkdir:
+		var req pathPayload
+		if err := json.Unmarshal(payload, &req); err != nil {
+			return nil, obsidianvault.ErrInvalidPath
+		}
+		return obsidianvault.Mkdir(ctx, root, req.Path)
+	case OpRename:
+		var req renamePayload
+		if err := json.Unmarshal(payload, &req); err != nil {
+			return nil, obsidianvault.ErrInvalidPath
+		}
+		return obsidianvault.Rename(ctx, root, req.Path, req.Name)
+	case OpDelete:
+		var req pathPayload
+		if err := json.Unmarshal(payload, &req); err != nil {
+			return nil, obsidianvault.ErrInvalidPath
+		}
+		return nil, obsidianvault.Remove(ctx, root, req.Path)
 	case OpSearch:
 		var req searchPayload
 		if err := json.Unmarshal(payload, &req); err != nil {

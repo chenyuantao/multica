@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, screen } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import type { DocNode } from "@multica/core/types";
 import { renderWithI18n } from "../test/i18n";
 vi.mock("./im-sidebar-search", () => ({
@@ -30,12 +30,20 @@ const mbp = node("mbp", [
 let tree: DocNode[] = [mbp];
 let searchNodes: DocNode[] = [];
 
-const { moveDoc } = vi.hoisted(() => ({ moveDoc: vi.fn() }));
+const { moveDoc, createFolder, renameDoc, deleteDoc } = vi.hoisted(() => ({
+  moveDoc: vi.fn(),
+  createFolder: vi.fn(),
+  renameDoc: vi.fn(),
+  deleteDoc: vi.fn(),
+}));
 
 vi.mock("@multica/core/docs", () => ({
   docsTreeOptions: () => ({ queryKey: ["docs", "tree"] }),
   docsSearchOptions: (q: string) => ({ queryKey: ["docs", "search", q] }),
   useMoveDoc: () => ({ mutateAsync: moveDoc }),
+  useCreateDocFolder: () => ({ mutateAsync: createFolder, isPending: false }),
+  useRenameDoc: () => ({ mutateAsync: renameDoc, isPending: false }),
+  useDeleteDoc: () => ({ mutateAsync: deleteDoc, isPending: false }),
 }));
 
 vi.mock("@tanstack/react-query", async () => {
@@ -67,6 +75,12 @@ describe("KnowledgeSidebar", () => {
     onCreate.mockReset();
     moveDoc.mockReset();
     moveDoc.mockResolvedValue({ from: "mbp/readme.md", path: "mbp/Strategy/readme.md", name: "readme.md", type: "file" });
+    createFolder.mockReset();
+    createFolder.mockResolvedValue({ path: "mbp/Strategy/Archive", name: "Archive", type: "dir" });
+    renameDoc.mockReset();
+    renameDoc.mockResolvedValue({ from: "mbp/readme.md", path: "mbp/hello.md", name: "hello.md", type: "file" });
+    deleteDoc.mockReset();
+    deleteDoc.mockResolvedValue({ path: "mbp/readme.md" });
     tree = [mbp];
     searchNodes = [];
     // jsdom has no layout, so scrollIntoView isn't defined at all.
@@ -202,6 +216,74 @@ describe("KnowledgeSidebar", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("creates a folder from the right-click menu", async () => {
+    renderWithI18n(<KnowledgeSidebar selectedPath={null} onSelect={onSelect} onCreate={onCreate} />);
+    fireEvent.contextMenu(screen.getByText("Strategy"));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "New folder here" }));
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Archive" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    await waitFor(() => expect(createFolder).toHaveBeenCalledWith({ path: "mbp/Strategy/Archive" }));
+  });
+
+  it("renames a note from the right-click menu", async () => {
+    const onRenamed = vi.fn();
+    renderWithI18n(
+      <KnowledgeSidebar selectedPath={null} onSelect={onSelect} onCreate={onCreate} onRenamed={onRenamed} />,
+    );
+    fireEvent.contextMenu(screen.getByText("readme.md"));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Rename" }));
+    const input = screen.getByLabelText("Name");
+    expect(input).toHaveValue("readme");
+    fireEvent.change(input, { target: { value: "hello" } });
+    fireEvent.click(screen.getByRole("button", { name: "Rename" }));
+    await waitFor(() => expect(renameDoc).toHaveBeenCalledWith({ path: "mbp/readme.md", name: "hello.md" }));
+    expect(onRenamed).toHaveBeenCalledWith({
+      from: "mbp/readme.md",
+      path: "mbp/hello.md",
+      name: "hello.md",
+      type: "file",
+    });
+  });
+
+  it("asks before deleting a note, and only deletes after confirmation", async () => {
+    const onDeleted = vi.fn();
+    renderWithI18n(
+      <KnowledgeSidebar selectedPath={null} onSelect={onSelect} onCreate={onCreate} onDeleted={onDeleted} />,
+    );
+    fireEvent.contextMenu(screen.getByText("readme.md"));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Delete note" }));
+    expect(deleteDoc).not.toHaveBeenCalled();
+    expect(screen.getByRole("alertdialog")).toHaveTextContent("This note will be removed from the shared folder.");
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(deleteDoc).not.toHaveBeenCalled();
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+
+    fireEvent.contextMenu(screen.getByText("readme.md"));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Delete note" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(deleteDoc).toHaveBeenCalledWith({ path: "mbp/readme.md" }));
+    expect(onDeleted).toHaveBeenCalledWith("mbp/readme.md");
+  });
+
+  it("asks before deleting a folder and its contents", async () => {
+    renderWithI18n(<KnowledgeSidebar selectedPath={null} onSelect={onSelect} onCreate={onCreate} />);
+    fireEvent.contextMenu(screen.getByText("Strategy"));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Delete folder" }));
+    expect(deleteDoc).not.toHaveBeenCalled();
+    expect(screen.getByRole("alertdialog")).toHaveTextContent("This folder and everything in it will be removed.");
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(deleteDoc).toHaveBeenCalledWith({ path: "mbp/Strategy" }));
+  });
+
+  it("does not offer rename or delete on a machine share", async () => {
+    renderWithI18n(<KnowledgeSidebar selectedPath={null} onSelect={onSelect} onCreate={onCreate} />);
+    fireEvent.contextMenu(screen.getByRole("button", { name: /^mbp/ }));
+    expect(await screen.findByRole("menuitem", { name: "New folder here" })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Rename" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Delete folder" })).toBeNull();
   });
 
   it("does not expand a folder when the pointer rests on a note", () => {

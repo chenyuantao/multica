@@ -29,6 +29,15 @@ type docsMoveRequest struct {
 	Dest string `json:"dest"`
 }
 
+type docsRenameRequest struct {
+	Path string `json:"path"`
+	Name string `json:"name"`
+}
+
+type docsDeleteResult struct {
+	Path string `json:"path"`
+}
+
 // PostDocsTree returns every machine share the caller can use as a nested
 // directory tree. Only markdown files are included, and directories with no
 // markdown left after that filter are omitted.
@@ -164,6 +173,88 @@ func (h *Handler) PostDocsMove(w http.ResponseWriter, r *http.Request) {
 	result.From = fileshare.Join(machine, result.From)
 	result.Path = fileshare.Join(machine, result.Path)
 	writeJSON(w, http.StatusOK, result)
+}
+
+// PostDocsFolder creates one directory inside a shared directory. The machine
+// name alone is the share root and is not a directory that can be created.
+func (h *Handler) PostDocsFolder(w http.ResponseWriter, r *http.Request) {
+	var req docsPathRequest
+	if !decodeDocsBody(w, r, &req) {
+		return
+	}
+	target, ok := h.resolveDocsPath(w, r, req.Path)
+	if !ok {
+		return
+	}
+	if target.rel == "" {
+		writeDocsVaultError(w, r, obsidianvault.ErrInvalidPath)
+		return
+	}
+	ctx, cancel := h.shareContext(r)
+	defer cancel()
+	var result obsidianvault.Entry
+	if err := target.peer.Call(ctx, fileshare.OpMkdir, map[string]string{"path": target.rel}, &result); err != nil {
+		writeShareError(w, r, err)
+		return
+	}
+	machine := target.peer.Meta().Machine
+	h.FileShares.Invalidate(machine)
+	result.Path = fileshare.Join(machine, result.Path)
+	writeJSON(w, http.StatusCreated, result)
+}
+
+// PostDocsRename changes a note or directory name on the same machine.
+func (h *Handler) PostDocsRename(w http.ResponseWriter, r *http.Request) {
+	var req docsRenameRequest
+	if !decodeDocsBody(w, r, &req) {
+		return
+	}
+	target, ok := h.resolveDocsPath(w, r, req.Path)
+	if !ok {
+		return
+	}
+	if target.rel == "" {
+		writeDocsVaultError(w, r, obsidianvault.ErrInvalidPath)
+		return
+	}
+	ctx, cancel := h.shareContext(r)
+	defer cancel()
+	var result obsidianvault.MoveResult
+	if err := target.peer.Call(ctx, fileshare.OpRename, map[string]string{"path": target.rel, "name": req.Name}, &result); err != nil {
+		writeShareError(w, r, err)
+		return
+	}
+	machine := target.peer.Meta().Machine
+	h.FileShares.Invalidate(machine)
+	result.From = fileshare.Join(machine, result.From)
+	result.Path = fileshare.Join(machine, result.Path)
+	writeJSON(w, http.StatusOK, result)
+}
+
+// PostDocsDelete removes a markdown note, or a directory and everything inside
+// it. The share root itself is refused.
+func (h *Handler) PostDocsDelete(w http.ResponseWriter, r *http.Request) {
+	var req docsPathRequest
+	if !decodeDocsBody(w, r, &req) {
+		return
+	}
+	target, ok := h.resolveDocsPath(w, r, req.Path)
+	if !ok {
+		return
+	}
+	if target.rel == "" {
+		writeDocsVaultError(w, r, obsidianvault.ErrInvalidPath)
+		return
+	}
+	ctx, cancel := h.shareContext(r)
+	defer cancel()
+	if err := target.peer.Call(ctx, fileshare.OpDelete, map[string]string{"path": target.rel}, nil); err != nil {
+		writeShareError(w, r, err)
+		return
+	}
+	machine := target.peer.Meta().Machine
+	h.FileShares.Invalidate(machine)
+	writeJSON(w, http.StatusOK, docsDeleteResult{Path: fileshare.Join(machine, target.rel)})
 }
 
 // PostDocsFile creates a markdown note inside an existing shared directory.

@@ -5,6 +5,8 @@ import {
   ancestorDirs,
   findNode,
   flattenFiles,
+  folderName,
+  joinDocPath,
   joinFrontmatter,
   noteFileName,
   parentDir,
@@ -48,6 +50,18 @@ describe("noteFileName", () => {
 
   it("rejects names that are not one visible file", () => {
     for (const name of ["", "  ", ".hidden", "a/b", "a\\b", ".md"]) expect(noteFileName(name)).toBeNull();
+  });
+});
+
+describe("folderName", () => {
+  it("keeps a single visible folder name", () => {
+    expect(folderName(" 归档 ")).toBe("归档");
+    expect(joinDocPath("mbp/Strategy", "归档")).toBe("mbp/Strategy/归档");
+    expect(joinDocPath("", "归档")).toBe("归档");
+  });
+
+  it("rejects names that are not one visible folder", () => {
+    for (const name of ["", "  ", ".hidden", "a/b", "a\\b"]) expect(folderName(name)).toBeNull();
   });
 });
 

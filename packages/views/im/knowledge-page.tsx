@@ -49,6 +49,10 @@ export function KnowledgePage() {
     const next = relocatedDocPath(selectedPath, result.from, result.path);
     if (next) navigation.replace(paths.knowledgeFile(next));
   };
+  const onDeleted = (path: string) => {
+    if (!selectedPath) return;
+    if (selectedPath === path || selectedPath.startsWith(`${path}/`)) navigation.replace(paths.knowledge());
+  };
   const launcher = useAskAILauncher(() =>
     selectedPath ? noteAskPage(selectedPath, qc.getQueryData<DocFile>(docsKeys.file(selectedPath))) : null,
   );
@@ -126,6 +130,8 @@ export function KnowledgePage() {
               onCreate={(dir) => navigation.push(paths.knowledgeNewNote(dir))}
               onOpenSearch={() => navigation.push(paths.knowledgeSearch())}
               onMoved={onMoved}
+              onRenamed={onMoved}
+              onDeleted={onDeleted}
               className="w-auto min-w-0 flex-1 border-r-0"
             />
           </MobileTabScreen>
@@ -144,6 +150,8 @@ export function KnowledgePage() {
         onCreate={setCreateDir}
         onOpenSearch={() => navigation.push(paths.knowledgeSearch())}
         onMoved={onMoved}
+        onRenamed={onMoved}
+        onDeleted={onDeleted}
       />
       <div className="relative flex min-w-0 flex-1">
         {selectedPath ? (

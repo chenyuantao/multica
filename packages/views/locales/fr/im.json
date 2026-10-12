@@ -222,6 +222,10 @@
     "search": "Rechercher des notes",
     "new_note": "Nouvelle note",
     "new_note_here": "Nouvelle note ici",
+    "new_folder_here": "Nouveau dossier ici",
+    "rename": "Renommer",
+    "delete_note": "Supprimer la note",
+    "delete_folder": "Supprimer le dossier",
     "copy_path": "Copier le chemin",
     "path_copied": "Chemin copié",
     "move_failed": "Impossible de déplacer",
@@ -260,6 +264,28 @@
       "failed": "Impossible de créer la note",
       "create": "Créer",
       "cancel": "Annuler"
+    },
+    "folder_dialog": {
+      "title": "Nouveau dossier",
+      "placeholder": "Dossier sans titre",
+      "exists": "Un élément portant ce nom existe déjà",
+      "failed": "Impossible de créer le dossier",
+      "create": "Créer"
+    },
+    "rename_dialog": {
+      "title": "Renommer",
+      "exists": "Un élément portant ce nom existe déjà",
+      "failed": "Impossible de renommer",
+      "save": "Renommer"
+    },
+    "delete_dialog": {
+      "title": "Supprimer « {{name}} » ?",
+      "note": "Cette note sera retirée du dossier partagé.",
+      "folder": "Ce dossier et tout ce qu'il contient seront retirés.",
+      "confirm": "Supprimer",
+      "cancel": "Annuler",
+      "deleting": "Suppression…",
+      "failed": "Impossible de supprimer"
     }
   },
   "search": {

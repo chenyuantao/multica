@@ -57,3 +57,28 @@ export interface DocMoveResult {
   name: string;
   type: DocNodeType;
 }
+
+/** Create one directory. `path` includes the parent and the new folder name. */
+export interface CreateDocFolderRequest {
+  path: string;
+}
+
+export interface DocFolderResult {
+  path: string;
+  name: string;
+  type: DocNodeType;
+}
+
+/** Rename a note or folder in place. `name` is the new filename, not a path. */
+export interface RenameDocRequest {
+  path: string;
+  name: string;
+}
+
+export interface DeleteDocRequest {
+  path: string;
+}
+
+export interface DocDeleteResult {
+  path: string;
+}
