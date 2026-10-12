@@ -239,6 +239,52 @@ describe("Attachment — image dispatch", () => {
     expect(screen.queryByTitle("Delete")).toBeNull();
   });
 
+  it("opens the preview from the picture while editing on a coarse pointer", async () => {
+    vi.spyOn(window, "matchMedia").mockImplementation((query: string) => ({
+      matches: query === "(pointer: coarse)",
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    }) as MediaQueryList);
+    renderWithQuery(
+      <Attachment
+        attachment={{
+          kind: "url",
+          url: "https://external.example/chart.png",
+          filename: "chart.png",
+          forceKind: "image",
+        }}
+        editable
+      />,
+    );
+    const figure = document.querySelector(".image-figure");
+    await waitFor(() => expect(figure).toHaveAttribute("data-clickable", "true"));
+    fireEvent.click(figure!);
+    expect(screen.getByRole("dialog").querySelector("img")).toBeTruthy();
+  });
+
+  it("keeps an image click in the editor from opening the preview on a fine pointer", () => {
+    renderWithQuery(
+      <Attachment
+        attachment={{
+          kind: "url",
+          url: "https://external.example/chart.png",
+          filename: "chart.png",
+          forceKind: "image",
+        }}
+        editable
+      />,
+    );
+    const figure = document.querySelector(".image-figure");
+    expect(figure).not.toHaveAttribute("data-clickable");
+    fireEvent.click(figure!);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
   it("editable image shows Trash button and wires onDelete", () => {
     const att = makeRecord();
     const onDelete = vi.fn();

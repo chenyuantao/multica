@@ -33,7 +33,7 @@ import {
   Maximize2,
   Trash2,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { cn } from "@multica/ui/lib/utils";
 import { copyText } from "@multica/ui/lib/clipboard";
@@ -512,6 +512,17 @@ function ImageAttachmentView({
   className,
 }: ImageAttachmentViewProps) {
   const { t } = useT("editor");
+  // A phone cannot hover the toolbar. Tapping the picture opens the preview
+  // even while the note is being edited.
+  const [coarsePointer, setCoarsePointer] = useState(false);
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const query = window.matchMedia("(pointer: coarse)");
+    const apply = () => setCoarsePointer(query.matches);
+    apply();
+    query.addEventListener("change", apply);
+    return () => query.removeEventListener("change", apply);
+  }, []);
 
   const handleCopyLink = async () => {
     if (await copyText(linkUrl)) {
@@ -521,12 +532,10 @@ function ImageAttachmentView({
     }
   };
 
-  // Click on figure opens the preview only in non-editor / non-uploading
-  // surfaces — inside the editor we let ProseMirror own the click for
-  // selection / cursor placement and route preview through the explicit
-  // Maximize button. The CSS rule `.image-figure[data-clickable="true"] {
-  // cursor: zoom-in }` keys off this same flag for the cursor affordance.
-  const clickable = !editable && !uploading;
+  // A fine pointer keeps the click for the editor caret and uses the
+  // Maximize button. A coarse pointer has no hover, so the picture itself
+  // opens the preview. `.image-figure[data-clickable="true"]` is the zoom cursor.
+  const clickable = !uploading && (!editable || coarsePointer);
 
   // DOM mirrors the original ReadonlyImage (span-only chain so it stays
   // valid HTML5 when rendered inside a markdown <p>). In editor surfaces

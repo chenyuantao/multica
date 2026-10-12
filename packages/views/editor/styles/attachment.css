@@ -69,8 +69,16 @@
   z-index: 1;
 }
 
-.image-figure:hover .image-toolbar {
+.image-figure:hover .image-toolbar,
+.image-figure:focus-within .image-toolbar {
   opacity: 1;
+}
+
+/* A phone has no hover, so the view/download controls stay visible. */
+@media (hover: none) {
+  .image-toolbar {
+    opacity: 1;
+  }
 }
 
 .image-toolbar button {

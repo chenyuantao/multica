@@ -15,12 +15,23 @@
 }
 
 /* Editor-only overrides: center the figure inside the NodeView and cap
- * width so an oversize paste doesn't blow out the editor column. */
+ * width so an oversize paste doesn't blow out the editor column.
+ * The image keeps its intrinsic width (`auto`). A percentage width inside
+ * the shrink-to-fit figure collapses a wide vault photo to nothing. */
 .rich-text-editor .image-node {
   display: block !important;
   text-align: center;
 }
 
 .rich-text-editor .image-figure {
+  display: block;
+  width: fit-content;
   max-width: min(100%, 640px);
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.rich-text-editor .image-content {
+  width: auto;
+  max-width: 100%;
 }
