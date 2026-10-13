@@ -203,6 +203,14 @@
     "cancel": "キャンセル",
     "failed": "チャットを作成できませんでした"
   },
+  "new_task": {
+    "title": "今日のタスク",
+    "description": "Enter で作成。⌘、Shift、Ctrl と Enter で改行。",
+    "placeholder": "やることを書く。@ で人やエージェントをメンション",
+    "label": "タスク",
+    "create": "作成",
+    "failed": "タスクを作成できませんでした"
+  },
   "add_member": {
     "title": "メンバーを追加",
     "description": "追加された相手は会話履歴をすべて閲覧できます。",

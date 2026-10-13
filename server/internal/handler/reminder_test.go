@@ -151,6 +151,35 @@ func TestReminderListsOnlyOnTheReminderPage(t *testing.T) {
 	}
 }
 
+func TestTaskReminderStaysInTheChatListWithoutMessages(t *testing.T) {
+	other := groupChatWorkspaceMember(t, "Task Reminder Ada", "task-reminder-ada@multica.test")
+	note := "Ask [@Ada](mention://member/" + other + ") to book the room"
+	created := newReminderWith(t, map[string]any{"description": note, "due_date": "2026-10-13", "task": true})
+	if !created.Task || created.DueDate == nil || *created.DueDate != "2026-10-13" {
+		t.Fatalf("task reminder = %+v, want a todo due 2026-10-13", created)
+	}
+	var ada bool
+	for _, member := range created.Members {
+		if member.MemberType == "member" && member.MemberID == other {
+			ada = true
+		}
+	}
+	if !ada {
+		t.Fatalf("members = %+v, want the mentioned person", created.Members)
+	}
+	listed := findChat(listChatsAs(t, testUserID), created.ID)
+	if listed == nil || !listed.Task || listed.LastCommentAt != nil {
+		t.Fatalf("chat list task = %+v, want it listed with no messages", listed)
+	}
+	if findChat(listChatsAs(t, other), created.ID) == nil {
+		t.Fatal("mentioned person does not see the task chat")
+	}
+	plain := newReminder(t, "Keep this off the chat list", "2026-10-13")
+	if findChat(listChatsAs(t, testUserID), plain.ID) != nil {
+		t.Fatal("reminder without messages appears in the IM chat list")
+	}
+}
+
 func TestReminderWithoutAgentStartsNoRun(t *testing.T) {
 	reminder := newReminder(t, "Water the plants", "")
 	postReminderMessage(t, reminder.ID, "every two days").Want(http.StatusCreated)

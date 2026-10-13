@@ -29,9 +29,10 @@ import (
 // and agents join when someone @mentions them in that note, in the title, or
 // in a message. A mention in the note or the title assigns the agent and
 // starts a run, so the person does not send a separate message. Until it has
-// a message it stays off the IM chat list. Once it has one, it appears there
-// as a task chat and sorts with the other conversations. It never appears in
-// the issue lists.
+// a message it stays off the IM chat list, unless it was created as a task
+// chat: those stay listed with an empty thread. Once it has a message, it
+// appears there as a task chat and sorts with the other conversations. It
+// never appears in the issue lists.
 
 const (
 	reminderOrigin    = "reminder"
@@ -82,6 +83,8 @@ type CreateReminderRequest struct {
 	// ?tz= when present, otherwise the timezone on their profile, otherwise UTC.
 	DueDate  *string  `json:"due_date"`
 	Position *float64 `json:"position"`
+	// Task lists the reminder in IM immediately, before it has a message.
+	Task bool `json:"task"`
 }
 
 // reminderNow is the clock behind a due_date of "today". Tests pin it.
@@ -154,6 +157,14 @@ func (h *Handler) CreateReminder(w http.ResponseWriter, r *http.Request) {
 		slog.Warn("create reminder failed", append(logger.RequestAttrs(r), "error", err)...)
 		writeError(w, http.StatusInternalServerError, "failed to create reminder")
 		return
+	}
+	if req.Task {
+		if err := h.Queries.MarkIssueTaskChat(ctx, res.Issue.ID); err != nil {
+			slog.Warn("mark task reminder failed", append(logger.RequestAttrs(r), "error", err)...)
+			writeError(w, http.StatusInternalServerError, "failed to create reminder")
+			return
+		}
+		res.Issue.IsTaskChat = true
 	}
 	h.subscribeGroupChatMember(ctx, res.Issue.ID, creator)
 	h.dispatchReminderTitleMentions(r, res.Issue, description, "")
@@ -550,6 +561,38 @@ func (h *Handler) admitReminderMentionedAgents(r *http.Request, issue db.Issue, 
 			continue
 		}
 		added = true
+	}
+	// A task chat can name a person. They join the chat; a reminder that is
+	// not a task chat still only admits agents.
+	if issue.IsTaskChat {
+		for _, m := range util.ParseMentions(content) {
+			if m.Type != "member" {
+				continue
+			}
+			id, err := util.ParseUUID(m.ID)
+			if err != nil {
+				continue
+			}
+			if _, err := h.Queries.GetMemberByUserAndWorkspace(ctx, db.GetMemberByUserAndWorkspaceParams{
+				UserID:      id,
+				WorkspaceID: issue.WorkspaceID,
+			}); err != nil {
+				continue
+			}
+			if err := h.Queries.AddIssueMember(ctx, db.AddIssueMemberParams{
+				IssueID:     issue.ID,
+				WorkspaceID: issue.WorkspaceID,
+				MemberType:  "member",
+				MemberID:    id,
+				AddedByType: pgtype.Text{String: "member", Valid: true},
+				AddedByID:   parseUUID(actorID),
+			}); err != nil {
+				slog.Warn("add mentioned member to task chat failed", "issue_id", uuidToString(issue.ID), "user_id", m.ID, "error", err)
+				continue
+			}
+			h.subscribeGroupChatMember(ctx, issue.ID, service.IssueMemberRef{Type: "member", ID: id})
+			added = true
+		}
 	}
 	if added {
 		h.publishGroupChatUpdated(workspaceID, actorID, issue.ID)

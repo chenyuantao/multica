@@ -205,6 +205,14 @@
     "cancel": "Cancel",
     "failed": "Couldn't create the chat"
   },
+  "new_task": {
+    "title": "Today's task",
+    "description": "Enter creates it. Command, Shift, or Control with Enter starts a new line.",
+    "placeholder": "What to do — @ to mention someone",
+    "label": "Task",
+    "create": "Create",
+    "failed": "Couldn't create the task"
+  },
   "add_member": {
     "title": "Add member",
     "description": "They'll see the whole conversation.",

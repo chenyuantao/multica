@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { api } from "../api";
 import { groupChatKeys } from "../group-chats/queries";
-import type { CreateReminderRequest, Reminder, ReminderPatch } from "../types";
+import type { CreateReminderRequest, GroupChat, Reminder, ReminderPatch } from "../types";
 import { reminderKeys } from "./queries";
 
 /** Issue metadata key that pins an unfinished reminder above the days. */
@@ -24,12 +24,20 @@ export function useCreateReminder(wsId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: CreateReminderRequest) => api.createReminder(data),
-    onSuccess: (created) => {
+    onSuccess: (created, vars) => {
       qc.setQueriesData<Reminder[]>({ queryKey: reminderKeys.all(wsId) }, (old) =>
         old && !old.some((r) => r.id === created.id) ? [...old, created] : old,
       );
+      if (vars.task) {
+        qc.setQueryData<GroupChat[]>(groupChatKeys.list(wsId), (old) =>
+          old && !old.some((chat) => chat.id === created.id) ? [created, ...old] : old,
+        );
+      }
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: reminderKeys.all(wsId) }),
+    onSettled: (_created, _err, vars) => {
+      qc.invalidateQueries({ queryKey: reminderKeys.all(wsId) });
+      if (vars.task) qc.invalidateQueries({ queryKey: groupChatKeys.list(wsId) });
+    },
   });
 }
 

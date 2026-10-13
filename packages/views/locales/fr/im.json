@@ -205,6 +205,14 @@
     "cancel": "Annuler",
     "failed": "Impossible de créer la discussion"
   },
+  "new_task": {
+    "title": "Tâche du jour",
+    "description": "Entrée crée la tâche. Commande, Maj ou Contrôle avec Entrée passe à la ligne.",
+    "placeholder": "Ce qu'il faut faire — @ pour mentionner quelqu'un",
+    "label": "Tâche",
+    "create": "Créer",
+    "failed": "Impossible de créer la tâche"
+  },
   "add_member": {
     "title": "Ajouter un membre",
     "description": "Cette personne verra toute la conversation.",

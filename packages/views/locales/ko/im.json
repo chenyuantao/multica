@@ -203,6 +203,14 @@
     "cancel": "취소",
     "failed": "채팅을 만들지 못했습니다"
   },
+  "new_task": {
+    "title": "오늘의 태스크",
+    "description": "Enter로 만듭니다. ⌘, Shift 또는 Ctrl과 Enter로 줄을 바꿉니다.",
+    "placeholder": "할 일을 적고 @로 사람이나 에이전트를 멘션",
+    "label": "태스크",
+    "create": "만들기",
+    "failed": "태스크를 만들지 못했습니다"
+  },
   "add_member": {
     "title": "멤버 추가",
     "description": "추가된 사람은 전체 대화 기록을 볼 수 있습니다.",

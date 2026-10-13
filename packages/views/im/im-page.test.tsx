@@ -2,7 +2,8 @@
 
 import { useState, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, screen, within } from "@testing-library/react";
+import { act, fireEvent, screen, within } from "@testing-library/react";
+import { configureShortcutPlatform } from "@multica/core/shortcuts";
 import type { GroupChat } from "@multica/core/types";
 import { renderWithI18n } from "../test/i18n";
 import { NavigationProvider, type NavigationAdapter } from "../navigation";
@@ -148,6 +149,9 @@ vi.mock("./chat-details-panel", () => ({
 vi.mock("./new-chat-dialog", () => ({
   NewChatDialog: ({ presentation }: { presentation?: string }) =>
     presentation === "page" ? <p>new chat form</p> : null,
+}));
+vi.mock("./new-task-dialog", () => ({
+  NewTaskDialog: ({ open }: { open: boolean }) => (open ? <p>new task</p> : null),
 }));
 vi.mock("../modals/create-agent", () => ({
   CreateAgentModal: ({ presentation }: { presentation?: string }) => <p>{`create agent ${presentation}`}</p>,
@@ -512,5 +516,40 @@ describe("ImPage sidebar tabs per chat", () => {
     fireEvent.click(screen.getByRole("button", { name: "select chat" }));
     expect(screen.getByRole("tab", { name: "c1" })).toHaveAttribute("aria-selected", "true");
     expect(screen.queryByRole("tab", { name: "c2" })).not.toBeInTheDocument();
+  });
+});
+
+describe("ImPage new task shortcut", () => {
+  beforeEach(() => {
+    configureShortcutPlatform("macos");
+  });
+
+  it("opens today's task dialog from Command+N on chats and swallows the chord", () => {
+    renderPage("chats");
+    expect(screen.queryByText("new task")).not.toBeInTheDocument();
+    const later = vi.fn();
+    document.addEventListener("keydown", later);
+    const event = new KeyboardEvent("keydown", { key: "n", metaKey: true, bubbles: true, cancelable: true });
+    act(() => {
+      document.body.dispatchEvent(event);
+    });
+    document.removeEventListener("keydown", later);
+    expect(event.defaultPrevented).toBe(true);
+    expect(later).not.toHaveBeenCalled();
+    expect(screen.getByText("new task")).toBeInTheDocument();
+  });
+
+  it("swallows a held Command+N without reopening", () => {
+    renderPage("chats");
+    const held = new KeyboardEvent("keydown", { key: "n", metaKey: true, repeat: true, bubbles: true, cancelable: true });
+    document.body.dispatchEvent(held);
+    expect(held.defaultPrevented).toBe(true);
+    expect(screen.queryByText("new task")).not.toBeInTheDocument();
+  });
+
+  it("leaves Command+N alone on contacts", () => {
+    renderPage("contacts");
+    fireEvent.keyDown(document, { key: "n", metaKey: true });
+    expect(screen.queryByText("new task")).not.toBeInTheDocument();
   });
 });

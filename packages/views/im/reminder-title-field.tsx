@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { isImeComposing } from "@multica/core/utils";
 import { cn } from "@multica/ui/lib/utils";
@@ -22,6 +22,11 @@ interface ReminderTitleFieldProps {
   placeholder?: string;
   ariaLabel: string;
   inputClassName?: string;
+  /** A textarea. Enter still commits; Command, Shift, or Control with Enter inserts a line. */
+  multiline?: boolean;
+  /** Blur commits a single-line title. A dialog commits from Enter and its button. */
+  commitOnBlur?: boolean;
+  id?: string;
 }
 
 /**
@@ -41,9 +46,12 @@ export function ReminderTitleField({
   placeholder,
   ariaLabel,
   inputClassName,
+  multiline = false,
+  commitOnBlur = true,
+  id,
 }: ReminderTitleFieldProps) {
   const { t } = useT("im");
-  const ref = useRef<HTMLInputElement>(null);
+  const ref = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
   const pendingCaret = useRef<number | null>(null);
   const [caret, setCaret] = useState(value.length);
   const [highlight, setHighlight] = useState(0);
@@ -96,7 +104,17 @@ export function ReminderTitleField({
     };
   }, [menuOpen, mention?.query, value]);
 
-  const readCaret = (el: HTMLInputElement) => setCaret(el.selectionStart ?? el.value.length);
+  const readCaret = (el: HTMLInputElement | HTMLTextAreaElement) => setCaret(el.selectionStart ?? el.value.length);
+
+  const insertNewline = () => {
+    const el = ref.current;
+    if (!el) return;
+    const start = el.selectionStart ?? value.length;
+    const end = el.selectionEnd ?? start;
+    const next = value.slice(0, start) + "\n" + value.slice(end);
+    pendingCaret.current = start + 1;
+    onChange(next);
+  };
 
   const insertMention = (m: ComposerMention) => {
     if (!mention) return;
@@ -108,7 +126,7 @@ export function ReminderTitleField({
     setDismissedAt(null);
   };
 
-  const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+  const onKeyDown = (e: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     if (isImeComposing(e)) return;
     if (menuOpen) {
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
@@ -129,6 +147,11 @@ export function ReminderTitleField({
         return;
       }
     }
+    if (e.key === "Enter" && multiline && (e.shiftKey || e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      insertNewline();
+      return;
+    }
     if (e.key === "Enter") {
       e.preventDefault();
       onCommit();
@@ -138,28 +161,48 @@ export function ReminderTitleField({
     }
   };
 
+  const fieldClass = cn("w-full bg-transparent text-body outline-none placeholder:text-muted-foreground", inputClassName);
+  const shared = {
+    id,
+    autoFocus: true as const,
+    value,
+    disabled,
+    onKeyDown,
+    placeholder,
+    "aria-label": ariaLabel,
+    "aria-autocomplete": "list" as const,
+    "aria-expanded": menuOpen,
+    "aria-controls": menuOpen ? "reminder-mention-list" : undefined,
+    className: fieldClass,
+  };
+
   return (
     <div className="min-w-0 flex-1">
-      <input
-        ref={ref}
-        autoFocus
-        value={value}
-        disabled={disabled}
-        onChange={(e) => {
-          onChange(e.target.value);
-          readCaret(e.target);
-        }}
-        onKeyDown={onKeyDown}
-        onKeyUp={(e) => readCaret(e.currentTarget)}
-        onClick={(e) => readCaret(e.currentTarget)}
-        onBlur={onCommit}
-        placeholder={placeholder}
-        aria-label={ariaLabel}
-        aria-autocomplete="list"
-        aria-expanded={menuOpen}
-        aria-controls={menuOpen ? "reminder-mention-list" : undefined}
-        className={cn("w-full bg-transparent text-body outline-none placeholder:text-muted-foreground", inputClassName)}
-      />
+      {multiline ? (
+        <textarea
+          {...shared}
+          ref={ref as RefObject<HTMLTextAreaElement | null>}
+          rows={4}
+          onChange={(e) => {
+            onChange(e.target.value);
+            readCaret(e.target);
+          }}
+          onKeyUp={(e) => readCaret(e.currentTarget)}
+          onClick={(e) => readCaret(e.currentTarget)}
+        />
+      ) : (
+        <input
+          {...shared}
+          ref={ref as RefObject<HTMLInputElement | null>}
+          onChange={(e) => {
+            onChange(e.target.value);
+            readCaret(e.target);
+          }}
+          onKeyUp={(e) => readCaret(e.currentTarget)}
+          onClick={(e) => readCaret(e.currentTarget)}
+          onBlur={commitOnBlur ? onCommit : undefined}
+        />
+      )}
       {errorName && (
         <p className="text-caption text-destructive" role="alert">
           {t(($) => $.composer.ambiguous, { name: errorName })}

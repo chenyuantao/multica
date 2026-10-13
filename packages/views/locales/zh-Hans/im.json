@@ -203,6 +203,14 @@
     "cancel": "取消",
     "failed": "群聊创建失败"
   },
+  "new_task": {
+    "title": "今天的任务",
+    "description": "回车创建。⌘、Shift 或 Ctrl 加回车换行。",
+    "placeholder": "写下要做的事，输入 @ 提到人或智能体",
+    "label": "任务",
+    "create": "创建",
+    "failed": "任务创建失败"
+  },
   "add_member": {
     "title": "添加成员",
     "description": "对方能看到完整的聊天记录。",

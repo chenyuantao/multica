@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { MessagesSquare, UsersRound } from "lucide-react";
 import { toast } from "sonner";
 import { useAuthStore } from "@multica/core/auth";
+import { isImeComposing } from "@multica/core/utils";
+import { createShortcutChord, isPortalLayerShortcutTarget, shortcutMatchesEvent } from "@multica/core/shortcuts";
 import { useWorkspaceId } from "@multica/core/hooks";
 import { useModalStore } from "@multica/core/modals";
 import { useWorkspacePaths } from "@multica/core/paths";
@@ -27,6 +29,7 @@ import { ImSearchDialog } from "./im-search-dialog";
 import { MobileContactDetail, MobileLevel, MobileTabScreen, parseContactParam } from "./mobile-shell";
 import { chatDisplayTitle, sortChats } from "./im-utils";
 import { NewChatDialog } from "./new-chat-dialog";
+import { NewTaskDialog } from "./new-task-dialog";
 import { CreateAgentModal } from "../modals/create-agent";
 import { useAskAILauncher } from "./use-ask-ai-launcher";
 import { entryKey, useChatDirectory, type DirectoryEntry } from "./use-chat-directory";
@@ -57,6 +60,9 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
   const { getActorName } = useActorName();
   const { data = EMPTY_CHATS, isLoading, isError } = useQuery(groupChatListOptions(wsId));
   const [newChatOpen, setNewChatOpen] = useState(false);
+  const [newTaskOpen, setNewTaskOpen] = useState(false);
+  /** The task just created from Cmd+N, so its composer takes focus once. */
+  const [composerFocusId, setComposerFocusId] = useState<string | null>(null);
   const contactTarget = parseContactParam(navigation.searchParams.get("contact"));
   const directory = useChatDirectory(wsId);
   const setPinned = useSetGroupChatPinned(wsId);
@@ -100,6 +106,22 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
 
   const select = (chatId: string) =>
     isMobile ? navigation.push(paths.imChat(chatId)) : navigation.replace(paths.imChat(chatId));
+
+  useEffect(() => {
+    if (view !== "chats") return;
+    // Capture on window so the chord is swallowed before anything else, a
+    // held key included, can treat Cmd+N as "new window".
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (isImeComposing(e)) return;
+      if (!shortcutMatchesEvent(createShortcutChord("N", { primary: true }), e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.repeat || newTaskOpen || isPortalLayerShortcutTarget(e.target)) return;
+      setNewTaskOpen(true);
+    };
+    window.addEventListener("keydown", onKeyDown, { capture: true });
+    return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
+  }, [newTaskOpen, view]);
 
   const openMemberChat = (chatId: string) =>
     isMobile ? navigation.push(paths.memberChat(chatId)) : navigation.replace(paths.memberChat(chatId));
@@ -145,6 +167,15 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
         open={newChatOpen}
         onOpenChange={setNewChatOpen}
         onCreated={(chat) => select(chat.id)}
+      />
+      <NewTaskDialog
+        wsId={wsId}
+        open={newTaskOpen}
+        onOpenChange={setNewTaskOpen}
+        onCreated={(reminder) => {
+          setComposerFocusId(reminder.id);
+          select(reminder.id);
+        }}
       />
       <ImSearchDialog
         {...launcher.dialog}
@@ -311,6 +342,7 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
           backLabel={t(($) => $.thread.back)}
           state={conversation}
           onAskAI={launcher.show}
+          focusComposer={composerFocusId === requested.id}
         />
       );
     }
@@ -393,6 +425,7 @@ export function ImPage({ view = "chats" }: { view?: ImView }) {
               backLabel={t(($) => $.thread.back)}
               state={conversation}
               onAskAI={launcher.show}
+              focusComposer={composerFocusId === selected.id}
             />
           ) : (
             <div className="flex flex-1 flex-col">

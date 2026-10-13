@@ -32,8 +32,9 @@ SELECT EXISTS (
 -- name: ListGroupChatsForMember :many
 -- Group chats the given person/agent belongs to: the ones they pinned first,
 -- then newest message first. Chats without messages yet sort by their
--- creation time. A reminder stays off this list until it has a message;
--- once it does, it sorts with the other chats.
+-- creation time. A reminder stays off this list until it has a message,
+-- unless it is a task chat: task chats stay listed with an empty thread.
+-- Once a reminder has a message, it sorts with the other chats.
 SELECT i.* FROM issue i
 JOIN issue_member m
   ON m.issue_id = i.id
@@ -44,6 +45,7 @@ WHERE i.workspace_id = @workspace_id
   AND (
     i.origin_type IS DISTINCT FROM 'reminder'
     OR i.last_comment_at IS NOT NULL
+    OR i.is_task_chat
   )
 ORDER BY (m.pinned_at IS NOT NULL) DESC, COALESCE(i.last_comment_at, i.created_at) DESC, i.id DESC
 LIMIT @row_limit;

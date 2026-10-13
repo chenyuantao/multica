@@ -154,6 +154,8 @@ export interface CreateReminderRequest {
   description: string;
   due_date?: string | null;
   position?: number;
+  /** List it in IM before it has a message. */
+  task?: boolean;
 }
 
 /** Fields a reminder row edits in place. */
