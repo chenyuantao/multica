@@ -18,6 +18,7 @@ import (
 	"github.com/multica-ai/multica/server/internal/groupchat"
 	"github.com/multica-ai/multica/server/internal/logger"
 	"github.com/multica-ai/multica/server/internal/service"
+	"github.com/multica-ai/multica/server/internal/util"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
 	"github.com/multica-ai/multica/server/pkg/protocol"
 )
@@ -309,6 +310,10 @@ func (h *Handler) StartMikaTaskChat(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "title is too long")
 		return
 	}
+	req.MentionAgentID = strings.TrimSpace(req.MentionAgentID)
+	if !h.allowMikaTaskDelegation(w, r, member.WorkspaceID, req) {
+		return
+	}
 
 	refs, mentionName, ok := h.mikaTaskMembers(w, r, member, userID, req)
 	if !ok {
@@ -347,6 +352,7 @@ func (h *Handler) StartMikaTaskChat(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		members = nil
 	}
+	h.finishMikaTaskAfterHandoff(r, member.WorkspaceID, mentionName)
 	writeJSON(w, http.StatusCreated, struct {
 		Chat    GroupChatResponse `json:"chat"`
 		Message CommentResponse   `json:"message"`
@@ -354,6 +360,96 @@ func (h *Handler) StartMikaTaskChat(w http.ResponseWriter, r *http.Request) {
 		Chat:    h.groupChatDetail(r.Context(), issue, members, userID),
 		Message: message,
 	})
+}
+
+const (
+	mikaSelfDelegationError  = "a task group cannot be delegated to Mika"
+	mikaMentionRequiredError = "mention_agent_id must name another agent"
+)
+
+// allowMikaTaskDelegation refuses a task group whose work would land on Mika.
+// Naming her, or leaving the mention empty while she is the caller — which
+// adds her as the only agent and the single-agent route then starts her —
+// is the self-delegation that runs the same job twice.
+func (h *Handler) allowMikaTaskDelegation(w http.ResponseWriter, r *http.Request, workspaceID pgtype.UUID, req mikaStartRequest) bool {
+	if req.MentionAgentID != "" {
+		mentionID, ok := parseUUIDOrBadRequest(w, req.MentionAgentID, "mention_agent_id")
+		if !ok {
+			return false
+		}
+		agent, err := h.Queries.GetAgentInWorkspace(r.Context(), db.GetAgentInWorkspaceParams{ID: mentionID, WorkspaceID: workspaceID})
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "agent not found in this workspace")
+			return false
+		}
+		if agent.SystemKey.String == service.MikaSystemKey {
+			writeError(w, http.StatusBadRequest, mikaSelfDelegationError)
+			return false
+		}
+	}
+	caller, ok := h.callingMikaAgent(r, workspaceID)
+	if ok && req.MentionAgentID == "" {
+		writeError(w, http.StatusBadRequest, mikaMentionRequiredError)
+		return false
+	}
+	if ok && strings.Contains(req.Content, "mention://agent/"+uuidToString(caller.ID)) {
+		writeError(w, http.StatusBadRequest, mikaSelfDelegationError)
+		return false
+	}
+	return true
+}
+
+// callingMikaAgent is the built-in agent behind this task-token request.
+func (h *Handler) callingMikaAgent(r *http.Request, workspaceID pgtype.UUID) (db.Agent, bool) {
+	if r.Header.Get("X-Actor-Source") != "task_token" {
+		return db.Agent{}, false
+	}
+	raw := strings.TrimSpace(r.Header.Get("X-Agent-ID"))
+	if raw == "" {
+		return db.Agent{}, false
+	}
+	agentID, err := util.ParseUUID(raw)
+	if err != nil {
+		return db.Agent{}, false
+	}
+	agent, err := h.Queries.GetAgentInWorkspace(r.Context(), db.GetAgentInWorkspaceParams{ID: agentID, WorkspaceID: workspaceID})
+	if err != nil || agent.SystemKey.String != service.MikaSystemKey {
+		return db.Agent{}, false
+	}
+	return agent, true
+}
+
+// finishMikaTaskAfterHandoff completes Mika's originating run once the group
+// message has been posted. The daemon sees the terminal status and stops the
+// process; the named agent is already queued to do the work.
+func (h *Handler) finishMikaTaskAfterHandoff(r *http.Request, workspaceID pgtype.UUID, workerName string) {
+	if _, ok := h.callingMikaAgent(r, workspaceID); !ok {
+		return
+	}
+	task, ok := h.taskFromRequestHeader(r)
+	if !ok || task.Status != "running" {
+		return
+	}
+	name := strings.TrimSpace(workerName)
+	if name == "" {
+		name = "对方"
+	}
+	result, err := json.Marshal(map[string]string{
+		"output": "已交给 " + name + "。这次到此结束，后续由对方完成。",
+	})
+	if err != nil {
+		return
+	}
+	if _, err := h.TaskService.CompleteTask(r.Context(), task.ID, result, textValue(task.SessionID), textValue(task.WorkDir), textValue(task.BranchName), false, "", textValue(task.DurableWorkDir)); err != nil {
+		slog.Warn("mika handoff did not end the originating task", append(logger.RequestAttrs(r), "error", err, "task_id", uuidToString(task.ID))...)
+	}
+}
+
+func textValue(v pgtype.Text) string {
+	if !v.Valid {
+		return ""
+	}
+	return v.String
 }
 
 func (h *Handler) mikaTaskMembers(w http.ResponseWriter, r *http.Request, member db.Member, userID string, req mikaStartRequest) ([]service.IssueMemberRef, string, bool) {

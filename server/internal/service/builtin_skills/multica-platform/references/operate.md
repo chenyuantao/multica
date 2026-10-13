@@ -33,7 +33,9 @@ multica-operate task start --title "<title>" --content "<what to do>" --mention-
 ```
 
 Pass `--chat-id` instead of `--title` to continue a group whose `recommend` is
-true. The server posts that message as the person. See `task-chats.md`.
+true. The server posts that message as the person. `--mention-agent-id` is
+who does the work, and it cannot be Mika. That call ends Mika's run. See
+`task-chats.md`.
 
 ## Reminders
 

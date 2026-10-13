@@ -18,8 +18,9 @@ multica-operate task agents
 Each agent has `description`, a short `instructions`, `skills`, `tools`,
 `runtime_online`, and `user_created`. Prefer a person-created agent
 (`user_created: true`) whose runtime is online and whose skills match the
-work. Skip an offline runtime. Do not invent an agent. If none fit, do the
-work yourself by omitting `--mention-agent-id`.
+work. Skip an offline runtime. Do not invent an agent. Always pass
+`--mention-agent-id`, and never pass your own id. If no other agent fits,
+say so in this chat and do not start a group.
 
 ## Reuse an existing group
 
@@ -51,8 +52,9 @@ named agent, and opens the group for them. Do not also post a link, and do
 not @mention that agent yourself in the group: an agent-authored mention
 does not start anyone.
 
-Say what you started in this chat, in one or two sentences. The person is
-already being taken to the group.
+`task start` ends this run. Do not post another message, do not enter the
+group to do the work, and do not change the group's status. The named agent
+finishes it. The person is already being taken to the group.
 
 ## Status
 
