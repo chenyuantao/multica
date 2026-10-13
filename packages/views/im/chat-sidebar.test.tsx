@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, screen, within } from "@testing-library/react";
 import type { Comment, GroupChat, Reminder } from "@multica/core/types";
 import { renderWithI18n } from "../test/i18n";
 import { setChatDraft } from "./chat-draft";
@@ -309,5 +309,23 @@ describe("ChatSidebar task chats", () => {
     fireEvent.contextMenu(screen.getByText("Room b"));
     fireEvent.click(await screen.findByRole("menuitem", { name: "Mark as not done" }));
     expect(onSetDone).toHaveBeenCalledWith("b", false);
+  });
+
+  it("keeps the last filter after leaving and returning", () => {
+    const today = toDateKey(new Date());
+    reminders.items = [reminder("b", "Open task", today)];
+    const chats = [chat("a", 0), { ...chat("b", 0), task: true, status: "todo", title: "Open task" }];
+    renderSidebar(null, chats);
+    fireEvent.click(screen.getByRole("button", { name: "Filter chats" }));
+    fireEvent.click(screen.getByRole("button", { name: "Only to-dos" }));
+    expect(screen.queryByRole("button", { name: /Room a/ })).toBeNull();
+
+    cleanup();
+    renderSidebar(null, chats);
+    expect(screen.queryByRole("button", { name: /Room a/ })).toBeNull();
+    expect(screen.getByRole("button", { name: /Open task/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Filter chats" }));
+    expect(screen.getByRole("button", { name: "Only to-dos" })).toHaveAttribute("aria-pressed", "true");
+    expect(localStorage.getItem("multica:im-chat-filter:ws-1")).toContain('"scope":"todo"');
   });
 });

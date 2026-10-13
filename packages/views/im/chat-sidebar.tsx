@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Check, ChevronLeft, ChevronRight, Circle, CirclePlus, Eye, EyeOff, ListFilter, Pin, PinOff, X } from "lucide-react";
 import { directChatPeer } from "@multica/core/group-chats";
@@ -25,6 +25,7 @@ import {
   type ChatListFilterState,
   type ChatScope,
 } from "./chat-list-filter";
+import { readChatListFilter, writeChatListFilter } from "./chat-list-filter-memory";
 import { chatActivityAt, chatDisplayTitle, formatStamp, plainTextPreview } from "./im-utils";
 import { ImSidebarSearch } from "./im-sidebar-search";
 import { ImSidebarHeader, ImSidebarShell } from "./im-sidebar-shell";
@@ -70,14 +71,15 @@ export function ChatSidebar({
   const { t } = useT("im");
   const wsId = useWorkspaceId();
   const todayKey = useMemo(() => toDateKey(new Date()), []);
-  const [filter, setFilter] = useState<ChatListFilterState>(() => ({
-    scope: "all",
-    view: null,
-    anchor: new Date(),
-    todayKey,
-    tags: new Set(),
-    hideCompleted: false,
-  }));
+  const [filterWs, setFilterWs] = useState(wsId);
+  const [filter, setFilter] = useState<ChatListFilterState>(() => readChatListFilter(wsId, todayKey));
+  if (wsId !== filterWs) {
+    setFilterWs(wsId);
+    setFilter(readChatListFilter(wsId, todayKey));
+  }
+  useEffect(() => {
+    writeChatListFilter(wsId, filter);
+  }, [filter, wsId]);
   const reminders = useQuery(reminderListOptions(wsId, {}));
   const reminderRows = reminders.data ?? EMPTY_REMINDERS;
   const visible = useMemo(
