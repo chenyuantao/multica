@@ -110,6 +110,11 @@ vi.mock("../common/actor-avatar", () => ({
     ) : null,
 }));
 vi.mock("../rich-content", () => ({ RichContent: ({ content }: { content: string }) => <p>{content}</p> }));
+vi.mock("../issues/components/comment-card", () => ({
+  AttachmentList: ({ attachments }: { attachments?: { id: string; filename: string }[] }) => (
+    <>{attachments?.map((a) => <img key={a.id} alt={a.filename} />)}</>
+  ),
+}));
 vi.mock("./chat-composer", () => ({
   QuoteText: ({ quote }: { quote: { name: string; text: string } }) => <span>{`${quote.name}: ${quote.text}`}</span>,
   ChatComposer: ({
@@ -319,6 +324,43 @@ describe("ChatThread message channel", () => {
   it("marks only messages sent from WeChat Claw", () => {
     renderThread();
     expect(screen.getAllByRole("img", { name: "Sent from WeChat Claw" })).toHaveLength(1);
+  });
+});
+
+describe("ChatThread message attachments", () => {
+  beforeEach(() => {
+    messages = [
+      {
+        ...message("m-qr", "Scan the code below."),
+        author_type: "agent",
+        author_id: "agent-1",
+        attachments: [
+          {
+            id: "att-qr",
+            workspace_id: "ws-1",
+            issue_id: chat.id,
+            comment_id: "m-qr",
+            chat_session_id: null,
+            chat_message_id: null,
+            uploader_type: "agent",
+            uploader_id: "agent-1",
+            filename: "mp-login-qr.png",
+            url: "/uploads/qr.png",
+            download_url: "/api/attachments/att-qr/download",
+            markdown_url: "",
+            content_type: "image/png",
+            size_bytes: 10303,
+            created_at: "2026-09-30T13:00:00Z",
+          },
+        ],
+      },
+    ];
+    vi.mocked(useQuery).mockImplementation(() => ({ data: [], isError: false }) as never);
+  });
+
+  it("shows an attachment the message body does not reference", () => {
+    renderThread();
+    expect(screen.getByRole("img", { name: "mp-login-qr.png" })).toBeInTheDocument();
   });
 });
 

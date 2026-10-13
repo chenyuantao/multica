@@ -60,6 +60,7 @@ import { ActorAvatar } from "../common/actor-avatar";
 import { WechatMark } from "../common/wechat-mark";
 import { useAppForeground } from "../common/use-app-foreground";
 import { RichContent } from "../rich-content";
+import { AttachmentList } from "../issues/components/comment-card";
 import { useT } from "../i18n";
 import { useOpenAgentDetail } from "../modals/agent-detail";
 import { AppLink } from "../navigation";
@@ -1275,6 +1276,7 @@ function MessageRow({
   ) : (
     <Bubble mine={mine} title={time}>
       <RichContent content={message.content} attachments={message.attachments} density="compact" />
+      <AttachmentList attachments={message.attachments} content={message.content} className="mt-1.5" />
     </Bubble>
   );
 
