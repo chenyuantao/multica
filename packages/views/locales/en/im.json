@@ -229,7 +229,7 @@
     "move_exists": "That folder already has something with this name",
     "move_invalid": "Can't move a folder into itself",
     "more": "More actions for {{name}}",
-    "empty": "No shared folders yet. Run multica-file share <folder> on a computer to add one.",
+    "empty": "No shared folders yet. Run multica-operate share <folder> on a computer to add one.",
     "no_results": "No matching notes",
     "truncated": "Showing only some results. Try a more specific keyword.",
     "load_failed": "Couldn't load the knowledge base",

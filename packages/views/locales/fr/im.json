@@ -229,7 +229,7 @@
     "move_exists": "Ce dossier contient déjà un élément du même nom",
     "move_invalid": "Impossible de déplacer un dossier dans lui-même",
     "more": "Plus d'actions pour {{name}}",
-    "empty": "Aucun dossier partagé pour l'instant. Exécutez multica-file share <dossier> sur un ordinateur pour en ajouter un.",
+    "empty": "Aucun dossier partagé pour l'instant. Exécutez multica-operate share <dossier> sur un ordinateur pour en ajouter un.",
     "no_results": "Aucune note correspondante",
     "truncated": "Seule une partie des résultats est affichée. Essayez un mot-clé plus précis.",
     "load_failed": "Impossible de charger la base de connaissances",

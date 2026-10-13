@@ -218,10 +218,10 @@ func findShare(profile string) (shareConfig, string, error) {
 		}
 		cfg, err := loadShareFile(path)
 		if errors.Is(err, os.ErrNotExist) {
-			return shareConfig{}, "", &notSharedError{"this machine has never shared a directory; run `multica-file share <dir>` to share one"}
+			return shareConfig{}, "", &notSharedError{"this machine has never shared a directory; run `multica-operate share <dir>` to share one"}
 		}
 		if err != nil {
-			return shareConfig{}, "", &notSharedError{fmt.Sprintf("the share settings in %s cannot be read (%v); run `multica-file share <dir>` again", path, err)}
+			return shareConfig{}, "", &notSharedError{fmt.Sprintf("the share settings in %s cannot be read (%v); run `multica-operate share <dir>` again", path, err)}
 		}
 		return cfg, filepath.Join(filepath.Dir(path), "file-daemon.pid"), nil
 	}
@@ -252,7 +252,7 @@ func findShare(profile string) (shareConfig, string, error) {
 		}
 		return cfg, filepath.Join(filepath.Dir(path), "file-daemon.pid"), nil
 	}
-	const hint = "the machine's user can run `multica-file share <dir>` outside an agent task"
+	const hint = "the machine's user can run `multica-operate share <dir>` outside an agent task"
 	switch {
 	case len(others) > 0:
 		return shareConfig{}, "", &notSharedError{fmt.Sprintf("this machine shares %s only with another server or workspace; %s", strings.Join(others, ", "), hint)}

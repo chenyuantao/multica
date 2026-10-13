@@ -12,7 +12,7 @@ files reference and answer here.
 ## Choose who does the work
 
 ```bash
-multica mika agents --output json
+multica-operate task agents
 ```
 
 Each agent has `description`, a short `instructions`, `skills`, `tools`,
@@ -24,7 +24,7 @@ work yourself by omitting `--mention-agent-id`.
 ## Reuse an existing group
 
 ```bash
-multica mika candidates --query "<the person's instruction>" --output json
+multica-operate task candidates --query "<the person's instruction>"
 ```
 
 The list is already ordered. Unfinished work, a recent last message, and a
@@ -37,13 +37,13 @@ pick from the title alone.
 Creating:
 
 ```bash
-multica mika start --title "<short title>" --content "<what to do>" --mention-agent-id "<agent id>" --output json
+multica-operate task start --title "<short title>" --content "<what to do>" --mention-agent-id "<agent id>"
 ```
 
 Continuing a recommended chat:
 
 ```bash
-multica mika start --chat-id "<chat id>" --content "<what to do next>" --mention-agent-id "<agent id>" --output json
+multica-operate task start --chat-id "<chat id>" --content "<what to do next>" --mention-agent-id "<agent id>"
 ```
 
 The server posts `--content` as the person, with a leading mention of the
@@ -60,5 +60,5 @@ Change the group's status with the existing issue command. `todo`,
 `in_progress`, `done`, and `cancelled` are the values. No other status exists.
 
 ```bash
-multica issue status <chat id> <status>
+multica-operate chat status <chat id> <status>
 ```

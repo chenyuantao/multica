@@ -159,7 +159,7 @@ func TestReadAndLs(t *testing.T) {
 		t.Fatalf("read: out=%q err=%v", out, err)
 	}
 	_, err := runFileCmd(t, "read", "mbp/missing.md")
-	if docsErrorCode(err) != "docs_not_found" || !strings.Contains(err.Error(), "multica-file ls") {
+	if docsErrorCode(err) != "docs_not_found" || !strings.Contains(err.Error(), "multica-operate ls") {
 		t.Fatalf("missing err = %v", err)
 	}
 	if out, err := runFileCmd(t, "ls", "mbp"); err != nil || out != "mbp/notes/\nmbp/a.md\n" {

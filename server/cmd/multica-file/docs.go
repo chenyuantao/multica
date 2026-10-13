@@ -17,7 +17,7 @@ import (
 	"github.com/multica-ai/multica/server/internal/obsidianvault"
 )
 
-const docsPathHelp = `Paths are knowledge paths: the machine name, then the path inside that machine's shared directory (for example mbp/notes/a.md). Run "multica-file ls" to list the machines you can use. Only Markdown (.md) files are visible.`
+const docsPathHelp = `Paths are knowledge paths: the machine name, then the path inside that machine's shared directory (for example mbp/notes/a.md). Run "multica-operate ls" to list the machines you can use. Only Markdown (.md) files are visible.`
 
 func newLsCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -277,7 +277,7 @@ func (e *docsAPIError) Error() string {
 	msg := e.Message
 	switch e.Code {
 	case "docs_not_found":
-		msg += "; check the path with `multica-file ls`, and that the share is visible to you and its parent directory exists"
+		msg += "; check the path with `multica-operate ls`, and that the share is visible to you and its parent directory exists"
 	case "docs_conflict", "docs_merge_conflict":
 		msg += "; read the note again and retry with the new revision"
 	}

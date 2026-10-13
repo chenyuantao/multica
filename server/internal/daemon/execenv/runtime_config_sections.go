@@ -955,15 +955,10 @@ func writeAttachments(b *strings.Builder) {
 // writeAlwaysUseCLI emits the "must go through the multica CLI" guardrail
 // (compressed).
 func writeAlwaysUseCLI(b *strings.Builder) {
-	b.WriteString("## Important: Always Use the `multica` CLI\n\n")
-	b.WriteString("Access Multica platform resources only through the `multica` CLI — never `curl` / `wget`. For anything the CLI doesn't cover, post a comment mentioning the workspace owner rather than working around it.\n\n")
-	// The variables are already in the process environment; an exception is
-	// permission to use them, not a second injection path. Reminders stay
-	// identity-gated. Knowledge matches the agent-facing multica-file
-	// commands and is gated by the share the server already allows this task.
-	b.WriteString("Two exceptions use the `MULTICA_SERVER_URL` and `MULTICA_TOKEN` already in the environment. Do not print the token.\n\n")
-	b.WriteString("Reminder list, create, update, and delete, and only when Agent Identity tells you to call them with `curl`. Those calls also send `MULTICA_WORKSPACE_ID`. The reminder exception does not cover other APIs, and it does not apply when Agent Identity does not grant it.\n\n")
-	b.WriteString("Knowledge list, search, read, write, and move are open to every agent on the shares this task may use — the same operations as `multica-file` ls, search, read, write, and mv. When that binary is not installed, call them with `curl` against `/api/docs` as the multica-platform files reference specifies. The server answers `docs_not_found` for a share you cannot use. This does not cover sharing or unsharing a directory, deleting a note, or any other Multica API.\n\n")
+	b.WriteString("## Important: Always Use the CLI\n\n")
+	b.WriteString("Access Multica platform resources only through `multica-operate` or the `multica` CLI. Never `curl` / `wget`, and never call the HTTP API yourself. `multica-operate` covers knowledge, group chats, task groups, reminders, and contacts. The same program still runs as `multica-file`.\n\n")
+	b.WriteString("Knowledge list, search, read, write, and move are `multica-operate` ls, search, read, write, and mv. This does not cover sharing or unsharing a directory, or deleting a note.\n\n")
+	b.WriteString("Reminder list, create, update, and delete are `multica-operate reminder`, and only when Agent Identity tells you to manage the reminder list.\n\n")
 }
 
 // writeDeliveryInvariant emits the always-on delivery contract, shared by every
@@ -1007,7 +1002,7 @@ func writeInlineBlocksPolicy(b *strings.Builder) {
 // inside the share>`; opening a card also matches when the machine prefix
 // is left off.
 func writeDocsNotePolicy(b *strings.Builder) {
-	b.WriteString("\n**Docs:** for each doc you create or modify in a shared directory, add one fenced `docs` code block to your reply holding only this JSON: `{\"name\": \"<file name without .md>\", \"summary\": \"<first 50 characters of the note body, frontmatter and Markdown markup removed>\", \"path\": \"<knowledge path>\"}`. It renders as a card that opens the doc. The knowledge path is the machine name, then the path inside that machine's shared directory, ending in .md — `multica-file write` prints it, a curl write to `/api/docs` returns it as `path`, and `multica-file path <local-file>` maps a file on disk to it. A card still opens when that machine prefix is left off. `path` is never absolute and never starts with `/`. Where a file belongs in the first place: the multica-platform files reference.\n")
+	b.WriteString("\n**Docs:** for each doc you create or modify in a shared directory, add one fenced `docs` code block to your reply holding only this JSON: `{\"name\": \"<file name without .md>\", \"summary\": \"<first 50 characters of the note body, frontmatter and Markdown markup removed>\", \"path\": \"<knowledge path>\"}`. It renders as a card that opens the doc. The knowledge path is the machine name, then the path inside that machine's shared directory, ending in .md — `multica-operate write` prints it, and `multica-operate path <local-file>` maps a file on disk to it. A card still opens when that machine prefix is left off. `path` is never absolute and never starts with `/`. Where a file belongs in the first place: the multica-platform files reference.\n")
 }
 
 // writeOutput emits the kind-specific Output section: the always-on delivery

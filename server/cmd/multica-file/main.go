@@ -1,12 +1,18 @@
-// Command multica-file publishes a local directory through the knowledge API.
-// It reuses the multica CLI login and keeps a daemon attached to the server.
-// The server asks this process for listings and file bodies; the directory
-// itself is not uploaded.
+// Command multica-operate is the agent-facing Multica client: knowledge,
+// chats, task groups, reminders, and contacts. It also publishes a local
+// directory through the knowledge API. Invoking the same program as
+// multica-file keeps existing share daemons working.
+//
+// It reuses the multica CLI login. A daemon stays attached for the share;
+// the server asks this process for listings and file bodies, and the
+// directory itself is not uploaded.
 package main
 
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -19,25 +25,35 @@ func main() {
 }
 
 func newRoot() *cobra.Command {
+	name := operateCommandName()
 	root := &cobra.Command{
-		Use:   "multica-file",
-		Short: "Share a local directory with Multica knowledge",
-		Long: `Share a directory on this machine with the signed-in Multica user and the agents they own.
+		Use:   name,
+		Short: "Operate Multica knowledge, chats, reminders, and contacts",
+		Long: `Operate the signed-in user's Multica workspace: knowledge notes, group chats, task groups, reminders, and contacts.
 
-The command reuses the login saved by "multica login". A daemon stays connected and serves remote reads and writes from this disk, so the files are not copied up front.
+Agents run this inside a task with the task login. People sharing a folder from their own computer use "` + name + ` share". The same program still runs when invoked as multica-file.
+
+The command reuses the login saved by "multica login". A daemon stays connected and serves remote reads and writes from this disk, so shared files are not copied up front.
 
 Each machine has one share, bound to the daemon id its multica runtimes register under, and it appears on that machine in the runtimes page. Paths show up in knowledge under the machine name; knowledge holds nothing but these shares. Set visibility to workspace to let every member and agent in the workspace use the directory.
 
-Agents can run "multica-file path" to read the shared directory and its knowledge prefix, or "multica-file path <file>" to check that a file they wrote shows up in knowledge.
-
-"ls", "search", "read", "write" and "mv" reach any share you or your agent may use, on any machine, through the server. Inside an agent task they use the task's own login.`,
+"ls", "search", "read", "write" and "mv" reach any share this login may use. "chat", "task", "reminder", and "contact" call the workspace APIs as the user the login belongs to.`,
 	}
 	// main prints the error once.
 	root.SilenceErrors = true
 	root.PersistentFlags().String("profile", "", "Configuration profile name shared with the multica CLI")
 	root.AddCommand(newLoginCmd(), newShareCmd(), newUnshareCmd(), newVisibilityCmd(), newStatusCmd(), newPathCmd(), newDaemonCmd(),
-		newLsCmd(), newSearchCmd(), newReadCmd(), newWriteCmd(), newMvCmd())
+		newLsCmd(), newSearchCmd(), newReadCmd(), newWriteCmd(), newMvCmd(),
+		newChatCmd(), newTaskCmd(), newReminderCmd(), newContactCmd())
 	return root
+}
+
+func operateCommandName() string {
+	base := strings.TrimSuffix(filepath.Base(os.Args[0]), ".exe")
+	if base == "multica-file" {
+		return "multica-file"
+	}
+	return "multica-operate"
 }
 
 func profileOf(cmd *cobra.Command) string {

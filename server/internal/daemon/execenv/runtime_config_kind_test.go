@@ -137,7 +137,7 @@ func TestBuildMetaSkillContentSlimKindMatrix(t *testing.T) {
 		{"## Available Commands", allKinds},
 		{"## Issue Body Formatting", allKinds},
 		{"### Workflow", allKinds},
-		{"## Important: Always Use the `multica` CLI", allKinds},
+		{"## Important: Always Use the CLI", allKinds},
 		{"## Output", allKinds},
 		{"## Comment Formatting", issueKinds},
 		{"## Repositories", map[taskKind]bool{
@@ -178,13 +178,11 @@ func TestBuildMetaSkillContentSlimKindMatrix(t *testing.T) {
 			}
 		}
 		for _, want := range []string{
-			"never `curl` / `wget`",
-			"Reminder list, create, update, and delete, and only when Agent Identity tells you to call them with `curl`",
-			"`MULTICA_SERVER_URL` and `MULTICA_TOKEN` already in the environment",
-			"it does not apply when Agent Identity does not grant it",
-			"the same operations as `multica-file` ls, search, read, write, and mv",
-			"curl` against `/api/docs`",
-			"This does not cover sharing or unsharing a directory, deleting a note, or any other Multica API",
+			"Never `curl` / `wget`",
+			"Reminder list, create, update, and delete are `multica-operate reminder`",
+			"only when Agent Identity tells you to manage the reminder list",
+			"`multica-operate` ls, search, read, write, and mv",
+			"This does not cover sharing or unsharing a directory, or deleting a note",
 		} {
 			if !strings.Contains(out, want) {
 				t.Errorf("kind=%d: brief missing %q", kind, want)

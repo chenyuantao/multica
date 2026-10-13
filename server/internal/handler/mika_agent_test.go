@@ -138,13 +138,16 @@ func TestComposeMikaInstructions(t *testing.T) {
 		t.Fatalf("the notes rule must not appear when there are no notes:\n%s", system)
 	}
 	for _, want := range []string{
-		"MULTICA_SERVER_URL",
-		"MULTICA_TOKEN",
-		"/api/reminders",
-		"Do not print the token",
+		"multica-operate reminder",
+		"Do not use `curl` or `wget`",
 	} {
 		if !strings.Contains(system, want) {
 			t.Fatalf("Mika instructions missing %q", want)
+		}
+	}
+	for _, banned := range []string{"MULTICA_TOKEN", "/api/reminders", "curl "} {
+		if strings.Contains(system, banned) {
+			t.Fatalf("Mika instructions still teach %q", banned)
 		}
 	}
 

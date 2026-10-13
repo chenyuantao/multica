@@ -362,6 +362,7 @@ func TestPlatformSkillDescriptionNamesEveryDomain(t *testing.T) {
 		"references/skill-import.md": "skill import",
 		"references/files.md":        "shared director",
 		"references/task-chats.md":   "task chat",
+		"references/operate.md":      "operate",
 	}
 
 	skill, ok := findSkill(t, PlatformSkillName)
@@ -707,10 +708,10 @@ func TestPlatformSkillCoversPlatformContracts(t *testing.T) {
 				"never absolute",
 				// Without multica-file, the same agent-facing operations go
 				// through the docs API. Delete and share stay off that path.
-				"POST /api/docs/files",
-				"PATCH /api/docs/files/content",
 				"docs_not_found",
 				"Do not call delete",
+				"multica-operate write",
+				"Do not call the HTTP API",
 			},
 		},
 	}

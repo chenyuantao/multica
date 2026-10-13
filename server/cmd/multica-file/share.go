@@ -171,7 +171,7 @@ func runShare(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	fmt.Fprintf(os.Stderr, "sharing %s as %s/ (%s) for machine %s\n", cfg.Dir, cfg.knowledgeRoot(), cfg.Visibility, daemonID)
-	fmt.Fprintf(os.Stderr, "run `multica-file daemon start` if the daemon is not already running\n")
+	fmt.Fprintf(os.Stderr, "run `multica-operate daemon start` if the daemon is not already running\n")
 	return nil
 }
 

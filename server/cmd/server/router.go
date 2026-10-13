@@ -2082,13 +2082,16 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 				r.Post("/task-chats", h.StartMikaTaskChat)
 			})
 
+			// Task tokens act as the user the task belongs to, the same bound-user
+			// rule as reminders. multica-operate uses these routes. Ask stays
+			// human-only: it is the Jev chooser, not an agent operation.
 			r.Route("/api/group-chats", func(r chi.Router) {
-				r.Use(handler.RequireHumanActor)
+				r.Use(handler.RequireHumanOrTaskToken)
 				r.Get("/", h.ListGroupChats)
 				r.Post("/", h.CreateGroupChat)
 				r.Post("/direct", h.OpenDirectGroupChat)
 				r.Get("/search", h.SearchGroupChats)
-				r.Post("/ask", h.AskAI)
+				r.With(handler.RequireHumanActor).Post("/ask", h.AskAI)
 				r.Route("/{id}", func(r chi.Router) {
 					r.Get("/", h.GetGroupChat)
 					r.Patch("/", h.UpdateGroupChat)
