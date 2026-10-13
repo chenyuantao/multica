@@ -1,4 +1,4 @@
-/** A directory a multica-file daemon publishes into knowledge. Each machine has at most one per user. */
+/** A directory a multica-operate daemon publishes into knowledge. Each machine has at most one per user. */
 export interface FileShare {
   /** The multica daemon id of the machine; matches `AgentRuntime.daemon_id`. */
   daemon_id: string;

@@ -2,7 +2,7 @@
 
 `multica-operate` is the command for what a person can do in chats, knowledge,
 reminders, and contacts. Inside a task it uses the task login and acts as
-that user. Output is JSON. The same program still runs as `multica-file`.
+that user. Output is JSON.
 Use this command only. Do not call the HTTP API with `curl` or `wget`.
 
 ## Chats

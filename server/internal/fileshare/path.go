@@ -1,5 +1,5 @@
 // Package fileshare serves one directory on the machine that runs
-// multica-file. The server never stores the files. It asks the machine for
+// multica-operate. The server never stores the files. It asks the machine for
 // the listing, the one note being opened, or the one write being saved.
 package fileshare
 

@@ -120,7 +120,7 @@ describe("KnowledgeSidebar", () => {
   it("says how to share a folder when nothing is shared", () => {
     tree = [];
     renderWithI18n(<KnowledgeSidebar selectedPath={null} onSelect={onSelect} onCreate={onCreate} />);
-    expect(screen.getByText(/multica-file share/)).toBeInTheDocument();
+    expect(screen.getByText(/multica-operate share/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "New note" })).toBeDisabled();
   });
 

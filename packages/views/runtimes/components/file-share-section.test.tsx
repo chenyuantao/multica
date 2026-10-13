@@ -82,7 +82,7 @@ describe("file share runtime section", () => {
   it("offers the share command on an unshared machine the viewer runs", () => {
     renderSection(machine("daemon-new"), true);
     expect(screen.getByText("Not shared")).toBeInTheDocument();
-    expect(screen.getByText("multica-file share <dir>")).toBeInTheDocument();
+    expect(screen.getByText("multica-operate share <dir>")).toBeInTheDocument();
   });
 
   it("renders nothing for an unshared machine the viewer does not run", () => {

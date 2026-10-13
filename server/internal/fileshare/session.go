@@ -29,7 +29,7 @@ type Envelope struct {
 	Payload     json.RawMessage `json:"payload,omitempty"`
 }
 
-// Session is a live websocket to one multica-file daemon.
+// Session is a live websocket to one multica-operate daemon.
 type Session struct {
 	metaMu sync.Mutex
 	meta   ShareMeta

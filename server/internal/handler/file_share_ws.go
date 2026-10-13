@@ -18,7 +18,7 @@ var fileShareUpgrader = websocket.Upgrader{
 	CheckOrigin: func(*http.Request) bool { return true },
 }
 
-// ConnectFileShare attaches a multica-file daemon. The socket stays open and
+// ConnectFileShare attaches a multica-operate daemon. The socket stays open and
 // the server asks it for listings and file bodies as the knowledge API is used.
 func (h *Handler) ConnectFileShare(w http.ResponseWriter, r *http.Request) {
 	if h.FileShares == nil {

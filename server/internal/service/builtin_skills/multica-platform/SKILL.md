@@ -2,7 +2,7 @@
 name: multica-platform
 description: "Use for Multica platform actions the runtime brief does not fully cover: issue and PR contracts, charts and files in comments, delivering files and shared directories, mentions, agents, squads, autopilots, projects, runtimes, skill import, task chats, operate. Not for the product code you are working on."
 user-invocable: false
-allowed-tools: Bash(multica *), Bash(multica-operate *), Bash(multica-file *), Bash(git *), Bash(gh *)
+allowed-tools: Bash(multica *), Bash(multica-operate *), Bash(git *), Bash(gh *)
 ---
 
 # Operating Multica

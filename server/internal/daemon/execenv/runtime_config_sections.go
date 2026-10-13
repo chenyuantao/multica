@@ -956,7 +956,7 @@ func writeAttachments(b *strings.Builder) {
 // (compressed).
 func writeAlwaysUseCLI(b *strings.Builder) {
 	b.WriteString("## Important: Always Use the CLI\n\n")
-	b.WriteString("Access Multica platform resources only through `multica-operate` or the `multica` CLI. Never `curl` / `wget`, and never call the HTTP API yourself. `multica-operate` covers knowledge, group chats, task groups, reminders, and contacts. The same program still runs as `multica-file`.\n\n")
+	b.WriteString("Access Multica platform resources only through `multica-operate` or the `multica` CLI. Never `curl` / `wget`, and never call the HTTP API yourself. `multica-operate` covers knowledge, group chats, task groups, reminders, and contacts.\n\n")
 	b.WriteString("Knowledge list, search, read, write, and move are `multica-operate` ls, search, read, write, and mv. This does not cover sharing or unsharing a directory, or deleting a note.\n\n")
 	b.WriteString("Reminder list, create, update, and delete are `multica-operate reminder`, and only when Agent Identity tells you to manage the reminder list.\n\n")
 }

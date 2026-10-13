@@ -10,7 +10,7 @@ import { cn } from "@multica/ui/lib/utils";
 import { useT } from "../../i18n";
 import type { RuntimeMachine } from "./runtime-machines";
 
-const SHARE_COMMAND = "multica-file share <dir>";
+const SHARE_COMMAND = "multica-operate share <dir>";
 
 /** The share published from this machine, matched by the multica daemon id its runtimes register under. */
 export function fileShareForMachine(

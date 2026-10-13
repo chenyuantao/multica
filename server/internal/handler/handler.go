@@ -209,7 +209,7 @@ type Handler struct {
 	TxStarter    txStarter
 	Hub          *realtime.Hub
 	DaemonHub    *daemonws.Hub
-	// FileShares is the set of multica-file daemons connected to this process.
+	// FileShares is the set of multica-operate daemons connected to this process.
 	// Nil keeps the docs API on the deployment vault only.
 	FileShares             *fileshare.Hub
 	DaemonProfileRefresh   RuntimeProfileRefreshNotifier
