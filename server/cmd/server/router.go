@@ -1710,7 +1710,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			r.Get("/qrcode/status", h.GetWechatClawQRCodeStatus)
 		})
 
-		// Knowledge browser. multica-file daemons attach here, and every
+		// Knowledge browser. multica-operate daemons attach here, and every
 		// /api/docs path starts with the name of the machine that shares it.
 		// Paths and queries are JSON bodies so notes with non-ASCII names are
 		// not put in the URL.

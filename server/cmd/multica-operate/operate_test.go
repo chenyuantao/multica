@@ -17,7 +17,7 @@ func TestOperateCommandsAreRegistered(t *testing.T) {
 			t.Errorf("missing command %s", name)
 		}
 	}
-	if root.Name() != "multica-operate" && root.Name() != "multica-file" {
+	if root.Name() != "multica-operate" {
 		t.Fatalf("root name = %s", root.Name())
 	}
 }

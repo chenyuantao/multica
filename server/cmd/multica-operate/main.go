@@ -1,7 +1,6 @@
 // Command multica-operate is the agent-facing Multica client: knowledge,
 // chats, task groups, reminders, and contacts. It also publishes a local
-// directory through the knowledge API. Invoking the same program as
-// multica-file keeps existing share daemons working.
+// directory through the knowledge API.
 //
 // It reuses the multica CLI login. A daemon stays attached for the share;
 // the server asks this process for listings and file bodies, and the
@@ -11,8 +10,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"path/filepath"
-	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -25,13 +22,12 @@ func main() {
 }
 
 func newRoot() *cobra.Command {
-	name := operateCommandName()
 	root := &cobra.Command{
-		Use:   name,
+		Use:   "multica-operate",
 		Short: "Operate Multica knowledge, chats, reminders, and contacts",
 		Long: `Operate the signed-in user's Multica workspace: knowledge notes, group chats, task groups, reminders, and contacts.
 
-Agents run this inside a task with the task login. People sharing a folder from their own computer use "` + name + ` share". The same program still runs when invoked as multica-file.
+Agents run this inside a task with the task login. People sharing a folder from their own computer use "multica-operate share".
 
 The command reuses the login saved by "multica login". A daemon stays connected and serves remote reads and writes from this disk, so shared files are not copied up front.
 
@@ -46,14 +42,6 @@ Each machine has one share, bound to the daemon id its multica runtimes register
 		newLsCmd(), newSearchCmd(), newReadCmd(), newWriteCmd(), newMvCmd(),
 		newChatCmd(), newTaskCmd(), newReminderCmd(), newContactCmd())
 	return root
-}
-
-func operateCommandName() string {
-	base := strings.TrimSuffix(filepath.Base(os.Args[0]), ".exe")
-	if base == "multica-file" {
-		return "multica-file"
-	}
-	return "multica-operate"
 }
 
 func profileOf(cmd *cobra.Command) string {
