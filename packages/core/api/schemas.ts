@@ -1188,6 +1188,7 @@ export const GroupChatSchema = z.object({
   pinned: z.boolean().default(false).catch(false),
   task: z.boolean().default(false).catch(false),
   status: z.string().default("").catch(""),
+  due_date: z.string().nullable().default(null).catch(null),
 }).loose();
 
 export const GroupChatsListSchema = z.object({

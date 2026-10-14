@@ -51,6 +51,20 @@ export interface ComposerMention {
   id: string;
 }
 
+/** Task chats can @ any live agent, including one that is not in the chat yet. */
+export function withOutsideAgents(
+  members: readonly ComposerMention[],
+  agents: readonly { id: string; name: string; archived_at?: string | null }[],
+): ComposerMention[] {
+  const seen = new Set(members.filter((member) => member.type === "agent").map((member) => member.id));
+  const extra: ComposerMention[] = [];
+  for (const agent of agents) {
+    if (agent.archived_at || seen.has(agent.id)) continue;
+    extra.push({ type: "agent", id: agent.id, name: agent.name });
+  }
+  return extra.length === 0 ? [...members] : [...members, ...extra];
+}
+
 /** One-line preview of a markdown message for the chat list. */
 export function plainTextPreview(markdown: string): string {
   return docExcerptPlain(markdown)

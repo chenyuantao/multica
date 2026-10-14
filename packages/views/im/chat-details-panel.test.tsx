@@ -139,6 +139,27 @@ describe("ChatDetailsPanel rename", () => {
   });
 });
 
+describe("ChatDetailsPanel due date", () => {
+  beforeEach(() => updateMutateAsync.mockReset().mockResolvedValue(chat));
+
+  it("is absent on a chat that is not a task", () => {
+    renderPanel();
+    expect(screen.queryByLabelText("Due date")).toBeNull();
+  });
+
+  it("saves a new due date and clears it", async () => {
+    renderWithI18n(<ChatDetailsPanel wsId="ws-1" chat={{ ...chat, task: true, due_date: "2026-10-14" }} userId="user-1" />);
+    const input = screen.getByLabelText("Due date");
+    expect(input).toHaveValue("2026-10-14");
+
+    fireEvent.change(input, { target: { value: "2026-10-20" } });
+    await waitFor(() => expect(updateMutateAsync).toHaveBeenCalledWith({ due_date: "2026-10-20" }));
+
+    fireEvent.change(input, { target: { value: "" } });
+    await waitFor(() => expect(updateMutateAsync).toHaveBeenCalledWith({ due_date: null }));
+  });
+});
+
 describe("ChatDetailsPanel announcement", () => {
   beforeEach(() => updateMutateAsync.mockReset().mockResolvedValue(chat));
 

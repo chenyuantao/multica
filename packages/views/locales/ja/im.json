@@ -182,6 +182,8 @@
     "announcement": "お知らせ",
     "announcement_placeholder": "お知らせを追加…",
     "announcement_failed": "お知らせを保存できませんでした",
+    "due_date": "期限",
+    "due_date_failed": "期限を保存できませんでした",
     "open_chat": "チャットを開く",
     "back": "チャットに戻る",
     "back_to_info": "チャット詳細に戻る",

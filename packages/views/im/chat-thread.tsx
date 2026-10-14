@@ -95,6 +95,7 @@ import {
   plainTextPreview,
   runProgress,
   thinkingTaskId,
+  withOutsideAgents,
   type ComposerMention,
 } from "./im-utils";
 
@@ -119,7 +120,7 @@ interface ChatThreadProps {
   onAskAI?: (selection?: AskAISelection) => void;
   /** The knowledge note tab open beside the chat. Each send tells the agent the message is about it. */
   focusNote?: FocusNote | null;
-  /** Who the composer can @mention. Defaults to the other chat members. */
+  /** Who the composer can @mention. Defaults to the other chat members, plus every live agent when the chat is a task. */
   mentionCandidates?: ComposerMention[];
   /** Dismisses the conversation. The details toggle stays beside it. */
   onClose?: () => void;
@@ -586,14 +587,15 @@ export function ChatThread({
   }, [loadOlder, messages.length, searchOpen]);
 
   const agents = chat.members.filter((m) => m.member_type === "agent");
-  const candidates = useMemo<ComposerMention[]>(
-    () =>
+  const candidates = useMemo<ComposerMention[]>(() => {
+    const members =
       mentionCandidates ??
       chat.members
         .filter((m) => !(m.member_type === "member" && m.member_id === userId))
-        .map((m) => ({ type: m.member_type, id: m.member_id, name: getActorName(m.member_type, m.member_id) })),
-    [mentionCandidates, chat.members, getActorName, userId],
-  );
+        .map((m) => ({ type: m.member_type, id: m.member_id, name: getActorName(m.member_type, m.member_id) }));
+    if (mentionCandidates || !chat.task) return members;
+    return withOutsideAgents(members, agentList);
+  }, [mentionCandidates, chat.members, chat.task, agentList, getActorName, userId]);
 
   const deliver = useCallback(
     async (localId: string, content: string, attachmentIds: string[], refMessageId?: string, note?: FocusNote) => {

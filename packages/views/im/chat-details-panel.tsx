@@ -141,6 +141,12 @@ export function ChatDetailsPanel({ wsId, chat, userId, variant = "aside", onOpen
         <ChatNameRow wsId={wsId} chat={chat} />
       </PanelSection>
 
+      {chat.task && (
+        <PanelSection title={t(($) => $.panel.due_date)}>
+          <TaskDueDate wsId={wsId} chat={chat} />
+        </PanelSection>
+      )}
+
       <PanelSection title={t(($) => $.panel.announcement)}>
         <ChatAnnouncement wsId={wsId} chat={chat} />
       </PanelSection>
@@ -183,6 +189,34 @@ export function ChatDetailsPanel({ wsId, chat, userId, variant = "aside", onOpen
         options={options}
         onCommit={commit}
         label={t(($) => $.panel.resize)}
+      />
+    </div>
+  );
+}
+
+function TaskDueDate({ wsId, chat }: { wsId: string; chat: GroupChat }) {
+  const { t } = useT("im");
+  const update = useUpdateGroupChat(wsId, chat.id);
+
+  const save = async (value: string) => {
+    const next = value || null;
+    if ((chat.due_date ?? null) === next) return;
+    try {
+      await update.mutateAsync({ due_date: next });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t(($) => $.panel.due_date_failed));
+    }
+  };
+
+  return (
+    <div className="px-2 py-1.5">
+      <Input
+        type="date"
+        value={chat.due_date ?? ""}
+        onChange={(e) => void save(e.target.value)}
+        disabled={update.isPending}
+        aria-label={t(($) => $.panel.due_date)}
+        className="h-8"
       />
     </div>
   );

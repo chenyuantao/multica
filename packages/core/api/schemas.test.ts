@@ -1548,6 +1548,22 @@ describe("GroupChatsListSchema unread_count", () => {
     expect(parsed.chats.map((c) => c.is_direct)).toEqual([true, false, false]);
   });
 
+  it("keeps a task due date and treats a missing or malformed one as unset", () => {
+    const parsed = parseWithFallback<{ chats: GroupChat[] }>(
+      {
+        chats: [
+          chat({ due_date: "2026-10-20" }),
+          chat({ id: "chat-2" }),
+          chat({ id: "chat-3", due_date: 7 }),
+        ],
+      },
+      GroupChatsListSchema,
+      { chats: [] },
+      ENDPOINT,
+    );
+    expect(parsed.chats.map((c) => c.due_date)).toEqual(["2026-10-20", null, null]);
+  });
+
   it("reads a missing or malformed task as an ordinary chat", () => {
     const parsed = parseWithFallback<{ chats: GroupChat[] }>(
       {

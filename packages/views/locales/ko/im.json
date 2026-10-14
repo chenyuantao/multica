@@ -182,6 +182,8 @@
     "announcement": "공지",
     "announcement_placeholder": "공지 추가…",
     "announcement_failed": "공지를 저장하지 못했습니다",
+    "due_date": "마감일",
+    "due_date_failed": "마감일을 저장하지 못했습니다",
     "open_chat": "채팅 열기",
     "back": "채팅으로 돌아가기",
     "back_to_info": "채팅 상세로 돌아가기",

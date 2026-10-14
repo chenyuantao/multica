@@ -511,13 +511,13 @@ func (h *Handler) loadOwnedReminder(w http.ResponseWriter, r *http.Request) (db.
 	return issue, userID, true
 }
 
-// admitReminderMentionedAgents adds each agent a person @mentions in a
-// reminder message to the reminder, whether or not it worked there before, so
-// the ordinary group chat dispatch reaches it. An agent the person may not
-// bring into a chat is left out, and rejectNonMemberAgentMentions refuses the
-// message as it would in any chat.
+// admitReminderMentionedAgents adds each agent a person @mentions in a task
+// chat or reminder, whether or not it worked there before, so the ordinary
+// group chat dispatch reaches it. An agent the person may not bring into a
+// chat is left out, and rejectNonMemberAgentMentions refuses the message as
+// it would in any chat that is not a task.
 func (h *Handler) admitReminderMentionedAgents(r *http.Request, issue db.Issue, content string) {
-	if !isReminder(issue) {
+	if !isTaskChat(issue) {
 		return
 	}
 	ctx := r.Context()

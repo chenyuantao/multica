@@ -11,6 +11,7 @@ import {
   formatStamp,
   resolveComposerMentions,
   resolveTitleMentions,
+  withOutsideAgents,
   needsTimeSeparator,
   plainTextPreview,
   runProgress,
@@ -42,6 +43,19 @@ describe("encodeMentions", () => {
 
   it("leaves text without picked mentions unchanged", () => {
     expect(encodeMentions("email me @ noon", [])).toBe("email me @ noon");
+  });
+});
+
+describe("withOutsideAgents", () => {
+  it("adds live agents that are not already in the chat", () => {
+    const members = [{ type: "member" as const, id: "u1", name: "Ada" }, { type: "agent" as const, id: "a1", name: "Jev" }];
+    expect(
+      withOutsideAgents(members, [
+        { id: "a1", name: "Jev", archived_at: null },
+        { id: "a2", name: "Mika", archived_at: null },
+        { id: "a3", name: "Old", archived_at: "2026-01-01T00:00:00Z" },
+      ]),
+    ).toEqual([...members, { type: "agent", id: "a2", name: "Mika" }]);
   });
 });
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -58,6 +59,8 @@ type GroupChatResponse struct {
 	Task bool `json:"task"`
 	// Status is the issue status. Task chats use "done" once checked off.
 	Status string `json:"status"`
+	// DueDate is the task's due day (YYYY-MM-DD). Empty for a chat that is not a task.
+	DueDate *string `json:"due_date"`
 }
 
 type groupChatMemberRef struct {
@@ -96,6 +99,7 @@ func groupChatToResponse(issue db.Issue, prefix string, members []db.IssueMember
 		IsDirect:        issue.IsDirectChat,
 		Task:            isTaskChat(issue),
 		Status:          issue.Status,
+		DueDate:         dateToPtr(issue.DueDate),
 	}
 	for _, m := range members {
 		resp.Members = append(resp.Members, groupChatMemberToResponse(m))
@@ -658,11 +662,12 @@ func (h *Handler) openDirectChat(w http.ResponseWriter, r *http.Request, member 
 	return issue, members, true, ok
 }
 
-// UpdateGroupChatRequest patches the chat name and its announcement, which is
-// the underlying issue's description. Omitted fields stay unchanged.
+// UpdateGroupChatRequest patches the chat name, its announcement, and, for a
+// task chat, the due day. Omitted fields stay unchanged. due_date null clears it.
 type UpdateGroupChatRequest struct {
 	Title       *string `json:"title"`
 	Description *string `json:"description"`
+	DueDate     *string `json:"due_date"`
 }
 
 // UpdateGroupChat renames a chat or edits its announcement. Any chat member
@@ -676,14 +681,33 @@ func (h *Handler) UpdateGroupChat(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var req UpdateGroupChatRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if req.Title == nil && req.Description == nil {
+	var raw map[string]json.RawMessage
+	var req UpdateGroupChatRequest
+	if err := json.Unmarshal(body, &raw); err != nil || json.Unmarshal(body, &req) != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	_, duePresent := raw["due_date"]
+	if req.Title == nil && req.Description == nil && !duePresent {
 		writeError(w, http.StatusBadRequest, "title or description is required")
 		return
+	}
+	if duePresent && !isTaskChat(issue) {
+		writeError(w, http.StatusBadRequest, "due date is only set on a task chat")
+		return
+	}
+	var due pgtype.Date
+	if duePresent {
+		due, err = h.resolveReminderDueDate(r, req.DueDate)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid due_date")
+			return
+		}
 	}
 	var patch service.IssueContentPatch
 	if req.Title != nil {
@@ -702,6 +726,7 @@ func (h *Handler) UpdateGroupChat(w http.ResponseWriter, r *http.Request) {
 			patch.Description = &description
 		}
 	}
+	changed := false
 	if patch.Title != nil || patch.Description != nil {
 		updated, err := h.IssueService.UpdateContent(r.Context(), issue, patch)
 		if err != nil {
@@ -710,6 +735,29 @@ func (h *Handler) UpdateGroupChat(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		issue = updated
+		changed = true
+	}
+	if duePresent {
+		updated, err := h.Queries.UpdateIssue(r.Context(), db.UpdateIssueParams{
+			ID:            issue.ID,
+			SourceTaskID:  h.wakeupSourceTaskID(r),
+			AssigneeType:  issue.AssigneeType,
+			AssigneeID:    issue.AssigneeID,
+			StartDate:     issue.StartDate,
+			DueDate:       due,
+			ParentIssueID: issue.ParentIssueID,
+			ProjectID:     issue.ProjectID,
+			Stage:         issue.Stage,
+		})
+		if err != nil {
+			slog.Warn("update task chat due date failed", append(logger.RequestAttrs(r), "error", err)...)
+			writeError(w, http.StatusInternalServerError, "failed to update chat")
+			return
+		}
+		issue = updated
+		changed = true
+	}
+	if changed {
 		h.publishGroupChatUpdated(uuidToString(issue.WorkspaceID), userID, issue.ID)
 	}
 	writeJSON(w, http.StatusOK, groupChatToResponse(issue, h.getIssuePrefix(r.Context(), issue.WorkspaceID), members, nil, userID))
@@ -731,10 +779,6 @@ func (h *Handler) AddGroupChatMember(w http.ResponseWriter, r *http.Request) {
 	}
 	if issue.IsDirectChat {
 		writeError(w, http.StatusBadRequest, "members of a direct chat cannot change")
-		return
-	}
-	if isReminder(issue) {
-		writeError(w, http.StatusBadRequest, "agents join a reminder when mentioned")
 		return
 	}
 	if !isGroupChatCreator(issue, userID) {

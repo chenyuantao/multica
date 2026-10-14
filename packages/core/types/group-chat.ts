@@ -37,6 +37,8 @@ export interface GroupChat {
   task: boolean;
   /** Issue status. Task chats use `done` once checked off; anything else is open. */
   status: string;
+  /** Task due day (YYYY-MM-DD). Null until one is set, and on a chat that is not a task. */
+  due_date?: string | null;
 }
 
 /** A chat whose messages contain the search keyword. */
@@ -123,6 +125,8 @@ export interface GroupChatMemberRef {
 export interface UpdateGroupChatRequest {
   title?: string;
   description?: string;
+  /** Task due day. Null clears it. Omitted leaves it unchanged. */
+  due_date?: string | null;
 }
 
 export interface CreateGroupChatRequest {

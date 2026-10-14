@@ -192,9 +192,16 @@ func TestReminderMentionAddsTheAgentAndStartsIt(t *testing.T) {
 	agentID := createHandlerTestAgent(t, "reminder-mentioned-agent", nil)
 	reminder := newReminder(t, "Draft the launch post", "")
 
+	// Inviting from the sidebar adds the agent and does not start a run.
 	testutil.Call(t, testHandler.AddGroupChatMember, withURLParam(groupChatRequestAs(t, testUserID, "POST", "/api/group-chats/"+reminder.ID+"/members", map[string]string{
 		"member_type": "agent", "member_id": agentID,
-	}), "id", reminder.ID)).Want(http.StatusBadRequest)
+	}), "id", reminder.ID)).Want(http.StatusOK)
+	if n := dbfx.Count(t, `SELECT count(*) FROM issue_member WHERE issue_id = $1 AND member_type = 'agent' AND member_id = $2`, reminder.ID, agentID); n != 1 {
+		t.Fatalf("agent memberships = %d, want the invited agent added", n)
+	}
+	if n := dbfx.Count(t, `SELECT count(*) FROM agent_task_queue WHERE issue_id = $1 AND agent_id = $2`, reminder.ID, agentID); n != 0 {
+		t.Fatalf("tasks = %d, want no run until the agent is mentioned", n)
+	}
 
 	postReminderMessage(t, reminder.ID, "[@Writer](mention://agent/"+agentID+") draft it").Want(http.StatusCreated)
 	if n := dbfx.Count(t, `SELECT count(*) FROM issue_member WHERE issue_id = $1 AND member_type = 'agent' AND member_id = $2`, reminder.ID, agentID); n != 1 {
@@ -605,6 +612,25 @@ func TestReminderUpdateAndDeleteStayOnTheBoundUser(t *testing.T) {
 	testutil.Call(t, testHandler.DeleteReminder, remove).Want(http.StatusNoContent)
 	if hasReminder(listRemindersAs(t, testUserID, ""), reminder.ID) {
 		t.Fatal("deleted reminder is still listed")
+	}
+}
+
+func TestTaskChatDueDateCanChange(t *testing.T) {
+	reminder := newReminder(t, "Ship the notes", "2026-10-14")
+	var updated GroupChatResponse
+	testutil.Call(t, testHandler.UpdateGroupChat, withURLParam(groupChatRequestAs(t, testUserID, "PATCH", "/api/group-chats/"+reminder.ID, map[string]any{
+		"due_date": "2026-10-20",
+	}), "id", reminder.ID)).Want(http.StatusOK).JSON(&updated)
+	if updated.DueDate == nil || *updated.DueDate != "2026-10-20" {
+		t.Fatalf("due_date = %v, want 2026-10-20", updated.DueDate)
+	}
+
+	var cleared GroupChatResponse
+	testutil.Call(t, testHandler.UpdateGroupChat, withURLParam(groupChatRequestAs(t, testUserID, "PATCH", "/api/group-chats/"+reminder.ID, map[string]any{
+		"due_date": nil,
+	}), "id", reminder.ID)).Want(http.StatusOK).JSON(&cleared)
+	if cleared.DueDate != nil {
+		t.Fatalf("due_date = %v, want cleared", *cleared.DueDate)
 	}
 }
 

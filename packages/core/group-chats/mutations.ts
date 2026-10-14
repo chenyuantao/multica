@@ -126,11 +126,16 @@ export function useUpdateGroupChat(wsId: string, chatId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: UpdateGroupChatRequest) => api.updateGroupChat(chatId, data),
-    onSuccess: (chat) => {
+    onSuccess: (chat, vars) => {
       if (!chat) return;
       qc.setQueryData<GroupChat[]>(groupChatKeys.list(wsId), (old) =>
-        old?.map((c) => (c.id === chat.id ? { ...c, title: chat.title, description: chat.description } : c)),
+        old?.map((c) =>
+          c.id === chat.id ? { ...c, title: chat.title, description: chat.description, due_date: chat.due_date } : c,
+        ),
       );
+      if (vars.due_date !== undefined) {
+        void qc.invalidateQueries({ queryKey: reminderKeys.all(wsId) });
+      }
     },
     onSettled: () => qc.invalidateQueries({ queryKey: groupChatKeys.list(wsId) }),
   });
