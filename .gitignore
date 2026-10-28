@@ -16,6 +16,9 @@ dist-electron
 # config files (entitlements, icons) — not build output.
 !apps/desktop/build/
 !apps/desktop/build/**
+# xiaohongshu/bin holds source CLIs, not build output.
+!xiaohongshu/bin/
+!xiaohongshu/bin/**
 
 # env
 .env*

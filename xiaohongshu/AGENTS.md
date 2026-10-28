@@ -18,6 +18,16 @@ stdout is the complete Xiaohongshu reply as its original Markdown, followed by a
 - Follow-ups in the same conversation: pass `-c <conversationId>`; the id is printed on stderr.
 - Exit code 3 means login is required: give the user the QR link and image path from stderr, wait for the scan, then rerun. For other failures, report the error message; do not answer the question yourself.
 
+## 采集笔记评论
+
+从仓库根目录运行。用已登录的 Ego Lite 打开网页搜索，读取公开笔记浮层里当前可见的评论，并按关切词归类。不调用未公开接口。
+
+```bash
+node xiaohongshu/bin/xhs-comments.mjs 个人养老金 税优健康险
+```
+
+stdout 是归类后的 Markdown。加 `--json` 输出原始结果。登录失效时退出码为 3，先运行 `node xiaohongshu/bin/xhs-ai.mjs login`。
+
 ## 发布小红书图文
 
 本机已安装 skillhub 技能 `@indiv-sunny/xhs-note-publisher`（小红书图文发布）。用户要发小红书、做图文笔记、生成封面后发布，或说「复用发布能力」时走本节。问点点仍走上一节。
