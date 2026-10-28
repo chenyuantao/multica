@@ -2,7 +2,7 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"time"
@@ -11,16 +11,17 @@ import (
 	"github.com/multica-ai/multica/server/internal/imindasr"
 )
 
-// IMindASR proxies one recording to qwen-audio-3.1-asr-flash-message.
-// The phone cannot reliably set an Authorization header on its WebSocket, so
-// the first text frame carries the Multica session token.
+// IMindASR forwards authenticated, workspace-authorized audio to the ASR model.
 func (h *Handler) IMindASR(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.iMindPeer(w, r, r.URL.Query().Get("share_machine")); !ok {
+		return
+	}
 	cfg, ok := imindasr.ConfigFromEnv()
 	if !ok {
 		writeErrorCode(w, http.StatusServiceUnavailable, "imind_asr_unconfigured", "iMind speech recognition is not configured")
 		return
 	}
-	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
+	upgrader := websocket.Upgrader{}
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		return
@@ -31,32 +32,32 @@ func (h *Handler) IMindASR(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	_ = conn.SetReadDeadline(time.Now().Add(8 * time.Second))
-	_, data, err := conn.ReadMessage()
+	kind, data, err := conn.ReadMessage()
 	if err != nil {
 		return
 	}
 	_ = conn.SetReadDeadline(time.Time{})
+	client := &imindASRClient{conn: conn}
 	var start struct {
-		Type  string `json:"type"`
-		Token string `json:"token"`
+		Type         string `json:"type"`
+		SampleRateHz int    `json:"sample_rate_hz"`
+		Format       string `json:"format"`
+		Language     string `json:"language"`
 	}
-	if err := json.Unmarshal(data, &start); err != nil || start.Type != "start" {
-		_ = conn.WriteJSON(imindasr.ServerMessage{Type: "error", Message: "expected start"})
+	if kind != websocket.TextMessage || decodeIMindJSON(data, &start) != nil || start.Type != "start" ||
+		start.SampleRateHz != 16000 || start.Format != "pcm_s16le" || (start.Language != "" && start.Language != "zh") {
+		_ = client.Write(imindasr.ServerMessage{Type: "error", Code: "asr_invalid_start", Message: "expected start with 16000 Hz pcm_s16le audio"})
 		return
 	}
-	userID, err := speechUserID(start.Token)
+	userID := requestUserID(r)
+	upstream, err := imindasr.Dial(ctx, cfg)
 	if err != nil {
-		_ = conn.WriteJSON(imindasr.ServerMessage{Type: "error", Message: "unauthorized"})
+		slog.Warn("imind asr: dial failed", "user_id", userID)
+		_ = client.Write(imindasr.ServerMessage{Type: "error", Code: "asr_unavailable", Message: "speech recognition is unavailable"})
 		return
 	}
-	upstream, err := imindasr.Dial(cfg)
-	if err != nil {
-		slog.Warn("imind asr: dial failed", "user_id", userID, "error", err)
-		_ = conn.WriteJSON(imindasr.ServerMessage{Type: "error", Message: "speech recognition is unavailable"})
-		return
-	}
-	if err := imindasr.Relay(ctx, &imindASRClient{conn: conn}, upstream); err != nil && ctx.Err() == nil {
-		slog.Warn("imind asr: session ended", "user_id", userID, "error", err)
+	if err := imindasr.Relay(ctx, client, upstream); err != nil && ctx.Err() == nil {
+		slog.Warn("imind asr: session ended", "user_id", userID)
 	}
 }
 
@@ -73,11 +74,13 @@ func (c *imindASRClient) Read() (imindasr.ClientMessage, error) {
 	var msg struct {
 		Type string `json:"type"`
 	}
-	if err := json.Unmarshal(data, &msg); err != nil {
-		return imindasr.ClientMessage{}, err
+	if kind != websocket.TextMessage || decodeIMindJSON(data, &msg) != nil || (msg.Type != "stop" && msg.Type != "commit") {
+		return imindasr.ClientMessage{}, errors.New("invalid ASR control frame")
 	}
 	return imindasr.ClientMessage{Kind: msg.Type}, nil
 }
+
+func (c *imindASRClient) Close() error { return c.conn.Close() }
 
 func (c *imindASRClient) Write(msg imindasr.ServerMessage) error {
 	_ = c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))

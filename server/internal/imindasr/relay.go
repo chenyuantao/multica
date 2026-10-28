@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -42,10 +44,10 @@ func ConfigFromEnv() (Config, bool) {
 }
 
 // Dial opens the model socket. Authorization is attached only on this hop.
-func Dial(cfg Config) (*websocket.Conn, error) {
+func Dial(ctx context.Context, cfg Config) (*websocket.Conn, error) {
 	header := http.Header{}
 	header.Set("Authorization", "Bearer "+cfg.APIKey)
-	conn, _, err := websocket.DefaultDialer.Dial(cfg.URL, header)
+	conn, _, err := websocket.DefaultDialer.DialContext(ctx, cfg.URL, header)
 	return conn, err
 }
 
@@ -58,17 +60,19 @@ type ClientMessage struct {
 // ServerMessage is JSON written back to the phone.
 type ServerMessage struct {
 	Type       string `json:"type"`
-	Text       string `json:"text,omitempty"`
+	Text       string `json:"text"`
 	StartMS    *int   `json:"start_ms,omitempty"`
 	EndMS      *int   `json:"end_ms,omitempty"`
 	SentenceID *int   `json:"sentence_id,omitempty"`
 	Message    string `json:"message,omitempty"`
+	Code       string `json:"code,omitempty"`
 }
 
 // Client is the phone socket.
 type Client interface {
 	Read() (ClientMessage, error)
 	Write(ServerMessage) error
+	Close() error
 }
 
 // Upstream is the DashScope socket.
@@ -98,8 +102,24 @@ type envelope struct {
 }
 
 // Relay runs one recognition session.
-func Relay(ctx context.Context, client Client, up Upstream) error {
-	defer up.Close()
+func Relay(ctx context.Context, client Client, up Upstream) (err error) {
+	ctx, cancel := context.WithCancel(ctx)
+	var readers sync.WaitGroup
+	watchDone := make(chan struct{})
+	go func() {
+		defer close(watchDone)
+		<-ctx.Done()
+		_ = up.Close()
+		_ = client.Close()
+	}()
+	defer func() {
+		if err != nil && ctx.Err() == nil {
+			_ = client.Write(ServerMessage{Type: "error", Code: "asr_unavailable", Message: "speech recognition session failed"})
+		}
+		cancel()
+		<-watchDone
+		readers.Wait()
+	}()
 	taskID := strings.ReplaceAll(uuid.NewString(), "-", "")
 	if err := up.WriteJSON(runTask(taskID)); err != nil {
 		return err
@@ -113,34 +133,55 @@ func Relay(ctx context.Context, client Client, up Upstream) error {
 
 	events := make(chan envelope, 8)
 	readErr := make(chan error, 1)
+	readers.Add(1)
 	go func() {
+		defer readers.Done()
 		for {
 			var ev envelope
 			if err := up.ReadJSON(&ev); err != nil {
 				readErr <- err
 				return
 			}
-			events <- ev
+			select {
+			case events <- ev:
+			case <-ctx.Done():
+				return
+			}
+			if ev.Header.Event == "task-finished" || ev.Header.Event == "task-failed" {
+				return
+			}
 		}
 	}()
 	incoming := make(chan ClientMessage, 8)
 	clientErr := make(chan error, 1)
+	readers.Add(1)
 	go func() {
+		defer readers.Done()
 		for {
 			msg, err := client.Read()
 			if err != nil {
 				clientErr <- err
 				return
 			}
-			incoming <- msg
+			select {
+			case incoming <- msg:
+			case <-ctx.Done():
+				return
+			}
+			if msg.Kind == "stop" || msg.Kind == "commit" {
+				return
+			}
 		}
 	}()
 
 	stopped := false
+	var finishTimeout <-chan time.Time
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case <-finishTimeout:
+			return fmt.Errorf("speech finish timed out")
 		case err := <-readErr:
 			return err
 		case err := <-clientErr:
@@ -162,18 +203,16 @@ func Relay(ctx context.Context, client Client, up Upstream) error {
 			case "task-finished":
 				return client.Write(ServerMessage{Type: "done"})
 			case "task-failed":
-				msg := ev.Header.ErrorMessage
-				if msg == "" {
-					msg = "speech recognition failed"
-				}
-				_ = client.Write(ServerMessage{Type: "error", Message: msg})
-				return fmt.Errorf("%s", msg)
+				return fmt.Errorf("speech recognition failed")
 			}
 		case msg := <-incoming:
 			switch msg.Kind {
 			case "audio":
 				if stopped || len(msg.Audio) == 0 {
 					continue
+				}
+				if len(msg.Audio)%2 != 0 {
+					return fmt.Errorf("invalid PCM frame")
 				}
 				if err := up.WriteMessage(websocket.BinaryMessage, msg.Audio); err != nil {
 					return err
@@ -183,6 +222,9 @@ func Relay(ctx context.Context, client Client, up Upstream) error {
 					continue
 				}
 				stopped = true
+				timer := time.NewTimer(15 * time.Second)
+				defer timer.Stop()
+				finishTimeout = timer.C
 				if err := up.WriteJSON(finishTask(taskID)); err != nil {
 					return err
 				}
@@ -192,6 +234,10 @@ func Relay(ctx context.Context, client Client, up Upstream) error {
 }
 
 func waitStarted(ctx context.Context, up Upstream) error {
+	if socket, ok := up.(interface{ SetReadDeadline(time.Time) error }); ok {
+		_ = socket.SetReadDeadline(time.Now().Add(10 * time.Second))
+		defer socket.SetReadDeadline(time.Time{})
+	}
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -204,9 +250,6 @@ func waitStarted(ctx context.Context, up Upstream) error {
 		case "task-started":
 			return nil
 		case "task-failed":
-			if ev.Header.ErrorMessage != "" {
-				return fmt.Errorf("%s", ev.Header.ErrorMessage)
-			}
 			return fmt.Errorf("speech task was rejected")
 		}
 	}

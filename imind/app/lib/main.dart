@@ -1,13 +1,12 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:record/record.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
 
 import 'api.dart';
+import 'asr_session.dart';
 import 'transcript.dart';
 import 'url_extract.dart';
 
@@ -2021,7 +2020,13 @@ class _RecordingDetailState extends State<RecordingDetail> {
 }
 
 class RecordPage extends StatefulWidget {
-  const RecordPage({super.key, required this.api, required this.machine});
+  const RecordPage({
+    super.key,
+    required this.api,
+    required this.machine,
+    this.recorder,
+  });
+  final AudioRecorder? recorder;
   final MulticaApi api;
   final String machine;
 
@@ -2038,49 +2043,70 @@ class _LiveLine {
 }
 
 class _RecordPageState extends State<RecordPage> {
-  final _recorder = AudioRecorder();
+  late final _recorder = widget.recorder ?? AudioRecorder();
   final _lines = <_LiveLine>[];
   final _noteTitle = TextEditingController();
   final _noteBody = TextEditingController();
   final _elapsed = ValueNotifier<Duration>(Duration.zero);
   final _live = ValueNotifier<bool>(false);
-  WebSocketChannel? _socket;
+  AsrSession? _socket;
   StreamSubscription<dynamic>? _audio;
-  StreamSubscription<dynamic>? _messages;
+  var _connecting = false;
+  var _saving = false;
+  var _finalizing = false;
+  var _sessionOffsetMs = 0;
   Timer? _clock;
   var _started = DateTime.now();
   var _recording = false;
   String? _status;
 
   Future<void> _start() async {
-    if (_recording) return;
-    if (!await _recorder.hasPermission()) {
-      if (mounted) setState(() => _status = '需要麦克风权限才能转写');
-      return;
-    }
-    await _messages?.cancel();
-    await _socket?.sink.close();
-    final base = widget.api.baseUrl;
-    final ws = base.replaceFirst(RegExp(r'^http'), 'ws');
-    final channel = WebSocketChannel.connect(Uri.parse('$ws/api/imind/asr'));
+    if (_recording || _connecting || _finalizing || _saving) return;
+    setState(() {
+      _connecting = true;
+      _status = '正在连接语音服务...';
+    });
+    AsrSession? channel;
     try {
-      channel.sink.add(
-        jsonEncode({
-          'type': 'start',
-          'token': widget.api.token,
-          'language': 'zh',
-        }),
-      );
-      _messages = channel.stream.listen(
-        (event) {
-          final raw = event is String ? event : utf8.decode(event as List<int>);
-          final data = jsonDecode(raw);
-          if (data is Map<String, dynamic>) _apply(data);
+      if (!await _recorder.hasPermission()) {
+        throw ApiException(0, '需要麦克风权限才能转写');
+      }
+      if (!mounted) return;
+      // An HTTP preflight lets expired sessions follow the shared 401 flow.
+      final shares = await widget.api.shares();
+      if (!shares.any((share) => share['machine'] == widget.machine)) {
+        throw ApiException(403, '共享知识库已断开，请返回首页重新选择');
+      }
+      if (!mounted) return;
+      await _socket?.close();
+      _sessionOffsetMs = _elapsed.value.inMilliseconds;
+      final ids = <int, int>{};
+      channel = AsrSession.connect(
+        api: widget.api,
+        machine: widget.machine,
+        onMessage: (data) {
+          if (!mounted) return;
+          if (data['type'] == 'partial' || data['type'] == 'final') {
+            final id = data['sentence_id'] as int;
+            final localId = ids.putIfAbsent(id, () => _lines.length);
+            final start = data['start_ms'] as int?;
+            _apply({
+              ...data,
+              'sentence_id': localId,
+              if (start != null && start >= 0)
+                'start_ms': _sessionOffsetMs + start,
+            });
+          } else {
+            _apply(data);
+          }
         },
-        onError: (Object error) {
-          if (mounted) setState(() => _status = '$error');
-        },
       );
+      _socket = channel;
+      await channel.start();
+      if (!mounted) {
+        await channel.close();
+        return;
+      }
       final stream = await _recorder.startStream(
         const RecordConfig(
           encoder: AudioEncoder.pcm16bits,
@@ -2088,23 +2114,36 @@ class _RecordPageState extends State<RecordPage> {
           numChannels: 1,
         ),
       );
-      _audio = stream.listen((frame) => channel.sink.add(frame));
+      if (!mounted) {
+        await _recorder.stop();
+        await channel.close();
+        return;
+      }
+      _audio = stream.listen(
+        channel.sendAudio,
+        onError: (Object _) {
+          if (mounted) setState(() => _status = '麦克风采集失败，已收到的转写仍可保存');
+        },
+      );
       _started = DateTime.now();
       _clock?.cancel();
       _clock = Timer.periodic(const Duration(seconds: 1), (_) {
-        _elapsed.value = DateTime.now().difference(_started);
+        if (mounted) {
+          _elapsed.value =
+              Duration(milliseconds: _sessionOffsetMs) +
+              DateTime.now().difference(_started);
+        }
       });
-      _elapsed.value = Duration.zero;
       _live.value = true;
-      if (!mounted) return;
       setState(() {
-        _socket = channel;
         _recording = true;
         _status = null;
       });
     } catch (error) {
-      await channel.sink.close();
+      await channel?.close();
       if (mounted) setState(() => _status = '$error');
+    } finally {
+      if (mounted) setState(() => _connecting = false);
     }
   }
 
@@ -2115,13 +2154,14 @@ class _RecordPageState extends State<RecordPage> {
         setState(
           () => _status = '${data['error'] ?? data['message'] ?? '转写失败'}',
         );
+        if (_recording && !_finalizing) unawaited(_stop());
       }
       return;
     }
     final text = '${data['text'] ?? ''}'.trim();
     if (text.isEmpty) return;
     final id = (data['sentence_id'] as num?)?.toInt() ?? _lines.length;
-    final start = (data['start_ms'] as num?)?.toInt() ?? 0;
+    final start = (data['start_ms'] as num?)?.toInt() ?? -1;
     setState(() {
       final index = _lines.indexWhere((line) => line.id == id);
       if (index >= 0) {
@@ -2136,15 +2176,31 @@ class _RecordPageState extends State<RecordPage> {
   }
 
   Future<void> _stop() async {
+    if (_finalizing) return;
+    setState(() => _finalizing = true);
     _clock?.cancel();
+    _elapsed.value =
+        Duration(milliseconds: _sessionOffsetMs) +
+        DateTime.now().difference(_started);
     _live.value = false;
-    await _audio?.cancel();
-    _socket?.sink.add(jsonEncode({'type': 'stop'}));
-    await _recorder.stop();
-    if (mounted) setState(() => _recording = false);
+    try {
+      await _recorder.stop();
+      await _audio?.cancel();
+      await _socket?.finish();
+    } catch (error) {
+      if (mounted) setState(() => _status = '$error');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _recording = false;
+          _finalizing = false;
+        });
+      }
+    }
   }
 
   Future<void> _askSave() async {
+    if (_connecting || _saving || _finalizing) return;
     final action = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
@@ -2191,6 +2247,8 @@ class _RecordPageState extends State<RecordPage> {
   }
 
   Future<void> _save() async {
+    if (_saving) return;
+    setState(() => _saving = true);
     final titleSource = _noteTitle.text.trim().isNotEmpty
         ? _noteTitle.text.trim()
         : (_lines.isEmpty ? '录音' : _lines.first.text);
@@ -2214,13 +2272,15 @@ class _RecordPageState extends State<RecordPage> {
         'transcript': transcript,
         'audio': {
           'duration_ms': _elapsed.value.inMilliseconds,
-          'format': 'pcm',
+          'format': 'pcm_s16le',
           'sample_rate_hz': 16000,
         },
       });
       if (mounted) Navigator.pop(context, true);
     } catch (error) {
       if (mounted) setState(() => _status = '$error');
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -2238,19 +2298,23 @@ class _RecordPageState extends State<RecordPage> {
   }
 
   Future<void> _back() async {
+    if (_connecting || _saving || _finalizing) return;
     if (_recording) {
       await _askSave();
       return;
     }
-    if (mounted) Navigator.pop(context, _lines.isNotEmpty);
+    if (_lines.isNotEmpty || _noteBody.text.isNotEmpty) {
+      await _askSave();
+      return;
+    }
+    if (mounted) Navigator.pop(context, false);
   }
 
   @override
   void dispose() {
     _clock?.cancel();
     _audio?.cancel();
-    _messages?.cancel();
-    _socket?.sink.close();
+    _socket?.close();
     _recorder.dispose();
     _noteTitle.dispose();
     _noteBody.dispose();
@@ -2353,9 +2417,29 @@ class _RecordPageState extends State<RecordPage> {
                   PillButton(
                     dark: true,
                     icon: _recording ? Icons.stop : Icons.mic_none,
-                    label: _recording ? '保存' : '开始',
-                    onPressed: _recording ? _askSave : _start,
+                    label: _connecting
+                        ? '连接中'
+                        : _finalizing
+                        ? '等待转写'
+                        : _saving
+                        ? '保存中'
+                        : _recording
+                        ? '保存'
+                        : '开始',
+                    onPressed: _connecting || _finalizing || _saving
+                        ? null
+                        : _recording
+                        ? _askSave
+                        : _start,
                   ),
+                  if (!_recording && _elapsed.value > Duration.zero)
+                    PillButton(
+                      icon: Icons.save_outlined,
+                      label: '保存',
+                      onPressed: _connecting || _finalizing || _saving
+                          ? null
+                          : _save,
+                    ),
                   PillButton(
                     icon: Icons.edit_outlined,
                     label: '笔记',

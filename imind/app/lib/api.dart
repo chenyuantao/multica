@@ -12,6 +12,24 @@ String defaultApiBase() {
   return 'http://127.0.0.1:18607';
 }
 
+bool validWorkspaceId(Object? value) =>
+    value is String &&
+    RegExp(r'^[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$')
+        .hasMatch(value);
+
+bool validShareMachine(Object? value) =>
+    value is String &&
+    value.trim().isNotEmpty &&
+    value == value.trim() &&
+    value != '.' &&
+    value != '..' &&
+    !RegExp(r'[/\\\x00-\x1f\x7f]').hasMatch(value);
+
+bool validSessionToken(Object? value) =>
+    value is String &&
+    value.isNotEmpty &&
+    !RegExp(r'\s|[\x00-\x1f\x7f]').hasMatch(value);
+
 class ApiException implements Exception {
   ApiException(this.status, this.message);
   final int status;
@@ -27,6 +45,9 @@ class MulticaApi {
   final String baseUrl;
   final http.Client _client;
   String? token;
+  String? workspaceId;
+
+  void close() => _client.close();
 
   Future<void> sendCode(String email) =>
       _post('/auth/send-code', {'email': email}, auth: false);

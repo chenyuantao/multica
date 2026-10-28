@@ -4,7 +4,7 @@
 
 ## 身份与作用域
 
-- 除登录接口外，全部请求带 `Authorization: Bearer <multica JWT>`；笔记接口另带 `X-Workspace-ID: <workspace UUID>`。服务端认证和成员中间件实际验证身份，不信任客户端自行声明的工作区。
+- 除登录接口外，全部请求带 `Authorization: Bearer <multica JWT>`；`/api/imind/*` 另带 `X-Workspace-ID: <workspace UUID>`。服务端认证和成员中间件实际验证身份，不信任客户端自行声明的工作区。
 - `share_machine` 是现有共享知识库的 machine 名；共享的 WorkspaceID 必须等于已验证工作区，再复用现有可见性/所有者授权。工作区共享供成员使用，private 仅原有授权用户使用；不能通过所有者身份跨工作区访问。
 - 该值由客户端首次选择后用平台安全存储保存；它不进入 Multica 数据库。
 - 所有 iMind 文件只允许位于 `<share_machine>/iMind/` 的一级物理目录。API 不接受 `../`、绝对路径、非法文件名或目录外目标；daemon拒绝目录/笔记 symlink（检查时存在的链接），列表过滤这些链接。
@@ -49,6 +49,7 @@ audio: null
 - `audio` 是可选对象，形如 `{"duration_ms":112000,"format":"pcm_s16le","sample_rate_hz":16000}`；本版本不上传/保留音频文件。
 - HTML 注释分隔符为唯一可信边界，不依赖 `## 原文` 标题；四个分隔符必须各一份、独立行、顺序正确，区外不能有额外非空文本。正文与转写不能包含保留 imind 分隔符。
 - UTF-8/头部字段与类型严格校验，拒绝 NUL、重复 JSON 键、未知请求字段、多个 JSON 值及非法类型。
+- 时间戳使用 `MM:SS.mmm`，支持超过两位的分钟。原文片段保留多行 Markdown，不只读取第一行。
 - `updated_at` 由服务端生成。客户端提交的 `title` 用于确定文件名；元数据不保存标题。`tags`、正文、转写由客户端提交。
 
 ## HTTP API
@@ -122,7 +123,7 @@ audio: null
 { "type": "start", "sample_rate_hz": 16000, "format": "pcm_s16le", "language": "zh" }
 ```
 
-随后发送二进制 PCM 帧；结束时发送 `{ "type": "stop" }`。
+服务端返回 `{ "type": "ready" }`（上游task-started）后才开始发送二进制 PCM 帧。结束发送 `{ "type": "stop" }`，继续接收尾部 final，直到 `{ "type": "done" }`（上游task-finished）才完成保存。每个片段另含 `sentence_id`，`start_ms/end_ms` 只在上游提供时存在；客户端暂停重连映射独立句ID并累加时间，不覆盖前一段。Token仅在升级头，不放首帧或URL。
 
 服务端到客户端：
 

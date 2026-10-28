@@ -1491,9 +1491,6 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 	// set Authorization; the first frame carries the session token. The
 	// DashScope key is read from the server environment.
 	r.Get("/api/speech/realtime", h.SpeechRealtime)
-	// iMind recording uses Qwen-Audio-3.1-ASR-Flash-Message. The first frame
-	// carries the session token for the same reason as /api/speech/realtime.
-	r.Get("/api/imind/asr", h.IMindASR)
 
 	// Local file serving (when using local storage). Served through the
 	// handler so /uploads/* carries the same preview security headers as the
@@ -1734,6 +1731,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 		})
 		r.Route("/api/imind", func(r chi.Router) {
 			r.Use(middleware.RequireWorkspaceMember(queries))
+			r.Get("/asr", h.IMindASR)
 			r.Get("/shares", h.GetIMindShares)
 			r.Post("/bootstrap", h.PostIMindBootstrap)
 			r.Post("/notes/list", h.PostIMindNotesList)
