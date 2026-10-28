@@ -2,16 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:record/record.dart';
 
-import 'api.dart';
 import 'asr_session.dart';
+
+import 'api.dart';
+import 'session.dart';
 import 'transcript.dart';
 import 'url_extract.dart';
-
-const _storage = FlutterSecureStorage();
-const _machineKey = 'imind_share_machine';
 
 const _bg = Color(0xFFF2F2F6);
 const _ink = Color(0xFF1C1C1E);
@@ -24,10 +22,11 @@ const _red = Color(0xFFE5484D);
 void main() => runApp(const IMindApp());
 
 class IMindApp extends StatelessWidget {
-  const IMindApp({super.key, this.initialToken});
+  const IMindApp({super.key, this.initialToken, this.api, this.sessionStore});
 
-  /// Empty string forces the login screen. Null reads the persisted token.
   final String? initialToken;
+  final MulticaApi? api;
+  final SessionStore? sessionStore;
 
   @override
   Widget build(BuildContext context) {
@@ -39,68 +38,91 @@ class IMindApp extends StatelessWidget {
         scaffoldBackgroundColor: _bg,
         colorScheme: ColorScheme.fromSeed(seedColor: _dark),
       ),
-      home: SessionGate(initialToken: initialToken),
+      home: SessionGate(
+        initialToken: initialToken,
+        api: api,
+        sessionStore: sessionStore,
+      ),
     );
   }
 }
 
 class SessionGate extends StatefulWidget {
-  const SessionGate({super.key, this.initialToken});
+  const SessionGate({
+    super.key,
+    this.initialToken,
+    this.api,
+    this.sessionStore,
+  });
   final String? initialToken;
+  final MulticaApi? api;
+  final SessionStore? sessionStore;
 
   @override
   State<SessionGate> createState() => _SessionGateState();
 }
 
 class _SessionGateState extends State<SessionGate> {
-  String? _token;
-  var _ready = false;
+  final _navigator = GlobalKey<NavigatorState>();
+  late final _api = widget.api ?? MulticaApi(baseUrl: defaultApiBase());
+  late final _session = SessionController(
+    api: _api,
+    store: widget.sessionStore,
+  );
 
   @override
   void initState() {
     super.initState();
-    if (widget.initialToken != null) {
-      _token = widget.initialToken!.isEmpty ? null : widget.initialToken;
-      _ready = true;
-      return;
-    }
-    _storage
-        .read(key: 'multica_token')
-        .then((value) {
-          if (!mounted) return;
-          setState(() {
-            _token = value;
-            _ready = true;
-          });
-        })
-        .catchError((_) {
-          if (mounted) setState(() => _ready = true);
-        });
+    _session.addListener(_refreshSession);
+    _session.restore(initialToken: widget.initialToken);
   }
 
-  Future<void> _login(String token) async {
-    await _storage.write(key: 'multica_token', value: token);
-    if (mounted) setState(() => _token = token);
+  void _refreshSession() {
+    if (mounted) setState(() {});
   }
 
-  Future<void> _logout() async {
-    await _storage.delete(key: 'multica_token');
-    if (mounted) setState(() => _token = null);
+  @override
+  void dispose() {
+    _session.removeListener(_refreshSession);
+    _session.dispose();
+    if (widget.api == null) _api.close();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!_ready) {
+    if (!_session.ready) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    if (_token == null) return LoginPage(onLogin: _login);
-    return HomePage(token: _token!, onLogout: _logout);
+    if (_session.data == null) {
+      return LoginPage(
+        api: _api,
+        onLogin: _session.login,
+        sessionError: _session.error,
+      );
+    }
+    return NavigatorPopHandler<Object?>(
+      onPopWithResult: (result) => _navigator.currentState?.maybePop(result),
+      child: Navigator(
+        key: _navigator,
+        onGenerateRoute: (_) => MaterialPageRoute<void>(
+          builder: (_) => HomePage(session: _session),
+        ),
+      ),
+    );
   }
 }
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({super.key, required this.onLogin});
+  const LoginPage({
+    super.key,
+    required this.api,
+    required this.onLogin,
+    this.sessionError,
+  });
+  final MulticaApi api;
   final Future<void> Function(String token) onLogin;
+  final String? sessionError;
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -109,7 +131,7 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final _email = TextEditingController();
   final _code = TextEditingController();
-  final _api = MulticaApi(baseUrl: defaultApiBase());
+  MulticaApi get _api => widget.api;
   var _sent = false;
   var _busy = false;
   String? _error;
@@ -122,7 +144,7 @@ class _LoginPageState extends State<LoginPage> {
     try {
       if (!_sent) {
         await _api.sendCode(_email.text.trim());
-        setState(() => _sent = true);
+        if (mounted) setState(() => _sent = true);
       } else {
         final token = await _api.verifyCode(
           _email.text.trim(),
@@ -131,10 +153,17 @@ class _LoginPageState extends State<LoginPage> {
         await widget.onLogin(token);
       }
     } catch (error) {
-      setState(() => _error = '$error');
+      if (mounted) setState(() => _error = '$error');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  @override
+  void dispose() {
+    _email.dispose();
+    _code.dispose();
+    super.dispose();
   }
 
   @override
@@ -165,10 +194,13 @@ class _LoginPageState extends State<LoginPage> {
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(labelText: '验证码'),
                 ),
-              if (_error != null)
+              if (_error != null || widget.sessionError != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 12),
-                  child: Text(_error!, style: const TextStyle(color: _red)),
+                  child: Text(
+                    _error ?? widget.sessionError!,
+                    style: const TextStyle(color: _red),
+                  ),
                 ),
               const SizedBox(height: 16),
               FilledButton(
@@ -185,9 +217,8 @@ class _LoginPageState extends State<LoginPage> {
 }
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key, required this.token, required this.onLogout});
-  final String token;
-  final Future<void> Function() onLogout;
+  const HomePage({super.key, required this.session});
+  final SessionController session;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -195,7 +226,8 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   final _scaffold = GlobalKey<ScaffoldState>();
-  late final _api = MulticaApi(baseUrl: defaultApiBase())..token = widget.token;
+  MulticaApi get _api => widget.session.api;
+  var _reloading = false;
   List<Map<String, dynamic>> _notes = const [];
   String? _machine;
   String? _error;
@@ -214,26 +246,59 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _reload() async {
+    if (_reloading || widget.session.data == null) return;
+    _reloading = true;
     try {
-      final shares = await _api.shares();
-      if (shares.isEmpty) {
+      final workspaces = await _api.workspaces();
+      if (!mounted) return;
+      if (workspaces.isEmpty) {
+        await widget.session.select(null, null);
         if (!mounted) return;
         setState(() {
           _ready = true;
           _machine = null;
+          _notes = const [];
+          _error = '当前账号没有可访问的工作区';
+        });
+        return;
+      }
+      final savedSession = widget.session.data;
+      final workspaceIds = [
+        for (final workspace in workspaces) workspace['id'] as String,
+      ];
+      final workspaceId = workspaceIds.contains(savedSession?.workspaceId)
+          ? savedSession!.workspaceId!
+          : workspaceIds.first;
+      final savedMachine = savedSession?.workspaceId == workspaceId
+          ? savedSession?.machine
+          : null;
+      if (savedSession?.workspaceId != workspaceId) {
+        setState(() {
+          _machine = null;
+          _notes = const [];
+          _selected.clear();
+        });
+      }
+      await widget.session.select(workspaceId, savedMachine);
+      if (!mounted) return;
+      final shares = await _api.shares();
+      if (shares.isEmpty) {
+        await widget.session.select(workspaceId, null);
+        if (!mounted) return;
+        setState(() {
+          _ready = true;
+          _machine = null;
+          _notes = const [];
           _error = '当前工作区还没有已连接的共享知识库';
         });
         return;
       }
-      final names = [
-        for (final share in shares)
-          if (share['machine'] is String) share['machine'] as String,
-      ];
-      final saved = await _storage.read(key: _machineKey);
-      final machine = saved != null && names.contains(saved)
-          ? saved
+      final names = [for (final share in shares) share['machine'] as String];
+      final machine = names.contains(savedMachine)
+          ? savedMachine!
           : names.first;
-      await _storage.write(key: _machineKey, value: machine);
+      await widget.session.select(workspaceId, machine);
+      if (!mounted) return;
       await _api.bootstrap(machine);
       final notes = await _api.notes(machine);
       if (!mounted) return;
@@ -245,21 +310,19 @@ class _HomePageState extends State<HomePage> {
         _selected.removeWhere((id) => !notes.any((note) => note['id'] == id));
       });
     } on ApiException catch (error) {
-      if (error.status == 401) {
-        await widget.onLogout();
-        return;
-      }
-      if (!mounted) return;
+      if (error.status == 401 || !mounted) return;
       setState(() {
         _ready = true;
         _error = error.message;
       });
-    } catch (error) {
+    } catch (_) {
       if (!mounted) return;
       setState(() {
         _ready = true;
-        _error = '$error';
+        _error = '无法加载笔记，请重试';
       });
+    } finally {
+      _reloading = false;
     }
   }
 
@@ -421,14 +484,18 @@ class _HomePageState extends State<HomePage> {
     );
     Future<void>.delayed(const Duration(milliseconds: 350), controller.dispose);
     if (url == null || _machine == null) return;
-    await _api.createNote({
-      'share_machine': _machine,
-      'type': 'clip',
-      'title': '网页剪藏',
-      'source_url': url,
-      'content': '# 网页剪藏\n\n$url',
-    });
-    _reload();
+    try {
+      await _api.createNote({
+        'share_machine': _machine,
+        'type': 'clip',
+        'title': '网页剪藏',
+        'source_url': url,
+        'content': '# 网页剪藏\n\n$url',
+      });
+      if (mounted) _reload();
+    } on ApiException catch (error) {
+      _actionError(error);
+    }
   }
 
   List<Map<String, dynamic>> get _chosen =>
@@ -439,16 +506,21 @@ class _HomePageState extends State<HomePage> {
   ) async {
     final machine = _machine;
     if (machine == null) return;
-    for (final note in _chosen) {
-      final next = patch(note);
-      await _api.updateNote('${note['id']}', {
-        'share_machine': machine,
-        'revision': note['revision'],
-        'title': next['title'] ?? note['title'],
-        'tags': next['tags'] ?? noteTags(note),
-        'content': next['content'] ?? note['content'] ?? '',
-        'transcript': next['transcript'] ?? note['transcript'] ?? '',
-      });
+    try {
+      for (final note in _chosen) {
+        final next = patch(note);
+        await _api.updateNote('${note['id']}', {
+          'share_machine': machine,
+          'revision': note['revision'],
+          'title': next['title'] ?? note['title'],
+          'tags': next['tags'] ?? noteTags(note),
+          'content': next['content'] ?? note['content'] ?? '',
+          'transcript': next['transcript'] ?? note['transcript'] ?? '',
+        });
+      }
+    } on ApiException catch (error) {
+      _actionError(error);
+      return;
     }
     if (mounted) {
       setState(() {
@@ -548,8 +620,13 @@ class _HomePageState extends State<HomePage> {
       ),
     );
     if (ok != true) return;
-    for (final note in chosen) {
-      await _api.deleteNote('${note['id']}', machine, '${note['revision']}');
+    try {
+      for (final note in chosen) {
+        await _api.deleteNote('${note['id']}', machine, '${note['revision']}');
+      }
+    } on ApiException catch (error) {
+      _actionError(error);
+      return;
     }
     if (mounted) {
       setState(() {
@@ -558,6 +635,12 @@ class _HomePageState extends State<HomePage> {
       });
     }
     await _reload();
+  }
+
+  void _actionError(ApiException error) {
+    if (!mounted || error.status == 401) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(error.message)));
   }
 
   void _showInfo() {
@@ -964,7 +1047,7 @@ class _HomePageState extends State<HomePage> {
                 padding: const EdgeInsets.only(right: 12),
                 child: _round(
                   label: '退出登录',
-                  onTap: widget.onLogout,
+                  onTap: widget.session.logout,
                   child: const Icon(Icons.person_outline, size: 22),
                 ),
               ),
@@ -1159,7 +1242,9 @@ class _NoteEditorState extends State<NoteEditor> {
   @override
   void initState() {
     super.initState();
-    _note = widget.note == null ? null : Map<String, dynamic>.from(widget.note!);
+    _note = widget.note == null
+        ? null
+        : Map<String, dynamic>.from(widget.note!);
     _history.addListener(_refresh);
     _body.addListener(_refresh);
     _transcript.addListener(_refresh);
@@ -1393,126 +1478,126 @@ class _NoteEditorState extends State<NoteEditor> {
         _leave();
       },
       child: Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
         backgroundColor: Colors.white,
-        elevation: 0,
-        automaticallyImplyLeading: false,
-        leadingWidth: _editing ? 80 : null,
-        leading: _editing
-            ? TextButton(
-                onPressed: _saving ? null : _discard,
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          automaticallyImplyLeading: false,
+          leadingWidth: _editing ? 80 : null,
+          leading: _editing
+              ? TextButton(
+                  onPressed: _saving ? null : _discard,
+                  child: const Text(
+                    '放弃',
+                    style: TextStyle(color: _ink, fontSize: 16),
+                  ),
+                )
+              : IconButton(
+                  tooltip: '返回',
+                  onPressed: _leave,
+                  icon: const Icon(Icons.arrow_back),
+                ),
+          actions: [
+            if (_editing) ...[
+              IconButton(
+                tooltip: '撤销',
+                onPressed: _history.value.canUndo ? _history.undo : null,
+                icon: const Icon(Icons.undo),
+              ),
+              IconButton(
+                tooltip: '重做',
+                onPressed: _history.value.canRedo ? _history.redo : null,
+                icon: const Icon(Icons.redo),
+              ),
+              TextButton(
+                onPressed: _saving ? null : _save,
                 child: const Text(
-                  '放弃',
-                  style: TextStyle(color: _ink, fontSize: 16),
+                  '保存',
+                  style: TextStyle(color: _blue, fontWeight: FontWeight.w600),
                 ),
-              )
-            : IconButton(
-                tooltip: '返回',
-                onPressed: _leave,
-                icon: const Icon(Icons.arrow_back),
               ),
-        actions: [
-          if (_editing) ...[
-            IconButton(
-              tooltip: '撤销',
-              onPressed: _history.value.canUndo ? _history.undo : null,
-              icon: const Icon(Icons.undo),
-            ),
-            IconButton(
-              tooltip: '重做',
-              onPressed: _history.value.canRedo ? _history.redo : null,
-              icon: const Icon(Icons.redo),
-            ),
-            TextButton(
-              onPressed: _saving ? null : _save,
-              child: const Text(
-                '保存',
-                style: TextStyle(color: _blue, fontWeight: FontWeight.w600),
+            ] else if (_note != null)
+              IconButton(
+                tooltip: '更多',
+                onPressed: () => setState(() => _menu = true),
+                icon: const Icon(Icons.more_horiz),
               ),
-            ),
-          ] else if (_note != null)
-            IconButton(
-              tooltip: '更多',
-              onPressed: () => setState(() => _menu = true),
-              icon: const Icon(Icons.more_horiz),
-            ),
-        ],
-      ),
-      body: Stack(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: Column(
-              children: [
-                TextField(
-                  controller: _title,
-                  focusNode: _titleFocus,
-                  readOnly: !_editing,
-                  onTap: () => _beginEdit(title: true),
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                  ),
-                  decoration: const InputDecoration(
-                    hintText: '无标题',
-                    border: InputBorder.none,
-                  ),
-                ),
-                if (_error != null)
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(_error!, style: const TextStyle(color: _red)),
-                  ),
-                if (_tags.isNotEmpty || _activeText.trim().isNotEmpty)
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      [
-                        for (final tag in _tags) '#$tag',
-                        if (_activeText.trim().isNotEmpty)
-                          '${_activeText.trim().length} 字',
-                      ].join('  '),
-                      style: const TextStyle(color: _sub, fontSize: 12),
+          ],
+        ),
+        body: Stack(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Column(
+                children: [
+                  TextField(
+                    controller: _title,
+                    focusNode: _titleFocus,
+                    readOnly: !_editing,
+                    onTap: () => _beginEdit(title: true),
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                    ),
+                    decoration: const InputDecoration(
+                      hintText: '无标题',
+                      border: InputBorder.none,
                     ),
                   ),
-                if (source is String && source.isNotEmpty)
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      source,
-                      style: const TextStyle(color: _sub, fontSize: 12),
+                  if (_error != null)
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(_error!, style: const TextStyle(color: _red)),
                     ),
-                  ),
-                if (widget.focusTranscript) ...[
-                  const Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text('语音原文', style: TextStyle(color: _sub)),
-                  ),
-                  Expanded(child: _editor(_transcript)),
-                ] else ...[
-                  Expanded(child: _editor(_body)),
-                  if (widget.showTranscript &&
-                      _transcript.text.isNotEmpty) ...[
+                  if (_tags.isNotEmpty || _activeText.trim().isNotEmpty)
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        [
+                          for (final tag in _tags) '#$tag',
+                          if (_activeText.trim().isNotEmpty)
+                            '${_activeText.trim().length} 字',
+                        ].join('  '),
+                        style: const TextStyle(color: _sub, fontSize: 12),
+                      ),
+                    ),
+                  if (source is String && source.isNotEmpty)
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        source,
+                        style: const TextStyle(color: _sub, fontSize: 12),
+                      ),
+                    ),
+                  if (widget.focusTranscript) ...[
                     const Align(
                       alignment: Alignment.centerLeft,
                       child: Text('语音原文', style: TextStyle(color: _sub)),
                     ),
-                    SizedBox(
-                      height: 220,
-                      child: _MarkdownEditor(
-                        controller: _transcript,
-                        onTag: _pickTag,
+                    Expanded(child: _editor(_transcript)),
+                  ] else ...[
+                    Expanded(child: _editor(_body)),
+                    if (widget.showTranscript &&
+                        _transcript.text.isNotEmpty) ...[
+                      const Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text('语音原文', style: TextStyle(color: _sub)),
                       ),
-                    ),
+                      SizedBox(
+                        height: 220,
+                        child: _MarkdownEditor(
+                          controller: _transcript,
+                          onTag: _pickTag,
+                        ),
+                      ),
+                    ],
                   ],
                 ],
-              ],
+              ),
             ),
-          ),
-          if (_menu) _noteMenu(),
-        ],
-      ),
+            if (_menu) _noteMenu(),
+          ],
+        ),
       ),
     );
   }
@@ -1604,10 +1689,7 @@ class _NoteEditorState extends State<NoteEditor> {
           children: [
             Icon(icon, size: 22, color: color ?? const Color(0xFF3A3A3C)),
             const SizedBox(width: 16),
-            Text(
-              label,
-              style: TextStyle(fontSize: 17, color: color),
-            ),
+            Text(label, style: TextStyle(fontSize: 17, color: color)),
           ],
         ),
       ),
@@ -1771,134 +1853,134 @@ class _RecordingDetailState extends State<RecordingDetail> {
         _leave();
       },
       child: Scaffold(
-      backgroundColor: Colors.white,
-      body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              height: 54,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: Row(
-                  children: [
-                    if (_editing)
-                      TextButton(
-                        onPressed: _saving ? null : _discard,
-                        child: const Text(
-                          '放弃',
-                          style: TextStyle(color: _ink, fontSize: 16),
+        backgroundColor: Colors.white,
+        body: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                height: 54,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Row(
+                    children: [
+                      if (_editing)
+                        TextButton(
+                          onPressed: _saving ? null : _discard,
+                          child: const Text(
+                            '放弃',
+                            style: TextStyle(color: _ink, fontSize: 16),
+                          ),
+                        )
+                      else
+                        _round(
+                          label: '返回',
+                          onTap: _leave,
+                          child: const Icon(Icons.arrow_back, size: 22),
                         ),
-                      )
-                    else
-                      _round(
-                        label: '返回',
-                        onTap: _leave,
-                        child: const Icon(Icons.arrow_back, size: 22),
-                      ),
-                    const Spacer(),
-                    if (_editing) ...[
-                      IconButton(
-                        tooltip: '撤销',
-                        onPressed: _activeHistory.value.canUndo
-                            ? _activeHistory.undo
-                            : null,
-                        icon: const Icon(Icons.undo),
-                      ),
-                      IconButton(
-                        tooltip: '重做',
-                        onPressed: _activeHistory.value.canRedo
-                            ? _activeHistory.redo
-                            : null,
-                        icon: const Icon(Icons.redo),
-                      ),
-                      TextButton(
-                        onPressed: _saving ? null : _save,
-                        child: const Text(
-                          '保存',
-                          style: TextStyle(
-                            color: _blue,
-                            fontWeight: FontWeight.w600,
+                      const Spacer(),
+                      if (_editing) ...[
+                        IconButton(
+                          tooltip: '撤销',
+                          onPressed: _activeHistory.value.canUndo
+                              ? _activeHistory.undo
+                              : null,
+                          icon: const Icon(Icons.undo),
+                        ),
+                        IconButton(
+                          tooltip: '重做',
+                          onPressed: _activeHistory.value.canRedo
+                              ? _activeHistory.redo
+                              : null,
+                          icon: const Icon(Icons.redo),
+                        ),
+                        TextButton(
+                          onPressed: _saving ? null : _save,
+                          child: const Text(
+                            '保存',
+                            style: TextStyle(
+                              color: _blue,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
-                      ),
+                      ],
                     ],
-                  ],
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 10, 20, 12),
-              child: Text(
-                '${_note['title'] ?? ''}',
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  height: 1.4,
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Row(
-                children: [
-                  _tabButton('原文', 0),
-                  const SizedBox(width: 22),
-                  _tabButton('笔记', 1),
-                ],
-              ),
-            ),
-            if (_error != null)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
-                child: Text(_error!, style: const TextStyle(color: _red)),
-              ),
-            const SizedBox(height: 8),
-            Expanded(child: _editing ? _editors() : _reading(lines)),
-            if (!_editing && (tags.isNotEmpty || _note['updated_at'] != null))
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-                child: Text(
-                  [
-                    ...tags,
-                    formatWhen(_note['updated_at'] as String?),
-                  ].where((item) => item.isNotEmpty).join(' · '),
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFFA0A0A5),
                   ),
                 ),
               ),
-            if (!_editing)
               Padding(
-              padding: const EdgeInsets.only(bottom: 20),
-              child: Center(
-                child: ActionPill(
+                padding: const EdgeInsets.fromLTRB(20, 10, 20, 12),
+                child: Text(
+                  '${_note['title'] ?? ''}',
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Row(
                   children: [
-                    const PillButton(
-                      dark: true,
-                      icon: Icons.play_arrow,
-                      label: '播放',
-                      onPressed: null,
-                    ),
-                    PillButton(
-                      icon: Icons.auto_awesome,
-                      label: 'AI+',
-                      onPressed: () => showAiSheet(
-                        context,
-                        title: 'AI+ 问答',
-                        subtitle: '基于「${_note['title']}」',
-                        opening: '可以追问这段录音，或让我整理成笔记。',
-                      ),
-                    ),
+                    _tabButton('原文', 0),
+                    const SizedBox(width: 22),
+                    _tabButton('笔记', 1),
                   ],
                 ),
               ),
-            ),
-          ],
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+                  child: Text(_error!, style: const TextStyle(color: _red)),
+                ),
+              const SizedBox(height: 8),
+              Expanded(child: _editing ? _editors() : _reading(lines)),
+              if (!_editing && (tags.isNotEmpty || _note['updated_at'] != null))
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                  child: Text(
+                    [
+                      ...tags,
+                      formatWhen(_note['updated_at'] as String?),
+                    ].where((item) => item.isNotEmpty).join(' · '),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFFA0A0A5),
+                    ),
+                  ),
+                ),
+              if (!_editing)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 20),
+                  child: Center(
+                    child: ActionPill(
+                      children: [
+                        const PillButton(
+                          dark: true,
+                          icon: Icons.play_arrow,
+                          label: '播放',
+                          onPressed: null,
+                        ),
+                        PillButton(
+                          icon: Icons.auto_awesome,
+                          label: 'AI+',
+                          onPressed: () => showAiSheet(
+                            context,
+                            title: 'AI+ 问答',
+                            subtitle: '基于「${_note['title']}」',
+                            opening: '可以追问这段录音，或让我整理成笔记。',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
-    ),
     );
   }
 
@@ -2008,10 +2090,7 @@ class _RecordingDetailState extends State<RecordingDetail> {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
           child: content.isEmpty
-              ? const Text(
-                  '还没有笔记',
-                  style: TextStyle(color: _sub, fontSize: 16),
-                )
+              ? const Text('还没有笔记', style: TextStyle(color: _sub, fontSize: 16))
               : MarkdownBody(data: content),
         ),
       ),

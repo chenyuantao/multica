@@ -5,8 +5,9 @@
 ## 身份与作用域
 
 - 除登录接口外，全部请求带 `Authorization: Bearer <multica JWT>`；`/api/imind/*` 另带 `X-Workspace-ID: <workspace UUID>`。服务端认证和成员中间件实际验证身份，不信任客户端自行声明的工作区。
+- `GET /api/workspaces` 是账户级接口，返回数组；客户端校验/恢复工作区后再访问 iMind。
 - `share_machine` 是现有共享知识库的 machine 名；共享的 WorkspaceID 必须等于已验证工作区，再复用现有可见性/所有者授权。工作区共享供成员使用，private 仅原有授权用户使用；不能通过所有者身份跨工作区访问。
-- 该值由客户端首次选择后用平台安全存储保存；它不进入 Multica 数据库。
+- 客户端以安全存储单一 `imind_session` 保存 `base_url`、`token`、`workspace_id`、`share_machine`。会话绑定 API 根，不写入 Multica 数据库；旧未绑定键清理并重新登录。
 - 所有 iMind 文件只允许位于 `<share_machine>/iMind/` 的一级物理目录。API 不接受 `../`、绝对路径、非法文件名或目录外目标；daemon拒绝目录/笔记 symlink（检查时存在的链接），列表过滤这些链接。
 - daemon 必须声明 `imind_scope_revision_v1: true` 和 `imind_rename_v1: true`。旧版本仍服务通用 docs，但 iMind 返回 `409 imind_daemon_upgrade_required`，不静默降级。
 - 服务端转发 file-share payload 时带 `scope: imind`；通用 docs 无 scope 保持原语义。iMind 删除另带 `expected_revision`，在 daemon同一更新路径锁中重读 SHA-256；不承诺对不协作的直接磁盘写入或恶意并发 symlink 替换提供完整强隔离。
@@ -111,7 +112,7 @@ audio: null
 1. `POST /auth/send-code`，`{ "email": "..." }`
 2. `POST /auth/verify-code`，`{ "email": "...", "code": "123456" }`
 
-客户端把响应的 `token` 写入 `flutter_secure_storage`；请求 401 时清空并回到登录页。开发环境使用 `MULTICA_DEV_VERIFICATION_CODE`，不能在客户端硬编码测试账号或验证码。
+客户端把响应的 `token` 写入 `flutter_secure_storage` 的绑定会话中；请求 401 时清空持久化与内存会话，并撤销全部已登录页面返回登录页。验证码接口的 401 不清理现有登录；旧请求结果不覆盖新会话。HTTP默认超时20秒，重定向不转发凭据。开发环境使用 `MULTICA_DEV_VERIFICATION_CODE`，不能在客户端硬编码测试账号或验证码。
 
 ## 实时 ASR WebSocket
 

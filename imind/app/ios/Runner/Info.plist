@@ -51,6 +51,13 @@
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>iMind 需要麦克风，以便把语音实时转成可编辑的笔记原文。</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>iMind 需要访问本地网络，以连接本机或局域网中的笔记服务。</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
