@@ -50,11 +50,16 @@ server/multica
 # Test artifacts
 test-results/
 apps/web/test-results/
+/outputs/imind/
+
+# Local iMind notes
+/imind/iMind/
 
 # context (agent workspace)
 .context
 .agent_context/
 .multica/
+/.workbuddy/
 
 # local settings
 .claude/
