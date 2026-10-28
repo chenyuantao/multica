@@ -1,24 +1,25 @@
 # iMind 接口与 Markdown 契约
 
-版本：v1（2026-10-27）
+版本：v1 HTTP / imind_scope_revision_v1 + imind_rename_v1 daemon（2026-10-28）
 
 ## 身份与作用域
 
-- 除登录接口外，全部请求带 `Authorization: Bearer <multica JWT>`。
-- `share_machine` 是现有共享知识库的 machine 名；服务端必须用当前用户和工作区的现有 `FileShares` 授权逻辑验证它，不能信任任意本地路径。
+- 除登录接口外，全部请求带 `Authorization: Bearer <multica JWT>`；笔记接口另带 `X-Workspace-ID: <workspace UUID>`。服务端认证和成员中间件实际验证身份，不信任客户端自行声明的工作区。
+- `share_machine` 是现有共享知识库的 machine 名；共享的 WorkspaceID 必须等于已验证工作区，再复用现有可见性/所有者授权。工作区共享供成员使用，private 仅原有授权用户使用；不能通过所有者身份跨工作区访问。
 - 该值由客户端首次选择后用平台安全存储保存；它不进入 Multica 数据库。
-- 所有 iMind 文件只允许位于 `<share_machine>/iMind/`。API 不接受 `../`、绝对路径或 `iMind` 以外的目标。
+- 所有 iMind 文件只允许位于 `<share_machine>/iMind/` 的一级物理目录。API 不接受 `../`、绝对路径、非法文件名或目录外目标；daemon拒绝目录/笔记 symlink（检查时存在的链接），列表过滤这些链接。
+- daemon 必须声明 `imind_scope_revision_v1: true` 和 `imind_rename_v1: true`。旧版本仍服务通用 docs，但 iMind 返回 `409 imind_daemon_upgrade_required`，不静默降级。
+- 服务端转发 file-share payload 时带 `scope: imind`；通用 docs 无 scope 保持原语义。iMind 删除另带 `expected_revision`，在 daemon同一更新路径锁中重读 SHA-256；不承诺对不协作的直接磁盘写入或恶意并发 symlink 替换提供完整强隔离。
 
 ## Markdown 文件
 
-路径：`iMind/<uuid-v4>.md`。标题改动不重命名文件。UTF-8、最大 4 MiB，复用 `obsidianvault` 的乐观并发 revision。
+路径：`iMind/<标题>.md`，文件名是标题的唯一来源；创建和修改标题时若重名则追加数字后缀。UUID-v4 保存在 YAML 的 `id` 字段，接口通过元数据查找。UTF-8、最大 4 MiB，复用 `obsidianvault` 的乐观并发 revision。
 
 ```markdown
 ---
 imind_version: 1
 id: "4e2c1478-6f08-43d8-a949-e07ccf778d99"
 type: "note"
-title: "周末随笔：慢下来的城市"
 created_at: "2026-10-27T10:20:30Z"
 updated_at: "2026-10-27T10:22:41Z"
 tags: ["日常碎碎念"]
@@ -46,8 +47,9 @@ audio: null
 - `type` 仅为 `note`、`recording`、`clip`。
 - 普通笔记和剪藏的 transcript 区为空；录音笔记的 transcript 区可为空（录音尚未产生文字）。
 - `audio` 是可选对象，形如 `{"duration_ms":112000,"format":"pcm_s16le","sample_rate_hz":16000}`；本版本不上传/保留音频文件。
-- HTML 注释分隔符为唯一可信边界，不依赖 `## 原文` 标题，因标题可被用户编辑。
-- `updated_at` 由服务端生成。`title`、`tags`、正文、转写由客户端提交。
+- HTML 注释分隔符为唯一可信边界，不依赖 `## 原文` 标题；四个分隔符必须各一份、独立行、顺序正确，区外不能有额外非空文本。正文与转写不能包含保留 imind 分隔符。
+- UTF-8/头部字段与类型严格校验，拒绝 NUL、重复 JSON 键、未知请求字段、多个 JSON 值及非法类型。
+- `updated_at` 由服务端生成。客户端提交的 `title` 用于确定文件名；元数据不保存标题。`tags`、正文、转写由客户端提交。
 
 ## HTTP API
 
@@ -82,7 +84,7 @@ audio: null
 响应按 `updated_at` 倒序：
 
 ```json
-{ "notes": [{ "id": "uuid", "type": "recording", "title": "产品周会", "tags": ["工作"], "updated_at": "2026-10-27T10:22:41Z", "duration_ms": 112000, "source_url": null, "path": "mbp/iMind/uuid.md", "revision": "sha256" }] }
+{ "notes": [{ "id": "uuid", "type": "recording", "title": "产品周会", "tags": ["工作"], "updated_at": "2026-10-27T10:22:41Z", "duration_ms": 112000, "source_url": null, "path": "mbp/iMind/产品周会.md", "revision": "sha256" }] }
 ```
 
 ### `POST /api/imind/notes`

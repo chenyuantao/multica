@@ -129,6 +129,19 @@ func Rename(ctx context.Context, root, rel, name string) (MoveResult, error) {
 // A symlink is unlinked and its target is left in place. The vault root
 // cannot be removed.
 func Remove(ctx context.Context, root, rel string) error {
+	return remove(ctx, root, rel, "")
+}
+
+// RemoveIfRevision checks the revision and deletes under the same lock as Apply.
+// This lock does not cover non-cooperating writes outside this process.
+func RemoveIfRevision(ctx context.Context, root, rel, expectedRevision string) error {
+	if strings.TrimSpace(expectedRevision) == "" {
+		return ErrInvalidEdit
+	}
+	return remove(ctx, root, rel, expectedRevision)
+}
+
+func remove(ctx context.Context, root, rel, expectedRevision string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -140,6 +153,20 @@ func Remove(ctx context.Context, root, rel string) error {
 	if err != nil {
 		return err
 	}
+	parentRel := path.Dir(cleaned)
+	if parentRel == "." {
+		parentRel = ""
+	}
+	parent, _, err := open(root, parentRel)
+	if err != nil {
+		return err
+	}
+	abs = filepath.Join(parent, path.Base(cleaned))
+	unlock := lockNote(abs)
+	defer unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	info, err := os.Lstat(abs)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -147,10 +174,17 @@ func Remove(ctx context.Context, root, rel string) error {
 		}
 		return err
 	}
-	unlock := lockNote(abs)
-	defer unlock()
-	if err := ctx.Err(); err != nil {
-		return err
+	if expectedRevision != "" {
+		if !info.Mode().IsRegular() || !isMarkdown(path.Base(cleaned)) {
+			return ErrNotFile
+		}
+		current, err := loadNote(abs, cleaned)
+		if err != nil {
+			return err
+		}
+		if current.Revision != expectedRevision {
+			return &ConflictError{ModifiedAt: current.ModifiedAt, Revision: current.Revision}
+		}
 	}
 	if info.Mode()&os.ModeSymlink != 0 {
 		return os.Remove(abs)

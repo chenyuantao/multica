@@ -1733,6 +1733,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			r.Patch("/files/content", h.PatchDocsFileContent)
 		})
 		r.Route("/api/imind", func(r chi.Router) {
+			r.Use(middleware.RequireWorkspaceMember(queries))
 			r.Get("/shares", h.GetIMindShares)
 			r.Post("/bootstrap", h.PostIMindBootstrap)
 			r.Post("/notes/list", h.PostIMindNotesList)

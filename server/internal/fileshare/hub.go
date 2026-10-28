@@ -16,15 +16,17 @@ import (
 // daemon proposed. Dir is the absolute path reported by the machine, shown in
 // the runtime UI and never written back.
 type ShareMeta struct {
-	DaemonID       string
-	Machine        string
-	DefaultMachine string
-	OwnerUserID    string
-	WorkspaceID    string
-	Visibility     string
-	Dir            string
-	Enabled        bool
-	Online         bool
+	DaemonID           string
+	Machine            string
+	DefaultMachine     string
+	OwnerUserID        string
+	WorkspaceID        string
+	Visibility         string
+	Dir                string
+	Enabled            bool
+	Online             bool
+	IMindScopeRevision bool
+	IMindRename        bool
 }
 
 // AccessPatch is a runtime-UI change. Nil fields stay as they are. Dir is not
@@ -317,7 +319,12 @@ func (h *Hub) slot(machine string) *shareSlot {
 	if !ok {
 		return nil
 	}
-	return h.slots[key]
+	slot := h.slots[key]
+	if slot == nil {
+		return nil
+	}
+	snapshot := *slot
+	return &snapshot
 }
 
 func applyAccess(peer Peer, visibility string, enabled bool) {
@@ -333,9 +340,14 @@ func applyAccess(peer Peer, visibility string, enabled bool) {
 // Read loads one note. When the cached revision still matches, the machine
 // answers without the file body.
 func (h *Hub) Read(ctx context.Context, peer Peer, rel string) (obsidianvault.FileContent, error) {
+	return h.ReadScoped(ctx, peer, rel, "")
+}
+
+// ReadScoped revalidates the scope on the daemon even for cached content.
+func (h *Hub) ReadScoped(ctx context.Context, peer Peer, rel, scope string) (obsidianvault.FileContent, error) {
 	machine := peer.Meta().Machine
 	cached, ok := h.cache.get(machine, rel)
-	req := readPayload{Path: rel}
+	req := readPayload{Path: rel, Scope: scope}
 	if ok {
 		req.IfRevision = cached.Revision
 	}
@@ -369,6 +381,8 @@ type Local struct {
 }
 
 func NewLocal(meta ShareMeta, root string) *Local {
+	meta.IMindScopeRevision = true
+	meta.IMindRename = true
 	return &Local{meta: meta, root: root}
 }
 

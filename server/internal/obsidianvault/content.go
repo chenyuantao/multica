@@ -61,6 +61,7 @@ type EditChange struct {
 // edits send BaseRevision; Resolve "merge" keeps them when the file changed,
 // which needs BaseContent, the text BaseRevision was read from.
 type EditRequest struct {
+	Scope        string       `json:"scope,omitempty"`
 	Path         string       `json:"path"`
 	Op           string       `json:"op,omitempty"`
 	Content      string       `json:"content,omitempty"`
