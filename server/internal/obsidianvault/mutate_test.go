@@ -130,6 +130,77 @@ func TestRemoveFileAndDirectory(t *testing.T) {
 	}
 }
 
+func TestRemoveIfRevisionSerializesWithApply(t *testing.T) {
+	for i := 0; i < 32; i++ {
+		root := t.TempDir()
+		ctx := t.Context()
+		original, err := Create(ctx, root, "note.md", "original")
+		if err != nil {
+			t.Fatal(err)
+		}
+		start := make(chan struct{})
+		deleted := make(chan error, 1)
+		written := make(chan error, 1)
+		go func() {
+			<-start
+			deleted <- RemoveIfRevision(ctx, root, "note.md", original.Revision)
+		}()
+		go func() {
+			<-start
+			_, err := Apply(ctx, root, EditRequest{Path: "note.md", Op: "overwrite", Content: "updated", BaseRevision: original.Revision})
+			written <- err
+		}()
+		close(start)
+		deleteErr, writeErr := <-deleted, <-written
+		switch {
+		case writeErr == nil:
+			if !errors.Is(deleteErr, ErrConflict) {
+				t.Fatalf("成功写入后删除未冲突: %v", deleteErr)
+			}
+			current, err := Read(ctx, root, "note.md")
+			if err != nil || current.Content != "updated" {
+				t.Fatalf("并发更新丢失: %#v, %v", current, err)
+			}
+		case deleteErr == nil:
+			if !errors.Is(writeErr, ErrNotFound) && !errors.Is(writeErr, os.ErrNotExist) {
+				t.Fatalf("删除先完成后的写入错误: %v", writeErr)
+			}
+		default:
+			t.Fatalf("delete = %v, write = %v", deleteErr, writeErr)
+		}
+	}
+}
+
+func TestRemoveIfRevisionRejectsDirectoriesAndEmptyRevision(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "folder/note.md", "keep")
+	for _, revision := range []string{"", " "} {
+		if err := RemoveIfRevision(t.Context(), root, "folder/note.md", revision); !errors.Is(err, ErrInvalidEdit) {
+			t.Fatalf("空 revision: %v", err)
+		}
+	}
+	if err := RemoveIfRevision(t.Context(), root, "folder", "revision"); !errors.Is(err, ErrNotFile) {
+		t.Fatalf("目录 CAS: %v", err)
+	}
+	if _, err := Read(t.Context(), root, "folder/note.md"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRemoveRejectsEscapingParentSymlink(t *testing.T) {
+	root, outside := t.TempDir(), t.TempDir()
+	writeFile(t, outside, "note.md", "keep")
+	if err := os.Symlink(outside, filepath.Join(root, "parent")); err != nil {
+		t.Fatal(err)
+	}
+	if err := Remove(t.Context(), root, "parent/note.md"); !errors.Is(err, ErrInvalidPath) {
+		t.Fatalf("外部父目录 symlink: %v", err)
+	}
+	if _, err := Read(t.Context(), outside, "note.md"); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestRemoveRefusesRootHiddenAndOutsideSymlink(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, root, "note.txt", "x")

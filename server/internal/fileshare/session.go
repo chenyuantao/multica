@@ -15,18 +15,20 @@ import (
 // request messages with response messages. File bytes travel only inside a
 // response payload.
 type Envelope struct {
-	Type        string          `json:"type"`
-	ID          string          `json:"id,omitempty"`
-	Op          string          `json:"op,omitempty"`
-	DaemonID    string          `json:"daemon_id,omitempty"`
-	Machine     string          `json:"machine,omitempty"`
-	WorkspaceID string          `json:"workspace_id,omitempty"`
-	Visibility  string          `json:"visibility,omitempty"`
-	Dir         string          `json:"dir,omitempty"`
-	Enabled     *bool           `json:"enabled,omitempty"`
-	OK          bool            `json:"ok,omitempty"`
-	Error       *codedError     `json:"error,omitempty"`
-	Payload     json.RawMessage `json:"payload,omitempty"`
+	Type               string          `json:"type"`
+	ID                 string          `json:"id,omitempty"`
+	Op                 string          `json:"op,omitempty"`
+	DaemonID           string          `json:"daemon_id,omitempty"`
+	Machine            string          `json:"machine,omitempty"`
+	WorkspaceID        string          `json:"workspace_id,omitempty"`
+	Visibility         string          `json:"visibility,omitempty"`
+	Dir                string          `json:"dir,omitempty"`
+	Enabled            *bool           `json:"enabled,omitempty"`
+	OK                 bool            `json:"ok,omitempty"`
+	Error              *codedError     `json:"error,omitempty"`
+	Payload            json.RawMessage `json:"payload,omitempty"`
+	IMindScopeRevision bool            `json:"imind_scope_revision_v1,omitempty"`
+	IMindRename        bool            `json:"imind_rename_v1,omitempty"`
 }
 
 // Session is a live websocket to one multica-operate daemon.
@@ -87,6 +89,11 @@ func (s *Session) pushConfig() error {
 	meta := s.Meta()
 	enabled := meta.Enabled
 	return s.write(Envelope{Type: "config", Machine: meta.Machine, Visibility: meta.Visibility, Enabled: &enabled})
+}
+
+// SendReady shares the request write lock to avoid concurrent socket writes.
+func (s *Session) SendReady() error {
+	return s.write(Envelope{Type: "ready", Machine: s.Meta().Machine})
 }
 
 func (s *Session) Close() {
@@ -282,14 +289,16 @@ func AcceptHello(env Envelope, ownerUserID string) (ShareMeta, error) {
 		enabled = *env.Enabled
 	}
 	return ShareMeta{
-		DaemonID:       daemonID,
-		Machine:        machine,
-		DefaultMachine: machine,
-		OwnerUserID:    ownerUserID,
-		WorkspaceID:    env.WorkspaceID,
-		Visibility:     visibility,
-		Dir:            strings.TrimSpace(env.Dir),
-		Enabled:        enabled,
-		Online:         true,
+		DaemonID:           daemonID,
+		Machine:            machine,
+		DefaultMachine:     machine,
+		OwnerUserID:        ownerUserID,
+		WorkspaceID:        env.WorkspaceID,
+		Visibility:         visibility,
+		Dir:                strings.TrimSpace(env.Dir),
+		Enabled:            enabled,
+		Online:             true,
+		IMindScopeRevision: env.IMindScopeRevision,
+		IMindRename:        env.IMindRename,
 	}, nil
 }

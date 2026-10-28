@@ -1,0 +1,31 @@
+name: multica-imind
+
+services:
+  backend:
+    image: multica-imind:local
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    env_file:
+      - ../.env
+    environment:
+      APP_ENV: development
+      PORT: "8080"
+      DATABASE_URL: "postgres://${POSTGRES_USER:-multica}:${POSTGRES_PASSWORD:-multica}@postgres:5432/${POSTGRES_DB:?Use the checkout environment database}?sslmode=disable"
+      MULTICA_PUBLIC_URL: "http://localhost:${PORT:-18607}"
+      MULTICA_TELEMETRY_DISABLED: "true"
+    ports:
+      - "127.0.0.1:${PORT:-18607}:8080"
+    volumes:
+      - uploads:/app/data/uploads
+    networks:
+      - checkout
+    restart: unless-stopped
+
+networks:
+  checkout:
+    external: true
+    name: multica_default
+
+volumes:
+  uploads:

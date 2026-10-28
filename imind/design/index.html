@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>iMind 笔记·写作 App — 设计稿 v1</title>
+<style>
+:root{
+  --ui-bg:#2C2C2C; --ui-bg2:#383838; --ui-line:#444; --ui-text:#E6E6E6; --ui-sub:#9A9A9A;
+  --canvas:#1E1E1E; --blue:#0D99FF;
+  --app-font:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--canvas);font-family:var(--app-font);color:var(--ui-text);-webkit-font-smoothing:antialiased}
+button{font-family:inherit}
+
+/* ---------- 编辑器外壳 ---------- */
+#topbar{position:fixed;left:0;right:0;top:0;height:48px;background:var(--ui-bg);border-bottom:1px solid #1a1a1a;display:flex;align-items:center;padding:0 10px;z-index:20;gap:8px;user-select:none}
+#topbar .logo{width:32px;height:32px;border-radius:8px;display:grid;place-items:center;background:#3a3a3a}
+#topbar .file{font-size:13px;display:flex;gap:6px;align-items:center;margin-left:4px}
+#topbar .file b{font-weight:600}
+#topbar .file span{color:var(--ui-sub)}
+#topbar .tools{position:absolute;left:50%;transform:translateX(-50%);display:flex;gap:2px}
+.tb{height:32px;min-width:32px;padding:0 9px;border-radius:6px;border:0;background:transparent;color:var(--ui-text);display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer}
+.tb:hover{background:#3d3d3d}
+.tb.on{background:var(--blue);color:#fff}
+#topbar .right{margin-left:auto;display:flex;gap:6px;align-items:center}
+.play{background:var(--blue)!important;color:#fff!important;font-weight:600}
+#zoomLabel{width:52px;justify-content:center}
+
+#left,#right{position:fixed;top:48px;bottom:0;width:240px;background:var(--ui-bg);z-index:15;overflow:auto;user-select:none}
+#left{left:0;border-right:1px solid #1a1a1a}
+#right{right:0;border-left:1px solid #1a1a1a;width:272px}
+.ph{padding:14px 16px 8px;font-size:11px;font-weight:600;color:var(--ui-text);display:flex;justify-content:space-between}
+.ph span{color:var(--ui-sub);font-weight:400}
+.page-row{margin:0 8px;padding:7px 10px;border-radius:6px;font-size:12px;background:#3a3a3a}
+.sep{height:1px;background:var(--ui-line);margin:12px 0 4px}
+.lsec{padding:8px 16px 4px;font-size:11px;color:var(--ui-sub);display:flex;gap:6px;align-items:center}
+.lrow{margin:0 8px;padding:6px 10px 6px 22px;border-radius:6px;font-size:12px;display:flex;gap:8px;align-items:center;cursor:pointer;color:#d8d8d8}
+.lrow svg{flex:none;color:var(--ui-sub)}
+.lrow:hover{background:#363636}
+.lrow.sel{background:rgba(13,153,255,.25);color:#fff}
+.lrow.sel svg{color:var(--blue)}
+
+.rp{padding:14px 16px;font-size:12px;line-height:1.65;color:#cfcfcf}
+.rp h3{margin:0 0 4px;font-size:13px;color:#fff;font-weight:600}
+.rp h4{margin:16px 0 6px;font-size:11px;color:var(--ui-sub);font-weight:600;letter-spacing:.3px}
+.rp p{margin:0 0 6px}
+.kv{display:grid;grid-template-columns:64px 1fr;gap:4px 8px;color:var(--ui-sub)}
+.kv b{color:#e8e8e8;font-weight:400}
+.chip{display:inline-flex;align-items:center;gap:6px;margin:3px 4px 3px 0;padding:4px 8px;border-radius:6px;background:#3a3a3a;cursor:pointer;color:#e6e6e6}
+.chip:hover{background:#444}
+.chip i{width:6px;height:6px;border-radius:50%;background:var(--blue)}
+.mask-item{display:flex;gap:8px;align-items:flex-start;margin:6px 0}
+.mask-item s{color:#8a8a8a}
+.tag-off{font-size:10px;padding:1px 6px;border-radius:4px;background:#5a2a2a;color:#ffb4b4;white-space:nowrap}
+kbd{font-family:inherit;font-size:11px;background:#3a3a3a;border:1px solid #4a4a4a;border-bottom-width:2px;border-radius:4px;padding:0 5px;color:#ddd}
+.short{display:grid;grid-template-columns:1fr auto;gap:6px 8px;align-items:center}
+
+/* ---------- 画布 ---------- */
+#viewport{position:fixed;left:240px;right:272px;top:48px;bottom:0;overflow:hidden;cursor:default;
+  background-color:var(--canvas);
+  background-image:radial-gradient(circle,#3a3a3a 1px,transparent 1.2px);}
+#viewport.grab{cursor:grab}
+#viewport.panning{cursor:grabbing}
+#world{position:absolute;left:0;top:0;width:0;height:0;transform-origin:0 0;--s:1}
+
+.section{position:absolute;border-radius:16px;background:rgba(255,255,255,.028);border:1px solid rgba(255,255,255,.07)}
+.stitle{position:absolute;left:0;top:0;transform-origin:0 0;transform:scale(calc(1 / var(--s)));padding:12px}
+.stitle span{display:inline-block;font-size:12px;font-weight:600;color:#ddd;background:#3a3a3a;border-radius:6px;padding:4px 10px;white-space:nowrap}
+
+.frame{position:absolute;width:390px;height:844px}
+.flabel{position:absolute;left:0;bottom:100%;transform-origin:0 100%;transform:scale(calc(1 / var(--s)));padding:0 0 6px 2px;font-size:12px;color:#9a9a9a;white-space:nowrap;cursor:pointer;max-width:calc(390px * var(--s));overflow:hidden;text-overflow:ellipsis}
+.frame.sel .flabel{color:var(--blue)}
+.phone{position:absolute;inset:0;border-radius:44px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.45),0 0 0 1px rgba(255,255,255,.05)}
+.frame.sel .phone{outline:calc(2px / var(--s)) solid var(--blue);outline-offset:calc(3px / var(--s))}
+
+#links{position:absolute;left:0;top:0;width:1px;height:1px;overflow:visible;pointer-events:none}
+#links path.ln{fill:none;stroke:var(--blue);stroke-width:calc(2px / var(--s));opacity:.9}
+#links circle{fill:#fff;stroke:var(--blue);stroke-width:calc(2px / var(--s))}
+#links.hide{display:none}
+#links .hl path.ln{stroke-width:calc(3.5px / var(--s));opacity:1}
+
+.proto [data-link]{cursor:pointer}
+.proto [data-link]:hover{outline:2px solid rgba(13,153,255,.9);outline-offset:2px;border-radius:12px}
+
+.sticky{position:absolute;width:380px;padding:26px 28px;background:#FFE58A;color:#3b3200;border-radius:4px;box-shadow:0 12px 30px rgba(0,0,0,.35);font-size:17px;line-height:1.65}
+.sticky h5{margin:0 0 10px;font-size:20px}
+.sticky ul{margin:0;padding-left:20px}
+.sticky.blue{background:#BDE3FF;color:#06304d}
+
+#present{position:fixed;left:50%;bottom:20px;transform:translateX(calc(-50% - 16px));z-index:16;display:flex;align-items:center;gap:4px;background:var(--ui-bg);border:1px solid #1a1a1a;border-radius:10px;padding:4px;box-shadow:0 10px 30px rgba(0,0,0,.4);user-select:none}
+#present .cur{font-size:12px;padding:0 10px;min-width:200px;text-align:center}
+#present .cur span{color:var(--ui-sub);margin-right:6px}
+
+/* ---------- App 视觉（移动端） ---------- */
+.scr{position:absolute;inset:0;background:#F2F2F6;font-family:var(--app-font);color:#1C1C1E;overflow:hidden}
+.scr.w{background:#fff}
+.scr a{color:inherit;text-decoration:none}
+.sb{position:relative;height:54px;display:flex;align-items:center;justify-content:space-between;padding:0 28px 0 40px;font-size:16px;font-weight:600;z-index:5}
+.island{position:absolute;left:50%;top:11px;transform:translateX(-50%);width:122px;height:35px;background:#000;border-radius:20px}
+.sb-r{display:flex;gap:6px;align-items:center}
+.bat{width:26px;height:12.5px;border:1.4px solid rgba(0,0,0,.38);border-radius:4px;position:relative;display:inline-block}
+.bat:after{content:"";position:absolute;left:1.5px;top:1.5px;bottom:1.5px;width:72%;background:#111;border-radius:1.5px}
+.hi{position:absolute;left:50%;bottom:8px;transform:translateX(-50%);width:136px;height:5px;border-radius:3px;background:#111;z-index:30}
+.hd{display:flex;justify-content:space-between;align-items:center;padding:4px 16px 0;height:54px;position:relative;z-index:4}
+.rb{width:44px;height:44px;border-radius:50%;background:#fff;display:grid;place-items:center;box-shadow:0 6px 22px rgba(20,20,50,.07);color:#2a2a2e}
+.rg{display:flex;align-items:center;height:44px;padding:0 6px;border-radius:22px;background:#fff;box-shadow:0 6px 22px rgba(20,20,50,.07);color:#2a2a2e}
+.rg .ib{width:40px;height:40px;display:grid;place-items:center}
+.rg .ib.off{color:#c4c4c8}
+.done{height:44px;padding:0 18px;border-radius:22px;background:#fff;color:#3478F6;font-weight:600;font-size:16px;display:flex;align-items:center;box-shadow:0 6px 22px rgba(20,20,50,.07)}
+.hr{display:flex;gap:10px;align-items:center}
+.brand{font-size:34px;font-weight:800;letter-spacing:-.6px;padding:10px 16px 8px}
+
+.hero{padding:70px 26px 0 30px}
+.hero h1{font-size:33px;line-height:1.75;margin:0 0 34px;font-weight:700;letter-spacing:.5px}
+.feat{list-style:none;margin:0;padding:0}
+.feat li{display:flex;gap:14px;margin-bottom:26px;font-size:15px;line-height:1.6;color:#2b2b2e}
+.feat li svg{flex:none;margin-top:2px}
+
+.pill{position:absolute;left:50%;bottom:46px;transform:translateX(-50%);display:flex;gap:6px;padding:5px;background:rgba(255,255,255,.92);border-radius:28px;box-shadow:0 10px 30px rgba(20,20,50,.1);z-index:6}
+.pb{height:40px;padding:0 18px 0 12px;border-radius:20px;display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;white-space:nowrap;color:#1c1c1e}
+.pb.dk{background:#23262C;color:#fff}
+.pb .o{width:20px;height:20px;border-radius:50%;background:#fff;display:grid;place-items:center}
+.pb .o i{width:8px;height:8px;border-radius:50%;background:#23262C}
+.pb .o i.sq{border-radius:2px}
+.pb .pen{width:20px;height:20px;border-radius:50%;background:#23262C;color:#fff;display:grid;place-items:center}
+
+.list{margin:6px 16px 0;border-top:1px solid #E2E2E7}
+.it{display:block;padding:15px 10px;border-bottom:1px solid #E2E2E7;position:relative}
+.it .t{font-size:15.5px;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:28px}
+.it .m{display:flex;gap:12px;align-items:center;margin-top:7px;font-size:12px;color:#8E8E93}
+.it .m span{display:flex;gap:4px;align-items:center}
+.tg{background:#E5E5EA;color:#6c6c70;font-size:10.5px;padding:1px 6px;border-radius:4px}
+.ck{position:absolute;right:10px;top:50%;transform:translateY(-50%);width:20px;height:20px;border-radius:5px;background:#E5E5EA;display:grid;place-items:center;color:#fff}
+.ck.on{background:#3a3d44}
+.lp{position:absolute;right:8px;top:12px;font-size:10px;color:#0D99FF;border:1px dashed #0D99FF;border-radius:4px;padding:0 4px}
+
+.dim{position:absolute;inset:0;background:rgba(0,0,0,.42);z-index:8}
+.dim.l{background:rgba(0,0,0,.18)}
+.bg{position:absolute;inset:0;pointer-events:none}
+.pop{position:absolute;right:14px;top:62px;width:250px;background:rgba(250,250,252,.97);border-radius:26px;padding:10px 0;box-shadow:0 20px 50px rgba(0,0,0,.14);z-index:9;backdrop-filter:blur(20px)}
+.mi{display:flex;gap:16px;align-items:center;padding:12px 26px;font-size:17px;color:#1c1c1e}
+.mi svg{color:#3a3a3c}
+.mi.red,.mi.red svg{color:#E5484D}
+
+.drawer{position:absolute;left:0;top:0;bottom:0;width:318px;background:#F2F2F6;z-index:9;padding-top:0}
+.drawer .hdx{display:flex;justify-content:flex-end;padding:4px 18px 0;height:54px;align-items:center}
+.drawer h2{font-size:34px;margin:12px 20px 12px;font-weight:800}
+.nv{display:flex;align-items:center;gap:12px;margin:0 18px;padding:13px 14px;border-radius:24px;font-size:15.5px}
+.nv.on{background:#E3E3E8}
+.nv .gt{margin-left:auto;color:#a5a5aa}
+.nh{display:flex;align-items:center;gap:6px;margin:22px 20px 6px 38px;font-size:17px;font-weight:600}
+.nh .r{margin-left:auto;color:#8e8e93}
+.nline{height:1px;background:#DCDCE1;margin:8px 18px}
+
+.fmt{display:flex;justify-content:space-between;padding:10px 24px;color:#3a3a3c}
+.kb{position:absolute;left:0;right:0;bottom:0;height:342px;background:#E3E4E9;border-radius:34px 34px 46px 46px;padding:10px 6px 0;z-index:7}
+.kbt{display:flex;align-items:center;gap:14px;padding:0 10px 8px;color:#3a3a3c}
+.kbt .ime{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;color:#2fb36d;font-weight:800;font-size:18px;font-style:italic}
+.kbt .sp{flex:1}
+.kbt .c{width:34px;height:34px;border-radius:50%;background:#fff;display:grid;place-items:center}
+.kr{display:flex;gap:6px;justify-content:center;margin-bottom:11px}
+.k{height:42px;flex:1;max-width:34px;background:#fff;border-radius:8px;box-shadow:0 1px 0 rgba(0,0,0,.25);display:grid;place-items:center;font-size:20px;color:#111}
+.k.g{background:#ADB2BC;max-width:none;flex:none;width:44px}
+.k.w{max-width:none}
+.kr.b{padding:0 2px}
+.kb .gl{display:flex;justify-content:space-between;padding:6px 26px 0;color:#333}
+
+.ed{padding:6px 20px;font-size:16px;line-height:1.75;color:#2a2a2e}
+.ed h1{font-size:22px;margin:4px 0 10px;line-height:1.4}
+.ed h2{font-size:18px;margin:14px 0 4px}
+.ed p{margin:0 0 10px}
+.ed ul{margin:0 0 10px;padding-left:20px}
+.caret{display:inline-block;width:2px;height:19px;background:#3478F6;vertical-align:-4px;margin-left:1px;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+
+.rt{display:flex;justify-content:space-between;align-items:center;padding:6px 20px;height:44px}
+.live{display:flex;align-items:center;gap:10px;font-size:15px;font-variant-numeric:tabular-nums}
+.live i{width:12px;height:12px;border-radius:50%;background:#3478F6;box-shadow:0 0 0 4px rgba(52,120,246,.18);animation:pulse 1.4s infinite}
+@keyframes pulse{50%{box-shadow:0 0 0 7px rgba(52,120,246,.05)}}
+.rt .ic{display:flex;gap:22px;color:#3a3a3c}
+.tr{padding:14px 20px;font-size:16px;line-height:1.6}
+.tr p{margin:0 0 22px}
+.tr p.pt{color:#8e8e93}
+.wave{display:inline-flex;gap:3px;vertical-align:middle;margin-left:4px}
+.wave b{width:3px;border-radius:2px;background:#3478F6;animation:wv 1s infinite ease-in-out}
+.wave b:nth-child(1){height:8px}.wave b:nth-child(2){height:14px;animation-delay:.15s}.wave b:nth-child(3){height:10px;animation-delay:.3s}.wave b:nth-child(4){height:16px;animation-delay:.45s}
+@keyframes wv{50%{transform:scaleY(.4)}}
+
+.sheet{position:absolute;left:0;right:0;bottom:0;background:#fff;border-radius:30px 30px 0 0;z-index:9;box-shadow:0 -10px 40px rgba(0,0,0,.12)}
+.grab-h{width:38px;height:5px;border-radius:3px;background:#D8D8DD;margin:8px auto 0}
+
+.dlg{position:absolute;left:20px;right:20px;top:330px;background:#F2F2F6;border-radius:16px;padding:26px 28px 28px;z-index:9;text-align:center}
+.dlg .q{font-size:17px;color:#555;margin-bottom:24px}
+.dlg .bt{display:flex;gap:14px}
+.dlg .bt a{flex:1;height:48px;border-radius:8px;background:#fff;display:grid;place-items:center;font-size:17px;font-weight:700}
+.dlg .bt a.pri{color:#3478F6}
+
+.dt h1{font-size:22px;line-height:1.4;margin:10px 20px 18px;font-weight:800}
+.tabs{display:flex;gap:22px;padding:0 20px;font-size:15px;color:#8e8e93}
+.tabs a{position:relative;padding-bottom:8px}
+.tabs a.on{color:#1c1c1e;font-weight:700}
+.tabs a.on:after{content:"";position:absolute;left:2px;right:2px;bottom:0;height:2.5px;border-radius:2px;background:#1c1c1e}
+.ts{padding:18px 20px 0}
+.ts .tm{font-size:12.5px;color:#a0a0a5;margin:0 0 8px}
+.ts .tx{font-size:15.5px;line-height:1.6;margin:0 0 20px}
+.ts .tx.cur{font-weight:700}
+.sbar{position:absolute;right:12px;top:350px;width:3px;height:520px;background:#EDEDF0;border-radius:2px}
+.sbar i{position:absolute;left:-1px;top:0;width:5px;height:56px;background:#2a2d33;border-radius:3px}
+
+.flag{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:#E5484D;background:#FDECEC;border-radius:4px;padding:1px 6px;margin-right:6px;vertical-align:1px}
+.card{margin:14px 20px 0;padding:14px 16px;border-radius:14px;background:#F6F6F9}
+.card h5{margin:0 0 6px;font-size:13px;color:#8e8e93;font-weight:600;display:flex;gap:6px;align-items:center}
+.card p,.card li{font-size:15px;line-height:1.65;margin:0}
+.card ul{margin:0;padding-left:18px}
+.todo{display:flex;gap:10px;align-items:flex-start;font-size:15px;line-height:1.5;margin:6px 0}
+.todo i{flex:none;width:18px;height:18px;border-radius:5px;border:1.6px solid #c4c4c8;margin-top:2px}
+.todo em{font-style:normal;color:#8e8e93;font-size:12.5px;margin-left:4px}
+
+.bubble{max-width:290px;padding:11px 14px;border-radius:18px;font-size:15px;line-height:1.6;margin:0 0 14px}
+.bubble.me{margin-left:auto;background:#23262C;color:#fff;border-bottom-right-radius:6px}
+.bubble.ai{background:#F2F2F6;border-bottom-left-radius:6px}
+.cite{display:inline-flex;align-items:center;gap:3px;font-size:12px;color:#3478F6;background:#E8F0FE;border-radius:4px;padding:0 6px;margin:0 2px}
+.inp{position:absolute;left:16px;right:16px;bottom:40px;height:50px;border-radius:25px;background:#fff;box-shadow:0 6px 24px rgba(20,20,50,.1);display:flex;align-items:center;padding:0 6px 0 18px;color:#a0a0a5;font-size:15px;gap:8px;z-index:6}
+.inp .voice-text{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.inp .voice-text.has-text{color:#2a2a2e}
+.inp button{border:0;font:inherit;cursor:pointer;padding:0}
+.inp .voice{width:38px;height:38px;border-radius:50%;background:#F2F2F6;color:#3a3a3c;display:grid;place-items:center;flex:none;transition:.18s ease}
+.inp .voice.on{background:#E5484D;color:#fff;box-shadow:0 0 0 5px rgba(229,72,77,.14);animation:voicePulse 1.3s ease-in-out infinite}
+.inp .send{margin-left:auto;width:38px;height:38px;border-radius:50%;background:#23262C;color:#fff;display:grid;place-items:center}
+@keyframes voicePulse{50%{box-shadow:0 0 0 9px rgba(229,72,77,.05)}}
+
+.ai-h{display:flex;align-items:center;gap:8px;padding:16px 22px 4px;font-size:18px;font-weight:700}
+.ai-h .x{margin-left:auto;width:32px;height:32px;border-radius:50%;background:#F2F2F6;display:grid;place-items:center;color:#555}
+.ai-sub{padding:0 22px;font-size:13px;color:#8e8e93}
+.ai-g{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:16px 20px}
+.ai-g a{display:flex;align-items:center;gap:10px;height:52px;padding:0 14px;border-radius:14px;background:#F6F6F9;font-size:15px;font-weight:500}
+.ai-g a svg{color:#6E56CF}
+.ai-chat{padding:16px 20px 86px;overflow:hidden}
+.ai-chat .bubble{font-size:14px;margin-bottom:10px}
+.ai-panel{height:75%}
+.ai-panel .ai-chat{max-height:calc(100% - 92px);overflow:auto}
+.ai-sheet-input{left:20px;right:20px;bottom:24px;background:#F6F6F9;box-shadow:none}
+.grad{background:linear-gradient(135deg,#6E56CF,#3478F6);-webkit-background-clip:text;background-clip:text;color:transparent}
+
+.field{margin:16px 20px 0;height:52px;border-radius:14px;background:#F2F2F6;display:flex;align-items:center;gap:10px;padding:0 14px;font-size:15px;color:#3a3a3c}
+.btn{margin:18px 20px 0;height:52px;border-radius:26px;background:#23262C;color:#fff;display:grid;place-items:center;font-size:16px;font-weight:600}
+.scr a.btn{color:#fff}
+
+.bbar{position:absolute;left:16px;right:16px;bottom:40px;height:72px;border-radius:24px;background:#fff;box-shadow:0 8px 30px rgba(20,20,50,.08);display:flex;justify-content:space-around;align-items:center;z-index:6}
+.bbar a{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:12px;color:#2a2a2e}
+.bbar a.red{color:#E5484D}
+.disabled{color:#c4c4c8!important;opacity:.55;pointer-events:none}
+.tag-pop{position:absolute;left:62px;bottom:128px;width:266px;padding:10px 0;background:rgba(255,255,255,.98);border-radius:24px;box-shadow:0 14px 42px rgba(20,20,50,.14);z-index:9}
+.tag-pop a{height:56px;padding:0 24px;display:flex;align-items:center;gap:15px;font-size:17px;color:#1c1c1e}
+.tag-pop .tag-state{width:24px;display:grid;place-items:center;color:#0D99FF;flex:none}
+.tag-pop .tag-state.muted{color:#3a3a3c}
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <div class="logo"><svg width="18" height="18" viewBox="0 0 38 57"><path fill="#F24E1E" d="M19 28.5a9.5 9.5 0 1 1 19 0 9.5 9.5 0 0 1-19 0z" opacity="0"/><path fill="#1ABCFE" d="M19 28.5a9.5 9.5 0 1 1 19 0 9.5 9.5 0 0 1-19 0z"/><path fill="#0ACF83" d="M0 47.5A9.5 9.5 0 0 1 9.5 38H19v9.5a9.5 9.5 0 1 1-19 0z"/><path fill="#FF7262" d="M19 0v19h9.5a9.5 9.5 0 1 0 0-19H19z"/><path fill="#F24E1E" d="M0 9.5A9.5 9.5 0 0 0 9.5 19H19V0H9.5A9.5 9.5 0 0 0 0 9.5z"/><path fill="#A259FF" d="M0 28.5A9.5 9.5 0 0 0 9.5 38H19V19H9.5A9.5 9.5 0 0 0 0 28.5z"/></svg></div>
+  <div class="file"><span>草稿 /</span><b>iMind 笔记·写作 App</b><span>— 移动端设计稿 v1</span></div>
+  <div class="tools">
+    <button class="tb on" id="toolMove" title="移动 V"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M5 3l14 8-6 1.6L10 19z"/></svg></button>
+    <button class="tb" id="toolHand" title="抓手 H"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 13V5.5a1.5 1.5 0 0 1 3 0V12M11 11V4.5a1.5 1.5 0 0 1 3 0V12M14 11.5V6a1.5 1.5 0 0 1 3 0v7c0 4-2.5 8-7 8-3 0-4.5-1.5-6-4l-2-3.5a1.5 1.5 0 0 1 2.6-1.5L8 14"/></svg></button>
+    <span style="width:1px;background:#444;margin:6px 6px"></span>
+    <button class="tb on" id="toolProto" title="原型连线 P"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="5" cy="18" r="2"/><path d="M7 17c6-1 6-10 12-11"/><path d="M15 4l4 2-2 4"/></svg>原型连线</button>
+  </div>
+  <div class="right">
+    <button class="tb" id="zoomOut">−</button>
+    <button class="tb" id="zoomLabel" title="Shift+1 适应全部">100%</button>
+    <button class="tb" id="zoomIn">＋</button>
+    <button class="tb play" id="playBtn"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l14 8-14 8z"/></svg>演示</button>
+  </div>
+</div>
+
+<div id="left">
+  <div class="ph">页面</div>
+  <div class="page-row">📱 设计稿</div>
+  <div class="sep"></div>
+  <div class="ph">图层 <span id="frameCount"></span></div>
+  <div id="layers"></div>
+</div>
+
+<div id="right"><div class="rp" id="inspector"></div></div>
+
+<div id="viewport" class="proto">
+  <div id="world">
+    <svg id="links"><defs>
+      <marker id="arw" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#0D99FF"/></marker>
+    </defs><g id="linkG"></g></svg>
+  </div>
+</div>
+
+<div id="present">
+  <button class="tb" id="prevBtn">‹</button>
+  <div class="cur" id="curLabel"></div>
+  <button class="tb" id="nextBtn">›</button>
+</div>
+
+<script>
+/* ================= 图标 ================= */
+const P = {
+  menu:'<path d="M4 6.5h16M4 12h10M4 17.5h14"/>',
+  more:'<circle cx="5" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.7" fill="currentColor" stroke="none"/>',
+  back:'<path d="M15 5l-7 7 7 7"/>',
+  undo:'<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5H14a2.5 2.5 0 0 1 0 5h-3"/><path d="M11.3 7.6 9.4 9.5l1.9 1.9"/>',
+  redo:'<circle cx="12" cy="12" r="9"/><path d="M14.5 9.5H10a2.5 2.5 0 0 0 0 5h3"/><path d="M12.7 7.6l1.9 1.9-1.9 1.9"/>',
+  sparkles:'<path d="M11 3.5l1.7 4.8 4.8 1.7-4.8 1.7L11 16.5l-1.7-4.8L4.5 10l4.8-1.7z" fill="currentColor" stroke="none"/><path d="M18.5 14.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z" fill="currentColor" stroke="none"/>',
+  hash:'<path d="M4 9h16M4 15h16M10 3.5 8 20.5M16 3.5l-2 17"/>',
+  camera:'<path d="M14.5 4.5h-5L7.6 7H4.5a1.5 1.5 0 0 0-1.5 1.5v10A1.5 1.5 0 0 0 4.5 20h15a1.5 1.5 0 0 0 1.5-1.5v-10A1.5 1.5 0 0 0 19.5 7h-3.1z"/><circle cx="12" cy="13.2" r="3.4"/>',
+  image:'<rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="9" cy="9.5" r="1.6"/><path d="m21 15.5-5-5L5.5 20"/>',
+  H:'<path d="M6.5 5v14M17.5 5v14M6.5 12h11"/>',
+  bold:'<path d="M7 4.5h6.2a3.6 3.6 0 0 1 0 7.2H7zM7 11.7h7.4a3.9 3.9 0 0 1 0 7.8H7z" stroke-width="2.6"/>',
+  list:'<path d="M9.5 6h11M9.5 12h11M9.5 18h11"/><circle cx="4.5" cy="6" r="1.2" fill="currentColor"/><circle cx="4.5" cy="12" r="1.2" fill="currentColor"/><circle cx="4.5" cy="18" r="1.2" fill="currentColor"/>',
+  olist:'<path d="M10 6h10.5M10 12h10.5M10 18h10.5"/><path d="M4 4.5h1.2V8M3.6 10.6h1.8l-1.8 2.6h2M3.6 15.8h1.9l-1 1.2a1 1 0 1 1-.9 1.6" stroke-width="1.3"/>',
+  flag:'<path d="M5 21V4M5 4.5h11.5l-2.2 4 2.2 4H5"/>',
+  x:'<path d="M6 6l12 12M18 6 6 18"/>',
+  edit:'<path d="M12 4H6.5A2.5 2.5 0 0 0 4 6.5v11A2.5 2.5 0 0 0 6.5 20h11a2.5 2.5 0 0 0 2.5-2.5V12"/><path d="M18.3 3.7a2 2 0 0 1 2.9 2.9L12.5 15.3l-3.8.9.9-3.8z"/>',
+  pause:'<rect x="6.5" y="5" width="3.6" height="14" rx="1" fill="currentColor" stroke="none"/><rect x="13.9" y="5" width="3.6" height="14" rx="1" fill="currentColor" stroke="none"/>',
+  pen:'<path d="M15.5 4.5l4 4L9 19l-4.8.8.8-4.8z" fill="currentColor" stroke="none"/>',
+  layers:'<path d="m12 3.5 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/>',
+  fileAudio:'<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><circle cx="10.5" cy="16.3" r="1.6"/><path d="M12.1 16.3V11l2.2 1"/>',
+  fileText:'<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 16.5h4"/>',
+  clip:'<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M3 8.5h18M7 12.5h10M7 16h6"/>',
+  trash:'<path d="M4 7h16M9.5 7V4.5h5V7M6 7l1 13h10l1-13M10 11v5.5M14 11v5.5"/>',
+  chevR:'<path d="m9 6 6 6-6 6"/>',
+  chevD:'<path d="m6 9 6 6 6-6"/>',
+  caret:'<path d="M7 10l5 5 5-5z" fill="currentColor" stroke="none"/>',
+  sliders:'<path d="M4 8h9M18 8h2M4 16h3M12 16h8"/><circle cx="15.5" cy="8" r="2"/><circle cx="9.5" cy="16" r="2"/>',
+  gift:'<rect x="3.5" y="8" width="17" height="4" rx="1"/><path d="M5.5 12v8h13v-8M12 8v12M12 8S10.5 3.5 8 4.6 9 8 12 8zM12 8s1.5-4.5 4-3.4S15 8 12 8z"/>',
+  user:'<circle cx="12" cy="8" r="3.8"/><path d="M5 20.5c.5-3.6 3.3-5.8 7-5.8s6.5 2.2 7 5.8"/>',
+  sort:'<path d="M6.5 4v16M3.8 6.8 6.5 4l2.7 2.8M3.8 17.2 6.5 20l2.7-2.8M12.5 7h8M12.5 12h8M12.5 17h8"/>',
+  share:'<path d="M12 15V3.5M8 7.5l4-4 4 4M5 12.5V19a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6.5"/>',
+  pencil:'<path d="M16.5 3.8a2.2 2.2 0 0 1 3.1 3.1L7.5 19l-4 1 1-4z"/><path d="M14.5 6l3 3"/>',
+  wand:'<path d="M4 20 15 9M13.5 7.5l3 3"/><path d="M18 2.5l.6 1.6 1.6.6-1.6.6L18 7l-.6-1.7-1.6-.6 1.6-.6zM8 3l.5 1.3 1.3.5-1.3.5L8 6.6l-.5-1.3L6.2 4.8l1.3-.5z" fill="currentColor" stroke="none"/>',
+  info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.6v.2"/>',
+  check:'<path d="m5.5 12.5 4.5 4.5 8.5-9.5"/>',
+  plusCircle:'<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>',
+  pip:'<rect x="3" y="4.5" width="18" height="15" rx="2.5"/><rect x="12" y="12" width="6.5" height="5" rx="1"/><path d="M6.5 8.2l3.5 3.5M10 8.5v3.2H6.8"/>',
+  vibrate:'<rect x="8" y="3.5" width="8" height="17" rx="2"/><path d="M4.5 8.5v7M19.5 8.5v7M2 10.5v3M22 10.5v3"/>',
+  translate:'<path d="M3 5.5h8M7 3.5v2M9.2 5.5c0 3.5-2.2 6.5-5.7 8M5 8.5c1 2.2 2.8 4 5 5"/><path d="M12.5 20.5l4-9 4 9M14 17.3h5"/>',
+  mic:'<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/>',
+  clock:'<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+  feather:'<path d="M20 4C10 4 5.5 9.5 5 19.5"/><path d="M20 4c0 8-4.5 12.5-13 12.5"/><path d="M4 20l3-3"/><path d="M12.5 8.5c1.8.4 3.6.4 5.8-.4M10 12c2 .3 4 .2 6-.5"/>',
+  zap:'<path d="M13.5 2.5 4.5 14h7l-1 7.5 9-11.5h-7z" fill="currentColor" stroke="none"/>',
+  wifiOff:'<path d="M2.5 8.8a14 14 0 0 1 19 0M5.5 12.2a9.5 9.5 0 0 1 13 0M8.8 15.5a5 5 0 0 1 6.4 0"/><circle cx="12" cy="19" r="1" fill="currentColor"/><path d="M15.5 17.5l4 4M19.5 17.5l-4 4"/>',
+  knot:'<path d="M12 3.5c2.5 0 4 1.6 4 3.6v4.3M12 20.5c-2.5 0-4-1.6-4-3.6v-4.3M3.6 9.5c1.2-2.2 3.4-2.7 5.2-1.7L12.5 10M20.4 14.5c-1.2 2.2-3.4 2.7-5.2 1.7L11.5 14M3.6 14.5c-1.2-2.2-.6-4.3 1.2-5.3L8.5 7M20.4 9.5c1.2 2.2.6 4.3-1.2 5.3L15.5 17"/>',
+  link:'<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+  send:'<path d="M12 19V5M6 11l6-6 6 6"/>',
+  globe:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.7 5.6 3.7 9s-1.2 6.4-3.7 9c-2.5-2.6-3.7-5.6-3.7-9S9.5 5.6 12 3z"/>',
+  shift:'<path d="M12 4.5 4.5 12H8.5v7h7v-7h4z"/>',
+  bksp:'<path d="M9 5.5h11a1.5 1.5 0 0 1 1.5 1.5v10a1.5 1.5 0 0 1-1.5 1.5H9L3 12z"/><path d="M12.5 9.5l5 5M17.5 9.5l-5 5"/>',
+  clipb:'<rect x="5.5" y="4.5" width="13" height="16.5" rx="2"/><path d="M9 4.5V3h6v1.5M9 10h6M9 13.5h6M9 17h3.5"/>',
+  aiText:'<path d="M3 19 8 5l5 14M4.8 14h6.4"/><path d="M17.5 10v9M17.5 6.5v.2" /><path d="M20 3.5l.5 1.3 1.3.5-1.3.5L20 7l-.5-1.2-1.3-.5 1.3-.5z" fill="currentColor" stroke="none"/>',
+  signal:'<rect x="2" y="15" width="3.5" height="5" rx="1" fill="currentColor" stroke="none"/><rect x="7.5" y="11.5" width="3.5" height="8.5" rx="1" fill="currentColor" stroke="none"/><rect x="13" y="8" width="3.5" height="12" rx="1" fill="currentColor" stroke="none"/><rect x="18.5" y="4" width="3.5" height="16" rx="1" fill="currentColor" stroke="none"/>',
+  wifi:'<path d="M12 19.5 2.5 9a14 14 0 0 1 19 0z" fill="currentColor" stroke="none"/>',
+  frame:'<path d="M8 3v18M16 3v18M3 8h18M3 16h18"/>',
+  play:'<path d="M7 4.5l13 7.5-13 7.5z" fill="currentColor" stroke="none"/>',
+  bulb:'<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>',
+  search:'<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/>',
+  tone:'<path d="M4 18c3-8 6-8 8-4s5 4 8-4"/>',
+  shrink:'<path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/>',
+  expand:'<path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>',
+  heading:'<path d="M5 5v14M14 5v14M5 12h9M18 9.5l2.5-1.5V19"/>'
+};
+function ic(n,s=22,w=1.8,extra=''){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" ${extra}>${P[n]||''}</svg>`}
+
+/* ================= 通用组件 ================= */
+const sb = () => `<div class="sb"><span>9:41</span><i class="island"></i><span class="sb-r">${ic('signal',17)}${ic('wifi',17)}<b class="bat"></b></span></div>`;
+const hi = '<i class="hi"></i>';
+const strip = h => h.replace(/data-link="[^"]*"/g,'').replace(/data-line="[^"]*"/g,'');
+const pill = (l, r) => `<div class="pill">${l}${r}</div>`;
+const pbRec = (lk) => `<a class="pb dk" ${lk}><span class="o"><i></i></span>录音</a>`;
+const pbNote = (lk) => `<a class="pb" ${lk}><span class="pen">${ic('pen',12)}</span>笔记</a>`;
+const fmtBar = (first='sparkles', lk='') => `<div class="fmt"><a ${lk}>${ic(first,22,1.8, first==='sparkles'?'style="color:#6E56CF"':'')}</a>${ic('hash')}${ic('camera')}${ic('image')}${ic('H')}${ic('bold')}${ic('list')}${ic('olist')}</div>`;
+const keyboard = () => {
+  const row = s => s.split('').map(c=>`<span class="k">${c}</span>`).join('');
+  return `<div class="kb">
+    <div class="kbt"><span class="ime">P</span><span class="sp"></span><span class="c">${ic('sparkles',18)}</span><span class="c">${ic('mic',18)}</span><span class="c">${ic('clipb',18)}</span><span class="c">${ic('aiText',18)}</span><span class="c">${ic('chevD',18)}</span></div>
+    <div class="kr">${row('QWERTYUIOP')}</div>
+    <div class="kr" style="padding:0 18px">${row('ASDFGHJKL')}</div>
+    <div class="kr"><span class="k g">${ic('shift',20)}</span><span style="width:8px"></span>${row('ZXCVBNM')}<span style="width:8px"></span><span class="k g">${ic('bksp',20)}</span></div>
+    <div class="kr b"><span class="k g" style="width:84px;font-size:16px">123</span><span class="k" style="max-width:44px">，</span><span class="k w" style="flex:1;color:#aaa">${ic('mic',18)}</span><span class="k" style="max-width:44px;font-size:13px;line-height:1">中<br>英</span><span class="k g" style="width:84px;font-size:16px">换行</span></div>
+    <div class="gl">${ic('globe',26,1.6)}${ic('mic',26,1.6)}</div>
+  </div>`;
+};
+
+/* ================= 数据 ================= */
+const ITEMS = [
+  {t:'产品周会：Q4 写作功能规划', k:'audio', d:'2026-10-27 10:20', dur:'01:52', tag:'工作'},
+  {t:'周末随笔：慢下来的城市', k:'note', d:'2026-10-26 21:08', tag:'日常碎碎念'},
+  {t:'如何写出让人读下去的开头', k:'clip', d:'2026-10-26 14:30', src:'mp.weixin.qq.com'},
+  {t:'这里是录音功能。可以一边录音，一边输入笔记', k:'audio', d:'2026-10-26 09:42', dur:'00:33', tag:'日常碎碎念'},
+  {t:'《原则》读书笔记：极度透明', k:'note', d:'2026-10-25 22:15', tag:'读书'}
+];
+const kindIcon = {audio:'fileAudio', note:'fileText', clip:'clip'};
+function itemHTML(it, attrs='', extra=''){
+  return `<a class="it" ${attrs}><div class="t">${it.t}</div><div class="m">
+    <span>${ic(kindIcon[it.k],13,1.7)}${it.d}</span>
+    ${it.dur?`<span>${ic('clock',13,1.7)}${it.dur}</span>`:''}
+    ${it.src?`<span>${ic('link',13,1.7)}${it.src}</span>`:''}
+    ${it.tag?`<span class="tg">${it.tag}</span>`:''}
+  </div>${extra}</a>`;
+}
+
+/* ================= 页面 ================= */
+const homeEmpty = () => `<div class="scr">${sb()}
+  <div class="hd"><a class="rb" data-link="sidebar" data-line="0">${ic('menu')}</a><a class="rb" data-link="menu" data-line="0">${ic('more')}</a></div>
+  <div class="brand">iMind</div>
+  <div class="hero"><h1>在这里，<br>记录你的一切。</h1>
+    <ul class="feat">
+      <li>${ic('feather',22,1.7)}<span>语音记录、思考笔记、网课播客、图文剪藏，记录一切，没有限制。</span></li>
+      <li>${ic('zap',22)}<span>无限记录、无限转译、无限剪藏，轻而易记，极简极致，极其享受。</span></li>
+      <li>${ic('wifiOff',22,1.7)}<span>采用精调的端侧转录、翻译模型和本地存储，这就是保护隐私的最佳方式。</span></li>
+      <li>${ic('knot',22,1.7)}<span>续写润色、提炼要点、上下文连贯记忆、深度问答 —— 你的全能 AI 写作助手。</span></li>
+    </ul></div>
+  ${pill(pbRec('data-link="rec" data-line="0"'), pbNote('data-link="noteEdit" data-line="0"'))}${hi}</div>`;
+
+const home = (live=true) => { const h = `<div class="scr">${sb()}
+  <div class="hd"><a class="rb" data-link="sidebar">${ic('menu')}</a><a class="rb" data-link="menu">${ic('more')}</a></div>
+  <div class="brand">iMind</div>
+  <div class="list">
+    ${itemHTML(ITEMS[0],'data-link="detail" data-line="0"')}
+    ${itemHTML(ITEMS[1],'data-link="noteView" data-line="0"')}
+    ${itemHTML(ITEMS[2])}
+    ${itemHTML(ITEMS[3])}
+    ${itemHTML(ITEMS[4],'data-link="select"', live?'<span class="lp">长按</span>':'')}
+  </div>
+  ${pill(pbRec('data-link="rec"'), pbNote('data-link="noteEdit"'))}${hi}</div>`; return live?h:strip(h); };
+
+const sidebar = () => `<div class="scr"><div class="bg">${home(false)}</div><div class="dim"></div>
+  <div class="drawer">${sb()}
+    <div class="hdx"><div class="rg">${'<span class="ib">'+ic('gift')+'</span><span class="ib">'+ic('user')+'</span>'}</div></div>
+    <h2>文件</h2>
+    <a class="nv on" data-link="home" data-line="0">${ic('layers',20,1.8,'style="color:#3DBE6A"')}全部<span class="gt">${ic('chevR',18)}</span></a>
+    <a class="nv">${ic('fileAudio',20,1.8,'style="color:#3478F6"')}音频<span class="gt">${ic('chevR',18)}</span></a>
+    <a class="nv">${ic('fileText',20,1.8,'style="color:#E6A23C"')}笔记<span class="gt">${ic('chevR',18)}</span></a>
+    <a class="nv">${ic('clip',20,1.8,'style="color:#F07B3F"')}剪藏<span class="gt">${ic('chevR',18)}</span></a>
+    <a class="nv">${ic('trash',20,1.8,'style="color:#E5484D"')}回收站<span class="gt">${ic('chevR',18)}</span></a>
+    <div class="nh">标签 ${ic('caret',18)}<span class="r">${ic('sliders',20)}</span></div>
+    <div class="nline"></div>
+    <a class="nv" data-link="tag">${ic('hash',19)}日常碎碎念<span class="gt">${ic('more',18)}</span></a>
+    <a class="nv">${ic('hash',19)}工作<span class="gt">${ic('more',18)}</span></a>
+    <a class="nv">${ic('hash',19)}读书<span class="gt">${ic('more',18)}</span></a>
+  </div>${hi}</div>`;
+
+const tagPage = () => `<div class="scr">${sb()}
+  <div class="hd"><a class="rb" data-link="home" data-line="0">${ic('back')}</a><a class="rb">${ic('more')}</a></div>
+  <div class="brand" style="display:flex;align-items:center;gap:6px"><span style="color:#a0a0a5;font-weight:600">#</span>日常碎碎念</div>
+  <div style="padding:0 18px 6px;font-size:13px;color:#8e8e93">2 个文件</div>
+  <div class="list">${itemHTML(ITEMS[1])}${itemHTML(ITEMS[3])}</div>
+  ${pill(pbRec(''), pbNote(''))}${hi}</div>`;
+
+const menu = () => `<div class="scr"><div class="bg">${home(false)}</div><div class="dim l"></div>
+  <div class="pop">
+    <a class="mi">${ic('sort')}排序方式</a>
+    <a class="mi" data-link="clip">${ic('clip')}网页剪藏</a>
+  </div>${hi}</div>`;
+
+const clipSheet = () => `<div class="scr"><div class="bg">${home(false)}</div><div class="dim"></div>
+  <div class="sheet" style="height:470px"><div class="grab-h"></div>
+    <div class="ai-h">${ic('clip',22)}网页剪藏<a class="x" data-link="home" data-line="0">${ic('x',16,2)}</a></div>
+    <div class="ai-sub">粘贴链接，正文与图片将保存为可编辑的笔记，可直接用于写作引用。</div>
+    <div class="field">${ic('link',20)}<span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">https://mp.weixin.qq.com/s/9xK2hF…</span></div>
+    <div class="card" style="display:flex;gap:12px;align-items:center">
+      <div style="width:56px;height:56px;border-radius:10px;background:linear-gradient(135deg,#f6d365,#fda085);flex:none"></div>
+      <div><h5 style="margin:0 0 2px">检测到剪贴板链接</h5><p style="font-size:14.5px;font-weight:600">如何写出让人读下去的开头</p></div>
+    </div>
+    <a class="btn" data-link="home" data-line="0">剪藏</a>
+  </div>${hi}</div>`;
+
+const selectPage = (live=true) => { const h = `<div class="scr">${sb()}
+  <div class="hd"><span></span><a class="done" data-link="home" data-line="0">完成</a></div>
+  <div class="brand">iMind</div>
+  <div class="list">
+    ${itemHTML(ITEMS[0],'',`<span class="ck on">${ic('check',13,2.6)}</span>`)}
+    ${itemHTML(ITEMS[1],'',`<span class="ck"></span>`)}
+    ${itemHTML(ITEMS[2],'',`<span class="ck"></span>`)}
+    ${itemHTML(ITEMS[3],'',`<span class="ck on">${ic('check',13,2.6)}</span>`)}
+    ${itemHTML(ITEMS[4],'',`<span class="ck"></span>`)}
+  </div>
+  <div class="bbar">
+    <a data-link="selectTag">${ic('hash')}标记</a><a class="disabled" aria-disabled="true">${ic('share')}导出</a><a>${ic('wand')}AI 命名</a><a>${ic('pencil')}重命名</a><a>${ic('info')}简介</a><a class="red">${ic('trash')}删除</a>
+  </div>${hi}</div>`; return live?h:strip(h); };
+
+const selectTagPage = () => `<div class="scr"><div class="bg">${selectPage(false)}</div>
+  <div class="tag-pop">
+    <a data-link="select" data-line="0"><span class="tag-state"></span><span>#工作</span></a>
+    <a data-link="select" data-line="0"><span class="tag-state">${ic('check',20,2.2)}</span><span>#日常碎碎念</span></a>
+    <a><span class="tag-state muted">${ic('plusCircle',22,1.8)}</span><span>新建标签</span></a>
+  </div>${hi}</div>`;
+
+const NOTE_BODY = (caret) => `<div class="ed">
+  <h1>周末随笔：慢下来的城市</h1>
+  <p>早上七点的菜市场，比任何一个工作日都热闹。卖豆腐的阿姨认得每一个熟客，称完秤会顺手多给一块。</p>
+  <h2>观察</h2>
+  <ul><li>早餐摊排队的人，大多不看手机</li><li>公园里下棋的老人，一局能下一上午</li><li>书店的咖啡座，周末永远没有空位</li></ul>
+  <p>城市并没有变慢，只是周末给了我们慢下来的理由。${caret?'<span class="caret"></span>':''}</p>
+</div>`;
+
+const REC_NOTE_BODY = (caret) => `<div class="ed">
+  <h1>产品周会：Q4 写作功能规划</h1>
+  <p>Q4 重点：AI 续写 &gt; 模板库 &gt; 多端同步。</p>
+  <h2>会后事项</h2>
+  <ul><li>找算法同学对齐端侧模型体积</li><li>确认长文写作的上下文记忆方案</li><li>整理内测排期并同步团队</li></ul>
+  <p>11 月中旬开始内测，12 月全量上线。${caret?'<span class="caret"></span>':''}</p>
+</div>`;
+
+const noteEdit = () => `<div class="scr w">${sb()}
+  <div class="hd"><a class="rb" data-link="home" data-line="0">${ic('back')}</a>
+    <div class="hr"><div class="rg"><span class="ib">${ic('undo')}</span><span class="ib off">${ic('redo')}</span></div><a class="done" data-link="noteView">完成</a></div></div>
+  ${NOTE_BODY(true)}
+  <div style="position:absolute;left:0;right:0;bottom:342px">${fmtBar('sparkles','data-link="ai"')}</div>
+  ${keyboard()}${hi}</div>`;
+
+const aiInput = (placeholder) => `<div class="inp ai-input ai-sheet-input">
+  <span class="voice-text" data-placeholder="${placeholder}">${placeholder}</span>
+  <button type="button" class="voice" aria-label="开始语音输入">${ic('mic',18,2)}</button>
+  <span class="send">${ic('send',18,2.2)}</span>
+</div>`;
+
+const aiSheet = () => `<div class="scr w"><div class="bg">${sb()}<div class="hd"><span class="rb">${ic('back')}</span><span class="done">完成</span></div>${NOTE_BODY(false)}</div><div class="dim l"></div>
+  <div class="sheet ai-panel"><div class="grab-h"></div>
+    <div class="ai-h">${ic('sparkles',22,1.8,'style="color:#6E56CF"')}<span class="grad">AI+ 写作</span><a class="x" data-link="noteEdit" data-line="0">${ic('x',16,2)}</a></div>
+    <div class="ai-sub">基于当前笔记「周末随笔：慢下来的城市」</div>
+    <div class="ai-chat">
+      <div class="bubble ai">想怎么调整这篇笔记？直接告诉我，我会结合全文帮你完成。</div>
+      <div class="bubble me">把结尾续写得更有余韵</div>
+      <div class="bubble ai">可以。我会保留现在克制、生活化的语气，并让结尾重新呼应“慢下来的城市”。</div>
+    </div>
+    ${aiInput('告诉 AI+ 你想怎么写…')}
+  </div>${hi}</div>`;
+
+const noteView = (live=true) => { const h = `<div class="scr w">${sb()}
+  <div class="hd"><a class="rb" data-link="home" data-line="0">${ic('back')}</a><a class="rb" data-link="noteMenu">${ic('more')}</a></div>
+  ${NOTE_BODY(false)}
+  <div style="padding:6px 20px;font-size:12px;color:#a0a0a5;display:flex;gap:10px"><span class="tg">日常碎碎念</span>2026-10-26 21:08 · 186 字</div>
+  ${hi}</div>`; return live?h:strip(h); };
+
+const noteMenu = () => `<div class="scr w"><div class="bg">${noteView(false)}</div><div class="dim l" style="background:rgba(0,0,0,.06)"></div>
+  <div class="pop" style="width:290px">
+    <a class="mi disabled" aria-disabled="true">${ic('share')}导出<span style="margin-left:auto;font-size:12px">暂不可用</span></a>
+    <a class="mi">${ic('pencil')}重命名</a>
+    <a class="mi red">${ic('trash')}删除</a>
+  </div>${hi}</div>`;
+
+const TRANS = ['好，我们开始今天的周会，主要过一下 Q4 写作功能的规划。','先说目标，希望写作日活提升 30%，人均每周成稿 2 篇。','核心功能有三块：AI 续写润色、写作模板库、多端草稿同步。','排期上，11 月中旬内测，12 月全量。'];
+const recScr = (live=true, time='01:46') => { const h = `<div class="scr w">${sb()}
+  <div class="rt"><div class="live"><i></i>${time}</div></div>
+  <div class="tr">${TRANS.map(t=>`<p>${t}</p>`).join('')}<p class="pt">风险主要是端侧模型的体积<span class="wave"><b></b><b></b><b></b><b></b></span></p></div>
+  ${pill(`<a class="pb dk" data-link="recConfirm"><span class="o"><i class="sq"></i></span>保存</a>`, pbNote('data-link="recNote"'))}${hi}</div>`; return live?h:strip(h); };
+
+const recordNoteEdit = (recording=true) => `<div class="scr w">${sb()}
+  <div class="hd"><a class="rb" data-link="${recording?'rec':'dNote'}">${ic('back')}</a>
+    <div class="hr"><div class="rg"><span class="ib">${ic('undo')}</span><span class="ib off">${ic('redo')}</span></div><a class="done" data-link="${recording?'rec':'dNote'}" data-line="0">${recording?'保存':'完成'}</a></div></div>
+  ${recording?'<div style="padding:2px 20px 0;color:#3478F6;font-size:12px;display:flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:50%;background:#3478F6"></span>录音进行中 · 01:46</div>':''}
+  ${REC_NOTE_BODY(true)}
+  <div style="position:absolute;left:0;right:0;bottom:342px">${fmtBar('sparkles')}</div>
+  ${keyboard()}${hi}</div>`;
+const recNote = () => recordNoteEdit(true);
+const dNoteEdit = () => recordNoteEdit(false);
+
+const recConfirm = () => `<div class="scr w"><div class="bg">${recScr(false,'01:52')}</div><div class="dim" style="background:rgba(0,0,0,.2)"></div>
+  <div class="dlg"><div class="q">确定结束录音并保存？</div>
+    <div class="bt"><a data-link="rec" data-line="0">暂停</a><a class="pri" data-link="detail">保存</a></div></div>${hi}</div>`;
+
+const detailHead = (tab, editLink='') => `${sb()}
+  <div class="hd"><a class="rb" data-link="home" data-line="0">${ic('back')}</a><div class="rg"><span class="ib" ${editLink?`data-link="${editLink}" data-line="0"`:''}>${ic('edit',21)}</span><span class="ib">${ic('more')}</span></div></div>
+  <div class="dt"><h1>产品周会：Q4 写作功能规划</h1></div>
+  <div class="tabs">
+    <a class="${tab==='raw'?'on':''}" ${tab!=='raw'?'data-link="detail" data-line="0"':''}>原文</a>
+    <a class="${tab==='note'?'on':''}" ${tab==='raw'?'data-link="dNote"':tab!=='note'?'data-link="dNote" data-line="0"':''}>笔记</a>
+  </div>`;
+const detailPill = (lk='data-link="chat" data-line="0"') => pill(`<a class="pb dk"><span class="o" style="background:transparent;color:#fff">${ic('play',14)}</span>播放</a>`, `<a class="pb" ${lk} style="background:#F2F2F6"><span class="pen">${ic('sparkles',12)}</span>AI+</a>`);
+
+const detail = () => `<div class="scr w">${detailHead('raw')}
+  <div class="ts">
+    ${[['00:00',TRANS[0]],['00:12',TRANS[1]],['00:31',TRANS[2]],['00:58',TRANS[3]],['01:20','风险主要是端侧模型的体积，还有长文写作时的上下文记忆。'],['01:41','好，那今天就先到这里，会后把纪要发群里。']]
+      .map((r,i)=>`<div class="tm">${r[0]}${i===0?' ·':''}</div><div class="tx ${i===0?'cur':''}">${r[1]}</div>`).join('')}
+  </div>
+  <div class="sbar"><i></i></div>
+  ${detailPill('data-link="chat"')}${hi}</div>`;
+
+const dNote = () => `<div class="scr w">${detailHead('note','dNoteEdit')}
+  ${REC_NOTE_BODY(false)}
+  <div style="padding:6px 20px;font-size:12px;color:#a0a0a5;display:flex;gap:10px"><span class="tg">工作</span>2026-10-27 10:20 · 92 字</div>
+  ${detailPill()}${hi}</div>`;
+
+const chat = () => `<div class="scr w"><div class="bg">${strip(detail())}</div><div class="dim l"></div>
+  <div class="sheet ai-panel"><div class="grab-h"></div>
+    <div class="ai-h">${ic('sparkles',22,1.8,'style="color:#6E56CF"')}<span class="grad">AI+ 问答</span><a class="x" data-link="detail" data-line="0">${ic('x',16,2)}</a></div>
+    <div class="ai-sub">基于「产品周会：Q4 写作功能规划」</div>
+    <div class="ai-chat">
+      <div class="bubble me">这次会议定了哪些上线时间？</div>
+      <div class="bubble ai">根据录音 <span class="cite">${ic('play',9)}00:58</span>：11 月中旬开始内测，12 月全量上线。</div>
+      <div class="bubble me">帮我写一段同步给团队的周报</div>
+      <div class="bubble ai"><b>本周进展</b><br>周会明确了 Q4 写作功能三项重点，计划 11 月中旬内测、12 月全量。</div>
+    </div>
+    ${aiInput('继续追问，或让 AI+ 帮你写…')}
+  </div>${hi}</div>`;
+
+/* ================= 画布布局 ================= */
+const C = 560;
+const SECTIONS = [
+  {id:'s1', name:'01 首页与文件管理', x:-120, y:-300, w:4550, h:1300},
+  {id:'s2', name:'02 笔记与 AI 写作', x:1000, y:1220, w:2310, h:1280},
+  {id:'s3', name:'03 录音、转写与 AI 辅助', x:-120, y:2680, w:3990, h:1320}
+];
+const FRAMES = [
+  {id:'homeEmpty', s:'s1', x:0,     y:0, name:'首页 · 空状态', html:homeEmpty, desc:'首次进入的引导页。保留「录音」「笔记」两个主入口，第四条卖点改为 AI 写作助手。'},
+  {id:'home',      s:'s1', x:C,     y:0, name:'首页 · 文件列表', html:home, desc:'按时间倒序展示音频、笔记、剪藏三类文件。点击音频进入转写详情，点击笔记进入阅读页，长按进入多选。'},
+  {id:'sidebar',   s:'s1', x:C*2,   y:0, name:'侧边栏', html:sidebar, desc:'文件分类与标签。已屏蔽「发现」分组（笔记洞察、智能设备、使用指南）。'},
+  {id:'tag',       s:'s1', x:C*3,   y:0, name:'标签 · 日常碎碎念', html:tagPage, desc:'按标签筛选后的文件列表。'},
+  {id:'menu',      s:'s1', x:C*4,   y:0, name:'首页 · 更多菜单', html:menu, desc:'右上角更多菜单。已屏蔽「音频导入」，保留「排序方式」「网页剪藏」。'},
+  {id:'clip',      s:'s1', x:C*5,   y:0, name:'网页剪藏', html:clipSheet, desc:'粘贴或自动识别剪贴板链接，剪藏为可编辑笔记。'},
+  {id:'select',    s:'s1', x:C*6,   y:0, name:'多选管理', html:selectPage, desc:'长按列表进入。底部批量操作包含标记、AI 命名、重命名、简介和删除；导出暂不可用。'},
+  {id:'noteEdit',  s:'s2', x:C*2,   y:1500, name:'笔记 · 编辑', html:noteEdit, desc:'富文本编辑：AI、标签、拍照、图片、标题、加粗、列表。点击左侧 ✦ 唤起 AI+ 写作。'},
+  {id:'ai',        s:'s2', x:C*3,   y:1500, name:'AI+ 写作面板', html:aiSheet, desc:'3/4 屏会话式写作面板，不提供预置功能按钮，仅支持自由文字与语音输入；再次点击语音按钮可取消本次录制。'},
+  {id:'noteView',  s:'s2', x:C*4,   y:1500, name:'笔记 · 阅读', html:noteView, desc:'完成编辑后的阅读态，点击正文重新进入编辑。'},
+  {id:'noteMenu',  s:'s2', x:C*5,   y:1500, name:'笔记 · 更多菜单', html:noteMenu, desc:'导出暂不可用，保留重命名与删除。'},
+  {id:'rec',       s:'s3', x:0,     y:3000, name:'录音 · 实时转写', html:()=>recScr(true), desc:'端侧实时转写。右上角不提供额外工具，底部保留保存与边录边记。'},
+  {id:'recNote',   s:'s3', x:C,     y:3000, name:'录音 · 边录边记', html:recNote, desc:'录音不中断，进入与普通笔记一致的富文本编辑器，不插入录音时间戳。'},
+  {id:'recConfirm',s:'s3', x:C*2,   y:3000, name:'录音 · 结束确认', html:recConfirm, desc:'二次确认：暂停或保存。'},
+  {id:'detail',    s:'s3', x:C*3,   y:3000, name:'详情 · 原文', html:detail, desc:'带时间戳的逐段转写原文，当前播放段落加粗。'},
+  {id:'dNote',     s:'s3', x:C*4,   y:3000, name:'详情 · 笔记', html:dNote, desc:'录音时写下的普通笔记；阅读与再次编辑均沿用普通笔记体验，不显示录音时间戳。'},
+  {id:'dNoteEdit', s:'s3', x:C*5,   y:3000, name:'详情 · 笔记编辑', html:dNoteEdit, desc:'录音结束后仍使用与普通笔记一致的编辑器进行修改，不显示录音状态或时间戳。'},
+  {id:'chat',      s:'s3', x:C*6,   y:3000, name:'AI+ 深度问答', html:chat, desc:'录音详情上方的 3/4 屏会话弹层，不提供预置功能按钮，支持文字或语音追问。'},
+  {id:'selectTag', s:'s1', x:C*7,   y:0, name:'多选管理 · 标记', html:selectTagPage, desc:'点击「标记」后的标签选择浮层：展示可选标签、当前已选标签与新建标签入口。'}
+];
+const STICKIES = [
+  {x:-560, y:-300, cls:'', html:`<h5>本版屏蔽的功能</h5><ul><li>发现：笔记洞察、智能设备、使用指南</li><li>首页更多菜单：音频导入</li></ul>`},
+  {x:-560, y:120, cls:'blue', html:`<h5>浏览方式</h5><ul><li>拖拽或滚动平移画布</li><li>⌘ / Ctrl + 滚轮、双指捏合缩放</li><li>点击蓝框热区跳到目标页</li><li>← → 键逐页演示</li></ul>`}
+];
+
+/* ================= 渲染 ================= */
+const world = document.getElementById('world'), view = document.getElementById('viewport');
+const svgLinks = document.getElementById('links'), linkG = document.getElementById('linkG');
+const FM = Object.fromEntries(FRAMES.map((f,i)=>[f.id,{...f,i}]));
+
+SECTIONS.forEach(s=>{
+  const el = document.createElement('div'); el.className='section';
+  Object.assign(el.style,{left:s.x+'px',top:s.y+'px',width:s.w+'px',height:s.h+'px'});
+  el.innerHTML = `<div class="stitle"><span>${s.name}</span></div>`;
+  world.insertBefore(el, svgLinks);
+});
+STICKIES.forEach(s=>{const el=document.createElement('div');el.className='sticky '+s.cls;el.style.left=s.x+'px';el.style.top=s.y+'px';el.innerHTML=s.html;world.insertBefore(el, svgLinks);});
+FRAMES.forEach((f,i)=>{
+  const el = document.createElement('div'); el.className='frame'; el.id='f-'+f.id;
+  el.style.left=f.x+'px'; el.style.top=f.y+'px';
+  el.innerHTML = `<div class="flabel">${String(i+1).padStart(2,'0')} ${f.name}</div><div class="phone">${f.html()}</div>`;
+  world.insertBefore(el, svgLinks);
+});
+world.appendChild(svgLinks);
+
+/* 图层面板 */
+const layers = document.getElementById('layers');
+document.getElementById('frameCount').textContent = FRAMES.length + ' 个画板';
+SECTIONS.forEach(s=>{
+  layers.insertAdjacentHTML('beforeend', `<div class="lsec">${ic('chevD',12,2)}${s.name}</div>`);
+  FRAMES.filter(f=>f.s===s.id).forEach(f=>{
+    layers.insertAdjacentHTML('beforeend', `<div class="lrow" data-f="${f.id}">${ic('frame',13,1.6)}${String(FM[f.id].i+1).padStart(2,'0')} ${f.name}</div>`);
+  });
+});
+layers.addEventListener('click', e=>{const r=e.target.closest('.lrow'); if(r){select(r.dataset.f); flyToFrame(r.dataset.f);}});
+
+/* ================= 连线 ================= */
+let LINKS = [];
+function collectLinks(){
+  LINKS = [];
+  FRAMES.forEach(f=>{
+    document.querySelectorAll(`#f-${f.id} [data-link]`).forEach(el=>{
+      if(!FM[el.dataset.link]) return;
+      LINKS.push({from:f.id, to:el.dataset.link, el, line: el.dataset.line!=='0'});
+    });
+  });
+}
+function drawLinks(){
+  const o = world.getBoundingClientRect();
+  let out = '';
+  LINKS.filter(l=>l.line).forEach((l,idx)=>{
+    const r = l.el.getBoundingClientRect();
+    const x1 = (r.left + r.width/2 - o.left)/st.s, y1 = (r.top + r.height/2 - o.top)/st.s;
+    const src = FM[l.from], t = FM[l.to];
+    const L=t.x, R=t.x+390, T=t.y, B=t.y+844;
+    const sameRow = Math.abs(src.y - t.y) < 10;
+    let d, x2, y2;
+    if (sameRow && t.x > src.x && t.x - src.x <= C+1){
+      x2=L; y2=Math.min(Math.max(y1, T+60), B-60);
+      const k=(x2-x1)*.5; d=`M${x1} ${y1} C ${x1+k} ${y1}, ${x2-k} ${y2}, ${x2} ${y2}`;
+    } else if (sameRow && t.x < src.x && src.x - t.x <= C+1){
+      x2=R; y2=Math.min(Math.max(y1, T+60), B-60);
+      const k=(x1-x2)*.5; d=`M${x1} ${y1} C ${x1-k} ${y1}, ${x2+k} ${y2}, ${x2} ${y2}`;
+    } else if (sameRow){
+      x2=t.x+195; y2=T; const h=170+Math.abs(x2-x1)*.08;
+      const cy=Math.min(y1,T)-h; d=`M${x1} ${y1} C ${x1} ${cy}, ${x2} ${cy}, ${x2} ${y2}`;
+    } else if (t.y > src.y){
+      x2=t.x+195; y2=T; const m=(T-y1)*.55;
+      d=`M${x1} ${y1} C ${x1} ${y1+m}, ${x2} ${T-m}, ${x2} ${y2}`;
+    } else {
+      x2=t.x+195; y2=B; const m=(y1-B)*.55;
+      d=`M${x1} ${y1} C ${x1} ${y1-m}, ${x2} ${B+m}, ${x2} ${y2}`;
+    }
+    out += `<g data-from="${l.from}" data-to="${l.to}"><path class="ln" d="${d}" marker-end="url(#arw)"/><circle cx="${x1}" cy="${y1}" r="${4/st.s}"/></g>`;
+  });
+  linkG.innerHTML = out;
+}
+
+/* ================= 视图变换 ================= */
+const st = {x:0,y:0,s:1};
+const zoomLabel = document.getElementById('zoomLabel');
+function apply(){
+  world.style.transform = `translate(${st.x}px,${st.y}px) scale(${st.s})`;
+  world.style.setProperty('--s', st.s);
+  let g = 24*st.s; while(g<10) g*=4;
+  view.style.backgroundSize = `${g}px ${g}px`;
+  view.style.backgroundPosition = `${st.x}px ${st.y}px`;
+  zoomLabel.textContent = Math.round(st.s*100)+'%';
+  linkG.querySelectorAll('circle').forEach(c=>c.setAttribute('r', 4/st.s));
+}
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+function zoomAt(cx,cy,f){
+  const ns = clamp(st.s*f, .04, 4);
+  st.x = cx-(cx-st.x)*ns/st.s; st.y = cy-(cy-st.y)*ns/st.s; st.s = ns; apply();
+}
+let anim=null;
+function flyTo(tx,ty,ts,dur=550){
+  cancelAnimationFrame(anim);
+  const a={...st}, t0=performance.now();
+  const ease=t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
+  const step=now=>{
+    const p=Math.min(1,(now-t0)/dur), e=ease(p);
+    const s = Math.exp(Math.log(a.s)+(Math.log(ts)-Math.log(a.s))*e);
+    // 让世界坐标中心平滑插值
+    const vw=view.clientWidth, vh=view.clientHeight;
+    const ca={x:(vw/2-a.x)/a.s, y:(vh/2-a.y)/a.s}, cb={x:(vw/2-tx)/ts, y:(vh/2-ty)/ts};
+    const cx=ca.x+(cb.x-ca.x)*e, cy=ca.y+(cb.y-ca.y)*e;
+    st.s=s; st.x=vw/2-cx*s; st.y=vh/2-cy*s; apply();
+    if(p<1) anim=requestAnimationFrame(step);
+  };
+  anim=requestAnimationFrame(step);
+}
+function fitRect(x,y,w,h,pad=80,max=1.2){
+  const vw=view.clientWidth, vh=view.clientHeight;
+  const s=Math.min((vw-pad*2)/w,(vh-pad*2)/h,max);
+  return {x:vw/2-(x+w/2)*s, y:vh/2-(y+h/2)*s, s};
+}
+function flyToFrame(id){const f=FM[id]; const r=fitRect(f.x-20,f.y-40,430,904,60,1.1); flyTo(r.x,r.y,r.s); cur=f.i; updatePresent(); history.replaceState(null,'','#'+id);}
+function fitAll(animate=true){
+  const xs=[...SECTIONS.map(s=>s.x),...STICKIES.map(s=>s.x)], ys=SECTIONS.map(s=>s.y);
+  const x0=Math.min(...xs), y0=Math.min(...ys), x1=Math.max(...SECTIONS.map(s=>s.x+s.w)), y1=Math.max(...SECTIONS.map(s=>s.y+s.h));
+  const r=fitRect(x0,y0,x1-x0,y1-y0,40);
+  animate?flyTo(r.x,r.y,r.s):(Object.assign(st,r),apply());
+}
+
+/* ================= 交互 ================= */
+let protoOn=true, handTool=false, spaceDown=false;
+let drag=null;
+view.addEventListener('pointerdown', e=>{
+  if(e.button!==0 && e.button!==1) return;
+  cancelAnimationFrame(anim);
+  drag={sx:e.clientX, sy:e.clientY, x:st.x, y:st.y, moved:false, target:e.target};
+  view.setPointerCapture(e.pointerId);
+});
+view.addEventListener('pointermove', e=>{
+  if(!drag) return;
+  const dx=e.clientX-drag.sx, dy=e.clientY-drag.sy;
+  if(!drag.moved && Math.hypot(dx,dy)>3){drag.moved=true; view.classList.add('panning');}
+  if(drag.moved){st.x=drag.x+dx; st.y=drag.y+dy; apply();}
+});
+view.addEventListener('pointerup', e=>{
+  if(!drag) return;
+  view.classList.remove('panning');
+  if(!drag.moved && !handTool && !spaceDown){
+    const hs = protoOn && drag.target.closest('[data-link]');
+    if(hs && FM[hs.dataset.link]){ select(hs.dataset.link); flyToFrame(hs.dataset.link); }
+    else { const fr=drag.target.closest('.frame'); select(fr?fr.id.slice(2):null); }
+  }
+  drag=null;
+});
+view.addEventListener('dblclick', e=>{const fr=e.target.closest('.frame'); if(fr && !e.target.closest('[data-link]')) flyToFrame(fr.id.slice(2));});
+view.addEventListener('wheel', e=>{
+  e.preventDefault(); cancelAnimationFrame(anim);
+  const r=view.getBoundingClientRect();
+  if(e.ctrlKey||e.metaKey){ zoomAt(e.clientX-r.left, e.clientY-r.top, Math.exp(-e.deltaY*(e.ctrlKey&&!e.metaKey?0.012:0.004))); }
+  else { st.x-=e.deltaX; st.y-=e.deltaY; apply(); }
+},{passive:false});
+let gs=1;
+view.addEventListener('gesturestart', e=>{e.preventDefault(); gs=1;});
+view.addEventListener('gesturechange', e=>{e.preventDefault(); const r=view.getBoundingClientRect(); zoomAt(e.clientX-r.left, e.clientY-r.top, e.scale/gs); gs=e.scale;});
+
+const setTool = hand => {handTool=hand; document.getElementById('toolHand').classList.toggle('on',hand); document.getElementById('toolMove').classList.toggle('on',!hand); view.classList.toggle('grab',hand);};
+document.getElementById('toolMove').onclick=()=>setTool(false);
+document.getElementById('toolHand').onclick=()=>setTool(true);
+const setProto = on => {protoOn=on; svgLinks.classList.toggle('hide',!on); view.classList.toggle('proto',on); document.getElementById('toolProto').classList.toggle('on',on);};
+document.getElementById('toolProto').onclick=()=>setProto(!protoOn);
+const centerZoom=f=>zoomAt(view.clientWidth/2, view.clientHeight/2, f);
+document.getElementById('zoomIn').onclick=()=>centerZoom(1.25);
+document.getElementById('zoomOut').onclick=()=>centerZoom(.8);
+zoomLabel.onclick=()=>fitAll();
+
+window.addEventListener('keydown', e=>{
+  if(e.code==='Space'){spaceDown=true; view.classList.add('grab'); e.preventDefault(); return;}
+  if(e.shiftKey && e.code==='Digit1'){fitAll(); return;}
+  if(e.shiftKey && e.code==='Digit0'){const vw=view.clientWidth,vh=view.clientHeight,cx=(vw/2-st.x)/st.s,cy=(vh/2-st.y)/st.s; flyTo(vw/2-cx,vh/2-cy,1); return;}
+  if(e.shiftKey && e.code==='Digit2' && selected){flyToFrame(selected); return;}
+  if(e.key==='ArrowRight'||e.key==='ArrowDown'){go(1); e.preventDefault();}
+  else if(e.key==='ArrowLeft'||e.key==='ArrowUp'){go(-1); e.preventDefault();}
+  else if(e.key==='p'||e.key==='P') setProto(!protoOn);
+  else if(e.key==='v'||e.key==='V') setTool(false);
+  else if(e.key==='h'||e.key==='H') setTool(true);
+  else if(e.key==='='||e.key==='+') centerZoom(1.25);
+  else if(e.key==='-') centerZoom(.8);
+  else if(e.key==='Escape') select(null);
+});
+window.addEventListener('keyup', e=>{if(e.code==='Space'){spaceDown=false; if(!handTool) view.classList.remove('grab');}});
+
+/* ================= 选中 & 检查器 ================= */
+let selected=null;
+const insp=document.getElementById('inspector');
+function select(id){
+  selected=id;
+  document.querySelectorAll('.frame.sel').forEach(n=>n.classList.remove('sel'));
+  document.querySelectorAll('.lrow.sel').forEach(n=>n.classList.remove('sel'));
+  linkG.querySelectorAll('g').forEach(g=>g.classList.toggle('hl', !!id && (g.dataset.from===id||g.dataset.to===id)));
+  if(id){
+    document.getElementById('f-'+id).classList.add('sel');
+    const lr=document.querySelector(`.lrow[data-f="${id}"]`); lr.classList.add('sel'); lr.scrollIntoView({block:'nearest'});
+  }
+  renderInspector();
+}
+const uniq = a => [...new Set(a)];
+function renderInspector(){
+  if(!selected){
+    insp.innerHTML = `<h3>iMind 笔记·写作 App</h3>
+      <p style="color:var(--ui-sub)">移动端高保真设计稿，基于现有 App 截图重绘，按三条主流程排布 ${FRAMES.length} 个画板，蓝色连线为原型跳转关系。</p>
+      <h4>画板</h4><div class="kv"><span>尺寸</span><b>390 × 844（iPhone 15 / 16）</b><span>分区</span><b>${SECTIONS.length} 个流程</b><span>跳转</span><b>${LINKS.filter(l=>l.line).length} 条连线 · ${LINKS.length} 个热区</b></div>
+      <h4>本版屏蔽</h4>
+      <div class="mask-item"><span class="tag-off">已屏蔽</span><span><s>发现</s> · 笔记洞察、智能设备、使用指南</span></div>
+      <div class="mask-item"><span class="tag-off">已屏蔽</span><span><s>音频导入</s>（首页更多菜单）</span></div>
+      <h4>快捷键</h4>
+      <div class="short">
+        <span>平移</span><span>拖拽 / 滚轮 / <kbd>空格</kbd></span>
+        <span>缩放</span><span><kbd>⌘</kbd>+滚轮 · 捏合 · <kbd>+</kbd><kbd>-</kbd></span>
+        <span>适应全部</span><kbd>⇧1</kbd>
+        <span>缩放到 100%</span><kbd>⇧0</kbd>
+        <span>逐页演示</span><span><kbd>←</kbd> <kbd>→</kbd></span>
+        <span>显隐连线</span><kbd>P</kbd>
+        <span>聚焦画板</span><span>双击画板</span>
+      </div>`;
+    return;
+  }
+  const f=FM[selected];
+  const outs=uniq(LINKS.filter(l=>l.from===selected).map(l=>l.to));
+  const ins=uniq(LINKS.filter(l=>l.to===selected).map(l=>l.from));
+  const chips=a=>a.length?a.map(id=>`<span class="chip" data-go="${id}"><i></i>${FM[id].name}</span>`).join(''):'<span style="color:var(--ui-sub)">无</span>';
+  insp.innerHTML = `<h3>${String(f.i+1).padStart(2,'0')} ${f.name}</h3>
+    <div class="kv" style="margin-top:8px"><span>分区</span><b>${SECTIONS.find(s=>s.id===f.s).name}</b><span>尺寸</span><b>390 × 844</b><span>位置</span><b>X ${f.x}　Y ${f.y}</b></div>
+    <h4>说明</h4><p>${f.desc}</p>
+    <h4>跳转到</h4><div>${chips(outs)}</div>
+    <h4>来自</h4><div>${chips(ins)}</div>`;
+}
+insp.addEventListener('click', e=>{const c=e.target.closest('[data-go]'); if(c){select(c.dataset.go); flyToFrame(c.dataset.go);}});
+
+/* ================= 演示 ================= */
+let cur=-1;
+const curLabel=document.getElementById('curLabel');
+function updatePresent(){curLabel.innerHTML = cur<0?`<span>演示</span>按 → 从第一页开始`:`<span>${String(cur+1).padStart(2,'0')} / ${FRAMES.length}</span>${FRAMES[cur].name}`;}
+function go(d){cur=clamp(cur+d,0,FRAMES.length-1); const id=FRAMES[cur].id; select(id); flyToFrame(id);}
+document.getElementById('prevBtn').onclick=()=>go(-1);
+document.getElementById('nextBtn').onclick=()=>go(1);
+document.getElementById('playBtn').onclick=()=>{cur=-1; go(1);};
+
+/* ================= AI+ 语音输入 ================= */
+let voiceSession = null;
+function finishVoice({restore=false}={}){
+  if(!voiceSession) return;
+  const {button,text,recognition,before,placeholder}=voiceSession;
+  voiceSession=null;
+  if(recognition){
+    recognition.onend=null;
+    recognition.onerror=null;
+    try{recognition.abort();}catch(e){}
+  }
+  button.classList.remove('on');
+  button.setAttribute('aria-label','开始语音输入');
+  if(restore) text.textContent=before;
+  text.classList.toggle('has-text', text.textContent!==placeholder && text.textContent!=='正在听，请说话…');
+}
+function startVoice(button){
+  if(voiceSession) finishVoice({restore:true});
+  const text=button.closest('.ai-input').querySelector('.voice-text');
+  const placeholder=text.dataset.placeholder;
+  const before=text.textContent;
+  const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+  button.classList.add('on');
+  button.setAttribute('aria-label','取消语音输入');
+  text.textContent='正在听，请说话…';
+  text.classList.remove('has-text');
+
+  if(!Recognition){
+    voiceSession={button,text,recognition:null,before,placeholder};
+    text.textContent='当前浏览器暂不支持语音输入';
+    return;
+  }
+
+  const recognition=new Recognition();
+  voiceSession={button,text,recognition,before,placeholder};
+  recognition.lang='zh-CN';
+  recognition.continuous=true;
+  recognition.interimResults=true;
+  recognition.onresult=e=>{
+    let spoken='';
+    for(let i=0;i<e.results.length;i++) spoken+=e.results[i][0].transcript;
+    if(spoken){text.textContent=spoken;text.classList.add('has-text');}
+  };
+  recognition.onerror=e=>{
+    if(e.error==='aborted') return;
+    text.textContent=e.error==='not-allowed'?'请允许麦克风权限后重试':'没有听清，请再试一次';
+    text.classList.remove('has-text');
+    finishVoice();
+  };
+  recognition.onend=()=>{
+    if(voiceSession?.recognition!==recognition) return;
+    if(text.textContent==='正在听，请说话…') text.textContent=before;
+    finishVoice();
+  };
+  try{recognition.start();}catch(e){text.textContent='语音输入启动失败，请重试';finishVoice();}
+}
+document.addEventListener('click',e=>{
+  const button=e.target.closest('.voice');
+  if(!button) return;
+  e.preventDefault();
+  e.stopPropagation();
+  if(button.classList.contains('on')) finishVoice({restore:true});
+  else startVoice(button);
+});
+
+/* ================= 启动 ================= */
+collectLinks();
+const hashId = decodeURIComponent(location.hash.slice(1));
+if(FM[hashId]){ const f=FM[hashId]; Object.assign(st, fitRect(f.x-20,f.y-40,430,904,60,1.1)); apply(); cur=f.i; selected=hashId; }
+else fitAll(false);
+const redraw=()=>{drawLinks(); select(selected);};
+(document.fonts?document.fonts.ready:Promise.resolve()).then(redraw);
+redraw();
+updatePresent();
+</script>
+</body>
+</html>

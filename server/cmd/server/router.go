@@ -1729,6 +1729,17 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			r.Post("/files/asset", h.PostDocsFileAsset)
 			r.Patch("/files/content", h.PatchDocsFileContent)
 		})
+		r.Route("/api/imind", func(r chi.Router) {
+			r.Use(middleware.RequireWorkspaceMember(queries))
+			r.Get("/asr", h.IMindASR)
+			r.Get("/shares", h.GetIMindShares)
+			r.Post("/bootstrap", h.PostIMindBootstrap)
+			r.Post("/notes/list", h.PostIMindNotesList)
+			r.Post("/notes/get", h.PostIMindNote)
+			r.Post("/notes", h.PostIMindNotes)
+			r.Put("/notes/{id}", h.PutIMindNote)
+			r.Delete("/notes/{id}", h.DeleteIMindNote)
+		})
 
 		// Note (MUL-4309): the generic OpenAI-compatible passthrough endpoints
 		// (POST /api/llm/v1/chat/completions[/stream]) were intentionally

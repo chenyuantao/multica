@@ -21,7 +21,8 @@ var fileShareUpgrader = websocket.Upgrader{
 // ConnectFileShare attaches a multica-operate daemon. The socket stays open and
 // the server asks it for listings and file bodies as the knowledge API is used.
 func (h *Handler) ConnectFileShare(w http.ResponseWriter, r *http.Request) {
-	if h.FileShares == nil {
+	hub := h.FileShares
+	if hub == nil {
 		writeError(w, http.StatusServiceUnavailable, "file shares are not available")
 		return
 	}
@@ -58,25 +59,25 @@ func (h *Handler) ConnectFileShare(w http.ResponseWriter, r *http.Request) {
 	session := fileshare.NewSession(conn, meta)
 	if nickname := h.machineNickname(r.Context(), meta.WorkspaceID, meta.DaemonID); nickname != "" {
 		session.SetMachine(nickname)
-		err = h.FileShares.Register(session)
+		err = hub.Register(session)
 		if errors.Is(err, fileshare.ErrMachineTaken) {
 			session.SetMachine(meta.DefaultMachine)
-			err = h.FileShares.Register(session)
+			err = hub.Register(session)
 		}
 	} else {
-		err = h.FileShares.Register(session)
+		err = hub.Register(session)
 	}
 	if err != nil {
 		fail(err.Error())
 		return
 	}
-	if err := conn.WriteJSON(fileshare.Envelope{Type: "ready", Machine: session.Meta().Machine}); err != nil {
-		h.FileShares.Unregister(session)
+	if err := session.SendReady(); err != nil {
+		hub.Unregister(session)
 		session.Close()
 		return
 	}
 	_ = conn.SetReadDeadline(time.Time{})
-	go session.ReadLoop(func() { h.FileShares.Unregister(session) })
+	go session.ReadLoop(func() { hub.Unregister(session) })
 }
 
 // machineNickname is the knowledge path prefix taken from the machine name set

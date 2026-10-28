@@ -190,13 +190,15 @@ func serveOnce(ctx context.Context, profile string) time.Duration {
 	defer conn.Close()
 	enabled := cfg.accessEnabled()
 	hello := fileshare.Envelope{
-		Type:        "hello",
-		DaemonID:    daemonID,
-		Machine:     cfg.Machine,
-		WorkspaceID: cfg.WorkspaceID,
-		Visibility:  cfg.Visibility,
-		Dir:         cfg.Dir,
-		Enabled:     &enabled,
+		Type:               "hello",
+		DaemonID:           daemonID,
+		Machine:            cfg.Machine,
+		WorkspaceID:        cfg.WorkspaceID,
+		Visibility:         cfg.Visibility,
+		Dir:                cfg.Dir,
+		Enabled:            &enabled,
+		IMindScopeRevision: true,
+		IMindRename:        true,
 	}
 	if err := conn.WriteJSON(hello); err != nil {
 		fmt.Fprintf(os.Stderr, "hello: %v\n", err)
