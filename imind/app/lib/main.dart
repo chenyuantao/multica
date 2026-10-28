@@ -2015,12 +2015,15 @@ class _RecordingDetailState extends State<RecordingDetail> {
 
   Widget _editors() {
     final transcript = _tab == 0;
-    return _MarkdownEditor(
-      key: ValueKey(transcript ? 'transcript' : 'content'),
-      controller: transcript ? _transcriptText : _content,
-      history: transcript ? _transcriptHistory : _contentHistory,
-      editing: true,
-      onAi: _ai,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      child: _MarkdownEditor(
+        key: ValueKey(transcript ? 'transcript' : 'content'),
+        controller: transcript ? _transcriptText : _content,
+        history: transcript ? _transcriptHistory : _contentHistory,
+        editing: true,
+        onAi: _ai,
+      ),
     );
   }
 

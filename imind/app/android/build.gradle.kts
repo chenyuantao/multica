@@ -22,3 +22,17 @@ subprojects {
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
 }
+
+// Keep network-specific repositories out of Flutter's included plugin build.
+if (System.getenv("IMIND_MAVEN_MIRROR") == "aliyun") {
+    gradle.projectsEvaluated {
+        allprojects {
+            repositories {
+                clear()
+                maven("https://maven.aliyun.com/repository/google")
+                maven("https://maven.aliyun.com/repository/central")
+                maven("https://storage.flutter-io.cn/download.flutter.io")
+            }
+        }
+    }
+}

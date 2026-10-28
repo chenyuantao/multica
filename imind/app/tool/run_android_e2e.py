@@ -16,7 +16,8 @@ p.add_argument('--device', required=True)
 p.add_argument('--profile', default='imind-android')
 p.add_argument('--machine', default='imindhost')
 p.add_argument('--suite', choices=['all', 'main', 'features', 'duration'], default='all')
-p.add_argument('--mirror', action='store_true', help='Use temporary Maven mirrors for dependency downloads')
+p.add_argument('--test-name', help='Run only this exact test name within the selected suite')
+p.add_argument('--mirror', action='store_true', help='Use Maven mirrors for dependency downloads')
 p.add_argument('--pcm', type=Path, help='Optional raw 16 kHz mono signed 16-bit little-endian speech')
 args = p.parse_args()
 if Path(args.profile).name != args.profile:
@@ -49,27 +50,22 @@ with tempfile.TemporaryDirectory(prefix='imind-android-e2e-') as directory:
         'E2E_PCM': base64.b64encode(pcm).decode()}))
     defines.chmod(0o600)
     if args.mirror:
-        home = temp / 'gradle'
-        (home / 'init.d').mkdir(parents=True)
-        source_home = Path(env.get('GRADLE_USER_HOME', str(Path.home() / '.gradle')))
-        for name in ('caches', 'wrapper'):
-            (home / name).symlink_to(source_home / name, target_is_directory=True)
-        (home / 'init.d/mirrors.gradle').write_text('''allprojects {
- afterEvaluate {
-  if (rootProject.projectDir.name != 'android') return
-  repositories {
-   clear()
-   maven { url 'https://maven.aliyun.com/repository/google' }
-   maven { url 'https://maven.aliyun.com/repository/central' }
-   maven { url 'https://storage.flutter-io.cn/download.flutter.io' }
-  }
- }
-}
-''')
-        env['GRADLE_USER_HOME'] = str(home)
+        env['IMIND_MAVEN_MIRROR'] = 'aliyun'
     for name, filename in suites.items():
         if args.suite not in ('all', name):
             continue
         print(f'Running Android suite: {name}', flush=True)
-        subprocess.run(['flutter', 'test', f'integration_test/{filename}', '-d', args.device,
-                        f'--dart-define-from-file={defines}'], cwd=APP, env=env, check=True)
+        command = ['flutter', 'test', f'integration_test/{filename}', '--no-uninstall', '-d', args.device,
+                   f'--dart-define-from-file={defines}']
+        if args.test_name:
+            command.extend(['--plain-name', args.test_name])
+        with subprocess.Popen(command, cwd=APP, env=env, stdout=subprocess.PIPE,
+                              stderr=subprocess.STDOUT, text=True, bufsize=1) as process:
+            for line in process.stdout:
+                print(line, end='', flush=True)
+                if 'Installing ' in line and 'app-debug.apk' in line and name == 'main':
+                    subprocess.run(['adb', '-s', args.device, 'shell', 'pm', 'grant',
+                                    'ai.multica.imind_app', 'android.permission.RECORD_AUDIO'],
+                                   check=True, timeout=20)
+            if process.wait() != 0:
+                raise SystemExit(f'Android suite failed: {name}')

@@ -37,6 +37,7 @@ class Flow {
   }
 
   Future<void> tap(Finder finder) async {
+    await wait(finder);
     await tester.ensureVisible(finder);
     await tester.tap(finder);
     await tester.pumpAndSettle();
@@ -64,7 +65,13 @@ void main() {
       final title = 'Android features $run';
       final tag = 'android-$run';
       final secondTitle = 'Android batch $run';
-      final second = await f.api.createNote({'share_machine': Flow.machine, 'type': 'note', 'title': secondTitle, 'content': 'Batch fixture', 'tags': [tag]});
+      final second = await f.api.createNote({
+        'share_machine': Flow.machine,
+        'type': 'note',
+        'title': secondTitle,
+        'content': 'Batch fixture',
+        'tags': [tag],
+      });
       await f.start();
       await f.tap(find.widgetWithText(PillButton, '笔记'));
       await f.tap(find.byType(TextField).first);
@@ -105,8 +112,18 @@ void main() {
       await f.tap(find.byTooltip('更多'));
       await f.tap(find.text('排序方式'));
       await f.menu('#$tag');
+      expect(
+        tester.getTopLeft(find.text(secondTitle)).dy,
+        lessThan(tester.getTopLeft(find.text(renamed)).dy),
+      );
       await tester.longPress(find.text(renamed));
       await tester.pumpAndSettle();
+      final exportAction = tester.widget<InkWell>(
+        find
+            .ancestor(of: find.text('导出'), matching: find.byType(InkWell))
+            .first,
+      );
+      expect(exportAction.onTap, isNull);
       await f.tap(find.text('简介'));
       expect(find.textContaining(renamed), findsWidgets);
       await f.tap(find.widgetWithText(TextButton, '关闭'));
@@ -143,7 +160,10 @@ void main() {
         (await f.api.notes(Flow.machine)).any((n) => n['id'] == note['id']),
         isFalse,
       );
-      expect((await f.api.notes(Flow.machine)).any((n) => n['id'] == second['id']), isFalse);
+      expect(
+        (await f.api.notes(Flow.machine)).any((n) => n['id'] == second['id']),
+        isFalse,
+      );
       await f.menu('全部');
       await f.tap(find.byTooltip('更多'));
       await f.tap(find.text('网页剪藏').last);
@@ -196,11 +216,21 @@ void main() {
       );
       expect(play.onPressed, isNull);
       await f.tap(find.text('Original spoken words'));
+      expect(tester.getTopLeft(find.byType(TextField).last).dx, 16);
+      expect(
+        tester.getSize(find.byType(TextField).last).width,
+        tester.getSize(find.byType(Scaffold).last).width - 32,
+      );
       await f.text(
         find.byType(TextField).last,
         '<!-- transcript: 00:01.234 -->\nUpdated spoken words',
       );
       await f.tap(find.text('笔记').first);
+      expect(tester.getTopLeft(find.byType(TextField).last).dx, 16);
+      expect(
+        tester.getSize(find.byType(TextField).last).width,
+        tester.getSize(find.byType(Scaffold).last).width - 32,
+      );
       await f.text(find.byType(TextField).last, 'Updated recording note');
       await f.tap(find.widgetWithText(TextButton, '保存'));
       final saved = await f.api.getNote(Flow.machine, note['id'] as String);
@@ -221,48 +251,85 @@ void main() {
       );
     },
   );
-  testWidgets('format undo redo, system back, and real revision conflict preserve data', (tester) async {
-    final f = Flow(tester);
-    final title = 'Android conflict ${DateTime.now().millisecondsSinceEpoch}';
-    final note = await f.api.createNote({'share_machine': Flow.machine, 'type': 'note', 'title': title, 'content': 'Original conflict content'});
-    await f.start();
-    await f.wait(find.text(title));
-    await f.tap(find.text(title));
-    await f.wait(find.text('Original conflict content'));
-    await f.tap(find.text('Original conflict content'));
-    await f.text(find.byType(TextField).last, 'Format this line');
-    await tester.pump(const Duration(seconds: 1));
-    await f.tap(find.widgetWithText(TextButton, '标题'));
-    await tester.pump(const Duration(seconds: 1));
-    expect(tester.widget<TextField>(find.byType(TextField).last).controller!.text, '# Format this line');
-    await f.tap(find.byTooltip('撤销'));
-    expect(tester.widget<TextField>(find.byType(TextField).last).controller!.text, 'Format this line');
-    await f.tap(find.byTooltip('重做'));
-    expect(tester.widget<TextField>(find.byType(TextField).last).controller!.text, '# Format this line');
-    await f.text(find.byType(TextField).last, 'List item');
-    await f.tap(find.widgetWithText(TextButton, '列表'));
-    expect(tester.widget<TextField>(find.byType(TextField).last).controller!.text, '* List item');
-    await f.text(find.byType(TextField).last, 'Ordered item');
-    await f.tap(find.widgetWithText(TextButton, '有序列表'));
-    expect(tester.widget<TextField>(find.byType(TextField).last).controller!.text, '1. Ordered item');
-    await tester.binding.handlePopRoute();
-    await tester.pumpAndSettle();
-    expect(find.text('Original conflict content'), findsOneWidget);
-    await f.tap(find.text('Original conflict content'));
-    await f.text(find.byType(TextField).last, 'Unsaved local edit');
-    await f.api.updateNote(note['id'] as String, {'share_machine': Flow.machine, 'revision': note['revision'], 'title': title, 'content': 'Concurrent server edit', 'tags': [], 'transcript': ''});
-    await f.tap(find.widgetWithText(TextButton, '保存'));
-    await f.wait(find.text('note changed since it was loaded'));
-    expect(tester.widget<TextField>(find.byType(TextField).last).controller!.text, 'Unsaved local edit');
-    expect((await f.api.getNote(Flow.machine, note['id'] as String))['content'], 'Concurrent server edit');
-    await f.tap(find.text('放弃'));
-    await f.tap(find.byTooltip('返回'));
-    await f.wait(find.text(title));
-    await f.tap(find.text(title));
-    await f.wait(find.text('Concurrent server edit'));
-    expect(tester.takeException(), isNull);
-    f.api.close();
-    debugPrint('E2E_FEATURES: format undo/redo, system back and revision conflict passed');
-  });
-
+  testWidgets(
+    'format undo redo, system back, and real revision conflict preserve data',
+    (tester) async {
+      final f = Flow(tester);
+      final title = 'Android conflict ${DateTime.now().millisecondsSinceEpoch}';
+      final note = await f.api.createNote({
+        'share_machine': Flow.machine,
+        'type': 'note',
+        'title': title,
+        'content': 'Original conflict content',
+      });
+      await f.start();
+      await f.wait(find.text(title));
+      await f.tap(find.text(title));
+      await f.wait(find.text('Original conflict content'));
+      await f.tap(find.text('Original conflict content'));
+      await f.text(find.byType(TextField).last, 'Format this line');
+      await tester.pump(const Duration(seconds: 1));
+      await f.tap(find.widgetWithText(TextButton, '标题'));
+      await tester.pump(const Duration(seconds: 1));
+      expect(
+        tester.widget<TextField>(find.byType(TextField).last).controller!.text,
+        '# Format this line',
+      );
+      await f.tap(find.byTooltip('撤销'));
+      expect(
+        tester.widget<TextField>(find.byType(TextField).last).controller!.text,
+        'Format this line',
+      );
+      await f.tap(find.byTooltip('重做'));
+      expect(
+        tester.widget<TextField>(find.byType(TextField).last).controller!.text,
+        '# Format this line',
+      );
+      await f.text(find.byType(TextField).last, 'List item');
+      await f.tap(find.widgetWithText(TextButton, '列表'));
+      expect(
+        tester.widget<TextField>(find.byType(TextField).last).controller!.text,
+        '* List item',
+      );
+      await f.text(find.byType(TextField).last, 'Ordered item');
+      await f.tap(find.widgetWithText(TextButton, '有序列表'));
+      expect(
+        tester.widget<TextField>(find.byType(TextField).last).controller!.text,
+        '1. Ordered item',
+      );
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.text('Original conflict content'), findsOneWidget);
+      await f.tap(find.text('Original conflict content'));
+      await f.text(find.byType(TextField).last, 'Unsaved local edit');
+      await f.api.updateNote(note['id'] as String, {
+        'share_machine': Flow.machine,
+        'revision': note['revision'],
+        'title': title,
+        'content': 'Concurrent server edit',
+        'tags': [],
+        'transcript': '',
+      });
+      await f.tap(find.widgetWithText(TextButton, '保存'));
+      await f.wait(find.text('note changed since it was loaded'));
+      expect(
+        tester.widget<TextField>(find.byType(TextField).last).controller!.text,
+        'Unsaved local edit',
+      );
+      expect(
+        (await f.api.getNote(Flow.machine, note['id'] as String))['content'],
+        'Concurrent server edit',
+      );
+      await f.tap(find.text('放弃'));
+      await f.tap(find.byTooltip('返回'));
+      await f.wait(find.text(title));
+      await f.tap(find.text(title));
+      await f.wait(find.text('Concurrent server edit'));
+      expect(tester.takeException(), isNull);
+      f.api.close();
+      debugPrint(
+        'E2E_FEATURES: format undo/redo, system back and revision conflict passed',
+      );
+    },
+  );
 }

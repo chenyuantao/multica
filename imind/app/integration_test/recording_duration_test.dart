@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -117,11 +116,15 @@ void main() {
     );
     await tester.tap(find.widgetWithText(PillButton, '笔记'));
     await tester.pumpAndSettle();
-    final recordingTitle = 'Duration note ${DateTime.now().millisecondsSinceEpoch}';
+    final recordingTitle =
+        'Duration note ${DateTime.now().millisecondsSinceEpoch}';
     await tester.enterText(find.byType(TextField).first, recordingTitle);
     await tester.tap(find.text('正文'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).last, 'Notes written during paused recording');
+    await tester.enterText(
+      find.byType(TextField).last,
+      'Notes written during paused recording',
+    );
     await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(TextButton, '保存'));
