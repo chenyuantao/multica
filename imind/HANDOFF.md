@@ -79,7 +79,7 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home flutter
 flutter build ios --simulator --debug
 ```
 
-模拟器默认 API：iOS `http://127.0.0.1:18607`、Android `http://10.0.2.2:18607`；真机通过 `--dart-define=API_BASE=...` 配置可访问服务地址。Android Debug/Profile 仅放开本地地址明文；iOS仅启用本地网络 ATS，不全局关闭传输保护。iOS 最低部署版本维持 15.0；验收环境使用 iOS 27，不需要安装或验证 iOS 16。
+客户端默认 API 为 `https://chat.preview.aliyun-zeabur.cn`；本地验收通过 `--dart-define=API_BASE=...` 覆盖，iOS 模拟器使用 `http://127.0.0.1:18607`，Android 模拟器使用 `http://10.0.2.2:18607`，真机使用可访问的服务地址。Android Debug/Profile 仅放开本地地址明文；iOS仅启用本地网络 ATS，不全局关闭传输保护。iOS 最低部署版本维持 15.0；验收环境使用 iOS 27，不需要安装或验证 iOS 16。
 
 ## 待办与验收标准
 

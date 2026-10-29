@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show Platform;
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
@@ -9,8 +8,7 @@ const _apiBaseOverride = String.fromEnvironment('API_BASE');
 
 String defaultApiBase() {
   if (_apiBaseOverride.isNotEmpty) return _apiBaseOverride;
-  if (Platform.isAndroid) return 'http://10.0.2.2:18607';
-  return 'http://127.0.0.1:18607';
+  return 'https://chat.preview.aliyun-zeabur.cn';
 }
 
 bool validWorkspaceId(Object? value) =>
