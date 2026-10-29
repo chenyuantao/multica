@@ -3314,3 +3314,31 @@ describe("ApiClient shared credential across windows", () => {
     expect(onUnauthorized).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("ApiClient iMind configuration boundary", () => {
+  const reply = (body: unknown) => vi.fn().mockResolvedValue(new Response(JSON.stringify(body), {
+    status: 200, headers: { "Content-Type": "application/json" },
+  }));
+  it("uses automatic routing for missing and malformed default agent responses", async () => {
+    const client = new ApiClient("https://api.example.test");
+    for (const body of [{}, { agent_id: null }, { agent_id: 42 }]) {
+      vi.stubGlobal("fetch", reply(body));
+      expect(await client.getIMindDefaultAgent()).toBeNull();
+    }
+  });
+  it("clears the configured processor explicitly and parses the response", async () => {
+    const fetchMock = reply({ agent_id: null });
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new ApiClient("https://api.example.test");
+    expect(await client.setIMindDefaultAgent(null)).toBeNull();
+    expect(fetchMock.mock.calls[0]?.[1]?.method).toBe("PUT");
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body)).toEqual({ agent_id: null });
+  });
+  it("refuses malformed or unjoined file chat responses", async () => {
+    const client = new ApiClient("https://api.example.test");
+    for (const body of [{}, { issue_id: 42, joined: true }, { issue_id: "chat", joined: false }]) {
+      vi.stubGlobal("fetch", reply(body));
+      await expect(client.ensureIMindChat({ share_machine: "machine", note_id: "note", revision: "saved" })).rejects.toThrow();
+    }
+  });
+});

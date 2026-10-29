@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show Platform;
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
@@ -44,6 +45,7 @@ class MulticaApi {
     http.Client? client,
     this.requestTimeout = const Duration(seconds: 20),
     this.onUnauthorized,
+    this.enableRealtime = true,
   }) : baseUrl = baseUrl.replaceFirst(RegExp(r'/+$'), ''),
        _client = client ?? http.Client();
 
@@ -51,6 +53,7 @@ class MulticaApi {
   final http.Client _client;
   final Duration requestTimeout;
   Future<void> Function()? onUnauthorized;
+  final bool enableRealtime;
   String? token;
   String? workspaceId;
   int _sessionVersion = 0;
@@ -92,6 +95,23 @@ class MulticaApi {
     final body = await _request('GET', '/api/workspaces', workspace: false);
     if (body is! List) throw _malformed('workspaces');
     return [for (final value in body) _workspace(value)];
+  }
+
+  Future<Map<String, dynamic>> getMe() async {
+    final data = _object(await _request('GET', '/api/me', workspace: false));
+    if (!_validId(data['id'])) throw _malformed('me.id');
+    return data;
+  }
+
+  Future<List<Map<String, dynamic>>> workspaceAgents() async {
+    final workspace = workspaceId;
+    if (!validWorkspaceId(workspace)) throw ApiException(400, '请先选择工作区');
+    final value = await _request(
+      'GET',
+      '/api/agents?${Uri(queryParameters: {'workspace_id': workspace!}).query}',
+    );
+    if (value is! List) throw _malformed('agents');
+    return [for (final item in value) _object(item)];
   }
 
   Future<List<Map<String, dynamic>>> shares() async {
@@ -171,6 +191,257 @@ class MulticaApi {
       ),
     );
   }
+
+  Future<void> uploadMedia({
+    required String machine,
+    required String noteId,
+    required String name,
+    required String contentType,
+    required Uint8List bytes,
+  }) async {
+    _checkMachine(machine);
+    _checkId(noteId);
+    if (name != 'audio.wav' &&
+        !RegExp(
+          r'^[A-Za-z0-9-]{16,}\.(?:jpe?g|png|webp)$',
+          caseSensitive: false,
+        ).hasMatch(name)) {
+      throw ApiException(400, '媒体文件名无效');
+    }
+    final uri = Uri.parse('$baseUrl/api/imind/media').replace(
+      queryParameters: {'share_machine': machine, 'id': noteId, 'name': name},
+    );
+    final request = http.Request('POST', uri)
+      ..followRedirects = false
+      ..headers['Content-Type'] = contentType
+      ..bodyBytes = bytes;
+    await _sendMediaRequest(request);
+  }
+
+  Future<List<int>> getMedia({
+    required String machine,
+    required String noteId,
+    required String name,
+  }) async {
+    _checkMachine(machine);
+    _checkId(noteId);
+    if (name != 'audio.wav' &&
+        !RegExp(
+          r'^[A-Za-z0-9-]{16,}\.(?:jpe?g|png|webp)$',
+          caseSensitive: false,
+        ).hasMatch(name)) {
+      throw ApiException(400, '媒体文件名无效');
+    }
+    final uri = Uri.parse(
+      '$baseUrl/api/imind/media/$noteId/${Uri.encodeComponent(name)}',
+    ).replace(queryParameters: {'share_machine': machine});
+    final request = http.Request('GET', uri)..followRedirects = false;
+    final response = await _sendMediaRequest(request);
+    if (response.statusCode != 200) {
+      throw ApiException(response.statusCode, '媒体读取失败');
+    }
+    return response.bodyBytes;
+  }
+
+  Future<http.Response> _sendMediaRequest(http.Request request) async {
+    final requestToken = token;
+    final requestWorkspaceId = workspaceId;
+    final version = _sessionVersion;
+    if (!validSessionToken(requestToken)) {
+      throw ApiException(401, '请先登录');
+    }
+    if (!validWorkspaceId(requestWorkspaceId)) {
+      throw ApiException(400, '请先选择工作区');
+    }
+    request.headers.addAll({
+      'Authorization': 'Bearer $requestToken',
+      'X-Workspace-ID': requestWorkspaceId!,
+    });
+    final http.Response response;
+    try {
+      final streamed = await _client.send(request).timeout(requestTimeout);
+      response = await http.Response.fromStream(streamed)
+          .timeout(requestTimeout);
+    } on TimeoutException {
+      throw ApiException(408, '请求超时，请重试');
+    } on Exception {
+      throw ApiException(0, '无法连接服务器，请重试');
+    }
+    if (response.statusCode == 401) {
+      if (token == requestToken && version == _sessionVersion) {
+        clearSession();
+        await onUnauthorized?.call();
+      }
+      throw ApiException(401, '登录已过期，请重新登录');
+    }
+    if (token != requestToken || version != _sessionVersion) {
+      throw ApiException(401, '登录状态已变更，请重新登录');
+    }
+    if (workspaceId != requestWorkspaceId) {
+      throw ApiException(409, '工作区已变更，请重新加载');
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      var message = '媒体请求失败';
+      try {
+        final data = jsonDecode(response.body);
+        if (data is Map &&
+            data['error'] is String &&
+            (data['error'] as String).trim().isNotEmpty) {
+          message = (data['error'] as String).replaceAll(
+            requestToken!,
+            '[已隐藏]',
+          );
+        }
+      } on FormatException {
+        // Keep the generic message for non-JSON errors.
+      }
+      throw ApiException(response.statusCode, message);
+    }
+    return response;
+  }
+
+  Future<Map<String, dynamic>> ensureNoteChat(
+    String machine,
+    String noteId, {
+    required String revision,
+  }) async {
+    _checkMachine(machine);
+    _checkId(noteId);
+    final data = _object(
+      await _request(
+        'POST',
+        '/api/imind/chats/ensure',
+        body: {
+          'share_machine': machine,
+          'note_id': noteId,
+          'revision': _requiredString({'revision': revision}, 'revision'),
+        },
+      ),
+    );
+    final issueId = _requiredString(data, 'issue_id');
+    if (!validWorkspaceId(issueId)) throw _malformed('chat.issue_id');
+    return {
+      'issue_id': issueId,
+      'identifier': _string(data, 'identifier'),
+      'title': _string(data, 'title', 'iMind 群聊'),
+      'joined': data['joined'] == true,
+    };
+  }
+
+  Future<Map<String, dynamic>> noteChatHistory(
+    String issueId, {
+    String? beforeCreatedAt,
+    String? beforeId,
+    int limit = 50,
+  }) async {
+    _checkId(issueId);
+    final query = <String, String>{'limit': '${limit.clamp(1, 200)}'};
+    if (beforeCreatedAt != null && beforeId != null) {
+      query['before_created_at'] = beforeCreatedAt;
+      query['before_id'] = beforeId;
+    }
+    final path =
+        '/api/issues/$issueId/comments/page?${Uri(queryParameters: query).query}';
+    final data = _object(await _request('GET', path));
+    final comments = <Map<String, dynamic>>[];
+    for (final value in _list(data['comments'], 'comments')) {
+      final comment = _object(value);
+      if (_string(comment, 'issue_id') != issueId) continue;
+      if (!_validId(comment['id'])) throw _malformed('comment.id');
+      comments.add(comment);
+    }
+    return {
+      'comments': comments,
+      'has_more': data['has_more'] == true,
+      'next_cursor': data['next_cursor'],
+    };
+  }
+
+  Future<Map<String, dynamic>> sendNoteChatMessage(
+    String issueId,
+    String content, {
+    required String clientId,
+  }) async {
+    _checkId(issueId);
+    _checkId(clientId);
+    if (content.trim().isEmpty) throw ApiException(400, '消息不能为空');
+    final data = _object(
+      await _request(
+        'POST',
+        '/api/issues/$issueId/comments',
+        body: {'content': content, 'type': 'comment', 'client_id': clientId},
+      ),
+    );
+    if (!_validId(data['id']) || data['issue_id'] != issueId) {
+      throw _malformed('comment');
+    }
+    return data;
+  }
+
+  Future<List<Map<String, dynamic>>> noteChatRuns(String issueId) async {
+    _checkId(issueId);
+    final value = await _request('GET', '/api/issues/$issueId/task-runs');
+    if (value is! List) throw _malformed('task-runs');
+    return [for (final item in value) _object(item)];
+  }
+
+  Future<Map<String, dynamic>> cancelNoteChatRun(
+    String issueId,
+    String taskId,
+  ) async {
+    _checkId(issueId);
+    _checkId(taskId);
+    return _object(
+      await _request('POST', '/api/issues/$issueId/tasks/$taskId/cancel'),
+    );
+  }
+
+  Future<void> retryNoteChatRun(
+    String issueId,
+    String taskId,
+    String commentId,
+  ) async {
+    _checkId(issueId);
+    _checkId(taskId);
+    _checkId(commentId);
+    await _request(
+      'POST',
+      '/api/issues/$issueId/tasks/$taskId/supplements/$commentId/retry',
+    );
+  }
+
+  Future<Map<String, dynamic>> retryNoteChatDispatch(
+    String issueId,
+    String commentId,
+  ) async {
+    _checkId(issueId);
+    _checkId(commentId);
+    return _object(
+      await _request(
+        'POST',
+        '/api/imind/chats/$issueId/retry',
+        body: {'comment_id': commentId},
+      ),
+    );
+  }
+
+  Future<Map<String, dynamic>> getDocFile(String path) async {
+    if (!_validRelativeMarkdownPath(path)) throw ApiException(400, '文档路径无效');
+    return _object(
+      await _request('POST', '/api/docs/files/content', body: {'path': path}),
+    );
+  }
+
+  bool _validId(Object? value) => validWorkspaceId(value);
+
+  bool _validRelativeMarkdownPath(String path) =>
+      path.toLowerCase().endsWith('.md') &&
+      !path.startsWith('/') &&
+      !path.contains('\\') &&
+      !RegExp(r'^[a-z]:', caseSensitive: false).hasMatch(path) &&
+      path
+          .split('/')
+          .every((part) => part.isNotEmpty && part != '.' && part != '..');
 
   Future<Object?> _request(
     String method,
@@ -325,6 +596,7 @@ class MulticaApi {
         'duration_ms': _nonNegativeInt(raw, 'duration_ms'),
         'sample_rate_hz': _nonNegativeInt(raw, 'sample_rate_hz'),
         'format': _string(raw, 'format'),
+        if (raw['file'] is String) 'file': raw['file'],
       };
     }
     return {

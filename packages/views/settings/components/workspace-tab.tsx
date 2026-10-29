@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Copy } from "lucide-react";
 import { Input } from "@multica/ui/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@multica/ui/components/ui/select";
 import { Textarea } from "@multica/ui/components/ui/textarea";
 import { Button } from "@multica/ui/components/ui/button";
 import { Label } from "@multica/ui/components/ui/label";
@@ -156,6 +157,16 @@ export function WorkspaceTab() {
   const currentMember = members.find((m) => m.user_id === user?.id) ?? null;
   const canManageWorkspace = currentMember?.role === "owner" || currentMember?.role === "admin";
   const isOwner = currentMember?.role === "owner";
+  const { data: defaultAgentId = null } = useQuery({
+    queryKey: ["imind", "default-agent", wsId],
+    queryFn: () => api.getIMindDefaultAgent(),
+    enabled: !!wsId,
+  });
+  const { data: imindAgents = [] } = useQuery({
+    queryKey: ["imind", "available-agents", wsId],
+    queryFn: () => api.listAgents({ workspace_id: wsId }),
+    enabled: !!wsId,
+  });
   // Mirror the backend invariant (server/internal/handler/workspace.go:569):
   // a workspace must always have at least one owner, so the sole owner can't
   // leave. Pre-flight here instead of letting the 400 round-trip become a
@@ -473,6 +484,40 @@ export function WorkspaceTab() {
                 </Button>
               ) : null}
             </span>
+          </SettingsRow>
+        </SettingsCard>
+      </SettingsSection>
+
+      <SettingsSection title={t(($) => $.workspace.imind_section)}>
+        <SettingsCard>
+          <SettingsRow
+            anchor="imind-default-agent"
+            label={t(($) => $.workspace.imind_default_agent_label)}
+            description={t(($) => $.workspace.imind_default_agent_description)}
+          >
+            <Select
+              items={[{ value: "", label: t(($) => $.workspace.imind_default_agent_automatic) }, ...(defaultAgentId && !imindAgents.some((agent) => agent.id === defaultAgentId) ? [{value: defaultAgentId, label: t(($) => $.workspace.imind_default_agent_unavailable)}] : []), ...imindAgents.map((agent) => ({ value: agent.id, label: agent.name }))]}
+              value={defaultAgentId ?? ""}
+              onValueChange={async (value) => {
+                try {
+                  await api.setIMindDefaultAgent(value || null);
+                  await qc.invalidateQueries({ queryKey: ["imind", "default-agent", wsId] });
+
+                } catch (error) {
+                  toast.error(error instanceof Error ? error.message : t(($) => $.workspace.imind_default_agent_save_failed));
+                }
+              }}
+              disabled={!canManageWorkspace}
+            >
+              <SelectTrigger aria-label={t(($) => $.workspace.imind_default_agent_label)} className="min-w-52">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">{t(($) => $.workspace.imind_default_agent_automatic)}</SelectItem>
+                {defaultAgentId && !imindAgents.some((agent) => agent.id === defaultAgentId) ? <SelectItem value={defaultAgentId} disabled>{t(($) => $.workspace.imind_default_agent_unavailable)}</SelectItem> : null}
+                {imindAgents.map((agent) => <SelectItem key={agent.id} value={agent.id}>{agent.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </SettingsRow>
         </SettingsCard>
       </SettingsSection>

@@ -747,6 +747,12 @@
   },
   "workspace": {
     "section_general": "ワークスペース情報",
+    "imind_default_agent_unavailable": "利用できないエージェント",
+    "imind_section": "iMind",
+    "imind_default_agent_label": "iMind の既定処理エージェント",
+    "imind_default_agent_description": "未設定の場合はエージェントを自動選択します。",
+    "imind_default_agent_automatic": "自動選択",
+    "imind_default_agent_save_failed": "iMind エージェントを保存できませんでした",
     "logo_label": "ワークスペースのアイコン",
     "name_label": "名前",
     "description_label": "説明",

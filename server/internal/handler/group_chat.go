@@ -257,6 +257,9 @@ func (h *Handler) ListGroupChats(w http.ResponseWriter, r *http.Request) {
 	out := make([]GroupChatResponse, 0, len(issues))
 	for _, issue := range issues {
 		key := uuidToString(issue.ID)
+		if len(h.FilterIMindChatAudience(ctx, key, []string{userID})) == 0 {
+			continue
+		}
 		if issue.IsDirectChat && !kept[key] {
 			continue
 		}
@@ -319,6 +322,9 @@ func (h *Handler) SearchGroupChats(w http.ResponseWriter, r *http.Request) {
 	}
 	hits := make([]GroupChatSearchHit, 0, len(rows))
 	for _, row := range rows {
+		if len(h.FilterIMindChatAudience(r.Context(), uuidToString(row.IssueID), []string{userID})) == 0 {
+			continue
+		}
 		hits = append(hits, GroupChatSearchHit{
 			ChatID:    uuidToString(row.IssueID),
 			MessageID: uuidToString(row.CommentID),
@@ -535,7 +541,7 @@ func (h *Handler) CreateGroupChat(w http.ResponseWriter, r *http.Request) {
 
 // createGroupChat creates the chat with refs as its members (the creator
 // first). The caller writes the response.
-func (h *Handler) createGroupChat(w http.ResponseWriter, r *http.Request, member db.Member, userID, title string, refs []service.IssueMemberRef, direct, task bool) (db.Issue, []db.IssueMember, bool) {
+func (h *Handler) createGroupChat(w http.ResponseWriter, r *http.Request, member db.Member, userID, title string, refs []service.IssueMemberRef, direct, task bool, beforeCommit ...func(context.Context, pgx.Tx, db.Issue) error) (db.Issue, []db.IssueMember, bool) {
 	prefix := h.getIssuePrefix(r.Context(), member.WorkspaceID)
 	res, err := h.IssueService.Create(r.Context(), service.IssueCreateParams{
 		WorkspaceID:    member.WorkspaceID,
@@ -549,6 +555,14 @@ func (h *Handler) createGroupChat(w http.ResponseWriter, r *http.Request, member
 		DirectChat:     direct,
 		TaskChat:       task && !direct,
 	}, service.IssueCreateOpts{
+		BeforeCommit: func(ctx context.Context, tx pgx.Tx, issue db.Issue) error {
+			for _, persist := range beforeCommit {
+				if err := persist(ctx, tx, issue); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
 		ActorID:  userID,
 		Platform: func() string { p, _, _ := middleware.ClientMetadataFromContext(r.Context()); return p }(),
 		BroadcastPayload: func(issue db.Issue, _ []db.Attachment, _ []db.IssueLabel) map[string]any {

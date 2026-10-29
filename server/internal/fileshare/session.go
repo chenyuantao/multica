@@ -29,6 +29,7 @@ type Envelope struct {
 	Payload            json.RawMessage `json:"payload,omitempty"`
 	IMindScopeRevision bool            `json:"imind_scope_revision_v1,omitempty"`
 	IMindRename        bool            `json:"imind_rename_v1,omitempty"`
+	IMindMedia         bool            `json:"imind_media_v1,omitempty"`
 }
 
 // Session is a live websocket to one multica-operate daemon.
@@ -300,5 +301,6 @@ func AcceptHello(env Envelope, ownerUserID string) (ShareMeta, error) {
 		Online:             true,
 		IMindScopeRevision: env.IMindScopeRevision,
 		IMindRename:        env.IMindRename,
+		IMindMedia:         env.IMindMedia,
 	}, nil
 }

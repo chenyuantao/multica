@@ -76,12 +76,21 @@ func (h *Handler) GetIMindShares(w http.ResponseWriter, r *http.Request) {
 		peers = h.FileShares.List()
 	}
 	out := make([]share, 0, len(peers))
+	needsUpgrade := false
 	for _, peer := range peers {
 		meta := peer.Meta()
-		if !h.canUseIMindShare(r, meta) || !meta.IMindScopeRevision || !meta.IMindRename {
+		if !h.canUseIMindShare(r, meta) {
+			continue
+		}
+		if !meta.IMindScopeRevision || !meta.IMindRename || !meta.IMindMedia {
+			needsUpgrade = true
 			continue
 		}
 		out = append(out, share{Machine: meta.Machine, Name: meta.Machine})
+	}
+	if len(out) == 0 && needsUpgrade {
+		writeErrorCode(w, http.StatusConflict, "imind_daemon_upgrade_required", "file-share daemon must be upgraded to use iMind media")
+		return
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Machine < out[j].Machine })
 	writeJSON(w, http.StatusOK, map[string]any{"shares": out})
@@ -330,7 +339,7 @@ func (h *Handler) iMindPeer(w http.ResponseWriter, r *http.Request, machine stri
 		writeErrorCode(w, http.StatusNotFound, "imind_share_not_found", "iMind shared knowledge base not found")
 		return nil, false
 	}
-	if !peer.Meta().IMindScopeRevision || !peer.Meta().IMindRename {
+	if !peer.Meta().IMindScopeRevision || !peer.Meta().IMindRename || !peer.Meta().IMindMedia {
 		writeErrorCode(w, http.StatusConflict, "imind_daemon_upgrade_required", "file-share daemon must be upgraded for safe iMind operations")
 		return nil, false
 	}
@@ -482,7 +491,7 @@ func uniqueIMindJSONValue(decoder *json.Decoder, allowNull bool) error {
 			}
 			key = strings.ToLower(key)
 			keys[key] = true
-			allowNull = key == "audio" || key == "source_url" || key == "tags"
+			allowNull = key == "audio" || key == "source_url" || key == "tags" || key == "agent_id"
 		}
 		if err := uniqueIMindJSONValue(decoder, allowNull); err != nil {
 			return err

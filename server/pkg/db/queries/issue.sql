@@ -504,6 +504,9 @@ cleared_pr_automation AS (
 cleared_pr_exclusions AS (
     DELETE FROM issue_pull_request_exclusion WHERE issue_id IN (SELECT target.id FROM target)
 ),
+cleared_imind_chats AS (
+    DELETE FROM imind_group_chat WHERE issue_id IN (SELECT target.id FROM target)
+),
 cleared_issue_members AS (
     DELETE FROM issue_member WHERE issue_id IN (SELECT target.id FROM target)
 ),

@@ -474,8 +474,8 @@ WITH touched_issue AS (
     WHERE issue.id = sqlc.arg(issue_id) AND issue.workspace_id = sqlc.arg(workspace_id)
     RETURNING issue.id, issue.workspace_id, issue.revision
 ), inserted_comment AS (
-    INSERT INTO comment (issue_id, workspace_id, author_type, author_id, content, type, parent_id, source_task_id, quick_action_id, via_plugin_id, via_channel, suppressed_agent_ids, ref_message_id, id)
-    SELECT ti.id, ti.workspace_id, sqlc.arg(author_type), sqlc.arg(author_id), sqlc.arg(content), sqlc.arg(type), sqlc.narg(parent_id), sqlc.narg(source_task_id), sqlc.narg(quick_action_id), sqlc.narg(via_plugin_id), sqlc.narg(via_channel)::text, sqlc.narg(suppressed_agent_ids)::uuid[], sqlc.narg(ref_message_id)::uuid, COALESCE(sqlc.narg('id')::uuid, gen_random_uuid())
+    INSERT INTO comment (issue_id, workspace_id, author_type, author_id, content, type, parent_id, source_task_id, quick_action_id, via_plugin_id, via_channel, suppressed_agent_ids, ref_message_id, id, client_id)
+    SELECT ti.id, ti.workspace_id, sqlc.arg(author_type), sqlc.arg(author_id), sqlc.arg(content), sqlc.arg(type), sqlc.narg(parent_id), sqlc.narg(source_task_id), sqlc.narg(quick_action_id), sqlc.narg(via_plugin_id), sqlc.narg(via_channel)::text, sqlc.narg(suppressed_agent_ids)::uuid[], sqlc.narg(ref_message_id)::uuid, COALESCE(sqlc.narg('id')::uuid, gen_random_uuid()), sqlc.narg(client_id)::uuid
     FROM touched_issue ti
     RETURNING *
 )
@@ -593,6 +593,15 @@ SET revision = revision + 1,
 WHERE id = @id
   AND workspace_id = @workspace_id
 RETURNING *;
+
+-- name: GetCommentByClientID :one
+SELECT * FROM comment
+WHERE workspace_id = sqlc.arg(workspace_id)
+  AND issue_id = sqlc.arg(issue_id)
+  AND author_type = sqlc.arg(author_type)
+  AND author_id = sqlc.arg(author_id)
+  AND client_id = sqlc.arg(client_id)
+LIMIT 1;
 
 -- name: HasAgentCommentedSince :one
 SELECT EXISTS (

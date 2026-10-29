@@ -44,3 +44,7 @@ coverage
 /.github/
 /deploy/
 /scripts/
+
+# Native iMind builds and local acceptance data are not server/web inputs.
+/imind/
+/outputs/

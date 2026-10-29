@@ -405,6 +405,9 @@ deleted_issue_pr_automation AS (
 deleted_issue_pr_exclusions AS (
     DELETE FROM issue_pull_request_exclusion WHERE workspace_id = $1
 ),
+deleted_imind_chats AS (
+    DELETE FROM imind_group_chat WHERE workspace_id = $1
+),
 deleted_issue_members AS (
     DELETE FROM issue_member WHERE workspace_id = $1
 ),

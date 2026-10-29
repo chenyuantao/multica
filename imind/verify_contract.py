@@ -35,8 +35,13 @@ def call(method, path, body=None, authenticated=True, scoped=True, expected=200)
     except urllib.error.HTTPError as error:
         response = error
     raw = response.read()
-    payload = json.loads(raw) if raw else {}
-    assert response.status == expected, f'{method} {path}: {response.status}, expected {expected}'
+    try:
+        payload = json.loads(raw) if raw else {}
+    except json.JSONDecodeError:
+        assert response.status >= 400, 'Successful response must contain JSON'
+        payload = {}
+    allowed = expected if isinstance(expected, tuple) else (expected,)
+    assert response.status in allowed, f'{method} {path}: {response.status}, expected {expected}'
     return payload
 
 
@@ -100,12 +105,12 @@ record('stale update and stale delete rejected')
 listed = call('POST', '/api/imind/notes/list', {'share_machine': args.machine, 'tag': '已编辑'})['notes']
 assert any(value['id'] == note['id'] for value in listed)
 record('tag filtering')
-call('GET', '/api/imind/asr?share_machine=' + args.machine, expected=503)
-record('ASR missing server credentials rejected before upgrade')
+call('GET', '/api/imind/asr?share_machine=' + args.machine, expected=(400,503))
+record('authorized ASR preflight requires a WebSocket upgrade or configured credentials')
 report = {'status': 'passed', 'base_url': base, 'workspace_id': workspace,
     'share_machine': args.machine, 'tests': results,
     'note_ids': [value['id'] for value in created],
     'retained_test_notes': True,
-    'asr_live': 'blocked: server DASHSCOPE credentials are not configured'}
+    'asr_live': 'not exercised by this HTTP contract suite; see native device ASR evidence'}
 args.output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n')
 print(json.dumps({'status': 'passed', 'tests': len(results), 'report': str(args.output)}, ensure_ascii=False))

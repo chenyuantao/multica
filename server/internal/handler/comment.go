@@ -59,9 +59,10 @@ type CommentResponse struct {
 	// ViaChannel names the external channel a member's message arrived
 	// through ("wechat_claw"). Server-set only; omitted for messages typed in
 	// Multica.
-	ViaChannel  *string              `json:"via_channel,omitempty"`
-	Reactions   []ReactionResponse   `json:"reactions"`
-	Attachments []AttachmentResponse `json:"attachments"`
+	ViaChannel       *string              `json:"via_channel,omitempty"`
+	Reactions        []ReactionResponse   `json:"reactions"`
+	Attachments      []AttachmentResponse `json:"attachments"`
+	IMindAgentStatus *string              `json:"imind_agent_status,omitempty"`
 	// Orientation stats — populated only on the roots_only path and omitted in
 	// every other mode, so the default response shape stays byte-identical for
 	// existing callers. ReplyCount is the number of descendants in the thread;
@@ -121,26 +122,27 @@ func commentToResponse(c db.Comment, reactions []ReactionResponse, attachments [
 		attachments = []AttachmentResponse{}
 	}
 	return CommentResponse{
-		ID:             uuidToString(c.ID),
-		IssueID:        uuidToString(c.IssueID),
-		AuthorType:     c.AuthorType,
-		AuthorID:       uuidToString(c.AuthorID),
-		Content:        c.Content,
-		Type:           c.Type,
-		ParentID:       uuidToPtr(c.ParentID),
-		CreatedAt:      timestampToString(c.CreatedAt),
-		UpdatedAt:      timestampToString(c.UpdatedAt),
-		Revision:       c.Revision,
-		ResolvedAt:     timestampToPtr(c.ResolvedAt),
-		ResolvedByType: textToPtr(c.ResolvedByType),
-		ResolvedByID:   uuidToPtr(c.ResolvedByID),
-		SourceTaskID:   uuidToPtr(c.SourceTaskID),
-		DeletedAt:      timestampToPtr(c.DeletedAt),
-		QuickActionID:  uuidToPtr(c.QuickActionID),
-		RefMessageID:   uuidToPtr(c.RefMessageID),
-		ViaChannel:     textToPtr(c.ViaChannel),
-		Reactions:      reactions,
-		Attachments:    attachments,
+		ID:               uuidToString(c.ID),
+		IssueID:          uuidToString(c.IssueID),
+		AuthorType:       c.AuthorType,
+		AuthorID:         uuidToString(c.AuthorID),
+		Content:          c.Content,
+		Type:             c.Type,
+		ParentID:         uuidToPtr(c.ParentID),
+		CreatedAt:        timestampToString(c.CreatedAt),
+		UpdatedAt:        timestampToString(c.UpdatedAt),
+		Revision:         c.Revision,
+		ResolvedAt:       timestampToPtr(c.ResolvedAt),
+		ResolvedByType:   textToPtr(c.ResolvedByType),
+		ResolvedByID:     uuidToPtr(c.ResolvedByID),
+		SourceTaskID:     uuidToPtr(c.SourceTaskID),
+		DeletedAt:        timestampToPtr(c.DeletedAt),
+		QuickActionID:    uuidToPtr(c.QuickActionID),
+		RefMessageID:     uuidToPtr(c.RefMessageID),
+		ViaChannel:       textToPtr(c.ViaChannel),
+		Reactions:        reactions,
+		Attachments:      attachments,
+		IMindAgentStatus: textToPtr(c.ImindAgentStatus),
 	}
 }
 
@@ -1614,6 +1616,7 @@ func keepRootConnected(byID map[string]db.Comment) []db.Comment {
 
 type CreateCommentRequest struct {
 	Content          string   `json:"content"`
+	ClientID         *string  `json:"client_id"`
 	Type             string   `json:"type"`
 	ParentID         *string  `json:"parent_id"`
 	AttachmentIDs    []string `json:"attachment_ids"`
@@ -1881,6 +1884,25 @@ func (h *Handler) CreateComment(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid comment type")
 		return
 	}
+	var clientID pgtype.UUID
+	if req.ClientID != nil {
+		parsed, valid := parseUUIDOrBadRequest(w, *req.ClientID, "client_id")
+		if !valid {
+			return
+		}
+		clientID = parsed
+		existing, err := h.Queries.GetCommentByClientID(r.Context(), db.GetCommentByClientIDParams{
+			WorkspaceID: issue.WorkspaceID, IssueID: issue.ID, AuthorType: "member", AuthorID: parseUUID(userID), ClientID: clientID,
+		})
+		if err == nil {
+			writeJSON(w, http.StatusOK, commentToResponse(existing, nil, nil))
+			return
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			writeError(w, http.StatusInternalServerError, "failed to check message id")
+			return
+		}
+	}
 	h.admitReminderMentionedAgents(r, issue, req.Content)
 	if h.rejectNonMemberAgentMentions(w, r, issue, req.Content) {
 		return
@@ -2073,6 +2095,7 @@ func (h *Handler) CreateComment(w http.ResponseWriter, r *http.Request) {
 		// replay skips the agents it names.
 		SuppressedAgentIds: suppressAgentIDs,
 		RefMessageID:       refMessageID,
+		ClientID:           clientID,
 	}
 	if authorType == "member" {
 		createParams.ViaChannel = viaChannelFromContext(r.Context())
@@ -2130,6 +2153,13 @@ func (h *Handler) CreateComment(w http.ResponseWriter, r *http.Request) {
 			return q.CreateComment(r.Context(), createParams)
 		})
 	}
+	if err != nil && clientID.Valid {
+		existing, lookupErr := h.Queries.GetCommentByClientID(r.Context(), db.GetCommentByClientIDParams{WorkspaceID: issue.WorkspaceID, IssueID: issue.ID, AuthorType: authorType, AuthorID: parseUUID(authorID), ClientID: clientID})
+		if lookupErr == nil {
+			writeJSON(w, http.StatusOK, commentToResponse(existing, nil, nil))
+			return
+		}
+	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		// The issue was deleted, possibly while this waited for its row lock.
 		writeError(w, http.StatusNotFound, "issue not found")
@@ -2174,6 +2204,17 @@ func (h *Handler) CreateComment(w http.ResponseWriter, r *http.Request) {
 	// request. Surface the per-target outcomes so the client can show partial
 	// success instead of a silent no-op (MUL-4525 §2).
 	resp.TriggerOutcomes = h.triggerTasksForComment(r.Context(), issue, comment, parentComment, authorType, authorID, originatorUserID, suppressAgentIDs, steerTaskIDs)
+	if groupChat && authorType == "member" && h.isIMindChatIssue(r.Context(), issue) &&
+		!h.isAttachmentOnlyComment(r.Context(), issue, comment) && !groupchat.IsChatHistoryCard(comment.Content) {
+		status := h.imindRunStatus(r.Context(), issue, comment)
+		resp.IMindAgentStatus = &status
+		if _, err := h.DB.Exec(r.Context(), `UPDATE comment SET imind_agent_status=$2 WHERE id=$1`, comment.ID, status); err != nil {
+			slog.Warn("iMind message status was not saved", append(logger.RequestAttrs(r), "comment_id", uuidToString(comment.ID), "error", err)...)
+		}
+		h.publish(protocol.EventIMindMessageStatus, uuidToString(issue.WorkspaceID), "system", "", map[string]any{
+			"issue_id": uuidToString(issue.ID), "comment_id": uuidToString(comment.ID), "status": status,
+		})
+	}
 	if len(steerTaskIDs) > 0 {
 		applyCommentSupplements(&resp, h.listCommentSupplements(r.Context(), issue.WorkspaceID, []pgtype.UUID{comment.ID})[uuidToString(comment.ID)])
 	}

@@ -1109,6 +1109,24 @@ func (h *Handler) gateGroupChatIssue(w http.ResponseWriter, r *http.Request, iss
 		writeError(w, http.StatusNotFound, "issue not found")
 		return db.Issue{}, false
 	}
+	// File-specific iMind chats inherit the current file authorization. Chat
+	// membership alone must not preserve access after a shared root is revoked.
+	var rootID string
+	var noteID pgtype.UUID
+	err = h.DB.QueryRow(r.Context(), `SELECT share_root_id,note_id FROM imind_group_chat WHERE workspace_id=$1 AND issue_id=$2`, issue.WorkspaceID, issue.ID).Scan(&rootID, &noteID)
+	if err == nil {
+		peer := h.imindPeerByRoot(rootID)
+		if peer == nil || !h.canUseIMindShare(r, peer.Meta()) || !peer.Meta().IMindScopeRevision || !peer.Meta().IMindRename || !peer.Meta().IMindMedia {
+			writeError(w, http.StatusNotFound, "issue not found")
+			return db.Issue{}, false
+		}
+		if _, _, noteOK := h.readIMindNote(w, r, peer, uuidToString(noteID)); !noteOK {
+			return db.Issue{}, false
+		}
+	} else if err != pgx.ErrNoRows {
+		writeError(w, http.StatusInternalServerError, "failed to check file chat access")
+		return db.Issue{}, false
+	}
 	return issue, true
 }
 

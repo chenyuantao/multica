@@ -751,6 +751,12 @@
   },
   "workspace": {
     "section_general": "Workspace details",
+    "imind_default_agent_unavailable": "Unavailable agent",
+    "imind_section": "iMind",
+    "imind_default_agent_label": "iMind default processing agent",
+    "imind_default_agent_description": "Leave unset to use automatic agent selection.",
+    "imind_default_agent_automatic": "Automatic selection",
+    "imind_default_agent_save_failed": "Could not save the iMind agent",
     "logo_label": "Workspace logo",
     "change_logo_aria": "Change workspace logo",
     "click_logo_hint": "Click the logo to upload a new image",

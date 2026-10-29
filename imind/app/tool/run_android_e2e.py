@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import urllib.parse
 import wave
@@ -15,17 +16,34 @@ p = argparse.ArgumentParser()
 p.add_argument('--device', required=True)
 p.add_argument('--profile', default='imind-android')
 p.add_argument('--machine', default='imindhost')
-p.add_argument('--suite', choices=['all', 'main', 'features', 'duration'], default='all')
+p.add_argument('--suite', choices=['all', 'main', 'features', 'duration', 'login'], default='all')
 p.add_argument('--test-name', help='Run only this exact test name within the selected suite')
+p.add_argument('--production', action='store_true', help='Explicitly permit an HTTPS production profile and dedicated E2E share')
 p.add_argument('--mirror', action='store_true', help='Use Maven mirrors for dependency downloads')
 p.add_argument('--pcm', type=Path, help='Optional raw 16 kHz mono signed 16-bit little-endian speech')
 args = p.parse_args()
+if args.suite == 'login':
+    if args.production:
+        p.error('OTP database login E2E is local Docker only')
+    command = [sys.executable, str(APP / 'tool/run_login_e2e.py'),
+               '--platform', 'android', '--device', args.device, '--profile', args.profile]
+    if args.mirror:
+        command.append('--mirror')
+    raise SystemExit(subprocess.call(command))
 if Path(args.profile).name != args.profile:
     p.error('profile must be a single directory name')
 config = json.loads((Path.home() / '.multica/profiles' / args.profile / 'config.json').read_text())
 base = urllib.parse.urlparse(config['server_url'])
-if base.scheme != 'http' or base.hostname not in ('localhost', '127.0.0.1'):
-    p.error('This runner is restricted to a local development backend')
+if args.production:
+    if base.scheme != 'https' or not base.hostname or base.username or base.password:
+        p.error('Production tests require an HTTPS server URL without embedded credentials')
+    if not args.machine.startswith('imind-prod-e2e-'):
+        p.error('Production tests require a dedicated imind-prod-e2e-* share')
+    api_base = config['server_url'].rstrip('/')
+else:
+    if base.scheme != 'http' or base.hostname not in ('localhost', '127.0.0.1'):
+        p.error('Remote profiles require explicit --production authorization')
+    api_base = f'http://10.0.2.2:{base.port or 80}{base.path.rstrip("/")}'
 env = os.environ.copy()
 for key in ('HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'http_proxy', 'https_proxy', 'all_proxy'):
     env.pop(key, None)
@@ -46,7 +64,7 @@ with tempfile.TemporaryDirectory(prefix='imind-android-e2e-') as directory:
         p.error('PCM must be nonempty and contain complete 16-bit samples')
     defines = temp / 'defines.json'
     defines.write_text(json.dumps({'E2E_TOKEN': config['token'], 'E2E_WORKSPACE': config['workspace_id'],
-        'E2E_MACHINE': args.machine, 'API_BASE': f'http://10.0.2.2:{base.port or 80}{base.path.rstrip("/")}',
+        'E2E_MACHINE': args.machine, 'API_BASE': api_base,
         'E2E_PCM': base64.b64encode(pcm).decode()}))
     defines.chmod(0o600)
     if args.mirror:

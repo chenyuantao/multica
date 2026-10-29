@@ -33,6 +33,7 @@ type Audio struct {
 	DurationMS   int    `yaml:"duration_ms" json:"duration_ms"`
 	Format       string `yaml:"format" json:"format"`
 	SampleRateHz int    `yaml:"sample_rate_hz" json:"sample_rate_hz"`
+	File         string `yaml:"file,omitempty" json:"file,omitempty"`
 }
 
 type Note struct {
@@ -112,7 +113,7 @@ func (n Note) Validate() error {
 	if n.Type != "recording" && (strings.TrimSpace(n.Transcript) != "" || n.Audio != nil) {
 		return fmt.Errorf("%w: recording fields", ErrInvalidNote)
 	}
-	if n.Audio != nil && (n.Audio.DurationMS < 0 || n.Audio.Format != "pcm_s16le" || n.Audio.SampleRateHz != 16000) {
+	if n.Audio != nil && (n.Audio.DurationMS < 0 || (n.Audio.Format != "pcm_s16le" && n.Audio.Format != "wav_pcm_s16le") || n.Audio.SampleRateHz != 16000 || (n.Audio.File != "" && (n.Audio.File != "audio.wav" || n.Audio.Format != "wav_pcm_s16le"))) {
 		return fmt.Errorf("%w: audio", ErrInvalidNote)
 	}
 	for _, tag := range n.Tags {
@@ -252,7 +253,7 @@ func validFrontmatterTypes(header string) bool {
 			}
 			for j := 0; j < len(value.Content); j += 2 {
 				tag := "!!int"
-				if value.Content[j].Value == "format" {
+				if value.Content[j].Value == "format" || value.Content[j].Value == "file" {
 					tag = "!!str"
 				}
 				if value.Content[j+1].Tag != tag {

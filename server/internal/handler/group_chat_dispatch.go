@@ -7,14 +7,18 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/multica-ai/multica/server/internal/fileshare"
 	"github.com/multica-ai/multica/server/internal/groupchat"
+	"github.com/multica-ai/multica/server/internal/imind"
 	"github.com/multica-ai/multica/server/internal/logger"
+	"github.com/multica-ai/multica/server/internal/obsidianvault"
 	"github.com/multica-ai/multica/server/internal/service"
 	"github.com/multica-ai/multica/server/internal/util"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
@@ -70,6 +74,24 @@ func (h *Handler) dispatchGroupChatReply(ctx context.Context, issue db.Issue, co
 	if !ok {
 		return nil
 	}
+	if h.isIMindChatIssue(ctx, issue) {
+		selected, configured := h.imindDefaultProcessor(ctx, issue, comment.AuthorID)
+		if configured {
+			if selected.Valid {
+				h.enqueueGroupChatPlan(ctx, issue, comment.ID, groupchat.Plan{Mode: groupchat.ModeSingle, AgentIDs: []string{uuidToString(selected)}})
+			}
+			return nil
+		}
+	}
+	// With no configured processor, JEV selects the file chat's first agent.
+	// Persist membership so the ordinary router and runtime handle later turns.
+	if len(groupchat.AgentsOf(participantsOf(roster))) == 0 && h.isIMindChatIssue(ctx, issue) {
+		h.attachIMindDefaultAgent(ctx, issue, comment.AuthorID, comment.Content)
+		roster, ok = h.groupChatRosterIfChat(ctx, issue)
+		if !ok {
+			return nil
+		}
+	}
 	people := participantsOf(roster)
 	agents := groupchat.AgentsOf(people)
 	switch len(agents) {
@@ -91,6 +113,45 @@ func (h *Handler) dispatchGroupChatReply(ctx context.Context, issue db.Issue, co
 	}
 	h.enqueueGroupChatPlan(ctx, issue, comment.ID, plan)
 	return nil
+}
+
+func (h *Handler) attachIMindDefaultAgent(ctx context.Context, issue db.Issue, actorID pgtype.UUID, query string) {
+	var agentID pgtype.UUID
+	if err := h.DB.QueryRow(ctx, `SELECT imind_default_agent_id FROM workspace WHERE id=$1`, issue.WorkspaceID).Scan(&agentID); err != nil {
+		return
+	}
+	if agentID.Valid {
+		if _, err := h.Queries.GetAgentInWorkspace(ctx, db.GetAgentInWorkspaceParams{ID: agentID, WorkspaceID: issue.WorkspaceID}); err != nil {
+			return
+		}
+	} else {
+		actor, _ := h.Queries.GetMemberByUserAndWorkspace(ctx, db.GetMemberByUserAndWorkspaceParams{UserID: actorID, WorkspaceID: issue.WorkspaceID})
+		agents, err := h.Queries.ListAgents(ctx, issue.WorkspaceID)
+		if err != nil {
+			return
+		}
+		state := groupchat.AskState{Query: query, Agents: []groupchat.AskAgent{}}
+		for _, candidate := range agents {
+			if actor.UserID.Valid && !h.memberCanWireAgent(ctx, actor, candidate, uuidToString(issue.WorkspaceID)) {
+				continue
+			}
+			state.Agents = append(state.Agents, groupchat.AskAgent{ID: uuidToString(candidate.ID), Name: candidate.Name, Description: candidate.Description})
+		}
+		chosen, chooseErr := groupchat.ChooseAnswerer(ctx, h.GroupChatDecider, state)
+		if chooseErr != nil {
+			slog.Warn("iMind agent selection failed", "issue_id", uuidToString(issue.ID), "error", chooseErr)
+			return
+		}
+		agentID, err = util.ParseUUID(chosen)
+		if err != nil {
+			return
+		}
+	}
+	if err := h.Queries.AddIssueMember(ctx, db.AddIssueMemberParams{IssueID: issue.ID, WorkspaceID: issue.WorkspaceID, MemberType: "agent", MemberID: agentID, AddedByType: pgtype.Text{String: "member", Valid: true}, AddedByID: issue.CreatorID}); err != nil {
+		if _, checkErr := h.Queries.IsIssueMember(ctx, db.IsIssueMemberParams{IssueID: issue.ID, MemberType: "agent", MemberID: agentID}); checkErr != nil {
+			slog.Warn("iMind default agent could not join group chat", "issue_id", uuidToString(issue.ID), "agent_id", uuidToString(agentID), "error", err)
+		}
+	}
 }
 
 func (h *Handler) isAttachmentOnlyComment(ctx context.Context, issue db.Issue, comment db.Comment) bool {
@@ -385,7 +446,45 @@ func (h *Handler) groupChatTurns(ctx context.Context, issue db.Issue, roster []g
 	}
 	h.markGroupChatAttachments(ctx, issue, turns)
 	h.attachGroupChatFocusNotes(ctx, issue, turns)
+	if noteContext, ok := h.iMindNoteContext(ctx, issue); ok {
+		turns = append([]groupchat.Turn{noteContext}, turns...)
+	}
 	return turns
+}
+
+func (h *Handler) iMindNoteContext(ctx context.Context, issue db.Issue) (groupchat.Turn, bool) {
+	if h.FileShares == nil {
+		return groupchat.Turn{}, false
+	}
+	var rootID string
+	var noteID pgtype.UUID
+	if err := h.DB.QueryRow(ctx, `SELECT share_root_id,note_id FROM imind_group_chat WHERE workspace_id=$1 AND issue_id=$2`, issue.WorkspaceID, issue.ID).Scan(&rootID, &noteID); err != nil {
+		return groupchat.Turn{}, false
+	}
+	peer := h.imindPeerByRoot(rootID)
+	if peer == nil || peer.Meta().WorkspaceID != uuidToString(issue.WorkspaceID) {
+		return groupchat.Turn{}, false
+	}
+	var children obsidianvault.ChildrenResult
+	if err := peer.Call(ctx, fileshare.OpChildren, map[string]string{"path": "iMind", "scope": fileshare.IMindScope}, &children); err != nil {
+		return groupchat.Turn{}, false
+	}
+	for _, node := range children.Nodes {
+		if node.Type != obsidianvault.TypeFile || !strings.HasSuffix(node.Name, ".md") || node.Path != "iMind/"+node.Name {
+			continue
+		}
+		file, err := h.FileShares.ReadScoped(ctx, peer, node.Path, fileshare.IMindScope)
+		if err != nil {
+			continue
+		}
+		note, err := imind.Parse(file.Content, strings.TrimSuffix(node.Name, ".md"))
+		if err == nil && note.ID == uuidToString(noteID) {
+			ref := fileshare.Join(peer.Meta().Machine, node.Path)
+			text := fmt.Sprintf("The following content was loaded from the saved file version available when this run assembled its context. It may differ from the revision the user last saw when sending the message.\nFile: %s\nLoaded revision: %s\n\n%s\n\nTranscript:\n%s", ref, file.Revision, note.Content, note.Transcript)
+			return groupchat.Turn{Author: "iMind file", Role: "context", Text: text, Focus: &groupchat.FocusNote{Name: note.Title, Path: ref}}, true
+		}
+	}
+	return groupchat.Turn{}, false
 }
 
 // saveFocusNote stores the knowledge note open beside the chat when a person

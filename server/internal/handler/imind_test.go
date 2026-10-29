@@ -1,8 +1,11 @@
 package handler
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/json"
+	"github.com/multica-ai/multica/server/internal/testutil"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -133,6 +136,77 @@ func TestIMindShareScope(t *testing.T) {
 				t.Fatal("share leaked")
 			}
 		})
+	}
+}
+
+func TestIMindMediaUploadAndAuthorizedRead(t *testing.T) {
+	root := t.TempDir()
+	h := iMindTestHandler(t, root)
+	createdW := httptest.NewRecorder()
+	h.PostIMindNotes(createdW, iMindRequest(http.MethodPost, "/api/imind/notes", `{"share_machine":"mbp","type":"recording","title":"audio","audio":{"duration_ms":10,"format":"wav_pcm_s16le","sample_rate_hz":16000,"file":"audio.wav"}}`))
+	var note iMindNoteResponse
+	decodeDocs(t, createdW, http.StatusCreated, &note)
+	createdFile, readErr := os.ReadFile(filepath.Join(root, "iMind", "audio.md"))
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if _, parseErr := imind.Parse(string(createdFile), "audio"); parseErr != nil {
+		t.Fatalf("created note cannot be parsed: %v\n%s", parseErr, createdFile)
+	}
+	wav := make([]byte, 2<<20)
+	copy(wav[:4], "RIFF")
+	copy(wav[8:12], "WAVE")
+	binary.LittleEndian.PutUint32(wav[4:8], uint32(len(wav)-8))
+	copy(wav[12:16], "fmt ")
+	binary.LittleEndian.PutUint32(wav[16:20], 16)
+	binary.LittleEndian.PutUint16(wav[20:22], 1)
+	binary.LittleEndian.PutUint16(wav[22:24], 1)
+	binary.LittleEndian.PutUint32(wav[24:28], 16000)
+	binary.LittleEndian.PutUint32(wav[28:32], 32000)
+	binary.LittleEndian.PutUint16(wav[32:34], 2)
+	binary.LittleEndian.PutUint16(wav[34:36], 16)
+	copy(wav[36:40], "data")
+	binary.LittleEndian.PutUint32(wav[40:44], uint32(len(wav)-44))
+	for _, invalid := range []struct {
+		name   string
+		offset int
+		value  byte
+	}{
+		{"wrong sample rate", 24, 0}, {"stereo", 22, 2}, {"wrong bit depth", 34, 8}, {"wrong RIFF length", 4, 0},
+	} {
+		t.Run(invalid.name, func(t *testing.T) {
+			broken := append([]byte(nil), wav...)
+			broken[invalid.offset] = invalid.value
+			req := iMindRequest(http.MethodPost, "/api/imind/media?share_machine=mbp&id="+note.ID+"&name=audio.wav", string(broken))
+			req.Header.Set("Content-Type", "audio/wav")
+			testutil.Call(t, h.PostIMindMedia, req).Want(http.StatusBadRequest)
+		})
+	}
+	upload := httptest.NewRecorder()
+	uploadRequest := iMindRequest(http.MethodPost, "/api/imind/media?share_machine=mbp&id="+note.ID+"&name=audio.wav", string(wav))
+	uploadRequest.Header.Set("Content-Type", "audio/wav")
+	h.PostIMindMedia(upload, uploadRequest)
+	if upload.Code != http.StatusCreated {
+		t.Fatalf("upload status %d: %s", upload.Code, upload.Body.String())
+	}
+	r := iMindNoteRequest(http.MethodGet, "/api/imind/media/"+note.ID+"/audio.wav?share_machine=mbp", note.ID, "")
+	routeCtx := chi.RouteContext(r.Context())
+	routeCtx.URLParams.Add("name", "audio.wav")
+	got := httptest.NewRecorder()
+	h.GetIMindMedia(got, r)
+	if got.Code != http.StatusOK || got.Header().Get("Content-Type") != "audio/wav" || !bytes.Equal(got.Body.Bytes(), wav) {
+		t.Fatalf("download status=%d type=%q len=%d", got.Code, got.Header().Get("Content-Type"), got.Body.Len())
+	}
+	other := iMindRequest(http.MethodGet, "/api/imind/media/"+note.ID+"/audio.wav?share_machine=mbp", "")
+	other.Header.Set("X-User-ID", "stranger")
+	route := chi.NewRouteContext()
+	route.URLParams.Add("id", note.ID)
+	route.URLParams.Add("name", "audio.wav")
+	other = other.WithContext(context.WithValue(other.Context(), chi.RouteCtxKey, route))
+	denied := httptest.NewRecorder()
+	h.GetIMindMedia(denied, other)
+	if denied.Code != http.StatusNotFound {
+		t.Fatalf("unauthorized download status=%d", denied.Code)
 	}
 }
 
@@ -338,7 +412,7 @@ func TestIMindSocketDeleteCASAndScope(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer conn.Close()
-	if err := conn.WriteJSON(fileshare.Envelope{Type: "hello", DaemonID: "daemon-1", Machine: "mbp", WorkspaceID: "ws-1", Visibility: fileshare.VisibilityPrivate, IMindScopeRevision: true, IMindRename: true}); err != nil {
+	if err := conn.WriteJSON(fileshare.Envelope{Type: "hello", DaemonID: "daemon-1", Machine: "mbp", WorkspaceID: "ws-1", Visibility: fileshare.VisibilityPrivate, IMindScopeRevision: true, IMindRename: true, IMindMedia: true}); err != nil {
 		t.Fatal(err)
 	}
 	var ready fileshare.Envelope
@@ -439,8 +513,8 @@ func TestIMindLegacyDaemonFailsClosed(t *testing.T) {
 	}
 	w = httptest.NewRecorder()
 	h.GetIMindShares(w, iMindRequest(http.MethodGet, "/api/imind/shares", ""))
-	if strings.Contains(w.Body.String(), `"machine":"mbp"`) {
-		t.Fatalf("旧 daemon 出现在 iMind 列表: %s", w.Body.String())
+	if w.Code != http.StatusConflict || !strings.Contains(w.Body.String(), "imind_daemon_upgrade_required") {
+		t.Fatalf("旧 daemon 没有明确升级提示: status=%d body=%s", w.Code, w.Body.String())
 	}
 }
 

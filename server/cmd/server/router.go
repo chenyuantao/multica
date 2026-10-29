@@ -1739,6 +1739,12 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			r.Post("/notes", h.PostIMindNotes)
 			r.Put("/notes/{id}", h.PutIMindNote)
 			r.Delete("/notes/{id}", h.DeleteIMindNote)
+			r.Post("/chats/ensure", h.EnsureIMindChat)
+			r.Post("/chats/{id}/retry", h.RetryIMindChatMessage)
+			r.Get("/settings/default-agent", h.GetIMindDefaultAgent)
+			r.With(middleware.RequireWorkspaceRole(queries, "owner", "admin")).Put("/settings/default-agent", h.PutIMindDefaultAgent)
+			r.Post("/media", h.PostIMindMedia)
+			r.Get("/media/{id}/{name}", h.GetIMindMedia)
 		})
 
 		// Note (MUL-4309): the generic OpenAI-compatible passthrough endpoints

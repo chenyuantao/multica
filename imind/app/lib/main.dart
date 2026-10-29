@@ -1,14 +1,19 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:record/record.dart';
+import 'package:audioplayers/audioplayers.dart';
+import 'package:image_picker/image_picker.dart';
 
 import 'asr_session.dart';
 
+import 'ai_chat.dart';
 import 'api.dart';
 import 'session.dart';
 import 'transcript.dart';
+import 'media.dart';
 import 'url_extract.dart';
 
 const _bg = Color(0xFFF2F2F6);
@@ -1202,12 +1207,14 @@ class NoteEditor extends StatefulWidget {
     this.note,
     this.showTranscript = true,
     this.focusTranscript = false,
+    this.imagePicker,
   });
   final MulticaApi api;
   final String? machine;
   final Map<String, dynamic>? note;
   final bool showTranscript;
   final bool focusTranscript;
+  final ImagePicker? imagePicker;
 
   @override
   State<NoteEditor> createState() => _NoteEditorState();
@@ -1278,6 +1285,9 @@ class _NoteEditorState extends State<NoteEditor> {
   void _beginEdit({bool title = false}) {
     if (_editing) return;
     _focusTitle = title;
+    if (!_body.selection.isValid) {
+      _body.selection = TextSelection.collapsed(offset: _body.text.length);
+    }
     _capture();
     final previous = _history;
     previous.removeListener(_refresh);
@@ -1439,6 +1449,29 @@ class _NoteEditorState extends State<NoteEditor> {
     setState(() => _tags.add(name));
   }
 
+  Future<void> _pickImage(ImageSource source) async {
+    final machine = widget.machine;
+    if (machine == null || _saving) return;
+    try {
+      final selected = await MediaService(widget.api)
+          .pickImage(source, picker: widget.imagePicker);
+      if (!mounted || selected == null) return;
+      if (_note == null) await _persist();
+      if (!mounted) return;
+      await widget.api.uploadMedia(
+        machine: machine,
+        noteId: '${_note!['id']}',
+        name: selected.name,
+        contentType: selected.contentType,
+        bytes: selected.bytes,
+      );
+      insertMarkdownImage(_body, '${_note!['id']}', selected.name);
+      if (mounted) setState(() => _error = null);
+    } catch (error) {
+      if (mounted) setState(() => _error = '图片未插入，原有文字已保留。$error');
+    }
+  }
+
   String get _activeText =>
       widget.focusTranscript ? _transcript.text : _body.text;
 
@@ -1451,17 +1484,36 @@ class _NoteEditorState extends State<NoteEditor> {
       autofocus: !_focusTitle,
       onAi: _ai,
       onTag: _pickTag,
+      onCamera: () => _pickImage(ImageSource.camera),
+      onGallery: () => _pickImage(ImageSource.gallery),
+      mediaApi: widget.api,
+      mediaMachine: widget.machine,
+      mediaNoteId: _note?['id'] as String?,
     );
   }
 
-  void _ai() {
-    final name = _title.text.trim().isEmpty ? '未命名' : _title.text.trim();
-    showAiSheet(
-      context,
-      title: 'AI+ 写作',
-      subtitle: '基于当前笔记「$name」',
-      opening: '想怎么调整这篇笔记？直接告诉我，我会结合全文帮你完成。',
-    );
+  Future<void> _ai() async {
+    final machine = widget.machine;
+    if (machine == null || _saving) return;
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await _persist();
+      if (!mounted) return;
+      setState(() => _editing = false);
+      await showNoteAiChat(
+        context,
+        api: widget.api,
+        machine: machine,
+        note: _note!,
+      );
+    } catch (error) {
+      if (mounted) setState(() => _error = '$error');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   @override
@@ -1703,16 +1755,20 @@ class RecordingDetail extends StatefulWidget {
     required this.api,
     required this.machine,
     required this.note,
+    this.imagePicker,
   });
   final MulticaApi api;
   final String machine;
   final Map<String, dynamic> note;
+  final ImagePicker? imagePicker;
 
   @override
   State<RecordingDetail> createState() => _RecordingDetailState();
 }
 
 class _RecordingDetailState extends State<RecordingDetail> {
+  final AudioPlayer _player = AudioPlayer();
+  final Map<String, Future<Uint8List>> _imageReads = {};
   late Map<String, dynamic> _note = widget.note;
   late final _content = TextEditingController(
     text: '${widget.note['content'] ?? ''}',
@@ -1726,6 +1782,12 @@ class _RecordingDetailState extends State<RecordingDetail> {
   var _editing = false;
   var _changed = false;
   var _saving = false;
+  var _playing = false;
+  var _loadingAudio = false;
+  var _audioLoaded = false;
+  var _playbackEnded = false;
+  Duration _audioPosition = Duration.zero;
+  Duration _audioDuration = Duration.zero;
   var _popping = false;
   String? _error;
   late String _contentSnapshot;
@@ -1734,6 +1796,21 @@ class _RecordingDetailState extends State<RecordingDetail> {
   @override
   void initState() {
     super.initState();
+    _player.onPlayerComplete.listen((_) {
+      if (mounted) {
+        setState(() {
+          _playing = false;
+          _playbackEnded = true;
+          _audioPosition = _audioDuration;
+        });
+      }
+    });
+    _player.onPositionChanged.listen((value) {
+      if (mounted) setState(() => _audioPosition = value);
+    });
+    _player.onDurationChanged.listen((value) {
+      if (mounted) setState(() => _audioDuration = value);
+    });
     _contentHistory.addListener(_rebuild);
     _transcriptHistory.addListener(_rebuild);
     _capture();
@@ -1751,8 +1828,63 @@ class _RecordingDetailState extends State<RecordingDetail> {
     _transcriptText.dispose();
     _contentHistory.dispose();
     _transcriptHistory.dispose();
+    _player.dispose();
     super.dispose();
   }
+
+  Future<void> _togglePlayback() async {
+    if (_loadingAudio) return;
+    setState(() {
+      _loadingAudio = true;
+      _error = null;
+    });
+    try {
+      if (_playing) {
+        await _player.pause();
+        if (mounted) setState(() => _playing = false);
+        return;
+      }
+      if (_audioLoaded) {
+        if (_playbackEnded) await _player.seek(Duration.zero);
+        await _player.resume();
+      } else {
+        final audio = _note['audio'];
+        if (audio is! Map || audio['file'] != 'audio.wav') {
+          throw ApiException(404, '此录音没有保存原始音频，无法播放');
+        }
+        final bytes = await MediaService(widget.api).read(
+          machine: widget.machine,
+          noteId: '${_note['id']}',
+          name: 'audio.wav',
+        );
+        if (!mounted) return;
+        await _player.play(BytesSource(bytes, mimeType: 'audio/wav'));
+      }
+      if (mounted) {
+        setState(() {
+          _playing = true;
+          _audioLoaded = true;
+          _playbackEnded = false;
+        });
+      }
+    } catch (error) {
+      if (mounted) setState(() => _error = '录音读取或播放失败，可重试：$error');
+    } finally {
+      if (mounted) setState(() => _loadingAudio = false);
+    }
+  }
+
+  String _playbackTime(Duration value) {
+    final minutes = value.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds = value.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
+
+  Future<Uint8List> _readImage(String name) => _imageReads.putIfAbsent(
+    name,
+    () => MediaService(widget.api)
+        .read(machine: widget.machine, noteId: '${_note['id']}', name: name),
+  );
 
   void _capture() {
     _contentSnapshot = _content.text;
@@ -1829,12 +1961,35 @@ class _RecordingDetailState extends State<RecordingDetail> {
     }
   }
 
-  void _ai() {
-    showAiSheet(
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final selected = await MediaService(widget.api)
+          .pickImage(source, picker: widget.imagePicker);
+      if (!mounted || selected == null) return;
+      await widget.api.uploadMedia(
+        machine: widget.machine,
+        noteId: '${_note['id']}',
+        name: selected.name,
+        contentType: selected.contentType,
+        bytes: selected.bytes,
+      );
+      insertMarkdownImage(_content, '${_note['id']}', selected.name);
+      setState(() => _error = null);
+    } catch (error) {
+      if (mounted) setState(() => _error = '图片未插入，原有文字已保留。$error');
+    }
+  }
+
+  Future<void> _ai() async {
+    if (_editing) {
+      await _save();
+      if (_error != null || !mounted) return;
+    }
+    await showNoteAiChat(
       context,
-      title: 'AI+ 写作',
-      subtitle: '基于「${_note['title']}」',
-      opening: '可以追问这段录音，或让我整理成笔记。',
+      api: widget.api,
+      machine: widget.machine,
+      note: _note,
     );
   }
 
@@ -1955,23 +2110,71 @@ class _RecordingDetailState extends State<RecordingDetail> {
                 Padding(
                   padding: const EdgeInsets.only(bottom: 20),
                   child: Center(
-                    child: ActionPill(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        const PillButton(
-                          dark: true,
-                          icon: Icons.play_arrow,
-                          label: '播放',
-                          onPressed: null,
-                        ),
-                        PillButton(
-                          icon: Icons.auto_awesome,
-                          label: 'AI+',
-                          onPressed: () => showAiSheet(
-                            context,
-                            title: 'AI+ 问答',
-                            subtitle: '基于「${_note['title']}」',
-                            opening: '可以追问这段录音，或让我整理成笔记。',
+                        if (_audioLoaded)
+                          SizedBox(
+                            width: 280,
+                            child: Column(
+                              children: [
+                                Slider(
+                                  min: 0,
+                                  max: _audioDuration.inMilliseconds > 0
+                                      ? _audioDuration.inMilliseconds.toDouble()
+                                      : 1,
+                                  value: _audioPosition.inMilliseconds
+                                      .clamp(
+                                        0,
+                                        _audioDuration.inMilliseconds > 0
+                                            ? _audioDuration.inMilliseconds
+                                            : 1,
+                                      )
+                                      .toDouble(),
+                                  onChanged: (value) => _player.seek(
+                                    Duration(milliseconds: value.round()),
+                                  ),
+                                ),
+                                Text(
+                                  '${_playbackTime(_audioPosition)} / ${_playbackTime(_audioDuration)}',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: _sub,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
+                        ActionPill(
+                          children: [
+                            PillButton(
+                              dark: true,
+                              icon: _loadingAudio
+                                  ? Icons.hourglass_top
+                                  : (_playing ? Icons.pause : Icons.play_arrow),
+                              label: _loadingAudio
+                                  ? '读取中'
+                                  : (_playing
+                                        ? '暂停'
+                                        : (_note['audio'] is Map &&
+                                                  (_note['audio']
+                                                          as Map)['file'] ==
+                                                      'audio.wav'
+                                              ? '播放'
+                                              : '无原始录音')),
+                              onPressed:
+                                  _note['audio'] is Map &&
+                                      (_note['audio'] as Map)['file'] ==
+                                          'audio.wav'
+                                  ? _togglePlayback
+                                  : null,
+                            ),
+                            PillButton(
+                              icon: Icons.auto_awesome,
+                              label: 'AI+',
+                              onPressed: _ai,
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -2023,6 +2226,11 @@ class _RecordingDetailState extends State<RecordingDetail> {
         history: transcript ? _transcriptHistory : _contentHistory,
         editing: true,
         onAi: _ai,
+        onCamera: () => _pickImage(ImageSource.camera),
+        onGallery: () => _pickImage(ImageSource.gallery),
+        mediaApi: widget.api,
+        mediaMachine: widget.machine,
+        mediaNoteId: '${_note['id']}',
       ),
     );
   }
@@ -2094,7 +2302,44 @@ class _RecordingDetailState extends State<RecordingDetail> {
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
           child: content.isEmpty
               ? const Text('还没有笔记', style: TextStyle(color: _sub, fontSize: 16))
-              : MarkdownBody(data: content),
+              : MarkdownBody(
+                  data: content,
+                  sizedImageBuilder: (config) {
+                    final name = imindMediaName(
+                      config.uri.toString(),
+                      '${_note['id']}',
+                    );
+                    if (name == null) {
+                      return const Icon(Icons.broken_image_outlined);
+                    }
+                    return FutureBuilder<Uint8List>(
+                      future: _readImage(name),
+                      builder: (context, snapshot) {
+                        if (snapshot.hasError) {
+                          _imageReads.remove(name);
+                          return const Padding(
+                            padding: EdgeInsets.all(12),
+                            child: Text('图片读取失败，请重新打开笔记重试。'),
+                          );
+                        }
+                        if (!snapshot.hasData) {
+                          return const Padding(
+                            padding: EdgeInsets.all(20),
+                            child: Center(child: CircularProgressIndicator()),
+                          );
+                        }
+                        return Image.memory(
+                          snapshot.data!,
+                          fit: BoxFit.contain,
+                          width: config.width,
+                          height: config.height,
+                          errorBuilder: (_, _, _) =>
+                              const Icon(Icons.broken_image_outlined),
+                        );
+                      },
+                    );
+                  },
+                ),
         ),
       ),
     );
@@ -2107,8 +2352,10 @@ class RecordPage extends StatefulWidget {
     required this.api,
     required this.machine,
     this.recorder,
+    this.imagePicker,
   });
   final AudioRecorder? recorder;
+  final ImagePicker? imagePicker;
   final MulticaApi api;
   final String machine;
 
@@ -2127,6 +2374,10 @@ class _LiveLine {
 class _RecordPageState extends State<RecordPage> {
   late final _recorder = widget.recorder ?? AudioRecorder();
   final _lines = <_LiveLine>[];
+  final _pcm = BytesBuilder(copy: false);
+  final _pendingImages = <PickedImage>[];
+  Map<String, dynamic>? _savedNote;
+  Uint8List? _pendingWav;
   final _noteTitle = TextEditingController();
   final _noteBody = TextEditingController();
   final _elapsed = ValueNotifier<Duration>(Duration.zero);
@@ -2137,6 +2388,7 @@ class _RecordPageState extends State<RecordPage> {
   var _saving = false;
   var _finalizing = false;
   var _sessionOffsetMs = 0;
+  var _pcmLength = 0;
   Timer? _clock;
   var _started = DateTime.now();
   var _recording = false;
@@ -2202,7 +2454,28 @@ class _RecordPageState extends State<RecordPage> {
         return;
       }
       _audio = stream.listen(
-        channel.sendAudio,
+        (dynamic chunk) {
+          if (chunk is List<int>) {
+            const maxPcmBytes = (64 << 20) - 44;
+            final remaining = (maxPcmBytes - _pcmLength) & ~1;
+            if (chunk.length <= remaining) {
+              _pcm.add(chunk);
+              _pcmLength += chunk.length;
+            } else {
+              if (remaining > 0) {
+                _pcm.add(chunk.take(remaining).toList(growable: false));
+                _pcmLength += remaining;
+              }
+              if (mounted) {
+                setState(() => _status = '已达到约 35 分钟的原始音频保存上限，录音已停止；可以保存已录内容。');
+              }
+              if (_recording && !_finalizing) {
+                unawaited(_stop());
+              }
+            }
+          }
+          channel!.sendAudio(chunk as List<int>);
+        },
         onError: (Object _) {
           if (mounted) setState(() => _status = '麦克风采集失败，已收到的转写仍可保存');
         },
@@ -2329,7 +2602,11 @@ class _RecordPageState extends State<RecordPage> {
   }
 
   Future<void> _save() async {
-    if (_saving) return;
+    await _saveRecording(closeOnSuccess: true);
+  }
+
+  Future<bool> _saveRecording({required bool closeOnSuccess}) async {
+    if (_saving) return false;
     setState(() => _saving = true);
     final titleSource = _noteTitle.text.trim().isNotEmpty
         ? _noteTitle.text.trim()
@@ -2346,21 +2623,71 @@ class _RecordPageState extends State<RecordPage> {
         ),
     ]);
     try {
-      await widget.api.createNote({
+      _pendingWav = pcm16MonoWav(_pcm.toBytes());
+      final payload = <String, dynamic>{
         'share_machine': widget.machine,
         'type': 'recording',
         'title': title,
         'content': _noteBody.text.trim().isEmpty ? '# 录音笔记' : _noteBody.text,
         'transcript': transcript,
-        'audio': {
-          'duration_ms': _elapsed.value.inMilliseconds,
-          'format': 'pcm_s16le',
-          'sample_rate_hz': 16000,
-        },
-      });
-      if (mounted) Navigator.pop(context, true);
+        if (_pendingWav!.length > 44)
+          'audio': {
+            'duration_ms': _pcmLength ~/ 32,
+            'format': 'wav_pcm_s16le',
+            'sample_rate_hz': 16000,
+            'file': 'audio.wav',
+          },
+      };
+      final updatePayload = Map<String, dynamic>.from(payload)..remove('type');
+      _savedNote = _savedNote == null
+          ? await widget.api.createNote(payload)
+          : await widget.api.updateNote('${_savedNote!['id']}', {
+              ...updatePayload,
+              'revision': _savedNote!['revision'],
+              'tags': noteTags(_savedNote!),
+            });
+      if (_pendingWav!.length > 44) {
+        await widget.api.uploadMedia(
+          machine: widget.machine,
+          noteId: '${_savedNote!['id']}',
+          name: 'audio.wav',
+          contentType: 'audio/wav',
+          bytes: _pendingWav!,
+        );
+      }
+      if (_pendingImages.isNotEmpty) {
+        var updatedContent = _noteBody.text;
+        for (final image in _pendingImages) {
+          if (!updatedContent.contains('pending:${image.name}')) continue;
+          await widget.api.uploadMedia(
+            machine: widget.machine,
+            noteId: '${_savedNote!['id']}',
+            name: image.name,
+            contentType: image.contentType,
+            bytes: image.bytes,
+          );
+          updatedContent = updatedContent.replaceAll(
+            'pending:${image.name}',
+            'media/${_savedNote!['id']}/${image.name}',
+          );
+        }
+        _savedNote = await widget.api.updateNote('${_savedNote!['id']}', {
+          'share_machine': widget.machine,
+          'revision': _savedNote!['revision'],
+          'title': _savedNote!['title'],
+          'tags': noteTags(_savedNote!),
+          'content': updatedContent,
+          'transcript': _savedNote!['transcript'],
+          'audio': _savedNote!['audio'],
+        });
+        _noteBody.value = _noteBody.value.copyWith(text: updatedContent);
+        _pendingImages.clear();
+      }
+      if (mounted && closeOnSuccess) Navigator.pop(context, true);
+      return true;
     } catch (error) {
       if (mounted) setState(() => _status = '$error');
+      return false;
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -2370,12 +2697,38 @@ class _RecordPageState extends State<RecordPage> {
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => _SideNote(
+          api: widget.api,
+          machine: widget.machine,
           title: _noteTitle,
           body: _noteBody,
           elapsed: _elapsed,
           live: _live,
+          onAi: _openAiFromSideNote,
+          onPickImage: _pickPendingImage,
+          pendingImages: _pendingImages,
+          currentNoteId: () => _savedNote?['id'] as String?,
         ),
       ),
+    );
+  }
+
+  Future<PickedImage?> _pickPendingImage(ImageSource source) async {
+    final image = await MediaService(widget.api)
+        .pickImage(source, picker: widget.imagePicker);
+    if (image != null) _pendingImages.add(image);
+    return image;
+  }
+
+  Future<void> _openAiFromSideNote() async {
+    if (_recording) await _stop();
+    final saved = await _saveRecording(closeOnSuccess: false);
+    final note = _savedNote;
+    if (!mounted || !saved || note == null) return;
+    await showNoteAiChat(
+      context,
+      api: widget.api,
+      machine: widget.machine,
+      note: note,
     );
   }
 
@@ -2385,7 +2738,10 @@ class _RecordPageState extends State<RecordPage> {
       await _askSave();
       return;
     }
-    if (_lines.isNotEmpty || _noteBody.text.isNotEmpty) {
+    if (_lines.isNotEmpty ||
+        _pcmLength > 0 ||
+        _pendingImages.isNotEmpty ||
+        _noteBody.text.isNotEmpty) {
       await _askSave();
       return;
     }
@@ -2539,15 +2895,27 @@ class _RecordPageState extends State<RecordPage> {
 
 class _SideNote extends StatefulWidget {
   const _SideNote({
+    required this.api,
+    required this.machine,
     required this.title,
     required this.body,
     required this.elapsed,
     required this.live,
+    required this.onAi,
+    required this.onPickImage,
+    required this.pendingImages,
+    required this.currentNoteId,
   });
+  final MulticaApi api;
+  final String machine;
   final TextEditingController title;
   final TextEditingController body;
   final ValueNotifier<Duration> elapsed;
   final ValueNotifier<bool> live;
+  final Future<void> Function() onAi;
+  final Future<PickedImage?> Function(ImageSource) onPickImage;
+  final List<PickedImage> pendingImages;
+  final String? Function() currentNoteId;
 
   @override
   State<_SideNote> createState() => _SideNoteState();
@@ -2555,15 +2923,32 @@ class _SideNote extends StatefulWidget {
 
 class _SideNoteState extends State<_SideNote> {
   final _history = UndoHistoryController();
+  String? _error;
+  final _images = <String, Uint8List>{};
 
   @override
   void initState() {
     super.initState();
+    for (final image in widget.pendingImages) {
+      _images[image.name] = image.bytes;
+    }
     _history.addListener(_refresh);
   }
 
   void _refresh() {
     if (mounted) setState(() {});
+  }
+
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final image = await widget.onPickImage(source);
+      if (!mounted || image == null) return;
+      _images[image.name] = image.bytes;
+      insertPendingMarkdownImage(widget.body, image.name);
+      setState(() => _error = null);
+    } catch (error) {
+      if (mounted) setState(() => _error = '图片未插入，原有文字已保留。$error');
+    }
   }
 
   @override
@@ -2629,14 +3014,23 @@ class _SideNoteState extends State<_SideNote> {
               child: _MarkdownEditor(
                 controller: widget.body,
                 history: _history,
-                onAi: () => showAiSheet(
-                  context,
-                  title: 'AI+ 写作',
-                  subtitle: '基于当前笔记',
-                  opening: '想怎么调整这篇笔记？直接告诉我。',
-                ),
+                pendingImages: _images,
+                mediaApi: widget.api,
+                mediaMachine: widget.machine,
+                mediaNoteId: widget.currentNoteId(),
+                onAi: () async {
+                  await widget.onAi();
+                  if (mounted) setState(() {});
+                },
+                onCamera: () => _pickImage(ImageSource.camera),
+                onGallery: () => _pickImage(ImageSource.gallery),
               ),
             ),
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(_error!, style: const TextStyle(color: _red)),
+              ),
           ],
         ),
       ),
@@ -2654,6 +3048,12 @@ class _MarkdownEditor extends StatefulWidget {
     this.autofocus = true,
     this.onAi,
     this.onTag,
+    this.onCamera,
+    this.onGallery,
+    this.mediaApi,
+    this.mediaMachine,
+    this.mediaNoteId,
+    this.pendingImages = const {},
   });
   final TextEditingController controller;
   final UndoHistoryController? history;
@@ -2662,6 +3062,12 @@ class _MarkdownEditor extends StatefulWidget {
   final bool autofocus;
   final VoidCallback? onAi;
   final VoidCallback? onTag;
+  final VoidCallback? onCamera;
+  final VoidCallback? onGallery;
+  final MulticaApi? mediaApi;
+  final String? mediaMachine;
+  final String? mediaNoteId;
+  final Map<String, Uint8List> pendingImages;
 
   @override
   State<_MarkdownEditor> createState() => _MarkdownEditorState();
@@ -2762,6 +3168,8 @@ class _MarkdownEditorState extends State<_MarkdownEditor> {
                 if (widget.onAi != null)
                   _tool('AI+', widget.onAi, color: const Color(0xFF6E56CF)),
                 if (widget.onTag != null) _tool('标签', widget.onTag),
+                if (widget.onCamera != null) _tool('拍照', widget.onCamera),
+                if (widget.onGallery != null) _tool('选图', widget.onGallery),
                 _tool('标题', () => _apply('# ', '')),
                 _tool('加粗', () => _apply('**', '**')),
                 _tool('列表', () => _apply('* ', '')),
@@ -2778,6 +3186,11 @@ class _MarkdownEditorState extends State<_MarkdownEditor> {
       widget.onBeginEdit!();
       return;
     }
+    if (!widget.controller.selection.isValid) {
+      widget.controller.selection = TextSelection.collapsed(
+        offset: widget.controller.text.length,
+      );
+    }
     setState(() => _localEditing = true);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _focus.requestFocus();
@@ -2793,7 +3206,15 @@ class _MarkdownEditorState extends State<_MarkdownEditor> {
         alignment: Alignment.topLeft,
         child: raw.isEmpty
             ? const Text('正文', style: TextStyle(color: _sub, fontSize: 16))
-            : MarkdownBody(data: raw),
+            : SingleChildScrollView(
+                child: IMindMarkdown(
+                  data: raw,
+                  api: widget.mediaApi,
+                  machine: widget.mediaMachine,
+                  noteId: widget.mediaNoteId,
+                  pendingImages: widget.pendingImages,
+                ),
+              ),
       ),
     );
   }
@@ -2981,192 +3402,4 @@ String clockFromMs(int ms) {
 String? sourceHost(Object? url) {
   if (url is! String || url.isEmpty) return null;
   return Uri.tryParse(url)?.host ?? url;
-}
-
-void showAiSheet(
-  BuildContext context, {
-  required String title,
-  required String subtitle,
-  String? opening,
-}) {
-  showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.white,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
-    ),
-    builder: (context) =>
-        _AiSheet(title: title, subtitle: subtitle, opening: opening),
-  );
-}
-
-class _AiSheet extends StatefulWidget {
-  const _AiSheet({required this.title, required this.subtitle, this.opening});
-  final String title;
-  final String subtitle;
-  final String? opening;
-
-  @override
-  State<_AiSheet> createState() => _AiSheetState();
-}
-
-class _AiMessage {
-  _AiMessage(this.mine, this.text);
-  final bool mine;
-  final String text;
-}
-
-class _AiSheetState extends State<_AiSheet> {
-  final _input = TextEditingController();
-  late final _messages = <_AiMessage>[
-    if (widget.opening != null) _AiMessage(false, widget.opening!),
-  ];
-
-  @override
-  void dispose() {
-    _input.dispose();
-    super.dispose();
-  }
-
-  void _send() {
-    final ask = _input.text.trim();
-    if (ask.isEmpty) return;
-    setState(() {
-      _messages.add(_AiMessage(true, ask));
-      _messages.add(_AiMessage(false, '（Mock）已收到：$ask。正式模型接口尚未接入。'));
-      _input.clear();
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-      child: SizedBox(
-        height: MediaQuery.sizeOf(context).height * 0.72,
-        child: Column(
-          children: [
-            const SizedBox(height: 8),
-            const SizedBox(
-              width: 38,
-              height: 5,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: Color(0xFFD8D8DD),
-                  borderRadius: BorderRadius.all(Radius.circular(3)),
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 12, 0),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.auto_awesome,
-                    color: Color(0xFF6E56CF),
-                    size: 22,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    widget.title,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    tooltip: '关闭',
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close, size: 18),
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  widget.subtitle,
-                  style: const TextStyle(color: _sub),
-                ),
-              ),
-            ),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                children: [
-                  for (final message in _messages)
-                    Align(
-                      alignment: message.mine
-                          ? Alignment.centerRight
-                          : Alignment.centerLeft,
-                      child: Container(
-                        constraints: const BoxConstraints(maxWidth: 290),
-                        margin: const EdgeInsets.only(bottom: 14),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 11,
-                        ),
-                        decoration: BoxDecoration(
-                          color: message.mine ? _dark : _bg,
-                          borderRadius: BorderRadius.only(
-                            topLeft: const Radius.circular(18),
-                            topRight: const Radius.circular(18),
-                            bottomLeft: Radius.circular(message.mine ? 18 : 6),
-                            bottomRight: Radius.circular(message.mine ? 6 : 18),
-                          ),
-                        ),
-                        child: Text(
-                          message.text,
-                          style: TextStyle(
-                            fontSize: 15,
-                            height: 1.6,
-                            color: message.mine ? Colors.white : _ink,
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _input,
-                      decoration: const InputDecoration(
-                        hintText: '告诉 AI+ 你想怎么写…',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(24)),
-                          borderSide: BorderSide.none,
-                        ),
-                        filled: true,
-                        fillColor: _bg,
-                        contentPadding: EdgeInsets.symmetric(
-                          horizontal: 18,
-                          vertical: 12,
-                        ),
-                      ),
-                      onSubmitted: (_) => _send(),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton.filled(
-                    tooltip: '发送',
-                    onPressed: _send,
-                    icon: const Icon(Icons.send, size: 18),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }

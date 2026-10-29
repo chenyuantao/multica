@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,18 +13,20 @@ import (
 )
 
 const (
-	OpTree      = "tree"
-	OpChildren  = "children"
-	OpHierarchy = "hierarchy"
-	OpRead      = "read"
-	OpAsset     = "asset"
-	OpWrite     = "write"
-	OpCreate    = "create"
-	OpMove      = "move"
-	OpMkdir     = "mkdir"
-	OpRename    = "rename"
-	OpDelete    = "delete"
-	OpSearch    = "search"
+	OpTree            = "tree"
+	OpChildren        = "children"
+	OpHierarchy       = "hierarchy"
+	OpRead            = "read"
+	OpAsset           = "asset"
+	OpIMindMediaRead  = "imind_media_read"
+	OpIMindMediaWrite = "imind_media_write"
+	OpWrite           = "write"
+	OpCreate          = "create"
+	OpMove            = "move"
+	OpMkdir           = "mkdir"
+	OpRename          = "rename"
+	OpDelete          = "delete"
+	OpSearch          = "search"
 )
 
 const IMindScope = "imind"
@@ -72,6 +75,18 @@ type searchPayload struct {
 	Q string `json:"q"`
 }
 
+type imindMediaPayload struct {
+	Path      string `json:"path"`
+	Content   []byte `json:"content,omitempty"`
+	Offset    int64  `json:"offset,omitempty"`
+	ChunkSize int    `json:"chunk_size,omitempty"`
+	Complete  bool   `json:"complete,omitempty"`
+	Size      int64  `json:"size,omitempty"`
+	UploadID  string `json:"upload_id,omitempty"`
+}
+
+const imindMediaChunkSize = 512 << 10
+
 // Exec runs one knowledge operation against a local directory. Listing and
 // search stay on this machine; only the result is returned to the caller.
 func Exec(ctx context.Context, root, op string, payload json.RawMessage) (any, error) {
@@ -95,6 +110,9 @@ func Exec(ctx context.Context, root, op string, payload json.RawMessage) (any, e
 	if scope.Scope != "" {
 		if scope.Scope != IMindScope {
 			return nil, obsidianvault.ErrInvalidPath
+		}
+		if op == OpIMindMediaRead || op == OpIMindMediaWrite {
+			return execIMindMedia(root, op, payload)
 		}
 		return execIMind(ctx, root, op, payload)
 	}
@@ -181,6 +199,185 @@ func Exec(ctx context.Context, root, op string, payload json.RawMessage) (any, e
 	default:
 		return nil, obsidianvault.ErrInvalidPath
 	}
+}
+
+// execIMindMedia confines binary assets to iMind/media/<note UUID>/<file>.
+func execIMindMedia(root, op string, payload json.RawMessage) (any, error) {
+	var req imindMediaPayload
+	if err := json.Unmarshal(payload, &req); err != nil || !validIMindMediaPath(req.Path) {
+		return nil, obsidianvault.ErrInvalidPath
+	}
+	sharedRoot, err := filepath.Abs(root)
+	if err != nil {
+		return nil, obsidianvault.ErrUnavailable
+	}
+	sharedRoot, err = filepath.EvalSymlinks(sharedRoot)
+	if err != nil {
+		return nil, obsidianvault.ErrUnavailable
+	}
+	// Resolve each directory without following a link, including the existing iMind root.
+	dirs := []string{filepath.Join(sharedRoot, iMindDir), filepath.Join(sharedRoot, iMindDir, "media"), filepath.Join(sharedRoot, iMindDir, "media", strings.Split(req.Path, "/")[2])}
+	for _, dir := range dirs {
+		info, statErr := os.Lstat(dir)
+		if errors.Is(statErr, os.ErrNotExist) && op == OpIMindMediaWrite {
+			if err := os.Mkdir(dir, 0700); err != nil && !errors.Is(err, os.ErrExist) {
+				return nil, err
+			}
+			info, statErr = os.Lstat(dir)
+		}
+		if statErr != nil {
+			return nil, obsidianvault.ErrNotFound
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return nil, obsidianvault.ErrInvalidPath
+		}
+		if !info.IsDir() {
+			return nil, obsidianvault.ErrNotDir
+		}
+	}
+	target := filepath.Join(sharedRoot, filepath.FromSlash(req.Path))
+	info, statErr := os.Lstat(target)
+	if statErr == nil && (!info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0) {
+		return nil, obsidianvault.ErrInvalidPath
+	}
+	if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
+		return nil, statErr
+	}
+	maxSize := int64(16 << 20)
+	if filepath.Base(target) == "audio.wav" {
+		maxSize = 64 << 20
+	}
+	if statErr == nil && info.Size() > maxSize {
+		return nil, obsidianvault.ErrInvalidEdit
+	}
+	if op == OpIMindMediaRead {
+		if statErr != nil {
+			return nil, obsidianvault.ErrNotFound
+		}
+		if req.Offset < 0 || req.Offset > info.Size() {
+			return nil, obsidianvault.ErrInvalidPath
+		}
+		chunkSize := req.ChunkSize
+		if chunkSize <= 0 || chunkSize > imindMediaChunkSize {
+			chunkSize = imindMediaChunkSize
+		}
+		file, err := os.Open(target)
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, obsidianvault.ErrNotFound
+		}
+		if err != nil {
+			return nil, err
+		}
+		defer file.Close()
+		length := int64(chunkSize)
+		if remain := info.Size() - req.Offset; remain < length {
+			length = remain
+		}
+		data := make([]byte, length)
+		if _, err := file.ReadAt(data, req.Offset); err != nil && !errors.Is(err, io.EOF) {
+			return nil, err
+		}
+		return imindMediaPayload{Path: req.Path, Content: data, Offset: req.Offset, Size: info.Size(), Complete: req.Offset+length >= info.Size()}, nil
+	}
+	if op != OpIMindMediaWrite || len(req.Content) == 0 || len(req.Content) > imindMediaChunkSize || req.Offset < 0 {
+		return nil, obsidianvault.ErrInvalidEdit
+	}
+	if len(req.UploadID) != 32 {
+		return nil, obsidianvault.ErrInvalidEdit
+	}
+	for _, c := range req.UploadID {
+		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
+			return nil, obsidianvault.ErrInvalidEdit
+		}
+	}
+	part := filepath.Join(filepath.Dir(target), ".imind-upload-"+req.UploadID)
+	partInfo, partErr := os.Lstat(part)
+	if partErr == nil && (partInfo.Mode()&os.ModeSymlink != 0 || !partInfo.Mode().IsRegular()) {
+		return nil, obsidianvault.ErrInvalidPath
+	}
+	if partErr != nil && !errors.Is(partErr, os.ErrNotExist) {
+		return nil, partErr
+	}
+	flags := os.O_WRONLY | os.O_CREATE
+	if req.Offset == 0 {
+		flags |= os.O_TRUNC
+	} else {
+		flags |= os.O_APPEND
+	}
+	tmp, err := os.OpenFile(part, flags, 0600)
+	if err != nil {
+		return nil, err
+	}
+	info, err = tmp.Stat()
+	if err != nil {
+		tmp.Close()
+		return nil, err
+	}
+	if info.Size() != req.Offset || req.Offset+int64(len(req.Content)) > maxSize {
+		tmp.Close()
+		return nil, obsidianvault.ErrInvalidEdit
+	}
+	if _, err := tmp.Write(req.Content); err != nil {
+		tmp.Close()
+		return nil, err
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		return nil, err
+	}
+	if err := tmp.Close(); err != nil {
+		return nil, err
+	}
+	newSize := req.Offset + int64(len(req.Content))
+	if req.Complete {
+		if err := os.Rename(part, target); err != nil {
+			return nil, err
+		}
+	}
+	return map[string]any{"path": req.Path, "size": newSize, "complete": req.Complete}, nil
+}
+
+func validIMindMediaPath(p string) bool {
+	parts := strings.Split(p, "/")
+	if len(parts) != 4 || parts[0] != iMindDir || parts[1] != "media" || !validIMindUUID(parts[2]) {
+		return false
+	}
+	name := parts[3]
+	if name == "audio.wav" {
+		return true
+	}
+	if len(name) < 5 || strings.ContainsAny(name, "\\\x00") || strings.HasPrefix(name, ".") {
+		return false
+	}
+	ext := strings.ToLower(filepath.Ext(name))
+	if ext != ".jpg" && ext != ".jpeg" && ext != ".png" && ext != ".webp" {
+		return false
+	}
+	stem := strings.TrimSuffix(name, filepath.Ext(name))
+	if len(stem) < 16 {
+		return false
+	}
+	for _, r := range stem {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-') {
+			return false
+		}
+	}
+	return true
+}
+
+func validIMindUUID(s string) bool {
+	if len(s) != 36 || s[8] != '-' || s[13] != '-' || s[18] != '-' || s[23] != '-' || s[14] != '4' {
+		return false
+	}
+	for i, r := range s {
+		if i == 8 || i == 13 || i == 18 || i == 23 {
+			continue
+		}
+		if !(r >= '0' && r <= '9' || r >= 'a' && r <= 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 // execIMind confines operations to a physical first-level directory; unscoped docs retain symlink behavior.

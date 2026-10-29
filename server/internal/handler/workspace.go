@@ -170,10 +170,18 @@ func (h *Handler) ListWorkspaces(w http.ResponseWriter, r *http.Request) {
 
 	resp := make([]WorkspaceResponse, len(workspaces))
 	for i, ws := range workspaces {
-		resp[i] = h.workspaceToResponse(ws)
+		resp[i] = h.workspaceListRowToResponse(ws)
 	}
 
 	writeJSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) workspaceListRowToResponse(w db.ListWorkspacesRow) WorkspaceResponse {
+	return h.workspaceToResponse(db.Workspace{
+		ID: w.ID, Name: w.Name, Slug: w.Slug, Description: w.Description, Settings: w.Settings,
+		Context: w.Context, Repos: w.Repos, IssuePrefix: w.IssuePrefix, AvatarUrl: w.AvatarUrl,
+		CreatedAt: w.CreatedAt, UpdatedAt: w.UpdatedAt,
+	})
 }
 
 func (h *Handler) GetWorkspace(w http.ResponseWriter, r *http.Request) {

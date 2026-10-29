@@ -52,6 +52,127 @@ const operations = [
 ];
 
 void main() {
+  test('文件群聊接口使用笔记 UUID 幂等加入并分页读取 issue 评论', () async {
+    final requests = <http.Request>[];
+    final api = MulticaApi(
+      baseUrl: 'https://example.test',
+      client: MockClient((request) async {
+        requests.add(request);
+        if (request.url.path == '/api/imind/chats/ensure') {
+          return http.Response(
+            jsonEncode({
+              'issue_id': noteId,
+              'identifier': 'MUL-41',
+              'joined': true,
+            }),
+            200,
+          );
+        }
+        if (request.url.path.endsWith('/comments/page')) {
+          return http.Response(
+            jsonEncode({
+              'comments': [
+                {'id': noteId, 'issue_id': noteId, 'content': 'hello'},
+                {
+                  'id': workspaceId,
+                  'issue_id': workspaceId,
+                  'content': 'wrong issue',
+                },
+              ],
+              'has_more': true,
+              'next_cursor': {
+                'created_at': '2026-10-28T00:00:00Z',
+                'id': noteId,
+              },
+            }),
+            200,
+          );
+        }
+        return http.Response(
+          jsonEncode({'id': workspaceId, 'issue_id': noteId}),
+          200,
+        );
+      }),
+    )..token = 'session';
+    api.workspaceId = workspaceId;
+
+    final chat = await api.ensureNoteChat('mbp', noteId, revision: 'sha256');
+    expect(chat['issue_id'], noteId);
+    expect(chat['joined'], isTrue);
+    final page = await api.noteChatHistory(
+      noteId,
+      beforeCreatedAt: '2026-10-27T00:00:00Z',
+      beforeId: workspaceId,
+    );
+    expect(page['comments'], hasLength(1));
+    expect(page['has_more'], isTrue);
+    const clientId = '66666666-6666-4666-8666-666666666666';
+    await api.sendNoteChatMessage(noteId, 'hello', clientId: clientId);
+    expect(requests.first.url.path, '/api/imind/chats/ensure');
+    expect(jsonDecode(requests.first.body), {
+      'share_machine': 'mbp',
+      'note_id': noteId,
+      'revision': 'sha256',
+    });
+    expect(
+      requests.every(
+        (request) => request.headers['X-Workspace-ID'] == workspaceId,
+      ),
+      isTrue,
+    );
+    expect(requests[1].url.queryParameters['before_id'], workspaceId);
+    expect(jsonDecode(requests.last.body), {
+      'content': 'hello',
+      'type': 'comment',
+      'client_id': clientId,
+    });
+  });
+
+  test('文件群聊接口拒绝畸形 issue、文档路径穿越及空消息', () async {
+    final api = responding({'issue_id': 'bad'});
+    await expectLater(
+      api.ensureNoteChat('mbp', noteId, revision: 'r'),
+      throwsA(apiError(502)),
+    );
+    await expectLater(api.getDocFile('../secret.md'), throwsA(apiError(400)));
+    await expectLater(
+      api.sendNoteChatMessage(
+        noteId,
+        '  ',
+        clientId: '66666666-6666-4666-8666-666666666666',
+      ),
+      throwsA(apiError(400)),
+    );
+  });
+
+  test('按工作区列出 Agent 并只用原 issue/comment 重试群聊分发', () async {
+    final requests = <http.Request>[];
+    final api = MulticaApi(
+      baseUrl: 'https://example.test',
+      client: MockClient((request) async {
+        requests.add(request);
+        return http.Response(
+          jsonEncode(
+            request.url.path == '/api/agents'
+                ? [
+                    {'id': noteId, 'name': 'Agent'},
+                  ]
+                : {'status': 'queued'},
+          ),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }),
+    )..token = 'session';
+    api.workspaceId = workspaceId;
+    expect(await api.workspaceAgents(), hasLength(1));
+    final result = await api.retryNoteChatDispatch(noteId, workspaceId);
+    expect(result['status'], 'queued');
+    expect(requests.first.url.queryParameters['workspace_id'], workspaceId);
+    expect(requests.last.url.path, '/api/imind/chats/$noteId/retry');
+    expect(jsonDecode(requests.last.body), {'comment_id': workspaceId});
+  });
+
   for (final body in [
     {
       'shares': [null],

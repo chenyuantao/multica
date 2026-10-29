@@ -747,6 +747,12 @@
   },
   "workspace": {
     "section_general": "워크스페이스 정보",
+    "imind_default_agent_unavailable": "사용할 수 없는 에이전트",
+    "imind_section": "iMind",
+    "imind_default_agent_label": "iMind 기본 처리 에이전트",
+    "imind_default_agent_description": "비워 두면 에이전트를 자동으로 선택합니다.",
+    "imind_default_agent_automatic": "자동 선택",
+    "imind_default_agent_save_failed": "iMind 에이전트를 저장하지 못했습니다",
     "logo_label": "워크스페이스 아이콘",
     "change_logo_aria": "워크스페이스 로고 변경",
     "click_logo_hint": "로고를 클릭하여 새 이미지를 업로드하세요",

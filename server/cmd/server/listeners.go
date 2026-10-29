@@ -99,7 +99,7 @@ type eventIssueRef struct {
 	} `json:"issue"`
 }
 
-func newGroupChatAudience(q *db.Queries) groupChatAudience {
+func newGroupChatAudience(q *db.Queries, filters ...func(context.Context, string, []string) []string) groupChatAudience {
 	return func(ctx context.Context, issueID string) ([]string, bool) {
 		id, err := util.ParseUUID(issueID)
 		if err != nil {
@@ -122,6 +122,9 @@ func newGroupChatAudience(q *db.Queries) groupChatAudience {
 		out := make([]string, 0, len(ids))
 		for _, u := range ids {
 			out = append(out, util.UUIDToString(u))
+		}
+		for _, filter := range filters {
+			out = filter(ctx, issueID, out)
 		}
 		return out, true
 	}

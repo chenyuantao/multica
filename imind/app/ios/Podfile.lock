@@ -1,32 +1,45 @@
 PODS:
+  - audioplayers_darwin (0.0.1):
+    - Flutter
+    - FlutterMacOS
   - Flutter (1.0.0)
   - flutter_secure_storage_darwin (10.0.0):
     - Flutter
     - FlutterMacOS
+  - image_picker_ios (0.0.1):
+    - Flutter
   - integration_test (0.0.1):
     - Flutter
   - record_ios (2.0.0):
     - Flutter
 
 DEPENDENCIES:
+  - audioplayers_darwin (from `.symlinks/plugins/audioplayers_darwin/darwin`)
   - Flutter (from `Flutter`)
   - flutter_secure_storage_darwin (from `.symlinks/plugins/flutter_secure_storage_darwin/darwin`)
+  - image_picker_ios (from `.symlinks/plugins/image_picker_ios/ios`)
   - integration_test (from `.symlinks/plugins/integration_test/ios`)
   - record_ios (from `.symlinks/plugins/record_ios/ios`)
 
 EXTERNAL SOURCES:
+  audioplayers_darwin:
+    :path: ".symlinks/plugins/audioplayers_darwin/darwin"
   Flutter:
     :path: Flutter
   flutter_secure_storage_darwin:
     :path: ".symlinks/plugins/flutter_secure_storage_darwin/darwin"
+  image_picker_ios:
+    :path: ".symlinks/plugins/image_picker_ios/ios"
   integration_test:
     :path: ".symlinks/plugins/integration_test/ios"
   record_ios:
     :path: ".symlinks/plugins/record_ios/ios"
 
 SPEC CHECKSUMS:
+  audioplayers_darwin: 835ced6edd4c9fc8ebb0a7cc9e294a91d99917d5
   Flutter: 71a624a5bc0c04062bf19101d501e466baf2fb47
   flutter_secure_storage_darwin: 46e401699982ee74142909676535e0f6a7321e58
+  image_picker_ios: 9285ee31b06d6e15629dd5713b890f0c457a0a8b
   integration_test: 4a889634ef21a45d28d50d622cf412dc6d9f586e
   record_ios: 390a30c7caaf8b5d0fb1cb1d2fd5064b48b4520c
 

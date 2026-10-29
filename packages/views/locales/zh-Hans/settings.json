@@ -747,6 +747,12 @@
   },
   "workspace": {
     "section_general": "工作区信息",
+    "imind_default_agent_unavailable": "智能体不可用",
+    "imind_section": "iMind",
+    "imind_default_agent_label": "iMind 默认处理智能体",
+    "imind_default_agent_description": "留空时自动选择智能体。",
+    "imind_default_agent_automatic": "自动选择",
+    "imind_default_agent_save_failed": "保存 iMind 智能体失败",
     "logo_label": "工作区图标",
     "change_logo_aria": "更换工作区图标",
     "click_logo_hint": "点击图标上传新图片",

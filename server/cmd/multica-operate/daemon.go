@@ -199,6 +199,7 @@ func serveOnce(ctx context.Context, profile string) time.Duration {
 		Enabled:            &enabled,
 		IMindScopeRevision: true,
 		IMindRename:        true,
+		IMindMedia:         true,
 	}
 	if err := conn.WriteJSON(hello); err != nil {
 		fmt.Fprintf(os.Stderr, "hello: %v\n", err)

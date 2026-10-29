@@ -1127,6 +1127,7 @@ export const CommentSchema = z.object({
   ref_message_id: z.string().nullable().optional().catch(undefined),
   // An unknown future channel reads as a plain message.
   via_channel: z.enum(["wechat_claw"]).nullable().optional().catch(undefined),
+  imind_agent_status: z.enum(["queued", "unavailable"]).optional().catch(undefined),
 }).loose();
 
 export const CommentsListSchema = z.array(CommentSchema);
@@ -1194,6 +1195,15 @@ export const GroupChatSchema = z.object({
 export const GroupChatsListSchema = z.object({
   chats: z.array(GroupChatSchema).default([]),
 }).loose();
+
+export const IMindChatEnsureSchema = z.object({
+  issue_id: z.string().default(""),
+  identifier: z.string().default(""),
+  title: z.string().default(""),
+  joined: z.boolean().default(false).catch(false),
+  chat: GroupChatSchema.nullable().default(null).catch(null),
+}).loose();
+export const IMindDefaultAgentSchema = z.object({ agent_id: z.string().nullable().default(null).catch(null) }).loose();
 
 export const ReminderSchema = GroupChatSchema.extend({
   // An unknown status reads as open so the row keeps its checkbox.

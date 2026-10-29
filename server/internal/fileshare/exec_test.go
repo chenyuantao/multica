@@ -1,13 +1,18 @@
 package fileshare
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/gorilla/websocket"
 	"github.com/multica-ai/multica/server/internal/obsidianvault"
 )
 
@@ -213,8 +218,8 @@ func TestHubScopedReadDoesNotTrustUnscopedCache(t *testing.T) {
 
 func TestHelloIMindCapabilityIsOptional(t *testing.T) {
 	for _, capable := range []bool{false, true} {
-		meta, err := AcceptHello(Envelope{Type: "hello", DaemonID: "daemon-1", Machine: "mbp", IMindScopeRevision: capable}, "owner-1")
-		if err != nil || meta.IMindScopeRevision != capable {
+		meta, err := AcceptHello(Envelope{Type: "hello", DaemonID: "daemon-1", Machine: "mbp", IMindScopeRevision: capable, IMindRename: capable, IMindMedia: capable}, "owner-1")
+		if err != nil || meta.IMindScopeRevision != capable || meta.IMindRename != capable || meta.IMindMedia != capable {
 			t.Fatalf("hello = %#v, err = %v", meta, err)
 		}
 	}
@@ -227,5 +232,102 @@ func TestSanitizeMachine(t *testing.T) {
 	got, err := SanitizeMachine("Tao-MBP")
 	if err != nil || got != "Tao-MBP" {
 		t.Fatalf("got %q err %v", got, err)
+	}
+}
+
+func TestIMindMediaScopedReadWriteAndRejectSymlinks(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, "iMind"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	id := "4e2c1478-6f08-43d8-a949-e07ccf778d99"
+	p := "iMind/media/" + id + "/audio.wav"
+	_, err := Exec(context.Background(), root, OpIMindMediaWrite, json.RawMessage(`{"scope":"imind","path":"`+p+`","upload_id":"0123456789abcdef0123456789abcdef","complete":true,"content":"UklGRg=="}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := Exec(context.Background(), root, OpIMindMediaRead, json.RawMessage(`{"scope":"imind","path":"`+p+`"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := raw.(imindMediaPayload)
+	if string(got.Content) != "RIFF" {
+		t.Fatalf("content = %q", got.Content)
+	}
+	for _, bad := range []string{"iMind/media/../note.md", "iMind/media/" + id + "/../../secret", "iMind/media/not-a-uuid/audio.wav", "iMind/media/" + id + "/other.bin"} {
+		if _, err := Exec(context.Background(), root, OpIMindMediaWrite, json.RawMessage(`{"scope":"imind","path":"`+bad+`","content":"eA=="}`)); !errors.Is(err, obsidianvault.ErrInvalidPath) {
+			t.Errorf("path %q err = %v", bad, err)
+		}
+	}
+	linkRoot := t.TempDir()
+	if err := os.Mkdir(filepath.Join(linkRoot, "iMind"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(t.TempDir(), filepath.Join(linkRoot, "iMind", "media")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Exec(context.Background(), linkRoot, OpIMindMediaWrite, json.RawMessage(`{"scope":"imind","path":"`+p+`","content":"eA=="}`)); !errors.Is(err, obsidianvault.ErrInvalidPath) {
+		t.Fatalf("symlink media root err = %v", err)
+	}
+}
+
+func TestIMindMediaLargeTransferUsesBoundedWebSocketRPCChunks(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, "iMind"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	id := "4e2c1478-6f08-43d8-a949-e07ccf778d99"
+	path := "iMind/media/" + id + "/audio.wav"
+	data := make([]byte, 2<<20)
+	copy(data, "RIFF")
+	copy(data[8:], "WAVE")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		go func() { _ = ServeConn(ctx, conn, root, nil) }()
+	}))
+	defer server.Close()
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	peer := NewSession(conn, ShareMeta{Machine: "mbp"})
+	go peer.ReadLoop(func() {})
+	defer peer.Close()
+	const chunkSize = 512 << 10
+	for offset := 0; offset < len(data); {
+		end := offset + chunkSize
+		if end > len(data) {
+			end = len(data)
+		}
+		err := peer.Call(ctx, OpIMindMediaWrite, map[string]any{
+			"scope": IMindScope, "path": path, "offset": offset,
+			"upload_id": "0123456789abcdef0123456789abcdef", "content": data[offset:end], "complete": end == len(data),
+		}, nil)
+		if err != nil {
+			t.Fatalf("write chunk at %d: %v", offset, err)
+		}
+		offset = end
+	}
+	var out []byte
+	for offset := 0; ; {
+		var chunk imindMediaPayload
+		if err := peer.Call(ctx, OpIMindMediaRead, map[string]any{"scope": IMindScope, "path": path, "offset": offset, "chunk_size": chunkSize}, &chunk); err != nil {
+			t.Fatalf("read chunk at %d: %v", offset, err)
+		}
+		out = append(out, chunk.Content...)
+		offset += len(chunk.Content)
+		if chunk.Complete {
+			break
+		}
+	}
+	if !bytes.Equal(out, data) {
+		t.Fatalf("round trip mismatch: got %d bytes want %d", len(out), len(data))
 	}
 }

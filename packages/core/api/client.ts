@@ -496,6 +496,8 @@ import {
   type CreateIssueViewRequest,
   GroupChatSchema,
   GroupChatsListSchema,
+  IMindChatEnsureSchema,
+  IMindDefaultAgentSchema,
   GroupChatSearchResultSchema,
   MessageCollectionSchema,
   MessageCollectionsListSchema,
@@ -4650,6 +4652,23 @@ export class ApiClient {
     return parseWithFallback<{ chats: GroupChat[] }>(raw, GroupChatsListSchema, { chats: [] }, {
       endpoint: "GET /api/group-chats",
     }).chats;
+  }
+
+  async ensureIMindChat(input: { share_machine: string; note_id: string; revision: string }): Promise<{ issue_id: string; identifier: string; title: string; joined: boolean; chat: GroupChat | null }> {
+    const raw = await this.fetch<unknown>("/api/imind/chats/ensure", { method: "POST", body: JSON.stringify(input) });
+    const result = parseWithFallback(raw, IMindChatEnsureSchema, { issue_id: "", identifier: "", title: "", joined: false, chat: null }, { endpoint: "POST /api/imind/chats/ensure" });
+    if (!result.issue_id || !result.joined) throw new Error("Invalid iMind chat response");
+    return result;
+  }
+
+  async getIMindDefaultAgent(): Promise<string | null> {
+    const raw = await this.fetch<unknown>("/api/imind/settings/default-agent");
+    return parseWithFallback(raw, IMindDefaultAgentSchema, { agent_id: null }, { endpoint: "GET /api/imind/settings/default-agent" }).agent_id;
+  }
+
+  async setIMindDefaultAgent(agentId: string | null): Promise<string | null> {
+    const raw = await this.fetch<unknown>("/api/imind/settings/default-agent", { method: "PUT", body: JSON.stringify({ agent_id: agentId }) });
+    return parseWithFallback(raw, IMindDefaultAgentSchema, { agent_id: null }, { endpoint: "PUT /api/imind/settings/default-agent" }).agent_id;
   }
 
   /** One hit per chat of the current user whose messages contain `q`. */

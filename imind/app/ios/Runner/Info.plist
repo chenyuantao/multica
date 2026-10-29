@@ -49,6 +49,10 @@
 	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>拍照并将图片插入笔记。</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>选择图片并插入笔记。</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>iMind 需要麦克风，以便把语音实时转成可编辑的笔记原文。</string>
 	<key>NSLocalNetworkUsageDescription</key>

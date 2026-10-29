@@ -604,7 +604,6 @@ func main() {
 			channelLeaseRedis = newNamedRedisClient(opts, "channel-lease")
 		}
 	}
-	registerScopedListeners(bus, broadcaster, newGroupChatAudience(db.New(pool)))
 
 	analyticsClient := analytics.NewFromEnv()
 	defer analyticsClient.Close()
@@ -711,6 +710,7 @@ func main() {
 		LLMMaxRetries:       llmMaxRetries,
 		LLMDisableThinking:  llmDisableThinking,
 	})
+	registerScopedListeners(bus, broadcaster, newGroupChatAudience(db.New(pool), h.FilterIMindChatAudience))
 	var replicaQueries *db.Queries
 	if replicaPool != nil {
 		replicaQueries = db.New(replicaPool)

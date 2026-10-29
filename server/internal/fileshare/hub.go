@@ -27,6 +27,7 @@ type ShareMeta struct {
 	Online             bool
 	IMindScopeRevision bool
 	IMindRename        bool
+	IMindMedia         bool
 }
 
 // AccessPatch is a runtime-UI change. Nil fields stay as they are. Dir is not
@@ -383,6 +384,7 @@ type Local struct {
 func NewLocal(meta ShareMeta, root string) *Local {
 	meta.IMindScopeRevision = true
 	meta.IMindRename = true
+	meta.IMindMedia = true
 	return &Local{meta: meta, root: root}
 }
 
