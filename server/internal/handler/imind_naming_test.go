@@ -35,7 +35,7 @@ func TestIMindNamingProviderContract(t *testing.T) {
 		}
 		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"choices":[{"message":{"content":"{\"title\":\"项目周会\",\"summary\":\"讨论发布计划\"}"}}]}`))}, nil
 	})}
-	got, err := generateIMindName(context.Background(), client, "test-secret", "saved content", "saved transcript")
+	got, err := generateIMindName(context.Background(), client, "test-secret", "saved content\nsaved transcript")
 	if err != nil || got.Title != "项目周会" || got.Summary != "讨论发布计划" {
 		t.Fatalf("result=%+v err=%v", got, err)
 	}
@@ -47,7 +47,7 @@ func TestIMindNamingRejectsProviderFailures(t *testing.T) {
 			client := &http.Client{Transport: imindNamingTransport(func(*http.Request) (*http.Response, error) {
 				return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body))}, nil
 			})}
-			if _, err := generateIMindName(context.Background(), client, "key", "body", ""); err == nil {
+			if _, err := generateIMindName(context.Background(), client, "key", "body"); err == nil {
 				t.Fatal("accepted malformed provider response")
 			}
 		})

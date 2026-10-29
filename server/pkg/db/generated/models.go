@@ -1814,6 +1814,7 @@ type Workspace struct {
 	ImindDefaultAgentID   pgtype.UUID `json:"imind_default_agent_id"`
 	ImindClipAgentID      pgtype.UUID `json:"imind_clip_agent_id"`
 	ImindDeepseekKey      []byte      `json:"-"`
+	ImindPromptTemplates  []byte      `json:"imind_prompt_templates"`
 }
 
 type WorkspaceInvitation struct {

@@ -802,7 +802,38 @@
     "imind_key_missing": "未設定",
     "imind_key_save": "キーを保存",
     "imind_key_clear": "キーを削除",
-    "imind_deepseek_label": "DeepSeek API Key"
+    "imind_deepseek_label": "DeepSeek API Key",
+    "imind_prompts": {
+      "label": "LLM プロンプトテンプレート",
+      "help": "このワークスペースに適用されます。変更を保存するまでは既定値が表示されます。既定に戻すと保存した上書きが削除されます。タイトル生成は title と summary を含む JSON を返す必要があります。",
+      "file_title": "ファイル名（DeepSeek）",
+      "recording_title": "録音タイトル（DeepSeek）",
+      "processor": "既定処理エージェントのプロンプト",
+      "clip": "クリッピングエージェントのプロンプト",
+      "variable_help": "テンプレート変数",
+      "loading": "テンプレートを読み込み中...",
+      "load_failed": "テンプレートを読み込めません",
+      "retry": "再試行",
+      "save": "保存",
+      "restore": "既定に戻す",
+      "saved": "テンプレートを保存しました",
+      "save_failed": "テンプレートを保存できません",
+      "variables": {
+        "FILE_CONTENT": "YAML メタデータを含む保存済み Markdown 全文",
+        "FILE_PATH": "マシン名を含む共有パス（例：mac/iMind/Note.md）",
+        "FILE_RELATIVE_PATH": "共有ルートからの相対パス（例：iMind/Note.md）",
+        "SHARE_MACHINE": "共有マシン名",
+        "FILE_TITLE": ".md を除く現在のファイルタイトル",
+        "FILE_TYPE": "note、recording、clip のいずれか",
+        "FILE_ID": "ノートの固定 ID",
+        "FILE_REVISION": "保護された書き込みに使うリビジョン",
+        "FILE_BODY": "YAML メタデータを除く本文",
+        "TRANSCRIPT": "録音の文字起こし",
+        "SOURCE_URL": "ソース URL。未設定の場合は空",
+        "CLIP_ORIGINAL_TEXT": "クリッピング時に貼り付けた原文",
+        "CLIP_INSTRUCTIONS": "ファイルごとのクリッピング指示。未設定の場合は空"
+      }
+    }
   },
   "delete_workspace_dialog": {
     "title": "ワークスペースを削除",

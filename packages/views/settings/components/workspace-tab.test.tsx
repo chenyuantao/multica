@@ -80,6 +80,10 @@ vi.mock("../../navigation", () => ({
   useNavigation: () => ({ push: vi.fn() }),
 }));
 
+vi.mock("./imind-prompt-settings", () => ({
+  IMindPromptSettings: () => null,
+}));
+
 vi.mock("./delete-workspace-dialog", () => ({
   DeleteWorkspaceDialog: () => null,
 }));

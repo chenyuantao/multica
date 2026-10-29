@@ -8,6 +8,7 @@ import { Button } from "@multica/ui/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@multica/ui/components/ui/select";
 import { toast } from "sonner";
 import { useT } from "../../i18n";
+import { IMindPromptSettings } from "./imind-prompt-settings";
 import { SettingsRow } from "./settings-layout";
 
 export function IMindAISettings({ wsId, canManage, agents }: { wsId: string; canManage: boolean; agents: { id: string; name: string }[] }) {
@@ -60,5 +61,6 @@ export function IMindAISettings({ wsId, canManage, agents }: { wsId: string; can
         </form> : null}
       </div>
     </SettingsRow>
+    <IMindPromptSettings wsId={wsId} canManage={canManage} />
   </>;
 }

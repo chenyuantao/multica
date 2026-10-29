@@ -153,13 +153,3 @@ func TestIMindClipPlaceholderPersistsContextAndDispatchesInItsFileChat(t *testin
 		t.Fatalf("completion not visible in file chat: %d", n)
 	}
 }
-
-func TestIMindClipInstructionsOnlyApplyToClipFiles(t *testing.T) {
-	if got := imindClipInstructions(imind.Note{Type: "note"}, "ref", "rev"); got != "" {
-		t.Fatal(got)
-	}
-	note := imind.Note{Type: "clip", Content: "old clipping placeholder"}
-	if got := imindClipInstructions(note, "machine/iMind/file.md", "revision"); !strings.Contains(got, note.Content) {
-		t.Fatal("legacy clip lacks recoverable context")
-	}
-}

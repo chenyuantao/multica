@@ -14,7 +14,7 @@ import (
 const createWorkspace = `-- name: CreateWorkspace :one
 INSERT INTO workspace (name, slug, description, context, issue_prefix)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, name, slug, description, settings, created_at, updated_at, context, repos, issue_prefix, issue_counter, avatar_url, attribution_fail_closed, imind_default_agent_id, imind_clip_agent_id, imind_deepseek_key
+RETURNING id, name, slug, description, settings, created_at, updated_at, context, repos, issue_prefix, issue_counter, avatar_url, attribution_fail_closed, imind_default_agent_id, imind_clip_agent_id, imind_deepseek_key, imind_prompt_templates
 `
 
 type CreateWorkspaceParams struct {
@@ -51,6 +51,7 @@ func (q *Queries) CreateWorkspace(ctx context.Context, arg CreateWorkspaceParams
 		&i.ImindDefaultAgentID,
 		&i.ImindClipAgentID,
 		&i.ImindDeepseekKey,
+		&i.ImindPromptTemplates,
 	)
 	return i, err
 }
@@ -233,7 +234,7 @@ func (q *Queries) GetDaemonWorkspace(ctx context.Context, id pgtype.UUID) (GetDa
 }
 
 const getWorkspace = `-- name: GetWorkspace :one
-SELECT id, name, slug, description, settings, created_at, updated_at, context, repos, issue_prefix, issue_counter, avatar_url, attribution_fail_closed, imind_default_agent_id, imind_clip_agent_id, imind_deepseek_key FROM workspace
+SELECT id, name, slug, description, settings, created_at, updated_at, context, repos, issue_prefix, issue_counter, avatar_url, attribution_fail_closed, imind_default_agent_id, imind_clip_agent_id, imind_deepseek_key, imind_prompt_templates FROM workspace
 WHERE id = $1
 `
 
@@ -257,6 +258,7 @@ func (q *Queries) GetWorkspace(ctx context.Context, id pgtype.UUID) (Workspace, 
 		&i.ImindDefaultAgentID,
 		&i.ImindClipAgentID,
 		&i.ImindDeepseekKey,
+		&i.ImindPromptTemplates,
 	)
 	return i, err
 }
@@ -276,7 +278,7 @@ func (q *Queries) GetWorkspaceAttributionFailClosed(ctx context.Context, id pgty
 }
 
 const getWorkspaceBySlug = `-- name: GetWorkspaceBySlug :one
-SELECT id, name, slug, description, settings, created_at, updated_at, context, repos, issue_prefix, issue_counter, avatar_url, attribution_fail_closed, imind_default_agent_id, imind_clip_agent_id, imind_deepseek_key FROM workspace
+SELECT id, name, slug, description, settings, created_at, updated_at, context, repos, issue_prefix, issue_counter, avatar_url, attribution_fail_closed, imind_default_agent_id, imind_clip_agent_id, imind_deepseek_key, imind_prompt_templates FROM workspace
 WHERE slug = $1
 `
 
@@ -300,6 +302,7 @@ func (q *Queries) GetWorkspaceBySlug(ctx context.Context, slug string) (Workspac
 		&i.ImindDefaultAgentID,
 		&i.ImindClipAgentID,
 		&i.ImindDeepseekKey,
+		&i.ImindPromptTemplates,
 	)
 	return i, err
 }
@@ -469,7 +472,7 @@ UPDATE workspace SET
     avatar_url = COALESCE($8, avatar_url),
     updated_at = now()
 WHERE id = $1
-RETURNING id, name, slug, description, settings, created_at, updated_at, context, repos, issue_prefix, issue_counter, avatar_url, attribution_fail_closed, imind_default_agent_id, imind_clip_agent_id, imind_deepseek_key
+RETURNING id, name, slug, description, settings, created_at, updated_at, context, repos, issue_prefix, issue_counter, avatar_url, attribution_fail_closed, imind_default_agent_id, imind_clip_agent_id, imind_deepseek_key, imind_prompt_templates
 `
 
 type UpdateWorkspaceParams struct {
@@ -512,6 +515,7 @@ func (q *Queries) UpdateWorkspace(ctx context.Context, arg UpdateWorkspaceParams
 		&i.ImindDefaultAgentID,
 		&i.ImindClipAgentID,
 		&i.ImindDeepseekKey,
+		&i.ImindPromptTemplates,
 	)
 	return i, err
 }

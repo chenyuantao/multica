@@ -3357,8 +3357,30 @@ describe("iMind AI settings responses", () => {
     vi.stubGlobal("fetch", fetchMock);
     const client = new ApiClient("https://api.example.test");
     expect(await client.setIMindDeepSeek("test-only-secret")).toBe(true);
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ api_key: "test-only-secret" });
+    expect(JSON.parse(fetchMock.mock.calls[0]![1].body)).toEqual({ api_key: "test-only-secret" });
     await client.setIMindClipAgent(null);
-    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ agent_id: null });
+    expect(JSON.parse(fetchMock.mock.calls[1]![1].body)).toEqual({ agent_id: null });
+  });
+});
+
+
+describe("iMind prompt templates", () => {
+  it("parses defaults, saved overrides and reset responses", async () => {
+    const body = { prompts: [{ kind: "file_title", default_template: "Default {{FILE_CONTENT}}", template: "Mine {{FILE_PATH}}", custom: true }], variables: ["FILE_CONTENT", "FILE_PATH"] };
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify(body), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new ApiClient("https://api.example.test");
+    expect(await client.getIMindPrompts()).toEqual({ prompts: [{ kind: "file_title", defaultTemplate: "Default {{FILE_CONTENT}}", template: "Mine {{FILE_PATH}}", custom: true }], variables: body.variables });
+    await client.setIMindPrompt("file_title", "Custom {{FILE_CONTENT}}");
+    expect(JSON.parse(fetchMock.mock.calls[1]![1].body)).toEqual({ kind: "file_title", template: "Custom {{FILE_CONTENT}}" });
+    await client.setIMindPrompt("file_title", null);
+    expect(JSON.parse(fetchMock.mock.calls[2]![1].body)).toEqual({ kind: "file_title", template: null });
+  });
+  it("does not render blank editors from missing or malformed templates", async () => {
+    const client = new ApiClient("https://api.example.test");
+    for (const body of [null, {}, { prompts: 42 }, { prompts: [{ kind: "future", template: "new", default_template: "new" }] }, { prompts: [{ kind: "file_title", template: "", default_template: "default" }], variables: [false] }]) {
+      vi.stubGlobal("fetch", vi.fn().mockImplementation(async () => new Response(JSON.stringify(body), { status: 200 })));
+      expect(await client.getIMindPrompts()).toEqual({ prompts: [], variables: [] });
+    }
   });
 });

@@ -806,7 +806,38 @@
     "imind_key_missing": "Not configured",
     "imind_key_save": "Save key",
     "imind_key_clear": "Clear key",
-    "imind_deepseek_label": "DeepSeek API Key"
+    "imind_deepseek_label": "DeepSeek API Key",
+    "imind_prompts": {
+      "label": "LLM prompt templates",
+      "help": "Templates apply to this workspace. The inputs show the effective defaults until you save changes. Restore default removes the saved override. Naming must return JSON with title and summary.",
+      "file_title": "File title (DeepSeek)",
+      "recording_title": "Recording title (DeepSeek)",
+      "processor": "Default processing agent",
+      "clip": "Clipping agent",
+      "variable_help": "Template variables",
+      "loading": "Loading templates...",
+      "load_failed": "Unable to load templates",
+      "retry": "Retry",
+      "save": "Save",
+      "restore": "Restore default",
+      "saved": "Template saved",
+      "save_failed": "Unable to save template",
+      "variables": {
+        "FILE_CONTENT": "Complete saved Markdown, including YAML metadata",
+        "FILE_PATH": "Shared path including the machine name, e.g. mac/iMind/Note.md",
+        "FILE_RELATIVE_PATH": "Path relative to the shared root, e.g. iMind/Note.md",
+        "SHARE_MACHINE": "Shared machine name",
+        "FILE_TITLE": "Current filename title without .md",
+        "FILE_TYPE": "note, recording, or clip",
+        "FILE_ID": "Stable note ID",
+        "FILE_REVISION": "Revision used for protected writes",
+        "FILE_BODY": "Note body without YAML metadata",
+        "TRANSCRIPT": "Recording transcript",
+        "SOURCE_URL": "Source URL, empty when absent",
+        "CLIP_ORIGINAL_TEXT": "Original pasted clipping text",
+        "CLIP_INSTRUCTIONS": "Per-file clipping instructions, empty when absent"
+      }
+    }
   },
   "delete_workspace_dialog": {
     "title": "Delete workspace",

@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"fmt"
 	"path"
 	"strings"
 
@@ -112,19 +111,4 @@ func (h *Handler) dispatchIMindClip(ctx context.Context, issue db.Issue, comment
 	}
 	h.enqueueGroupChatPlan(ctx, issue, comment.ID, groupchat.Plan{Mode: groupchat.ModeSingle, AgentIDs: []string{uuidToString(id)}})
 	return true
-}
-
-func imindClipInstructions(note imind.Note, ref, revision string) string {
-	if note.Type != "clip" {
-		return ""
-	}
-	original, prompt := note.Content, ""
-	if note.Clip != nil {
-		original, prompt = note.Clip.OriginalText, note.Clip.Prompt
-	}
-	source := ""
-	if note.SourceURL != nil {
-		source = *note.SourceURL
-	}
-	return fmt.Sprintf("\n\nClipping task: fetch the source URL and write the clipped article into this existing iMind file, not a new file or a second chat. Use the available shared-document tools to read the complete Markdown and update it with revision protection. Preserve its YAML metadata (especially id, type, clip and source_url), both unique content delimiters and the empty transcript section. The filename is the title; rename this same file to a suitable article title if supported. Never claim success until the file write succeeds. If fetching or writing fails, explain the failure in this chat so the saved placeholder can be retried.\nTarget: %s\nContext revision: %s\nSource URL: %s\nOriginal pasted text:\n%s\nOptional clipping instructions:\n%s", ref, revision, source, original, prompt)
 }

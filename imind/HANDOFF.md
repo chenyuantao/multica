@@ -1,5 +1,8 @@
 # iMind Flutter App — 方案、进度与接力
 
+**LLM 提示词模板：** Web/Desktop 工作区设置新增普通文件标题、语音文件标题、默认处理智能体、剪藏智能体四种独立模板，默认值直接显示在输入框，可保存覆盖并恢复默认。后端从已保存文件展开完整 Markdown、主机路径、相对路径等变量；配置对后续 iMind 调用生效。迁移 590 和本地定向回归已完成，未部署线上。详细验收及全仓检查的非本次变更失败见 [PROMPT_TEMPLATES_VALIDATION.md](PROMPT_TEMPLATES_VALIDATION.md)。
+
+
 最后更新：2026-10-29（下一轮五项优化已交付，iOS 27 → Android 15 本地验收通过）
 
 ## 验收口径

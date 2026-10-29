@@ -483,8 +483,14 @@ func (h *Handler) iMindNoteContext(ctx context.Context, issue db.Issue) (groupch
 		note, err := imind.Parse(file.Content, strings.TrimSuffix(node.Name, ".md"))
 		if err == nil && note.ID == uuidToString(noteID) {
 			ref := fileshare.Join(peer.Meta().Machine, node.Path)
-			text := fmt.Sprintf("The following content was loaded from the saved file version available when this run assembled its context. It may differ from the revision the user last saw when sending the message.\nFile: %s\nLoaded revision: %s\n\n%s\n\nTranscript:\n%s", ref, file.Revision, note.Content, note.Transcript)
-			text += imindClipInstructions(note, ref, file.Revision)
+			kind := "processor"
+			if note.Type == "clip" {
+				kind = "clip"
+			}
+			text, err := h.renderIMindPrompt(ctx, issue.WorkspaceID, kind, imind.PromptValues(note, file.Content, peer.Meta().Machine, file.Path, file.Revision))
+			if err != nil {
+				return groupchat.Turn{}, false
+			}
 			return groupchat.Turn{Author: "iMind file", Role: "context", Text: text, Focus: &groupchat.FocusNote{Name: note.Title, Path: ref}}, true
 		}
 	}

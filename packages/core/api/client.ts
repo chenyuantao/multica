@@ -1,3 +1,4 @@
+import { IMindPromptsSchema, EMPTY_IMIND_PROMPTS, type IMindPromptKind } from "./schemas";
 import type { ZodType } from "zod";
 import type { IssueWakeup, IssueWakeupInput, IssueWakeupSummaryRow, PausedWakeup, SystemWakeup, WakeupRun, WorkspaceSystemWakeup } from "../types/issue-wakeup";
 import type { WorkspaceWakeupPage, WorkspaceWakeupFilters } from "../types/issue-wakeup";
@@ -4670,6 +4671,16 @@ export class ApiClient {
   async setIMindClipAgent(agentId: string | null): Promise<string | null> {
     const raw = await this.fetch<unknown>("/api/imind/settings/clip-agent", { method: "PUT", body: JSON.stringify({ agent_id: agentId }) });
     return parseWithFallback(raw, IMindDefaultAgentSchema, { agent_id: null }, { endpoint: "PUT /api/imind/settings/clip-agent" }).agent_id;
+  }
+
+  async getIMindPrompts() {
+    const raw = await this.fetch<unknown>("/api/imind/settings/prompts");
+    return parseWithFallback(raw, IMindPromptsSchema, EMPTY_IMIND_PROMPTS, { endpoint: "GET /api/imind/settings/prompts" });
+  }
+
+  async setIMindPrompt(kind: IMindPromptKind, template: string | null) {
+    const raw = await this.fetch<unknown>("/api/imind/settings/prompts", { method: "PUT", body: JSON.stringify({ kind, template }) });
+    return parseWithFallback(raw, IMindPromptsSchema, EMPTY_IMIND_PROMPTS, { endpoint: "PUT /api/imind/settings/prompts" });
   }
 
   async getIMindDeepSeek(): Promise<boolean> {

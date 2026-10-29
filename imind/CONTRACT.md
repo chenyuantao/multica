@@ -195,6 +195,32 @@ Flutter 录音在笔记、音频和图片全部保存成功后立即调用命名
 - Key 仅由后台录入，按工作区加密保存在数据库；不传到 Flutter、不写入 Markdown/日志/仓库。部署需设置 32 bytes base64 `MULTICA_IMIND_SECRET_KEY`，未设置拒绝配置，轮换后需重新录入已有配置。该部署加密密钥与模型 API Key 不同。
 - `GET/PUT /api/imind/settings/clip-agent` 使用 `{agent_id:UUID|null}`，权限、工作区和智能体使用权限与 default-agent 设置相同。
 
+## 工作区 LLM 提示词模板
+
+`GET /api/imind/settings/prompts` 返回 `prompts` 和 `variables`。每个模板包含 `kind`、`default_template`、当前生效的 `template` 和 `custom`。四种 kind 为 `file_title`（普通文件及剪藏文件的 DeepSeek 标题/摘要）、`recording_title`（语音文件的 DeepSeek 标题/摘要）、`processor`（非剪藏文件的默认处理智能体上下文）、`clip`（剪藏智能体的转存与原文件回写上下文）。默认内容由服务端统一提供，Web/Desktop 的“工作区 → 通用 → iMind”输入框直接展示当前生效值；客户端不用重装即可使用后端的新配置。
+
+`PUT /api/imind/settings/prompts` 接收 `{ "kind": "processor", "template": "..." }`，仅 owner/admin 可修改，工作区成员可读取。同一请求只更新一个模板，避免覆盖其他管理员对另一模板的修改。未保存过使用系统默认值；保存后完整覆盖该模板；显式传 `template: null` 删除覆盖并恢复默认。空白模板、未知变量、未知 kind、缺少 template、非字符串值及超过 32 KiB 的模板返回 400，已有配置不变。响应与 GET 相同。
+
+模板使用严格大写的 `{{VARIABLE}}`，仅单次字面替换，不执行模板代码，也不递归展开文件内容里的变量。展开结果超过 8 MiB 时拒绝调用，不截断文件内容。所有值来自当前授权文件的已保存版本：
+
+| 变量 | 值 |
+| --- | --- |
+| `FILE_CONTENT` | 完整 Markdown 字符串，包含 YAML 元数据、正文和转写分隔符 |
+| `FILE_PATH` | 包含主机名的共享文件路径，如 `mac/iMind/笔记.md` |
+| `FILE_RELATIVE_PATH` | 相对共享根目录的路径，如 `iMind/笔记.md` |
+| `SHARE_MACHINE` | 共享主机名 |
+| `FILE_TITLE` | 当前文件名，不含 `.md` |
+| `FILE_TYPE` | `note`、`recording` 或 `clip` |
+| `FILE_ID` | 笔记的固定 UUID |
+| `FILE_REVISION` | 当前已保存版本，用于保护写入 |
+| `FILE_BODY` | 不含 YAML 元数据的笔记正文 |
+| `TRANSCRIPT` | 语音转写文本 |
+| `SOURCE_URL` | 来源 URL，无来源时为空 |
+| `CLIP_ORIGINAL_TEXT` | 原始剪藏文本；旧文件无 clip 元数据时取正文 |
+| `CLIP_INSTRUCTIONS` | 当前文件的额外剪藏要求，无要求时为空 |
+
+DeepSeek 调用仍要求返回包含非空 `title` 和 `summary` 的 JSON；结构、文件名和 revision 校验继续由服务端执行。自定义模板可以替换处理/剪藏的操作要求，但不改变共享目录权限、写入保护和同一文件群聊绑定。
+
 ## 剪藏占位文件与执行
 
 客户端正则提取链接，先创建默认名 `生成中的剪藏1` 的 `clip` 文件，正文和 `clip.original_text` 保留用户原始文本，元数据 `source_url` 保存提取链接，`clip.prompt` 保存可选提示词。创建失败不建群；创建成功后以同一 note UUID/revision ensure 群聊，再发送链接和提示词（稳定 client_id），打开同一 AI+。关闭重开不会再次发送初始化消息。

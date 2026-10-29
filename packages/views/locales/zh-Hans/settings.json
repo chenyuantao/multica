@@ -802,7 +802,38 @@
     "imind_key_missing": "未配置",
     "imind_key_save": "保存密钥",
     "imind_key_clear": "清除密钥",
-    "imind_deepseek_label": "DeepSeek API Key"
+    "imind_deepseek_label": "DeepSeek API Key",
+    "imind_prompts": {
+      "label": "LLM 提示词模板",
+      "help": "模板对当前工作区生效。未修改时，输入框显示系统默认值；保存后使用你的版本，恢复默认会移除覆盖。生成标题须返回包含 title 和 summary 的 JSON。",
+      "file_title": "普通文件标题（DeepSeek）",
+      "recording_title": "语音文件标题（DeepSeek）",
+      "processor": "默认处理智能体提示词",
+      "clip": "剪藏智能体提示词",
+      "variable_help": "查看模板变量",
+      "loading": "正在加载模板...",
+      "load_failed": "无法加载模板",
+      "retry": "重试",
+      "save": "保存",
+      "restore": "恢复默认",
+      "saved": "模板已保存",
+      "save_failed": "无法保存模板",
+      "variables": {
+        "FILE_CONTENT": "完整的已保存 Markdown，包含 YAML 元数据",
+        "FILE_PATH": "包含主机名的共享路径，例如 mac/iMind/笔记.md",
+        "FILE_RELATIVE_PATH": "相对于共享根目录的路径，例如 iMind/笔记.md",
+        "SHARE_MACHINE": "共享主机名",
+        "FILE_TITLE": "当前文件标题，不含 .md",
+        "FILE_TYPE": "文件类型：note、recording 或 clip",
+        "FILE_ID": "笔记的固定 ID",
+        "FILE_REVISION": "用于保护写入的文件版本",
+        "FILE_BODY": "笔记正文，不含 YAML 元数据",
+        "TRANSCRIPT": "录音转写文本",
+        "SOURCE_URL": "来源 URL，无来源时为空",
+        "CLIP_ORIGINAL_TEXT": "剪藏时粘贴的原始文本",
+        "CLIP_INSTRUCTIONS": "当前文件的额外剪藏要求，未填写时为空"
+      }
+    }
   },
   "delete_workspace_dialog": {
     "title": "删除工作区",

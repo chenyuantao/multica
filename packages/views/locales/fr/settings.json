@@ -806,7 +806,38 @@
     "imind_key_missing": "Non configuré",
     "imind_key_save": "Enregistrer la clé",
     "imind_key_clear": "Effacer la clé",
-    "imind_deepseek_label": "DeepSeek API Key"
+    "imind_deepseek_label": "DeepSeek API Key",
+    "imind_prompts": {
+      "label": "Modèles de prompts LLM",
+      "help": "Ces modèles s’appliquent à cet espace. Les valeurs par défaut sont affichées avant toute modification enregistrée. Restaurer supprime la personnalisation. La génération de titres doit renvoyer un JSON avec title et summary.",
+      "file_title": "Titre de fichier (DeepSeek)",
+      "recording_title": "Titre d’enregistrement (DeepSeek)",
+      "processor": "Prompt de l’agent de traitement par défaut",
+      "clip": "Prompt de l’agent de capture",
+      "variable_help": "Variables du modèle",
+      "loading": "Chargement des modèles...",
+      "load_failed": "Impossible de charger les modèles",
+      "retry": "Réessayer",
+      "save": "Enregistrer",
+      "restore": "Restaurer le modèle par défaut",
+      "saved": "Modèle enregistré",
+      "save_failed": "Impossible d’enregistrer le modèle",
+      "variables": {
+        "FILE_CONTENT": "Markdown enregistré complet, métadonnées YAML incluses",
+        "FILE_PATH": "Chemin partagé avec le nom de machine, ex. mac/iMind/Note.md",
+        "FILE_RELATIVE_PATH": "Chemin relatif à la racine partagée, ex. iMind/Note.md",
+        "SHARE_MACHINE": "Nom de la machine partagée",
+        "FILE_TITLE": "Titre actuel sans .md",
+        "FILE_TYPE": "note, recording ou clip",
+        "FILE_ID": "ID stable de la note",
+        "FILE_REVISION": "Révision utilisée pour protéger les écritures",
+        "FILE_BODY": "Corps sans métadonnées YAML",
+        "TRANSCRIPT": "Transcription de l’enregistrement",
+        "SOURCE_URL": "URL source, vide si absente",
+        "CLIP_ORIGINAL_TEXT": "Texte original collé pour la capture",
+        "CLIP_INSTRUCTIONS": "Instructions de capture propres au fichier, vides si absentes"
+      }
+    }
   },
   "delete_workspace_dialog": {
     "title": "Supprimer l'espace de travail",

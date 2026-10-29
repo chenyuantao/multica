@@ -1203,6 +1203,23 @@ export const IMindChatEnsureSchema = z.object({
   joined: z.boolean().default(false).catch(false),
   chat: GroupChatSchema.nullable().default(null).catch(null),
 }).loose();
+export const IMindPromptKindSchema = z.enum(["file_title", "recording_title", "processor", "clip"]);
+export type IMindPromptKind = z.infer<typeof IMindPromptKindSchema>;
+export const IMindPromptsSchema = z.object({
+  prompts: z.array(z.object({
+    kind: IMindPromptKindSchema,
+    default_template: z.string().min(1),
+    template: z.string().min(1),
+    custom: z.boolean().catch(false),
+  }).transform((prompt) => ({
+    kind: prompt.kind, defaultTemplate: prompt.default_template,
+    template: prompt.template, custom: prompt.custom,
+  }))).catch([]),
+  variables: z.array(z.string()).catch([]),
+});
+export type IMindPrompts = z.infer<typeof IMindPromptsSchema>;
+export const EMPTY_IMIND_PROMPTS: IMindPrompts = { prompts: [], variables: [] };
+
 export const IMindDeepSeekSchema = z.object({ configured: z.boolean().default(false).catch(false) }).loose();
 
 export const IMindDefaultAgentSchema = z.object({ agent_id: z.string().nullable().default(null).catch(null) }).loose();

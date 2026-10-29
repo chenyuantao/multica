@@ -497,7 +497,7 @@ func uniqueIMindJSONValue(decoder *json.Decoder, allowNull bool) error {
 			}
 			key = strings.ToLower(key)
 			keys[key] = true
-			allowNull = key == "audio" || key == "source_url" || key == "tags" || key == "agent_id"
+			allowNull = key == "audio" || key == "source_url" || key == "tags" || key == "agent_id" || key == "template"
 		}
 		if err := uniqueIMindJSONValue(decoder, allowNull); err != nil {
 			return err
