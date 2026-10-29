@@ -177,6 +177,24 @@ class MulticaApi {
     );
   }
 
+  Future<Map<String, dynamic>> nameNote(
+    String machine,
+    String id,
+    String revision,
+  ) async {
+    _checkMachine(machine);
+    _checkId(id);
+    return _note(
+      await _request(
+        'POST',
+        '/api/imind/notes/$id/ai-name',
+        timeout: const Duration(seconds: 55),
+        body: {'share_machine': machine, 'revision': revision},
+      ),
+      expectedId: id,
+    );
+  }
+
   Future<void> deleteNote(String id, String machine, String revision) async {
     _checkId(id);
     _checkMachine(machine);
@@ -383,6 +401,20 @@ class MulticaApi {
     return [for (final item in value) _object(item)];
   }
 
+  Future<List<Map<String, dynamic>>> noteChatRunMessages(String taskId) async {
+    _checkId(taskId);
+    final value = await _request('GET', '/api/tasks/$taskId/messages');
+    if (value is! List) throw _malformed('task-messages');
+    final messages = [for (final item in value) _object(item)];
+    for (final message in messages) {
+      if (message['task_id'] != taskId || message['seq'] is! num) {
+        throw _malformed('task-message');
+      }
+    }
+    messages.sort((a, b) => (a['seq'] as num).compareTo(b['seq'] as num));
+    return messages;
+  }
+
   Future<Map<String, dynamic>> cancelNoteChatRun(
     String issueId,
     String taskId,
@@ -447,6 +479,7 @@ class MulticaApi {
     Map<String, dynamic>? body,
     bool auth = true,
     bool workspace = true,
+    Duration? timeout,
   }) async {
     final requestToken = token;
     final requestWorkspaceId = workspaceId;
@@ -470,7 +503,7 @@ class MulticaApi {
       response = await (() async {
         final streamed = await _client.send(request);
         return http.Response.fromStream(streamed);
-      })().timeout(requestTimeout);
+      })().timeout(timeout ?? requestTimeout);
     } on TimeoutException {
       throw ApiException(408, '请求超时，请重试');
     } on Exception {
@@ -611,6 +644,7 @@ class MulticaApi {
       'content': _string(data, 'content'),
       'transcript': _string(data, 'transcript'),
       'source_url': source,
+      'summary': _string(data, 'summary'),
       'audio': audio,
       'path': _string(data, 'path'),
     };

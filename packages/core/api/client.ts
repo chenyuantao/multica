@@ -498,6 +498,7 @@ import {
   GroupChatsListSchema,
   IMindChatEnsureSchema,
   IMindDefaultAgentSchema,
+  IMindDeepSeekSchema,
   GroupChatSearchResultSchema,
   MessageCollectionSchema,
   MessageCollectionsListSchema,
@@ -4659,6 +4660,26 @@ export class ApiClient {
     const result = parseWithFallback(raw, IMindChatEnsureSchema, { issue_id: "", identifier: "", title: "", joined: false, chat: null }, { endpoint: "POST /api/imind/chats/ensure" });
     if (!result.issue_id || !result.joined) throw new Error("Invalid iMind chat response");
     return result;
+  }
+
+  async getIMindClipAgent(): Promise<string | null> {
+    const raw = await this.fetch<unknown>("/api/imind/settings/clip-agent");
+    return parseWithFallback(raw, IMindDefaultAgentSchema, { agent_id: null }, { endpoint: "GET /api/imind/settings/clip-agent" }).agent_id;
+  }
+
+  async setIMindClipAgent(agentId: string | null): Promise<string | null> {
+    const raw = await this.fetch<unknown>("/api/imind/settings/clip-agent", { method: "PUT", body: JSON.stringify({ agent_id: agentId }) });
+    return parseWithFallback(raw, IMindDefaultAgentSchema, { agent_id: null }, { endpoint: "PUT /api/imind/settings/clip-agent" }).agent_id;
+  }
+
+  async getIMindDeepSeek(): Promise<boolean> {
+    const raw = await this.fetch<unknown>("/api/imind/settings/deepseek");
+    return parseWithFallback(raw, IMindDeepSeekSchema, { configured: false }, { endpoint: "GET /api/imind/settings/deepseek" }).configured;
+  }
+
+  async setIMindDeepSeek(apiKey: string): Promise<boolean> {
+    const raw = await this.fetch<unknown>("/api/imind/settings/deepseek", { method: "PUT", body: JSON.stringify({ api_key: apiKey }) });
+    return parseWithFallback(raw, IMindDeepSeekSchema, { configured: false }, { endpoint: "PUT /api/imind/settings/deepseek" }).configured;
   }
 
   async getIMindDefaultAgent(): Promise<string | null> {

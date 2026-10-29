@@ -1,14 +1,16 @@
 # iMind Flutter App — 方案、进度与接力
 
-最后更新：2026-10-29（P1 与 AI+ 流式语音输入完成，双端验收及交付）
+最后更新：2026-10-29（下一轮五项优化已交付，iOS 27 → Android 15 本地验收通过）
 
 ## 验收口径
+
+**最新五项优化已完成：** iOS 27 → Android 15 各 7 项本地设备 E2E 通过，普通安装包重启恢复通过；真实 DeepSeek 自动标题/摘要和 AI 重命名通过。剪藏抓取回写使用本地受控执行器验收，未执行真实 Agent CLI。完整 Flutter 回归 134 项通过。最新证据及边界见 [OPTIMIZATION_VALIDATION.md](OPTIMIZATION_VALIDATION.md)。
 
 依据 `imind/design/index.html` 的 18 个移动画板继续实现同一套 Flutter iOS/Android 客户端。接口由本地 Docker Multica 提供；复用现有工作区共享知识库；每条笔记为 `./iMind/<标题>.md`，UUID 保存在元数据，有 YAML 头部、唯一的正文和原文分隔符。AI+ 已替换为下文定义的文件专属 Agent 群聊。**iOS 以已完成的 iOS 27 验证为准，不再要求 iOS 16 环境或验收。** 生产环境验证作为补充证据，验证码登录 E2E 使用本地 Docker。
 
 **当前结论：四项 P1 的功能实现已完成，iOS 27 / Android 模拟器的功能、动态验证码登录、原始音频新进程回放及普通安装包重启验证均已通过；Web 输入框与两端 Flutter 输入框的双向实时消息补验也已通过。** 图片与原始 WAV 通过共享 daemon 持久化；本地真实验证码登录、文件群聊、Web 设置和实时消息已有通过记录。用户确认仅使用模拟器，真机拍照与实际听音保留待补验。最新结果与检查边界统一记录在 [P1_VALIDATION.md](P1_VALIDATION.md)，下方保留此前验证记录以区分历史和本轮证据。
 
-AI+ 流式语音输入也已完成：复用现有 record / AsrSession，partial 实时填入输入框，停止等待最终结果后可编辑、手动发送。iOS 27 / Android 模拟器的原生麦克风与真实 ASR 流式输入验收均通过；最新完整 Flutter 回归为 125 项，静态分析及普通双端构建通过。证据见 [VOICE_VALIDATION.md](VOICE_VALIDATION.md)。真机采集与真人语音质量仍未补验。
+AI+ 流式语音输入也已完成：复用现有 record / AsrSession，partial 实时填入输入框，停止等待最终结果后可编辑、手动发送。iOS 27 / Android 模拟器的原生麦克风与真实 ASR 流式输入验收均通过；语音输入该轮完整 Flutter 回归为 125 项，静态分析及普通双端构建通过。证据见 [VOICE_VALIDATION.md](VOICE_VALIDATION.md)。真机采集与真人语音质量仍未补验。
 
 - 接受现有 Markdown 源码编辑、格式工具栏和富文本预览与设计稿的差距，不要求改成所见即所得编辑器；补齐“拍照”和“选图”插入功能。
 - 接受现有文件操作的并发边界，不增加统一写入仲裁、跨进程锁或句柄级文件系统隔离；保留已有 revision 冲突保护与 symlink 检查。
@@ -22,7 +24,7 @@ AI+ 流式语音输入也已完成：复用现有 record / AsrSession，partial 
 5. 读取、更新和删除使用 revision。删除在 daemon 与文件更新相同的路径锁中再次比较 SHA-256。此保证只覆盖同进程、协作写入，不覆盖任意直接磁盘写入；这是已接受的实现边界。
 6. `lib/session.dart`：安全存储单一 `imind_session`，包含 API 根、token、工作区 UUID、共享 machine；绑定 API 根。401/退出立即撤销已登录路由栈并清理凭据。旧无绑定字段不迁移，需要重新登录。
 7. `lib/asr_session.dart`：升级头带 Bearer 与 `X-Workspace-ID`，query 仅带 share_machine；首帧 16 kHz 单声道 pcm_s16le；等 ready 后采集，stop 后继续等待 final/done 才保存；断线、超时显示可恢复错误。暂停后重连保持累计时间和独立句 ID。服务端使用指定 `qwen-audio-3.1-asr-flash-message`，密钥仅服务端环境。
-8. 正则网页剪藏截断中文标点及说明，保留查询参数与平衡括号；仅保存 URL，不抓取网页正文。AI+ 使用真实文件专属群聊，复用已有评论、JEV、任务与 WebSocket；AI 命名仍为 Mock。
+8. 正则网页剪藏截断中文标点及说明，保留查询参数与平衡括号；先保存原文、URL 和提示词占位文件，再在同一文件群聊分发抓取回写。AI+ 复用已有评论、JEV、任务与 WebSocket；AI 命名与录音自动标题摘要共用服务端 DeepSeek。
 
 详细契约见 [CONTRACT.md](CONTRACT.md)。
 
@@ -162,7 +164,7 @@ flutter build ios --simulator --debug
 
 - [ ] 真人讲话经原生麦克风、真实 ASR 到笔记保存回读的完整链路与识别质量。
 - [ ] 小时级录音，以及锁屏、切后台、来电、断网/重连和进程终止后的行为与恢复；现有约 3 分钟测试不覆盖这些场景。
-- [x] AI+ 语音输入：复用录音页 record / AsrSession 与实时 ASR，partial 流式填入输入框，停止排空 final 后可编辑并手动发送；iOS 27 / Android 原生麦克风与真实 ASR 流式输入验收通过，见 [VOICE_VALIDATION.md](VOICE_VALIDATION.md)。AI 命名仍保持 Mock。
+- [x] AI+ 语音输入：复用录音页 record / AsrSession 与实时 ASR，partial 流式填入输入框，停止排空 final 后可编辑并手动发送；iOS 27 / Android 原生麦克风与真实 ASR 流式输入验收通过，见 [VOICE_VALIDATION.md](VOICE_VALIDATION.md)。AI 命名已由下一轮优化替换为服务端 DeepSeek，见 [OPTIMIZATION_VALIDATION.md](OPTIMIZATION_VALIDATION.md)。
 
 ### 后续发布准备
 
@@ -171,16 +173,26 @@ flutter build ios --simulator --debug
 
 以上发布项按正式分发需求推进，不替代当前四项必做功能与验证。
 
+## 下一轮功能优化待办
+
+2026-10-29 记录。下列五项代码已实现，最终本地设备验收与真实上游调用边界见 [OPTIMIZATION_VALIDATION.md](OPTIMIZATION_VALIDATION.md)。它们替换此前「AI 命名保持 Mock」和「网页剪藏只保存 URL、不抓取正文」这两条已接受边界；导出与回收站恢复仍然不做。
+
+- [x] **输入框底部安全区。** 贴底输入框此前只处理键盘 `viewInsets`，或再加一段固定间距，收起键盘后仍贴着 Home 指示条。笔记编辑、录音、AI+ 输入和剪藏弹层都要同时考虑底部安全区：键盘弹起用 `viewInsets.bottom`，键盘收起用 `viewPadding.bottom`，取较大值，不能只用固定 24。
+- [x] **AI 消息上的查看与终止。** 对齐 Web IM，不要把终止放在聊天顶部。Web 的进行中回复在 `packages/views/im/chat-thread.tsx` 的 `ThinkingBubble` 上提供「查看」（`thread.view_progress`）；手机端经 `onOpenProgress` 进入 `packages/views/im/chat-progress-view.tsx` 的二级页，展示该次运行的执行过程，返回用页面自己的返回。终止调用现有 `POST /api/issues/{id}/tasks/{taskId}/cancel`，按钮放在对应 Agent 消息上，并在执行详情页保留；每个按钮只取消该消息绑定的运行。Flutter 此前把活动运行和红色终止放在消息列表上方的横幅（`imind/app/lib/ai_chat.dart` 的 `_runRow`），本轮已改为对应消息上的操作。提交中进入「正在终止」，失败可重试，不把本地加载态当成已取消。
+- [x] **语音笔记自动标题，并允许手改。** 录音保存后由服务端立刻调用 DeepSeek 生成标题和摘要。标题仍是文件名的唯一来源，用户可以随后手动修改，重名规则不变。DeepSeek API Key 只在管理后台配置，不进客户端，不进仓库。请求 `https://api.deepseek.com`，使用快速非思考模式：`thinking.type = disabled`，`reasoning.effort = low`。未配置 Key 时保留可恢复提示，不伪造标题。
+- [x] **AI 重命名走同一条 DeepSeek 调用。** 把该 md 的已保存内容读出，交给 DeepSeek 生成文件名，仍用上面的非思考参数和后台 Key。生成结果按现有重命名契约落盘；用户可以再改。失败保留原文件名并给出可重试反馈。
+- [x] **网页剪藏改为占位文件加同一条 AI+ 群聊。** 流程是：先创建文件，元数据标记类型为剪藏，保存用户原始粘贴文本和正则提取出的链接；标题先用默认名，例如「生成中的剪藏1」。文件创建成功后，打开这个文件自己的 AI+ 群聊，与用户手动点开的是同一个会话，不另建一套聊天。把「iMind 默认处理智能体」和「iMind 剪藏智能体」拉进群；剪藏智能体与默认智能体一样在管理后台指定，未指定时由 JEV 分发一个 Agent 处理。用户除链接外可以附上一段可选提示词，把链接和提示词合并后发给模型，由模型剪藏并回写这个占位文件。保存失败时不建群；回写失败保留占位文件和可重试入口。
+
 ## 已接受的边界与非目标
 
 - 不再要求 iOS 16 验收，以 iOS 27 验证为准。
 - 接受现有编辑器与设计稿的差距；本次仅补拍照和选图插入能力。
 - 不做并发文件操作强化。保留同 daemon 路径锁、revision 比较和现有 symlink 检查；外部直接写盘或第二 daemon 不协作时仍有并发窗口，Lstat 与后续操作间仍有 symlink 替换窗口。这些限制不再列为开发阻塞。
-- 导出、回收站恢复当前不可用；AI 命名保持 Mock；AI+ 对话升级为上述文件专属 Agent 群聊。网页剪藏仅保存 URL，不抓取网页正文。
+- 导出、回收站恢复当前不可用。AI 命名 Mock 和「剪藏只存 URL」不再是接受边界，改由上一节的待办替换。AI+ 对话保持文件专属 Agent 群聊。
 - 原始录音保存与回放已实现；媒体授权和存储以 CONTRACT 的图片与原始音频章节为准。
 
 ## 接力规则
 
 每次接力先看本文件和 CONTRACT，再检查实际容器、授权、runtime 与构建结果。验证状态以对应环境的最新日志为准：早期构建失败、模拟器 ANR、ASR 缺配置的记录仅作为历史证据，不覆盖后续成功结果。
 
-本轮 P1 的实现与验收记录见 P1_VALIDATION。后续补验真机拍照与实际听音，并按“其他待补验证”和发布准备推进。每次记录代码变更、实际执行的检查、设备与环境、结果及剩余限制；没有执行的测试保持未完成，不因已有预置会话用例通过而勾选验证码登录，也不因转写保存或禁用播放按钮测试通过而勾选音频保存与回放。无需恢复 iOS 16 验收、重做编辑器或扩展并发文件保护。
+本轮 P1 的实现与验收记录见 P1_VALIDATION。「下一轮功能优化待办」的实现和本地验收见 OPTIMIZATION_VALIDATION；真实 DeepSeek 成功调用与逐端结果以该报告为准，真机拍照与实际听音保留补验。每次记录代码变更、实际执行的检查、设备与环境、结果及剩余限制；没有执行的测试保持未完成，不因已有预置会话用例通过而勾选验证码登录，也不因转写保存或禁用播放按钮测试通过而勾选音频保存与回放。无需恢复 iOS 16 验收、重做编辑器或扩展并发文件保护。

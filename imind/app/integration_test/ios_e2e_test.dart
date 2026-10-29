@@ -195,7 +195,7 @@ void main() {
     await tester.pumpAndSettle();
     final clipUrl =
         'https://example.com/ios-e2e?run=${DateTime.now().millisecondsSinceEpoch}';
-    await tester.enterText(find.byType(TextField).last, '收藏这个链接：$clipUrl。');
+    await tester.enterText(find.byType(TextField).first, '收藏这个链接：$clipUrl。');
     await tester.tap(find.widgetWithText(FilledButton, '剪藏'));
     await tester.pumpAndSettle();
     final clips = (await api.notes(machine))
@@ -203,7 +203,11 @@ void main() {
         .toList();
     expect(clips, hasLength(1));
     expect(clips.single['type'], 'clip');
-    debugPrint('E2E_CHECK: delete and clip persisted');
+    await waitFor(find.byTooltip('发送'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('关闭'));
+    await tester.pumpAndSettle();
+    debugPrint('E2E_CHECK: delete and clip placeholder persisted in file chat');
     final recordingTitle =
         'Native mic ${DateTime.now().microsecondsSinceEpoch}';
     final beforeRecordIds = (await api.notes(machine))
@@ -245,13 +249,16 @@ void main() {
     expect(find.byTooltip('菜单'), findsNothing);
     expect(transport.attempts, 1);
     await tester.tap(find.widgetWithText(PillButton, '保存'));
+    if (!const bool.fromEnvironment('E2E_NAMING_CONFIGURED')) {
+      await waitFor(find.text('保留原标题'));
+      await tester.tap(find.text('保留原标题'));
+    }
     await waitFor(find.byTooltip('菜单'));
     expect(transport.attempts, 2);
     final newRecordings = (await api.notes(machine))
         .where(
           (note) =>
               note['type'] == 'recording' &&
-              note['title'] == recordingTitle &&
               !beforeRecordIds.contains(note['id']),
         )
         .toList();
@@ -261,6 +268,12 @@ void main() {
       newRecordings.single['id'] as String,
     );
     expect(recording['content'], contains('Native recording companion'));
+    if (const bool.fromEnvironment('E2E_NAMING_CONFIGURED')) {
+      expect(recording['summary'], isNotEmpty);
+      debugPrint(
+        'E2E_CHECK: saved native recording automatically named with real DeepSeek summary',
+      );
+    }
     expect(recording['audio']['file'], 'audio.wav');
     final bytes = await api.getMedia(
       machine: machine,

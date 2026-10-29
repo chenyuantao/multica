@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import urllib.parse
+import urllib.request
 import wave
 
 APP = Path(__file__).resolve().parents[1]
@@ -44,6 +45,16 @@ else:
     if base.scheme != 'http' or base.hostname not in ('localhost', '127.0.0.1'):
         p.error('Remote profiles require explicit --production authorization')
     api_base = f'http://10.0.2.2:{base.port or 80}{base.path.rstrip("/")}'
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *_):
+        return None
+
+opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
+request = urllib.request.Request(config['server_url'].rstrip('/') + '/api/imind/settings/deepseek',
+    headers={'Authorization':'Bearer '+config['token'], 'X-Workspace-ID':config['workspace_id']})
+with opener.open(request, timeout=15) as response:
+    naming_configured = json.load(response)['configured'] is True
+
 env = os.environ.copy()
 for key in ('HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'http_proxy', 'https_proxy', 'all_proxy'):
     env.pop(key, None)
@@ -65,6 +76,7 @@ with tempfile.TemporaryDirectory(prefix='imind-android-e2e-') as directory:
     defines = temp / 'defines.json'
     defines.write_text(json.dumps({'E2E_TOKEN': config['token'], 'E2E_WORKSPACE': config['workspace_id'],
         'E2E_MACHINE': args.machine, 'API_BASE': api_base,
+        'E2E_NAMING_CONFIGURED': 'true' if naming_configured else 'false',
         'E2E_PCM': base64.b64encode(pcm).decode()}))
     defines.chmod(0o600)
     if args.mirror:

@@ -118,6 +118,9 @@ func (h *Handler) EnsureIMindChat(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if note.Type == "clip" {
+		h.joinIMindClipConfiguredAgents(r.Context(), issue, parseUUID(userID))
+	}
 	h.subscribeGroupChatMember(r.Context(), issueID, service.IssueMemberRef{Type: "member", ID: parseUUID(userID)})
 	members, err := h.Queries.ListIssueMembers(r.Context(), db.ListIssueMembersParams{IssueID: issueID, WorkspaceID: member.WorkspaceID})
 	if err != nil {

@@ -8,6 +8,8 @@ import 'package:uuid/uuid.dart';
 import 'package:web_socket_channel/io.dart';
 
 import 'api.dart';
+import 'input_insets.dart';
+import 'run_progress.dart';
 import 'voice_input.dart';
 
 import 'package:record/record.dart';
@@ -23,6 +25,7 @@ Future<void> showNoteAiChat(
   required MulticaApi api,
   required String machine,
   required Map<String, dynamic> note,
+  String? initialMessage,
 }) => showModalBottomSheet<void>(
   context: context,
   isScrollControlled: true,
@@ -30,7 +33,12 @@ Future<void> showNoteAiChat(
   shape: const RoundedRectangleBorder(
     borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
   ),
-  builder: (_) => NoteAiChatSheet(api: api, machine: machine, note: note),
+  builder: (_) => NoteAiChatSheet(
+    api: api,
+    machine: machine,
+    note: note,
+    initialMessage: initialMessage,
+  ),
 );
 
 class NoteAiChatSheet extends StatefulWidget {
@@ -39,12 +47,14 @@ class NoteAiChatSheet extends StatefulWidget {
     required this.api,
     required this.machine,
     required this.note,
+    this.initialMessage,
     this.voiceRecorder,
     this.voiceSessionFactory,
   });
   final MulticaApi api;
   final String machine;
   final Map<String, dynamic> note;
+  final String? initialMessage;
   final AudioRecorder? voiceRecorder;
   final VoiceSessionFactory? voiceSessionFactory;
 
@@ -77,6 +87,8 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
   bool _connecting = false;
   final Set<String> _stoppingRuns = {};
   List<Map<String, dynamic>> _runs = [];
+  final _agentNames = <String, String>{};
+  bool _agentNamesRequested = false;
   String? _runError;
   IOWebSocketChannel? _channel;
   StreamSubscription<dynamic>? _subscription;
@@ -86,6 +98,7 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
   final _terminalStatuses = <String, String>{};
   int _retryCount = 0;
   bool _disposed = false;
+  bool _initialMessageSent = false;
 
   @override
   void initState() {
@@ -130,9 +143,17 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
       if (_disposed) return;
       _issueId = chat['issue_id'] as String;
       _userId = (await widget.api.getMe())['id'] as String;
+      unawaited(_loadAgentNames());
       _connect();
       unawaited(_loadRuns());
       await _loadLatest();
+      if (!_disposed &&
+          !_initialMessageSent &&
+          (widget.initialMessage?.trim().isNotEmpty ?? false)) {
+        _initialMessageSent = true;
+        _input.text = widget.initialMessage!.trim();
+        await _send();
+      }
     } catch (error) {
       if (!_disposed) setState(() => _error = '$error');
     } finally {
@@ -247,6 +268,36 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
     }
   }
 
+  String _runName(Map<String, dynamic> run) {
+    final cached = _agentNames[run['agent_id']];
+    if (cached != null) return cached;
+    final name = run['agent_name'];
+    return name is String && name.trim().isNotEmpty ? name : 'Agent';
+  }
+
+  Future<void> _loadAgentNames() async {
+    if (_agentNamesRequested) return;
+    _agentNamesRequested = true;
+    try {
+      final agents = await widget.api.workspaceAgents();
+      if (_disposed) return;
+      setState(() {
+        for (final agent in agents) {
+          final id = agent['id'];
+          final name = agent['name'];
+          if (id is String && name is String && name.trim().isNotEmpty) {
+            _agentNames[id] = name;
+          }
+        }
+        _runs = [
+          for (final run in _runs) {...run, 'agent_name': _runName(run)},
+        ];
+      });
+    } catch (_) {
+      // Names are optional enrichment; chat and run controls remain available.
+    }
+  }
+
   Future<void> _loadRuns() async {
     final issueId = _issueId;
     if (issueId == null) return;
@@ -256,7 +307,11 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
         setState(() {
           _runs = [
             for (final run in runs)
-              {...run, 'status': _terminalStatuses[run['id']] ?? run['status']},
+              {
+                ...run,
+                'status': _terminalStatuses[run['id']] ?? run['status'],
+                'agent_name': _runName(run),
+              },
           ];
           _stoppingRuns.removeWhere(
             (id) => !_runs.any((run) => run['id'] == id && _active(run)),
@@ -535,17 +590,14 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
     'deferred',
     'running',
   }.contains(run['status']);
-  List<Map<String, dynamic>> get _activeRuns => _runs.where(_active).toList();
-  List<Map<String, dynamic>> get _failedRuns =>
-      _runs.where((run) => run['status'] == 'failed').toList();
   @override
   Widget build(BuildContext context) {
     final noteTitle = '${widget.note['title'] ?? '未命名'}';
     final media = MediaQuery.of(context);
     final availableHeight =
-        media.size.height - media.viewInsets.bottom - media.padding.top;
+        media.size.height - inputBottomInset(context) - media.padding.top;
     return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      padding: EdgeInsets.only(bottom: inputBottomInset(context)),
       child: SizedBox(
         height: min(media.size.height * .9, availableHeight),
         child: Column(
@@ -614,23 +666,6 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
                   action: _loadRuns,
                   actionLabel: '重试',
                 ),
-              if (_activeRuns.isNotEmpty || _failedRuns.isNotEmpty)
-                Container(
-                  width: double.infinity,
-                  margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                  padding: const EdgeInsets.fromLTRB(12, 4, 8, 4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFFF0F0),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    children: [
-                      for (final run in _activeRuns) _runRow(run, active: true),
-                      for (final run in _failedRuns)
-                        _runRow(run, active: false),
-                    ],
-                  ),
-                ),
               Expanded(
                 child: NotificationListener<ScrollNotification>(
                   onNotification: (event) {
@@ -655,7 +690,7 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
                           padding: EdgeInsets.all(24),
                           child: Center(child: Text('围绕这份文件开始讨论')),
                         ),
-                      for (final message in _messages) _messageBubble(message),
+                      ..._conversation(),
                       for (final pending in _pending) _pendingBubble(pending),
                     ],
                   ),
@@ -773,6 +808,11 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
     final mine =
         message['author_type'] == 'member' && message['author_id'] == _userId;
     final content = '${message['content'] ?? ''}';
+    final sourceRun = message['author_type'] == 'agent'
+        ? _runs
+              .where((run) => run['id'] == message['source_task_id'])
+              .firstOrNull
+        : null;
     return Align(
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
@@ -792,6 +832,7 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _renderContent(content, mine ? Colors.white : _aiInk),
+            if (sourceRun != null) _runControls(sourceRun),
             if (mine && _dispatchStates[message['id']] == 'unavailable')
               TextButton.icon(
                 onPressed: _retryingComments.contains(message['id'])
@@ -816,37 +857,105 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
     );
   }
 
-  Widget _runRow(Map<String, dynamic> run, {required bool active}) {
-    final taskId = '${run['id'] ?? run['task_id'] ?? ''}';
-    final status = '${run['status'] ?? 'unknown'}';
-    final agent = '${run['agent_name'] ?? run['agent_id'] ?? 'Agent'}';
-    final stopping = _stoppingRuns.contains(taskId);
-    final retryable = run['trigger_comment_id'] is String;
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            active
-                ? '$agent · ${stopping ? '正在终止' : _statusLabel(status)}'
-                : '$agent · 运行失败',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(color: active ? _aiInk : _aiRed, fontSize: 13),
-          ),
+  Iterable<Widget> _conversation() sync* {
+    final linked = _messages
+        .where((message) => message['author_type'] == 'agent')
+        .map((message) => message['source_task_id'])
+        .whereType<String>()
+        .toSet();
+    final placeholders = _runs
+        .where(
+          (run) =>
+              !linked.contains(run['id']) &&
+              (_active(run) || run['status'] == 'failed'),
+        )
+        .toList();
+    for (final message in _messages) {
+      yield _messageBubble(message);
+      for (final run in placeholders.where(
+        (run) => run['trigger_comment_id'] == message['id'],
+      )) {
+        yield _runBubble(run);
+      }
+    }
+    final knownMessages = _messages.map((message) => message['id']).toSet();
+    for (final run in placeholders.where(
+      (run) => !knownMessages.contains(run['trigger_comment_id']),
+    )) {
+      yield _runBubble(run);
+    }
+  }
+
+  Future<void> _openProgress(Map<String, dynamic> run) async {
+    final issueId = _issueId;
+    if (issueId == null) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => NoteRunProgressPage(
+          api: widget.api,
+          issueId: issueId,
+          initialRun: run,
         ),
-        if (active)
+      ),
+    );
+    if (!_disposed) await _loadRuns();
+  }
+
+  Widget _runBubble(Map<String, dynamic> run) => Align(
+    alignment: Alignment.centerLeft,
+    child: Container(
+      key: ValueKey('run-message-${run['id']}'),
+      constraints: const BoxConstraints(maxWidth: 320),
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.fromLTRB(14, 10, 8, 4),
+      decoration: BoxDecoration(
+        color: _aiBg,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${run['agent_name'] ?? 'Agent'}',
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          Text(
+            run['status'] == 'failed'
+                ? '运行失败'
+                : _statusLabel('${run['status']}'),
+          ),
+          _runControls(run),
+        ],
+      ),
+    ),
+  );
+
+  Widget _runControls(Map<String, dynamic> run) {
+    final taskId = '${run['id'] ?? run['task_id'] ?? ''}';
+    final agent = '${run['agent_name'] ?? 'Agent'}';
+    final stopping = _stoppingRuns.contains(taskId);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        TextButton.icon(
+          onPressed: () => _openProgress(run),
+          icon: const Icon(Icons.info_outline, size: 16),
+          label: const Text('查看'),
+        ),
+        if (_active(run))
           IconButton(
-            tooltip: '终止 $agent 的运行',
+            tooltip: stopping ? '正在终止' : '终止 $agent 的运行',
             onPressed: stopping ? null : () => _cancel(run),
             icon: Icon(
               stopping ? Icons.hourglass_top : Icons.stop_circle,
               color: _aiRed,
             ),
           )
-        else
+        else if (run['status'] == 'failed' &&
+            run['trigger_comment_id'] is String)
           IconButton(
-            tooltip: retryable ? '重试 $agent 的运行' : '此运行没有可重试的消息',
-            onPressed: retryable ? () => _retryRun(run) : null,
+            tooltip: '重试 $agent 的运行',
+            onPressed: () => _retryRun(run),
             icon: const Icon(Icons.refresh, color: _aiRed),
           ),
       ],

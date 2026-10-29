@@ -795,7 +795,14 @@
     "prefix_new_label": "새 접두사",
     "prefix_rule": "영문자와 숫자만, 최대 10자까지 사용할 수 있습니다.",
     "prefix_confirm_action": "{{prefix}}(으)로 변경",
-    "prefix_external_warning": "PR 제목, 브랜치 이름, 문서, 채팅에 있는 이전 키({{oldExample}} 등)는 업데이트되지 않으므로 해당 링크가 작동하지 않습니다."
+    "prefix_external_warning": "PR 제목, 브랜치 이름, 문서, 채팅에 있는 이전 키({{oldExample}} 등)는 업데이트되지 않으므로 해당 링크가 작동하지 않습니다.",
+    "imind_clip_agent_label": "클리핑 에이전트",
+    "imind_deepseek_help": "녹음 제목, 요약 및 AI 이름 변경에 사용됩니다. 노트가 DeepSeek로 전송됩니다.",
+    "imind_key_configured": "설정됨",
+    "imind_key_missing": "설정되지 않음",
+    "imind_key_save": "키 저장",
+    "imind_key_clear": "키 삭제",
+    "imind_deepseek_label": "DeepSeek API Key"
   },
   "delete_workspace_dialog": {
     "title": "워크스페이스 삭제",

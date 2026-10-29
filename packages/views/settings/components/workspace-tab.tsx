@@ -59,6 +59,8 @@ import {
 } from "./settings-layout";
 import { useAutoSave } from "./use-auto-save";
 
+import { IMindAISettings } from "./imind-ai-settings";
+
 interface WorkspaceDetailsDraft {
   name: string;
   description: string;
@@ -519,6 +521,7 @@ export function WorkspaceTab() {
               </SelectContent>
             </Select>
           </SettingsRow>
+          <IMindAISettings key={wsId} wsId={wsId!} canManage={canManageWorkspace} agents={imindAgents} />
         </SettingsCard>
       </SettingsSection>
 

@@ -115,3 +115,27 @@ func TestParseRejectsMissingOrUnknownStructure(t *testing.T) {
 		t.Fatalf("version error = %v", err)
 	}
 }
+
+func TestGeneratedSummaryAndClipMetadataRoundTrip(t *testing.T) {
+	note, err := New("clip", "生成中的剪藏", time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	note.Summary = "网页摘要"
+	note.Clip = &ClipMetadata{OriginalText: "原始链接 https://example.com", Prompt: "总结观点"}
+	raw, err := note.Markdown()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := Parse(raw, "生成中的剪藏")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Summary != note.Summary || got.Clip == nil || *got.Clip != *note.Clip {
+		t.Fatalf("metadata lost: %+v", got)
+	}
+	note.Type = "note"
+	if _, err := note.Markdown(); err == nil {
+		t.Fatal("accepted clip metadata on ordinary note")
+	}
+}

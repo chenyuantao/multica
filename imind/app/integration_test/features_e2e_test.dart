@@ -36,6 +36,15 @@ class Flow {
     await tester.pumpAndSettle();
   }
 
+  Future<void> gone(Finder finder) async {
+    final deadline = DateTime.now().add(const Duration(seconds: 30));
+    while (finder.evaluate().isNotEmpty && DateTime.now().isBefore(deadline)) {
+      await tester.pump(const Duration(milliseconds: 150));
+    }
+    expect(finder, findsNothing);
+    await tester.pumpAndSettle();
+  }
+
   Future<void> tap(Finder finder) async {
     await wait(finder);
     await tester.ensureVisible(finder);
@@ -86,6 +95,7 @@ void main() {
       await f.text(find.byType(TextField).last, tag);
       await f.tap(find.widgetWithText(TextButton, '添加'));
       await f.tap(find.widgetWithText(TextButton, '保存'));
+      await f.gone(find.widgetWithText(TextButton, '保存'));
       var note = (await f.api.notes(Flow.machine))
           .singleWhere((n) => n['title'] == title);
       var saved = await f.api.getNote(Flow.machine, note['id'] as String);
@@ -128,22 +138,38 @@ void main() {
       expect(find.textContaining(renamed), findsWidgets);
       await f.tap(find.widgetWithText(TextButton, '关闭'));
       await f.tap(find.text('AI 命名'));
-      final mockTitle = '（Mock）$renamed';
-      await f.wait(find.text(mockTitle));
-      await tester.longPress(find.text(mockTitle));
-      await tester.pumpAndSettle();
+      await f.gone(find.text('正在命名'));
+      saved = await f.api.getNote(Flow.machine, note['id'] as String);
+      final aiTitle = '${saved['title']}';
+      expect(saved['content'], '**Android body**');
+      if (const bool.fromEnvironment('E2E_NAMING_CONFIGURED')) {
+        expect(saved['summary'], isNotEmpty);
+        await f.wait(find.text(aiTitle));
+        await tester.longPress(find.text(aiTitle));
+        await tester.pumpAndSettle();
+        debugPrint(
+          'E2E_FEATURES: real DeepSeek UI rename and persisted summary passed',
+        );
+      } else {
+        await f.wait(find.textContaining('DeepSeek'));
+        await tester.drag(find.byType(SnackBar), const Offset(0, 200));
+        await tester.pumpAndSettle();
+        expect(aiTitle, renamed);
+      }
       await f.tap(find.text('标记'));
       await f.text(find.byType(TextField).last, '$tag-batch');
       await f.tap(find.text('使用新标签'));
+      await f.gone(find.text('导出'));
       saved = await f.api.getNote(Flow.machine, note['id'] as String);
       expect(saved['tags'], contains('$tag-batch'));
       expect(saved['content'], '**Android body**');
-      await f.wait(find.text(mockTitle));
-      await tester.longPress(find.text(mockTitle));
+      await f.wait(find.text(aiTitle));
+      await tester.longPress(find.text(aiTitle));
       await tester.pumpAndSettle();
       await f.tap(find.text('重命名'));
       await f.text(find.byType(TextField).last, renamed);
       await f.tap(find.widgetWithText(TextButton, '完成'));
+      await f.gone(find.text('导出'));
       await f.wait(find.text(renamed));
       await tester.longPress(find.text(renamed));
       await tester.pumpAndSettle();
@@ -156,6 +182,7 @@ void main() {
       );
       await f.tap(find.text('删除'));
       await f.tap(find.widgetWithText(TextButton, '删除'));
+      await f.gone(find.text('导出'));
       expect(
         (await f.api.notes(Flow.machine)).any((n) => n['id'] == note['id']),
         isFalse,
@@ -167,7 +194,7 @@ void main() {
       await f.menu('全部');
       await f.tap(find.byTooltip('更多'));
       await f.tap(find.text('网页剪藏').last);
-      await f.text(find.byType(TextField).last, 'invalid text');
+      await f.text(find.byType(TextField).first, 'invalid text');
       await f.tap(find.widgetWithText(FilledButton, '剪藏'));
       expect(find.text('没有识别到链接'), findsOneWidget);
       await tester.binding.handlePopRoute();
@@ -212,7 +239,7 @@ void main() {
       await f.wait(find.text('Original spoken words'));
       expect(find.text('00:01'), findsOneWidget);
       final play = tester.widget<PillButton>(
-        find.widgetWithText(PillButton, '播放'),
+        find.widgetWithText(PillButton, '无原始录音'),
       );
       expect(play.onPressed, isNull);
       await f.tap(find.text('Original spoken words'));
@@ -233,6 +260,7 @@ void main() {
       );
       await f.text(find.byType(TextField).last, 'Updated recording note');
       await f.tap(find.widgetWithText(TextButton, '保存'));
+      await f.gone(find.widgetWithText(TextButton, '保存'));
       final saved = await f.api.getNote(Flow.machine, note['id'] as String);
       expect(saved['content'], 'Updated recording note');
       expect(saved['transcript'], contains('Updated spoken words'));

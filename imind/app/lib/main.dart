@@ -15,6 +15,7 @@ import 'session.dart';
 import 'transcript.dart';
 import 'media.dart';
 import 'url_extract.dart';
+import 'input_insets.dart';
 
 const _bg = Color(0xFFF2F2F6);
 const _ink = Color(0xFF1C1C1E);
@@ -233,6 +234,7 @@ class _HomePageState extends State<HomePage> {
   final _scaffold = GlobalKey<ScaffoldState>();
   MulticaApi get _api => widget.session.api;
   var _reloading = false;
+  var _naming = false;
   List<Map<String, dynamic>> _notes = const [];
   String? _machine;
   String? _error;
@@ -392,8 +394,9 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _clip() async {
     final controller = TextEditingController();
+    final prompt = TextEditingController();
     var error = '';
-    final url = await showModalBottomSheet<String>(
+    final clip = await showModalBottomSheet<Map<String, String>>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.white,
@@ -408,7 +411,7 @@ class _HomePageState extends State<HomePage> {
                 left: 20,
                 right: 20,
                 top: 8,
-                bottom: 24 + MediaQuery.viewInsetsOf(context).bottom,
+                bottom: 16 + inputBottomInset(context),
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -442,7 +445,7 @@ class _HomePageState extends State<HomePage> {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    '粘贴链接，只保存识别出的网址，不抓取网页。',
+                    '智能体会在文件群聊中处理链接并回写笔记。',
                     style: TextStyle(color: _sub, height: 1.4),
                   ),
                   const SizedBox(height: 16),
@@ -452,6 +455,12 @@ class _HomePageState extends State<HomePage> {
                       hintText: '粘贴包含链接的文字',
                       prefixIcon: Icon(Icons.link),
                     ),
+                  ),
+                  TextField(
+                    controller: prompt,
+                    decoration: const InputDecoration(labelText: '提示词（可选）'),
+                    minLines: 1,
+                    maxLines: 3,
                   ),
                   if (error.isNotEmpty)
                     Padding(
@@ -475,7 +484,11 @@ class _HomePageState extends State<HomePage> {
                           setSheet(() => error = '没有识别到链接');
                           return;
                         }
-                        Navigator.pop(context, found);
+                        Navigator.pop(context, {
+                          'url': found,
+                          'original': controller.text,
+                          'prompt': prompt.text.trim(),
+                        });
                       },
                       child: const Text('剪藏'),
                     ),
@@ -488,16 +501,31 @@ class _HomePageState extends State<HomePage> {
       },
     );
     Future<void>.delayed(const Duration(milliseconds: 350), controller.dispose);
-    if (url == null || _machine == null) return;
+    Future<void>.delayed(const Duration(milliseconds: 350), prompt.dispose);
+    final machine = _machine;
+    if (clip == null || machine == null) return;
     try {
-      await _api.createNote({
-        'share_machine': _machine,
+      final note = await _api.createNote({
+        'share_machine': machine,
         'type': 'clip',
-        'title': '网页剪藏',
-        'source_url': url,
-        'content': '# 网页剪藏\n\n$url',
+        'title': '生成中的剪藏1',
+        'source_url': clip['url'],
+        'content': clip['original'],
+        'clip': {'original_text': clip['original'], 'prompt': clip['prompt']},
       });
-      if (mounted) _reload();
+      if (!mounted) return;
+      await _reload();
+      if (!mounted) return;
+      await showNoteAiChat(
+        context,
+        api: _api,
+        machine: machine,
+        note: note,
+        initialMessage:
+            '请剪藏以下网页并将结果回写到本群对应的占位文件：\n${clip['url']}'
+            '${clip['prompt']!.isEmpty ? '' : '\n要求：${clip['prompt']}'}',
+      );
+      await _reload();
     } on ApiException catch (error) {
       _actionError(error);
     }
@@ -512,15 +540,17 @@ class _HomePageState extends State<HomePage> {
     final machine = _machine;
     if (machine == null) return;
     try {
-      for (final note in _chosen) {
+      for (final selected in _chosen) {
+        final note = await _api.getNote(machine, '${selected['id']}');
         final next = patch(note);
         await _api.updateNote('${note['id']}', {
           'share_machine': machine,
-          'revision': note['revision'],
+          'revision': selected['revision'],
           'title': next['title'] ?? note['title'],
           'tags': next['tags'] ?? noteTags(note),
           'content': next['content'] ?? note['content'] ?? '',
           'transcript': next['transcript'] ?? note['transcript'] ?? '',
+          'audio': note['audio'],
         });
       }
     } on ApiException catch (error) {
@@ -596,12 +626,26 @@ class _HomePageState extends State<HomePage> {
     await _patchChosen((_) => {'title': title});
   }
 
-  Future<void> _mockName() async {
-    await _patchChosen((note) {
-      final title = '${note['title'] ?? ''}'.trim();
-      if (title.startsWith('（Mock）')) return {'title': title};
-      return {'title': title.isEmpty ? '（Mock）未命名' : '（Mock）$title'};
-    });
+  Future<void> _aiNameChosen() async {
+    final machine = _machine;
+    if (machine == null || _naming) return;
+    setState(() => _naming = true);
+    try {
+      for (final note in _chosen) {
+        await _api.nameNote(machine, '${note['id']}', '${note['revision']}');
+      }
+      if (mounted) {
+        setState(() {
+          _selecting = false;
+          _selected.clear();
+        });
+      }
+    } on ApiException catch (error) {
+      _actionError(error);
+    } finally {
+      if (mounted) setState(() => _naming = false);
+    }
+    await _reload();
   }
 
   Future<void> _deleteChosen() async {
@@ -930,9 +974,9 @@ class _HomePageState extends State<HomePage> {
               _bar('标记', Icons.tag, _selected.isEmpty ? null : _tagChosen),
               _bar('导出', Icons.ios_share, null),
               _bar(
-                'AI 命名',
+                _naming ? '正在命名' : 'AI 命名',
                 Icons.auto_fix_high,
-                _selected.isEmpty ? null : _mockName,
+                _selected.isEmpty || _naming ? null : _aiNameChosen,
               ),
               _bar(
                 '重命名',
@@ -1530,6 +1574,7 @@ class _NoteEditorState extends State<NoteEditor> {
         _leave();
       },
       child: Scaffold(
+        resizeToAvoidBottomInset: false,
         backgroundColor: Colors.white,
         appBar: AppBar(
           backgroundColor: Colors.white,
@@ -1579,7 +1624,12 @@ class _NoteEditorState extends State<NoteEditor> {
         body: Stack(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              padding: EdgeInsets.fromLTRB(
+                16,
+                0,
+                16,
+                16 + inputBottomInset(context),
+              ),
               child: Column(
                 children: [
                   TextField(
@@ -1980,6 +2030,48 @@ class _RecordingDetailState extends State<RecordingDetail> {
     }
   }
 
+  Future<void> _renameRecording() async {
+    final controller = TextEditingController(text: '${_note['title']}');
+    final title = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('重命名'),
+        content: TextField(controller: controller, autofocus: true),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('完成'),
+          ),
+        ],
+      ),
+    );
+    Future<void>.delayed(const Duration(milliseconds: 350), controller.dispose);
+    if (title == null || title.isEmpty || !mounted) return;
+    setState(() => _saving = true);
+    try {
+      final updated = await widget.api.updateNote('${_note['id']}', {
+        'share_machine': widget.machine,
+        'revision': _note['revision'],
+        'title': title,
+        'tags': noteTags(_note),
+        'content': _note['content'],
+        'transcript': _note['transcript'],
+        'audio': _note['audio'],
+      });
+      if (mounted) {
+        setState(() {
+          _note = updated;
+          _changed = true;
+          _error = null;
+        });
+      }
+    } catch (error) {
+      if (mounted) setState(() => _error = '$error');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
   Future<void> _ai() async {
     if (_editing) {
       await _save();
@@ -2008,8 +2100,10 @@ class _RecordingDetailState extends State<RecordingDetail> {
         _leave();
       },
       child: Scaffold(
+        resizeToAvoidBottomInset: false,
         backgroundColor: Colors.white,
         body: SafeArea(
+          minimum: EdgeInsets.only(bottom: inputBottomInset(context)),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -2034,6 +2128,12 @@ class _RecordingDetailState extends State<RecordingDetail> {
                           child: const Icon(Icons.arrow_back, size: 22),
                         ),
                       const Spacer(),
+                      if (!_editing)
+                        IconButton(
+                          tooltip: '重命名',
+                          onPressed: _saving ? null : _renameRecording,
+                          icon: const Icon(Icons.edit_outlined),
+                        ),
                       if (_editing) ...[
                         IconButton(
                           tooltip: '撤销',
@@ -2075,6 +2175,14 @@ class _RecordingDetailState extends State<RecordingDetail> {
                   ),
                 ),
               ),
+              if ('${_note['summary'] ?? ''}'.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                  child: Text(
+                    '${_note['summary']}',
+                    style: const TextStyle(color: _sub),
+                  ),
+                ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Row(
@@ -2377,6 +2485,7 @@ class _RecordPageState extends State<RecordPage> {
   final _pcm = BytesBuilder(copy: false);
   final _pendingImages = <PickedImage>[];
   Map<String, dynamic>? _savedNote;
+  bool _namingFailed = false;
   Uint8List? _pendingWav;
   final _noteTitle = TextEditingController();
   final _noteBody = TextEditingController();
@@ -2683,11 +2792,47 @@ class _RecordPageState extends State<RecordPage> {
         _noteBody.value = _noteBody.value.copyWith(text: updatedContent);
         _pendingImages.clear();
       }
+      try {
+        _savedNote = await widget.api.nameNote(
+          widget.machine,
+          '${_savedNote!['id']}',
+          '${_savedNote!['revision']}',
+        );
+        _noteTitle.text = '${_savedNote!['title']}';
+        _namingFailed = false;
+      } catch (error) {
+        if (mounted) {
+          setState(() {
+            _namingFailed = true;
+            _status = '录音已保存，AI 命名失败：$error';
+          });
+        }
+        if (closeOnSuccess) return false;
+      }
       if (mounted && closeOnSuccess) Navigator.pop(context, true);
       return true;
     } catch (error) {
       if (mounted) setState(() => _status = '$error');
       return false;
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _retryRecordingName() async {
+    final note = _savedNote;
+    if (note == null || _saving) return;
+    setState(() => _saving = true);
+    try {
+      _savedNote = await widget.api.nameNote(
+        widget.machine,
+        '${note['id']}',
+        '${note['revision']}',
+      );
+      _noteTitle.text = '${_savedNote!['title']}';
+      if (mounted) Navigator.pop(context, true);
+    } catch (error) {
+      if (mounted) setState(() => _status = '录音已保存，AI 命名失败：$error');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -2765,8 +2910,10 @@ class _RecordPageState extends State<RecordPage> {
   Widget build(BuildContext context) {
     final ordered = [..._lines]..sort((a, b) => a.startMs.compareTo(b.startMs));
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       backgroundColor: Colors.white,
       body: SafeArea(
+        minimum: EdgeInsets.only(bottom: inputBottomInset(context)),
         child: Column(
           children: [
             SizedBox(
@@ -2848,6 +2995,22 @@ class _RecordPageState extends State<RecordPage> {
                 ],
               ),
             ),
+            if (_namingFailed)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  TextButton(
+                    onPressed: _saving ? null : _retryRecordingName,
+                    child: const Text('重试 AI 命名'),
+                  ),
+                  TextButton(
+                    onPressed: _saving
+                        ? null
+                        : () => Navigator.pop(context, true),
+                    child: const Text('保留原标题'),
+                  ),
+                ],
+              ),
             Padding(
               padding: const EdgeInsets.only(bottom: 20),
               child: ActionPill(
@@ -2961,6 +3124,7 @@ class _SideNoteState extends State<_SideNote> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: Colors.white,
@@ -2999,7 +3163,7 @@ class _SideNoteState extends State<_SideNote> {
         ],
       ),
       body: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        padding: EdgeInsets.fromLTRB(16, 0, 16, 16 + inputBottomInset(context)),
         child: Column(
           children: [
             TextField(

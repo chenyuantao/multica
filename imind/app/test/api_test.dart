@@ -34,6 +34,7 @@ Future<void> invoke(MulticaApi api, String operation) async =>
       'notes' => api.notes('mbp'),
       'create' => api.createNote({'share_machine': 'mbp'}),
       'get' => api.getNote('mbp', noteId),
+      'name' => api.nameNote('mbp', noteId, 'r'),
       'update' => api.updateNote(noteId, {
         'share_machine': 'mbp',
         'revision': 'r',
@@ -48,10 +49,56 @@ const operations = [
   'create',
   'get',
   'update',
+  'name',
   'delete',
 ];
 
 void main() {
+  test('AI命名传已保存revision并解析摘要与文件身份', () async {
+    final api =
+        MulticaApi(
+            baseUrl: 'http://localhost',
+            client: MockClient((request) async {
+              expect(request.method, 'POST');
+              expect(request.url.path, '/api/imind/notes/$noteId/ai-name');
+              expect(jsonDecode(request.body), {
+                'share_machine': 'mbp',
+                'revision': 'saved-r',
+              });
+              return http.Response(
+                jsonEncode({
+                  'id': noteId,
+                  'revision': 'named-r',
+                  'title': 'Generated',
+                  'summary': 'Summary',
+                }),
+                200,
+              );
+            }),
+          )
+          ..token = 'test-session'
+          ..workspaceId = workspaceId;
+    addTearDown(api.close);
+    final note = await api.nameNote('mbp', noteId, 'saved-r');
+    expect(note['title'], 'Generated');
+    expect(note['summary'], 'Summary');
+    expect(note['revision'], 'named-r');
+  });
+  for (final body in [
+    {'id': workspaceId, 'revision': 'r'},
+    {'id': noteId, 'revision': 'r', 'summary': 42},
+    {'id': noteId, 'summary': 'missing revision'},
+  ]) {
+    test('AI命名拒绝畸形返回 $body', () async {
+      final api = responding(body);
+      addTearDown(api.close);
+      await expectLater(
+        api.nameNote('mbp', noteId, 'r'),
+        throwsA(apiError(502)),
+      );
+    });
+  }
+
   test('文件群聊接口使用笔记 UUID 幂等加入并分页读取 issue 评论', () async {
     final requests = <http.Request>[];
     final api = MulticaApi(

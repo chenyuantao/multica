@@ -1,6 +1,6 @@
 # iMind 接口与 Markdown 契约
 
-版本：v1 HTTP / imind_scope_revision_v1 + imind_rename_v1 + imind_media_v1 daemon（2026-10-28）
+版本：v1 HTTP / imind_scope_revision_v1 + imind_rename_v1 + imind_media_v1 daemon（2026-10-29）
 
 ## 身份与作用域
 
@@ -46,6 +46,7 @@ audio: null
 约束：
 
 - `type` 仅为 `note`、`recording`、`clip`。
+- 可选 `summary` 保存 AI 生成摘要；旧文件默认为空。剪藏的可选 `clip` 对象保存 `original_text`（原始粘贴文本）与 `prompt`（可选提示词），`source_url` 保留提取出的 URL。修改标题、正文或标签保留这些元数据。
 - 普通笔记和剪藏的 transcript 区为空；录音笔记的 transcript 区可为空（录音尚未产生文字）。
 - `audio` 是可选对象。旧转写记录可只有 `{"duration_ms":112000,"format":"pcm_s16le","sample_rate_hz":16000}`；有原始音频的记录为 `{"duration_ms":112000,"format":"wav_pcm_s16le","sample_rate_hz":16000,"file":"audio.wav"}`。`file` 只能是 `audio.wav`，相对于该笔记的媒体目录，不能是端侧临时路径。
 - HTML 注释分隔符为唯一可信边界，不依赖 `## 原文` 标题；四个分隔符必须各一份、独立行、顺序正确，区外不能有额外非空文本。正文与转写不能包含保留 imind 分隔符。
@@ -91,7 +92,7 @@ audio: null
 
 ### `POST /api/imind/notes`
 
-创建普通笔记、剪藏或空录音笔记。请求携带 `share_machine`、`type`、`title`、可选 `tags`、`source_url`、`content` 和 `audio`。服务端生成 UUID、时间和完整文件内容。
+创建普通笔记、剪藏或空录音笔记。请求携带 `share_machine`、`type`、`title`、可选 `tags`、`source_url`、`content`、`audio` 和 `clip`。服务端生成 UUID、时间和完整文件内容。
 
 ### `POST /api/imind/notes/get`
 
@@ -184,6 +185,28 @@ AI+ 输入框使用与录音页相同的 `record` PCM 采集和 `AsrSession`，�
 
 `app/tool/run_login_e2e.py` 使用当前 checkout 环境配置，通过 Docker PostgreSQL 读取专用测试邮箱的动态验证码。开始发送前记录数据库时钟边界；只取本次边界后的最新、未使用、未过期且 attempts < 5 的记录，尊重 60 秒重发限制。测试桥仅监听 loopback，Android 用 `adb reverse`，每次运行使用随机鉴权值。验证码只驻留进程内存，不放入 Dart defines、仓库或日志；设备必须实际调用 send-code/verify-code。预置 token 功能测试不计为验证码登录通过。
 
+## 命名与后台配置
+
+`POST /api/imind/notes/{id}/ai-name` 请求 `{share_machine,revision}`，读取该 md 已保存正文和转写，由服务端向 `https://api.deepseek.com/chat/completions` 请求标题和摘要。使用快速 `deepseek-flash`、`thinking: {type: "disabled"}`、`reasoning: {effort: "low"}`，两个入口共用同一调用。成功沿用更新/重命名与重名后缀契约，返回完整 note；summary 保存于 YAML，标题仅来自文件名。生成期间发生修改返回 409，不能覆盖新版本。
+
+Flutter 录音在笔记、音频和图片全部保存成功后立即调用命名接口；手动 AI 命名读取所选 revision。无 Key 返回 503 `imind_deepseek_unconfigured`，上游失败返回 502 `imind_naming_failed`，均不修改原文件。录音页显示已保存与重试命名入口，可保留原标题退出；用户随后可手动重命名。生成摘要在录音详情展示。
+
+- `GET /api/imind/settings/deepseek` 返回 `{configured:boolean}`，不返回密钥。`PUT` 请求 `{api_key:string}`，空字符串清除；只有工作区 owner/admin 可写。
+- Key 仅由后台录入，按工作区加密保存在数据库；不传到 Flutter、不写入 Markdown/日志/仓库。部署需设置 32 bytes base64 `MULTICA_IMIND_SECRET_KEY`，未设置拒绝配置，轮换后需重新录入已有配置。该部署加密密钥与模型 API Key 不同。
+- `GET/PUT /api/imind/settings/clip-agent` 使用 `{agent_id:UUID|null}`，权限、工作区和智能体使用权限与 default-agent 设置相同。
+
+## 剪藏占位文件与执行
+
+客户端正则提取链接，先创建默认名 `生成中的剪藏1` 的 `clip` 文件，正文和 `clip.original_text` 保留用户原始文本，元数据 `source_url` 保存提取链接，`clip.prompt` 保存可选提示词。创建失败不建群；创建成功后以同一 note UUID/revision ensure 群聊，再发送链接和提示词（稳定 client_id），打开同一 AI+。关闭重开不会再次发送初始化消息。
+
+Ensure 把已配置默认智能体和剪藏智能体按权限加入同一个文件群。剪藏优先派给剪藏智能体；未指定剪藏智能体时使用 JEV，默认智能体仍加入。调度上下文含已保存 md 的授权引用和 revision，要求智能体抓取网页、按已有文档工具回写同一占位文件并保留 UUID、剪藏元数据与唯一分隔符，允许按现有契约改名。服务端不另设抓取/聊天体系。分发、抓取或回写失败保留原文件和群聊，已有消息重试分发使用原入口。
+
+## 输入安全区与运行详情
+
+笔记编辑、录音页/边录边记、AI+ 和剪藏输入使用 `max(viewInsets.bottom, viewPadding.bottom)`；全屏编辑页关闭 Scaffold 自动键盘缩放，由容器统一保留底部空间，避免重复键盘间距。
+
+活动运行作为对应 Agent 消息（尚无回复时为消息占位气泡）显示查看与红色终止；`source_task_id` 与 `trigger_comment_id` 定位，多个运行独立。查看打开有独立返回控件的执行详情页，通过 `GET /api/tasks/{id}/messages` 显示思考、工具调用/输出及回复。消息和详情均调用原 issue 范围取消接口，提交中“正在终止”，等待服务端终态，失败可重试。
+
 ## 非目标
 
-- 网页剪藏只从粘贴文本中识别 `https?://...`，创建 `clip` 笔记；不下载网页、图片或正文。
+- 导出、回收站恢复、真机拍照与实际听音不属于本轮模拟器优化验收。

@@ -41,16 +41,18 @@ type iMindShareRequest struct {
 
 type iMindCreateRequest struct {
 	iMindShareRequest
-	Type       string       `json:"type"`
-	Title      string       `json:"title"`
-	Tags       []string     `json:"tags"`
-	SourceURL  *string      `json:"source_url"`
-	Content    string       `json:"content"`
-	Transcript string       `json:"transcript"`
-	Audio      *imind.Audio `json:"audio"`
+	Type       string              `json:"type"`
+	Title      string              `json:"title"`
+	Tags       []string            `json:"tags"`
+	SourceURL  *string             `json:"source_url"`
+	Content    string              `json:"content"`
+	Transcript string              `json:"transcript"`
+	Audio      *imind.Audio        `json:"audio"`
+	Clip       *imind.ClipMetadata `json:"clip"`
 }
 
 type iMindUpdateRequest struct {
+	Summary *string `json:"summary"`
 	iMindShareRequest
 	Revision   string       `json:"revision"`
 	Title      string       `json:"title"`
@@ -186,6 +188,7 @@ func (h *Handler) PostIMindNotes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	note.Tags, note.SourceURL, note.Content, note.Transcript, note.Audio = req.Tags, req.SourceURL, req.Content, req.Transcript, req.Audio
+	note.Clip = req.Clip
 	raw, err := note.Markdown()
 	if err != nil {
 		writeErrorCode(w, http.StatusBadRequest, "imind_invalid_note", err.Error())
@@ -235,6 +238,9 @@ func (h *Handler) PutIMindNote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	note.Title, note.Tags, note.Content, note.Transcript, note.Audio = req.Title, req.Tags, req.Content, req.Transcript, req.Audio
+	if req.Summary != nil {
+		note.Summary = *req.Summary
+	}
 	note.UpdatedAt = time.Now().UTC()
 	raw, err := note.Markdown()
 	if err != nil {

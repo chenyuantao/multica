@@ -374,6 +374,7 @@ void main() {
   testWidgets('多 Agent 活动运行分别取消对应 task，docs 卡片走授权读取', (tester) async {
     final cancelled = <String>[];
     var cancellationConfirmed = false;
+    var agentNameRequests = 0;
     final requests = <String>[];
     final noteId1 = '66666666-6666-4666-8666-666666666666';
     final noteId2 = '77777777-7777-4777-8777-777777777777';
@@ -383,14 +384,24 @@ void main() {
       _api(
         intercept: (request) async {
           requests.add('${request.method} ${request.url.path}');
+          if (request.url.path == '/api/agents') {
+            agentNameRequests++;
+            return http.Response(
+              jsonEncode([
+                {'id': noteId1, 'name': 'Agent A'},
+                {'id': noteId2, 'name': 'Agent B'},
+              ]),
+              200,
+            );
+          }
           if (request.url.path == '/api/issues/$_otherWorkspace/task-runs') {
             return http.Response(
               jsonEncode([
-                {'id': noteId1, 'status': 'running', 'agent_name': 'Agent A'},
+                {'id': noteId1, 'status': 'running', 'agent_id': noteId1},
                 {
                   'id': noteId2,
                   'status': cancellationConfirmed ? 'cancelled' : 'running',
-                  'agent_name': 'Agent B',
+                  'agent_id': noteId2,
                 },
               ]),
               200,
@@ -462,6 +473,9 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     await tester.pumpAndSettle();
     expect(find.byIcon(Icons.hourglass_top), findsNothing);
+    expect(agentNameRequests, 1);
+    expect(find.text('Agent A'), findsOneWidget);
+    expect(find.text(noteId1), findsNothing);
     await tester.tap(find.text('方案'));
     await tester.pumpAndSettle();
     expect(find.text('已授权文档内容'), findsOneWidget);
@@ -521,5 +535,102 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('发送验证码'), findsOneWidget);
     expect(storage.values, isEmpty);
+  });
+  testWidgets('首页手动重命名读取完整笔记并保留正文转写音频', (tester) async {
+    Map<String, dynamic>? written;
+    var detailReads = 0;
+    const audio = {
+      'duration_ms': 1000,
+      'format': 'wav_pcm_s16le',
+      'sample_rate_hz': 16000,
+      'file': 'audio.wav',
+    };
+    final full = {
+      ..._note('完整录音正文'),
+      'type': 'recording',
+      'transcript': '保留原始转写',
+      'audio': audio,
+    };
+    await _pump(
+      tester,
+      _storage(),
+      _api(
+        intercept: (request) async {
+          Object? result;
+          if (request.url.path == '/api/imind/notes/list') {
+            result = {
+              'notes': [
+                {
+                  'id': _id,
+                  'revision': 'r',
+                  'title': '示例笔记',
+                  'type': 'recording',
+                },
+              ],
+            };
+          } else if (request.url.path == '/api/imind/notes/get') {
+            detailReads++;
+            result = full;
+          } else if (request.method == 'PUT' &&
+              request.url.path == '/api/imind/notes/$_id') {
+            written = jsonDecode(request.body) as Map<String, dynamic>;
+            result = {...full, ...written!};
+          }
+          return result == null
+              ? null
+              : http.Response(
+                  jsonEncode(result),
+                  200,
+                  headers: {'content-type': 'application/json'},
+                );
+        },
+      ),
+    );
+    await tester.longPress(find.text('示例笔记'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('重命名'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, '用户新标题');
+    await tester.tap(find.widgetWithText(TextButton, '完成'));
+    await tester.pumpAndSettle();
+    expect(detailReads, 1);
+    expect(written!['title'], '用户新标题');
+    expect(written!['revision'], 'r');
+    expect(written!['content'], '完整录音正文');
+    expect(written!['transcript'], '保留原始转写');
+    expect(written!['audio'], audio);
+  });
+  testWidgets('智能体名称读取失败不阻断群聊且不显示UUID', (tester) async {
+    const runId = '66666666-6666-4666-8666-666666666666';
+    await _pump(
+      tester,
+      _storage(),
+      _api(
+        intercept: (request) async {
+          if (request.url.path == '/api/agents') {
+            return http.Response('{"error":"unavailable"}', 503);
+          }
+          if (request.url.path == '/api/issues/$_otherWorkspace/task-runs') {
+            return http.Response(
+              jsonEncode([
+                {'id': runId, 'agent_id': runId, 'status': 'running'},
+              ]),
+              200,
+            );
+          }
+          return null;
+        },
+      ),
+    );
+    await tester.tap(find.text('示例笔记'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('示例正文'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('AI+'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('终止 Agent 的运行'), findsOneWidget);
+    expect(find.text('Agent'), findsOneWidget);
+    expect(find.text(runId), findsNothing);
+    expect(find.byTooltip('发送'), findsOneWidget);
   });
 }

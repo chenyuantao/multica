@@ -1321,6 +1321,9 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 		slog.Info("composio integration disabled (COMPOSIO_API_KEY not set)")
 	}
 
+	if key, err := secretbox.LoadKey("MULTICA_IMIND_SECRET_KEY"); err == nil {
+		h.IMindSecretBox, _ = secretbox.New(key)
+	}
 	// VCS at-rest encryption: the box encrypts per-workspace access tokens and
 	// webhook secrets for token-based providers (Forgejo / Gitea / GitLab).
 	// Without it, connect/webhook handlers return 503 (so a misconfigured
@@ -1738,6 +1741,11 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			r.Post("/notes/get", h.PostIMindNote)
 			r.Post("/notes", h.PostIMindNotes)
 			r.Put("/notes/{id}", h.PutIMindNote)
+			r.Post("/notes/{id}/ai-name", h.PostIMindAIName)
+			r.Get("/settings/deepseek", h.GetIMindDeepSeek)
+			r.Put("/settings/deepseek", h.PutIMindDeepSeek)
+			r.Get("/settings/clip-agent", h.GetIMindClipAgent)
+			r.Put("/settings/clip-agent", h.PutIMindClipAgent)
 			r.Delete("/notes/{id}", h.DeleteIMindNote)
 			r.Post("/chats/ensure", h.EnsureIMindChat)
 			r.Post("/chats/{id}/retry", h.RetryIMindChatMessage)

@@ -799,7 +799,14 @@
     "prefix_new_label": "New prefix",
     "prefix_rule": "Letters and numbers only, up to 10 characters.",
     "prefix_confirm_action": "Change to {{prefix}}",
-    "prefix_external_warning": "Old keys such as {{oldExample}} in PR titles, branch names, docs, and chat are not updated, so those links stop working."
+    "prefix_external_warning": "Old keys such as {{oldExample}} in PR titles, branch names, docs, and chat are not updated, so those links stop working.",
+    "imind_clip_agent_label": "Clipping agent",
+    "imind_deepseek_help": "Used for recording titles, summaries, and AI renaming. Notes are sent to DeepSeek.",
+    "imind_key_configured": "Configured",
+    "imind_key_missing": "Not configured",
+    "imind_key_save": "Save key",
+    "imind_key_clear": "Clear key",
+    "imind_deepseek_label": "DeepSeek API Key"
   },
   "delete_workspace_dialog": {
     "title": "Delete workspace",

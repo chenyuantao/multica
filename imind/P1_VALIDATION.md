@@ -53,3 +53,5 @@
 原有其他待办不扩大本次范围：真人语音识别质量、小时级录音与锁屏/后台/来电/断网/进程终止恢复、正式签名分发、AI 命名 Mock。录音当前有约 35 分钟 / 64 MiB WAV 上限，并在达到上限前停止以保留可保存内容。
 
 后续 AI+ 流式语音输入已完成，双端证据见 [VOICE_VALIDATION.md](VOICE_VALIDATION.md)。本报告的 122 项单测为 P1 原轮次；语音实现后的完整回归为 125 项。
+
+下一轮五项功能优化已替换历史 AI 命名 Mock 与只存 URL 边界，最新实现和本地验收见 [OPTIMIZATION_VALIDATION.md](OPTIMIZATION_VALIDATION.md)。

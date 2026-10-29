@@ -799,7 +799,14 @@
     "prefix_new_label": "Nouveau préfixe",
     "prefix_rule": "Lettres et chiffres uniquement, 10 caractères au maximum.",
     "prefix_confirm_action": "Remplacer par {{prefix}}",
-    "prefix_external_warning": "Les anciens identifiants comme {{oldExample}} dans les titres de PR, noms de branche, documents et discussions ne sont pas mis à jour : ces liens cesseront de fonctionner."
+    "prefix_external_warning": "Les anciens identifiants comme {{oldExample}} dans les titres de PR, noms de branche, documents et discussions ne sont pas mis à jour : ces liens cesseront de fonctionner.",
+    "imind_clip_agent_label": "Agent de capture",
+    "imind_deepseek_help": "Utilisé pour les titres, résumés et renommages IA. Les notes sont envoyées à DeepSeek.",
+    "imind_key_configured": "Configuré",
+    "imind_key_missing": "Non configuré",
+    "imind_key_save": "Enregistrer la clé",
+    "imind_key_clear": "Effacer la clé",
+    "imind_deepseek_label": "DeepSeek API Key"
   },
   "delete_workspace_dialog": {
     "title": "Supprimer l'espace de travail",

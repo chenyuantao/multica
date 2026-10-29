@@ -3342,3 +3342,23 @@ describe("ApiClient iMind configuration boundary", () => {
     }
   });
 });
+
+describe("iMind AI settings responses", () => {
+  it("defaults malformed clip-agent and key status responses", async () => {
+    const client = new ApiClient("https://api.example.test");
+    for (const body of [{}, { agent_id: 42, configured: "true" }, null]) {
+      vi.stubGlobal("fetch", vi.fn().mockImplementation(async () => new Response(JSON.stringify(body), { status: 200 })));
+      expect(await client.getIMindClipAgent()).toBeNull();
+      expect(await client.getIMindDeepSeek()).toBe(false);
+    }
+  });
+  it("sends configuration changes and never requires a key response", async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ configured: true }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new ApiClient("https://api.example.test");
+    expect(await client.setIMindDeepSeek("test-only-secret")).toBe(true);
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ api_key: "test-only-secret" });
+    await client.setIMindClipAgent(null);
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ agent_id: null });
+  });
+});

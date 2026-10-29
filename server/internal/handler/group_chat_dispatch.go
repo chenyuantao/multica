@@ -75,6 +75,9 @@ func (h *Handler) dispatchGroupChatReply(ctx context.Context, issue db.Issue, co
 		return nil
 	}
 	if h.isIMindChatIssue(ctx, issue) {
+		if h.dispatchIMindClip(ctx, issue, comment) {
+			return nil
+		}
 		selected, configured := h.imindDefaultProcessor(ctx, issue, comment.AuthorID)
 		if configured {
 			if selected.Valid {
@@ -481,6 +484,7 @@ func (h *Handler) iMindNoteContext(ctx context.Context, issue db.Issue) (groupch
 		if err == nil && note.ID == uuidToString(noteID) {
 			ref := fileshare.Join(peer.Meta().Machine, node.Path)
 			text := fmt.Sprintf("The following content was loaded from the saved file version available when this run assembled its context. It may differ from the revision the user last saw when sending the message.\nFile: %s\nLoaded revision: %s\n\n%s\n\nTranscript:\n%s", ref, file.Revision, note.Content, note.Transcript)
+			text += imindClipInstructions(note, ref, file.Revision)
 			return groupchat.Turn{Author: "iMind file", Role: "context", Text: text, Focus: &groupchat.FocusNote{Name: note.Title, Path: ref}}, true
 		}
 	}

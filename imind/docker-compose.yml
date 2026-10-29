@@ -14,6 +14,7 @@ services:
       DATABASE_URL: "postgres://${POSTGRES_USER:-multica}:${POSTGRES_PASSWORD:-multica}@postgres:5432/${POSTGRES_DB:?Use the checkout environment database}?sslmode=disable"
       MULTICA_PUBLIC_URL: "http://localhost:${PORT:-18607}"
       MULTICA_TELEMETRY_DISABLED: "true"
+      MULTICA_IMIND_SECRET_KEY: "${MULTICA_IMIND_SECRET_KEY:-}"
     ports:
       - "127.0.0.1:${PORT:-18607}:8080"
     volumes:

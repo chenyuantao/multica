@@ -36,28 +36,37 @@ type Audio struct {
 	File         string `yaml:"file,omitempty" json:"file,omitempty"`
 }
 
+type ClipMetadata struct {
+	OriginalText string `yaml:"original_text" json:"original_text"`
+	Prompt       string `yaml:"prompt" json:"prompt"`
+}
+
 type Note struct {
-	ID         string    `yaml:"id" json:"id"`
-	Type       string    `yaml:"type" json:"type"`
-	Title      string    `yaml:"title" json:"title"`
-	CreatedAt  time.Time `yaml:"created_at" json:"created_at"`
-	UpdatedAt  time.Time `yaml:"updated_at" json:"updated_at"`
-	Tags       []string  `yaml:"tags" json:"tags"`
-	SourceURL  *string   `yaml:"source_url" json:"source_url"`
-	Audio      *Audio    `yaml:"audio" json:"audio"`
-	Content    string    `yaml:"-" json:"content"`
-	Transcript string    `yaml:"-" json:"transcript"`
+	ID         string        `yaml:"id" json:"id"`
+	Summary    string        `yaml:"summary,omitempty" json:"summary,omitempty"`
+	Clip       *ClipMetadata `yaml:"clip,omitempty" json:"clip,omitempty"`
+	Type       string        `yaml:"type" json:"type"`
+	Title      string        `yaml:"title" json:"title"`
+	CreatedAt  time.Time     `yaml:"created_at" json:"created_at"`
+	UpdatedAt  time.Time     `yaml:"updated_at" json:"updated_at"`
+	Tags       []string      `yaml:"tags" json:"tags"`
+	SourceURL  *string       `yaml:"source_url" json:"source_url"`
+	Audio      *Audio        `yaml:"audio" json:"audio"`
+	Content    string        `yaml:"-" json:"content"`
+	Transcript string        `yaml:"-" json:"transcript"`
 }
 
 type frontmatter struct {
-	Version   int       `yaml:"imind_version"`
-	ID        string    `yaml:"id"`
-	Type      string    `yaml:"type"`
-	CreatedAt time.Time `yaml:"created_at"`
-	UpdatedAt time.Time `yaml:"updated_at"`
-	Tags      []string  `yaml:"tags"`
-	SourceURL *string   `yaml:"source_url"`
-	Audio     *Audio    `yaml:"audio"`
+	Summary   string        `yaml:"summary,omitempty"`
+	Clip      *ClipMetadata `yaml:"clip,omitempty"`
+	Version   int           `yaml:"imind_version"`
+	ID        string        `yaml:"id"`
+	Type      string        `yaml:"type"`
+	CreatedAt time.Time     `yaml:"created_at"`
+	UpdatedAt time.Time     `yaml:"updated_at"`
+	Tags      []string      `yaml:"tags"`
+	SourceURL *string       `yaml:"source_url"`
+	Audio     *Audio        `yaml:"audio"`
 }
 
 func New(noteType, title string, now time.Time) (Note, error) {
@@ -92,7 +101,13 @@ func (n Note) Validate() error {
 	if n.CreatedAt.IsZero() || n.UpdatedAt.IsZero() {
 		return fmt.Errorf("%w: timestamps", ErrInvalidNote)
 	}
-	values := append([]string{n.Title, n.Content, n.Transcript}, n.Tags...)
+	values := append([]string{n.Title, n.Content, n.Transcript, n.Summary}, n.Tags...)
+	if n.Clip != nil {
+		if n.Type != "clip" {
+			return fmt.Errorf("%w: clip metadata", ErrInvalidNote)
+		}
+		values = append(values, n.Clip.OriginalText, n.Clip.Prompt)
+	}
 	if n.SourceURL != nil {
 		u, err := url.Parse(*n.SourceURL)
 		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || u.User != nil {
@@ -129,7 +144,7 @@ func (n Note) Markdown() (string, error) {
 		return "", err
 	}
 	fm, err := yaml.Marshal(frontmatter{
-		Version: Version, ID: n.ID, Type: n.Type,
+		Version: Version, ID: n.ID, Type: n.Type, Summary: n.Summary, Clip: n.Clip,
 		CreatedAt: n.CreatedAt.UTC(), UpdatedAt: n.UpdatedAt.UTC(),
 		Tags: n.Tags, SourceURL: n.SourceURL, Audio: n.Audio,
 	})
@@ -186,7 +201,7 @@ func Parse(markdown, title string) (Note, error) {
 		return Note{}, fmt.Errorf("%w: transcript delimiter", ErrInvalidNote)
 	}
 	note := Note{
-		ID: fm.ID, Type: fm.Type, Title: title, CreatedAt: fm.CreatedAt, UpdatedAt: fm.UpdatedAt,
+		ID: fm.ID, Type: fm.Type, Title: title, Summary: fm.Summary, Clip: fm.Clip, CreatedAt: fm.CreatedAt, UpdatedAt: fm.UpdatedAt,
 		Tags: nonNil(fm.Tags), SourceURL: fm.SourceURL, Audio: fm.Audio,
 		Content: strings.TrimSpace(content), Transcript: strings.TrimSpace(transcript),
 	}
@@ -216,7 +231,7 @@ func validFrontmatterTypes(header string) bool {
 	for i := 0; i < len(fields); i += 2 {
 		key, value := fields[i].Value, fields[i+1]
 		switch key {
-		case "id", "type":
+		case "id", "type", "summary":
 			if value.Tag != "!!str" {
 				return false
 			}
@@ -243,6 +258,18 @@ func validFrontmatterTypes(header string) bool {
 		case "created_at", "updated_at":
 			if value.Tag != "!!str" && value.Tag != "!!timestamp" {
 				return false
+			}
+		case "clip":
+			if value.Tag == "!!null" {
+				continue
+			}
+			if value.Kind != yaml.MappingNode {
+				return false
+			}
+			for j := 0; j < len(value.Content); j += 2 {
+				if (value.Content[j].Value != "original_text" && value.Content[j].Value != "prompt") || value.Content[j+1].Tag != "!!str" {
+					return false
+				}
 			}
 		case "audio":
 			if value.Tag == "!!null" {

@@ -417,6 +417,10 @@ type Handler struct {
 	// error rather than silently storing plaintext. Wired in
 	// cmd/server/router.go after New.
 	VCSSecretBox *secretbox.Box
+	// IMindSecretBox encrypts workspace DeepSeek credentials at rest.
+	IMindSecretBox *secretbox.Box
+	// IMindNamingHTTP permits isolated provider transport in tests.
+	IMindNamingHTTP *http.Client
 	// PluginSurfaceTokens seal short-lived launch claims. Nil disables surface
 	// launches; wired from a domain-separated MULTICA_PLUGIN_SECRET_KEY at boot.
 	PluginSurfaceTokens *secretbox.Box

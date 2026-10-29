@@ -795,7 +795,14 @@
     "prefix_new_label": "新しいプレフィックス",
     "prefix_rule": "英字と数字のみ、最大 10 文字です。",
     "prefix_confirm_action": "{{prefix}} に変更",
-    "prefix_external_warning": "PR タイトル、ブランチ名、ドキュメント、チャット内の古いキー（{{oldExample}} など）は更新されないため、それらのリンクは機能しなくなります。"
+    "prefix_external_warning": "PR タイトル、ブランチ名、ドキュメント、チャット内の古いキー（{{oldExample}} など）は更新されないため、それらのリンクは機能しなくなります。",
+    "imind_clip_agent_label": "クリッピング用エージェント",
+    "imind_deepseek_help": "録音のタイトル、要約、AI による名前変更に使用します。ノートは DeepSeek に送信されます。",
+    "imind_key_configured": "設定済み",
+    "imind_key_missing": "未設定",
+    "imind_key_save": "キーを保存",
+    "imind_key_clear": "キーを削除",
+    "imind_deepseek_label": "DeepSeek API Key"
   },
   "delete_workspace_dialog": {
     "title": "ワークスペースを削除",

@@ -1203,6 +1203,8 @@ export const IMindChatEnsureSchema = z.object({
   joined: z.boolean().default(false).catch(false),
   chat: GroupChatSchema.nullable().default(null).catch(null),
 }).loose();
+export const IMindDeepSeekSchema = z.object({ configured: z.boolean().default(false).catch(false) }).loose();
+
 export const IMindDefaultAgentSchema = z.object({ agent_id: z.string().nullable().default(null).catch(null) }).loose();
 
 export const ReminderSchema = GroupChatSchema.extend({

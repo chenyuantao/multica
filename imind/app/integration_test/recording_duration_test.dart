@@ -140,13 +140,21 @@ void main() {
     await tester.tap(find.text('保存').first);
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(TextButton, '保存'));
+    if (!const bool.fromEnvironment('E2E_NAMING_CONFIGURED')) {
+      await until(find.text('保留原标题'));
+      await tester.tap(find.text('保留原标题'));
+    }
     await until(find.text('Open recorder'));
     final created = (await api.notes(machine))
         .where((n) => !before.contains(n['id']))
         .toList();
     expect(created, hasLength(1));
     final saved = await api.getNote(machine, created.single['id'] as String);
-    expect(saved['title'], recordingTitle);
+    if (!const bool.fromEnvironment('E2E_NAMING_CONFIGURED')) {
+      expect(saved['title'], recordingTitle);
+    } else {
+      expect(saved['summary'], isNotEmpty);
+    }
     expect(saved['content'], 'Notes written during paused recording');
     final duration = (saved['audio'] as Map)['duration_ms'] as int;
     expect(duration, greaterThanOrEqualTo(180000));

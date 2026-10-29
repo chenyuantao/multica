@@ -21,7 +21,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--platform', choices=['ios', 'android'], required=True)
     parser.add_argument('--device', required=True)
-    parser.add_argument('--suite', choices=['media', 'features', 'chat', 'main', 'web', 'voice'], default='media')
+    parser.add_argument('--suite', choices=['media', 'features', 'chat', 'main', 'web', 'voice', 'optimization', 'progress'], default='media')
     parser.add_argument('--mirror', action='store_true')
     parser.add_argument('--restore-media', action='store_true')
     args = parser.parse_args()
@@ -39,11 +39,11 @@ def main():
     if args.mirror:
         env['IMIND_MAVEN_MIRROR'] = 'aliyun'
     files = {'main': 'ios_e2e_test.dart', 'chat': 'chat_e2e_test.dart',
-             'media': 'media_e2e_test.dart', 'features': 'features_e2e_test.dart', 'web': 'web_interop_e2e_test.dart', 'voice': 'voice_e2e_test.dart'}
+             'media': 'media_e2e_test.dart', 'features': 'features_e2e_test.dart', 'web': 'web_interop_e2e_test.dart', 'voice': 'voice_e2e_test.dart', 'optimization': 'optimization_e2e_test.dart', 'progress': 'progress_e2e_test.dart'}
     prefix = f'{args.platform}-{args.suite}' + ('-restore' if args.restore_media else '') + '-p1'
     output = ROOT / 'outputs/imind'
     output.mkdir(parents=True, exist_ok=True)
-    report = {'platform': args.platform, 'suite': args.suite, 'status': 'failed',
+    report = {'platform': args.platform, 'device': args.device, 'suite': args.suite, 'status': 'failed',
               'log': str(output / (prefix + '.log'))}
     (output / (prefix + '-results.json')).write_text(json.dumps(report, indent=2) + '\n')
     defines = {'API_BASE': f'http://{host}:{base.port or 80}', 'E2E_TOKEN': config['token'],
@@ -63,6 +63,12 @@ def main():
         time.sleep(2)
     if not ready:
         raise SystemExit('Local Docker acceptance share is not ready')
+    request = urllib.request.Request(config['server_url'].rstrip('/') + '/api/imind/settings/deepseek',
+        headers={'Authorization':'Bearer '+config['token'], 'X-Workspace-ID':config['workspace_id']})
+    with opener.open(request, timeout=10) as response:
+        configured = json.load(response)['configured'] is True
+    defines['E2E_NAMING_CONFIGURED'] = 'true' if configured else 'false'
+    report['naming_configured'] = configured
     if args.suite in ('chat', 'web'):
         database = CheckoutDatabase()
         workspace = sql_literal(config['workspace_id'])
@@ -98,6 +104,41 @@ COMMIT;''')
                 str(speech / 'speech.aiff'), str(speech / 'speech.wav')], check=True)
             with wave.open(str(speech / 'speech.wav'), 'rb') as source:
                 defines['E2E_PCM'] = base64.b64encode(source.readframes(source.getnframes())).decode()
+    if args.suite == 'progress':
+        import uuid
+        import atexit
+        database = CheckoutDatabase()
+        workspace = sql_literal(config['workspace_id'])
+        if database.query(f'SELECT slug FROM workspace WHERE id={workspace};') != 'imind-validation':
+            raise SystemExit('Progress acceptance requires dedicated workspace')
+        def fixture_request(path, body):
+            request = urllib.request.Request(config['server_url'].rstrip('/') + path,
+                data=json.dumps(body).encode(), headers={
+                    'Content-Type': 'application/json', 'Authorization': 'Bearer ' + config['token'],
+                    'X-Workspace-ID': config['workspace_id']})
+            with opener.open(request, timeout=30) as response:
+                return json.load(response)
+        fixtures = []
+        for label in ('visible', 'isolated'):
+            note = fixture_request('/api/imind/notes', {'share_machine':'imindhost', 'type':'note',
+                'title':f'Progress {label} {time.time_ns()}', 'content':'Local controlled progress fixture'})
+            chat = fixture_request('/api/imind/chats/ensure', {'share_machine':'imindhost',
+                'note_id':note['id'], 'revision':note['revision']})
+            fixtures.append((note['id'],chat['issue_id'],str(uuid.uuid4())))
+        agent = str(uuid.uuid4())
+        agent_sql = sql_literal(agent)
+        runtime_sql = sql_literal(str(uuid.uuid4()))
+        task_ids = ','.join(sql_literal(f[2]) for f in fixtures)
+        def cleanup_progress():
+            database.query(f"DELETE FROM task_message WHERE task_id IN ({task_ids}); DELETE FROM agent_task_queue WHERE id IN ({task_ids}); DELETE FROM issue_member WHERE member_type='agent' AND member_id={agent_sql}; DELETE FROM agent WHERE id={agent_sql}; DELETE FROM agent_runtime WHERE id={runtime_sql};")
+        atexit.register(cleanup_progress)
+        database.query(f"INSERT INTO agent_runtime(id,workspace_id,name,runtime_mode,provider,status) VALUES({runtime_sql},{workspace},'iMind offline progress','local','controlled-fixture','offline');")
+        database.query(f"INSERT INTO agent(id,workspace_id,name,runtime_mode,status,visibility) VALUES({agent_sql},{workspace},'iMind progress fixture','local','offline','workspace');")
+        for _, issue, task in fixtures:
+            database.query(f"INSERT INTO agent_task_queue(id,agent_id,issue_id,runtime_id,status) VALUES({sql_literal(task)},{agent_sql},{sql_literal(issue)},{runtime_sql},'queued');")
+        database.query(f"INSERT INTO task_message(task_id,seq,type,content) VALUES({sql_literal(fixtures[0][2])},1,'thinking','Local fixture execution trace');")
+        defines.update({'E2E_PROGRESS_NOTE':fixtures[0][0], 'E2E_PROGRESS_RUN':fixtures[0][2],
+            'E2E_PROGRESS_OTHER_RUN':fixtures[1][2], 'E2E_PROGRESS_OTHER_ISSUE':fixtures[1][1]})
     previous = None
     if args.restore_media:
         previous = json.loads((output / f'{args.platform}-media-p1-results.json').read_text())
@@ -119,13 +160,16 @@ COMMIT;''')
                     if secret: line = line.replace(secret, '[REDACTED]')
                 log.write(line)
                 log.flush()
+                if args.platform == 'android' and args.suite in ('main', 'voice') and 'Installing ' in line and 'app-debug.apk' in line:
+                    subprocess.run(['adb', '-s', args.device, 'shell', 'pm', 'grant',
+                        'ai.multica.imind_app', 'android.permission.RECORD_AUDIO'], check=True, timeout=20)
                 if match := re.search(r'E2E_INTEROP_CHAT:([0-9a-f-]{36})', line):
                     report['issue_id'] = match[1]
                 if match := re.search(r'E2E_APP_PID:(\d+)', line):
                     report['app_pid'] = int(match[1])
                 if match := re.search(r'E2E_MEDIA_NOTE:([0-9a-f-]{36})', line):
                     report['note_id'] = match[1]
-                if 'reopened authorized image rendered' in line or 'both users expanded the same md' in line or 'real ASR partial reached composer BEFORE stop' in line:
+                if 'reopened authorized image rendered' in line or 'both users expanded the same md' in line or 'real ASR partial reached composer BEFORE stop' in line or 'E2E_PROGRESS: real task transcript' in line or 'E2E_OPTIMIZATION_CAPTURE:' in line:
                     image = output / (prefix + ('-image.png' if args.suite == 'media' else '-chat.png'))
                     if args.platform == 'ios':
                         capture = subprocess.run(['xcrun','simctl','io',args.device,'screenshot','--type=png',str(image)],capture_output=True,timeout=20)
