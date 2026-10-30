@@ -70,6 +70,44 @@ void main() {
       await wait(find.text('思考'));
       expect(find.text('暂无执行过程'), findsNothing);
       await tester.pumpAndSettle();
+      Finder body(int seq) => find.byKey(ValueKey('run-entry-body-$seq'));
+      for (var seq = 1; seq <= 5; seq++) {
+        expect(body(seq), findsNothing);
+      }
+      debugPrint('E2E_PROGRESS_FOLD_CAPTURE: collapsed');
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(seconds: 2)),
+      );
+      Future<void> toggle(String label) async {
+        final target = find.text(label);
+        await tester.ensureVisible(target);
+        await tester.tap(target);
+        await tester.pumpAndSettle();
+      }
+
+      await toggle('思考');
+      expect(body(1), findsOneWidget);
+      await toggle('调用工具：Read');
+      expect(body(2), findsOneWidget);
+      expect(body(3), findsNothing);
+      await toggle('思考');
+      expect(body(1), findsNothing);
+      // The active run polls every two seconds; open entries stay open.
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pumpAndSettle();
+      expect(body(2), findsOneWidget);
+      await toggle('调用工具：Read');
+      expect(body(2), findsNothing);
+      for (final (seq, label) in [(3, '工具结果：Read'), (4, '回复'), (5, '错误')]) {
+        await toggle(label);
+        expect(body(seq), findsOneWidget);
+        if (seq == 3) expect(find.text('工具输出已截断'), findsOneWidget);
+        await toggle(label);
+        expect(body(seq), findsNothing);
+      }
+      await toggle('调用工具：Read');
+      await toggle('工具结果：Read');
+      debugPrint('E2E_PROGRESS_FOLD_CAPTURE: expanded');
       debugPrint('E2E_PROGRESS: real task transcript opened on separate page');
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(seconds: 2)),

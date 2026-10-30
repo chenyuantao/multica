@@ -33,6 +33,7 @@ class NoteRunProgressPage extends StatefulWidget {
 class _NoteRunProgressPageState extends State<NoteRunProgressPage> {
   late Map<String, dynamic> _run;
   List<Map<String, dynamic>> _messages = [];
+  final Set<num> _expandedEntries = {};
   Timer? _poll;
   bool _loading = true;
   bool _stopping = false;
@@ -203,21 +204,48 @@ class _NoteRunProgressPageState extends State<NoteRunProgressPage> {
     final input = message['input'];
     final text =
         '${message['content'] ?? message['output'] ?? (input == null ? '' : const JsonEncoder.withIndent('  ').convert(input))}';
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
-          const SizedBox(height: 6),
-          if (type == 'tool_use' || type == 'tool_result')
-            SelectableText(text)
-          else
-            MarkdownBody(data: text, selectable: true),
-          if (type == 'tool_result' && message['output_truncated'] == true)
-            const Text('工具输出已截断'),
-        ],
-      ),
+    return ExpansionTile(
+      key: ValueKey('run-entry-$_taskId-${message['seq']}'),
+      initiallyExpanded: _expandedEntries.contains(message['seq']),
+      onExpansionChanged: (expanded) {
+        final seq = message['seq'] as num;
+        if (expanded) {
+          _expandedEntries.add(seq);
+        } else {
+          _expandedEntries.remove(seq);
+        }
+      },
+      tilePadding: EdgeInsets.zero,
+      childrenPadding: const EdgeInsets.fromLTRB(16, 4, 0, 20),
+      expandedCrossAxisAlignment: CrossAxisAlignment.start,
+      shape: const Border(),
+      collapsedShape: const Border(),
+      controlAffinity: ListTileControlAffinity.leading,
+      title: Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+      subtitle: text.isEmpty
+          ? null
+          : Text(
+              text.replaceAll(RegExp(r'\s+'), ' '),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+      children: [
+        SizedBox(
+          key: ValueKey('run-entry-body-${message['seq']}'),
+          width: double.infinity,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (type == 'tool_use' || type == 'tool_result')
+                SelectableText(text)
+              else
+                MarkdownBody(data: text, selectable: true),
+              if (type == 'tool_result' && message['output_truncated'] == true)
+                const Text('工具输出已截断'),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

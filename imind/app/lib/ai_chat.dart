@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:math' show min;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:uuid/uuid.dart';
 import 'package:web_socket_channel/io.dart';
@@ -709,13 +710,23 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
                   ),
                 ),
               Padding(
+                // Voice notices insert siblings without replacing the focused input.
+                key: const ValueKey('ai-composer'),
                 padding: const EdgeInsets.fromLTRB(16, 2, 16, 14),
                 child: Row(
                   children: [
                     Expanded(
                       child: TextField(
                         controller: _input,
-                        readOnly: _voice.active,
+                        onTapOutside: (_) =>
+                            FocusManager.instance.primaryFocus?.unfocus(),
+                        // Keep the keyboard connection while dictation owns the draft.
+                        inputFormatters: [
+                          if (_voice.active)
+                            TextInputFormatter.withFunction(
+                              (oldValue, _) => oldValue,
+                            ),
+                        ],
                         minLines: 1,
                         maxLines: 5,
                         decoration: const InputDecoration(
@@ -737,18 +748,21 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
                         onSubmitted: (_) => _send(),
                       ),
                     ),
-                    IconButton(
-                      tooltip: _voice.active ? '停止语音输入' : '语音输入',
-                      onPressed:
-                          _issueId == null ||
-                              _voice.connecting ||
-                              _voice.stopping
-                          ? null
-                          : () =>
-                                _voice.active ? _voice.stop() : _voice.start(),
-                      icon: Icon(
-                        _voice.active ? Icons.stop_circle : Icons.mic_none,
-                        color: _voice.active ? _aiRed : _aiMuted,
+                    TextFieldTapRegion(
+                      child: IconButton(
+                        tooltip: _voice.active ? '停止语音输入' : '语音输入',
+                        onPressed:
+                            _issueId == null ||
+                                _voice.connecting ||
+                                _voice.stopping
+                            ? null
+                            : () => _voice.active
+                                  ? _voice.stop()
+                                  : _voice.start(),
+                        icon: Icon(
+                          _voice.active ? Icons.stop_circle : Icons.mic_none,
+                          color: _voice.active ? _aiRed : _aiMuted,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 8),

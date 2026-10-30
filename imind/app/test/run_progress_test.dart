@@ -36,6 +36,126 @@ void main() {
   });
 
   testWidgets(
+    'each execution entry starts collapsed and preserves its choice on refresh',
+    (tester) async {
+      var reads = 0;
+      final entries = <Map<String, dynamic>>[
+        {
+          'task_id': _task,
+          'seq': 1,
+          'type': 'thinking',
+          'content': 'Planning details',
+        },
+        {
+          'task_id': _task,
+          'seq': 2,
+          'type': 'tool_use',
+          'tool': 'Read',
+          'input': {'path': '/notes/a.md'},
+        },
+        {
+          'task_id': _task,
+          'seq': 3,
+          'type': 'tool_result',
+          'tool': 'Read',
+          'output': 'Full tool output',
+          'output_truncated': true,
+        },
+        {
+          'task_id': _task,
+          'seq': 4,
+          'type': 'text',
+          'content': '**Message details**',
+        },
+        {
+          'task_id': _task,
+          'seq': 5,
+          'type': 'error',
+          'content': 'Error details',
+        },
+      ];
+      final api =
+          MulticaApi(
+              baseUrl: 'http://localhost',
+              client: MockClient((request) async {
+                final Object data;
+                if (request.url.path.endsWith('/task-runs')) {
+                  data = [
+                    {'id': _task, 'status': 'running'},
+                  ];
+                } else {
+                  reads++;
+                  data = entries;
+                }
+                return http.Response(
+                  jsonEncode(data),
+                  200,
+                  headers: {'content-type': 'application/json; charset=utf-8'},
+                );
+              }),
+            )
+            ..token = 'test-token'
+            ..workspaceId = _issue;
+      addTearDown(api.close);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: NoteRunProgressPage(
+            api: api,
+            issueId: _issue,
+            initialRun: const {'id': _task, 'status': 'running'},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      Finder body(int seq) => find.byKey(ValueKey('run-entry-body-$seq'));
+      for (var seq = 1; seq <= 5; seq++) {
+        expect(body(seq), findsNothing);
+      }
+      await tester.tap(find.text('调用工具：Read'));
+      await tester.pumpAndSettle();
+      expect(body(2), findsOneWidget);
+      expect(
+        find.descendant(of: body(2), matching: find.byType(SelectableText)),
+        findsOneWidget,
+      );
+      expect(body(1), findsNothing);
+      expect(body(3), findsNothing);
+      final before = reads;
+      entries.add({
+        'task_id': _task,
+        'seq': 6,
+        'type': 'text',
+        'content': 'New streaming message',
+      });
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+      expect(reads, greaterThan(before));
+      expect(body(2), findsOneWidget);
+      expect(body(6), findsNothing);
+      await tester.tap(find.text('调用工具：Read'));
+      await tester.pumpAndSettle();
+      expect(body(2), findsNothing);
+      for (final (seq, label) in [
+        (1, '思考'),
+        (3, '工具结果：Read'),
+        (4, '回复'),
+        (5, '错误'),
+      ]) {
+        final toggle = find.text(label).first;
+        await tester.ensureVisible(toggle);
+        await tester.tap(toggle);
+        await tester.pumpAndSettle();
+        expect(body(seq), findsOneWidget);
+        if (seq == 3) expect(find.text('工具输出已截断'), findsOneWidget);
+        await tester.tap(toggle);
+        await tester.pumpAndSettle();
+        expect(body(seq), findsNothing);
+      }
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
     'execution page renders ordered transcript and retries exact-run stop',
     (tester) async {
       final cancelled = <String>[];
@@ -114,6 +234,10 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('执行过程'), findsOneWidget);
       expect(find.text('Agent A · 正在处理'), findsOneWidget);
+      await tester.tap(find.text('思考'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('工具结果：工具'));
+      await tester.pumpAndSettle();
       expect(
         find.byWidgetPredicate(
           (widget) =>
@@ -122,7 +246,7 @@ void main() {
         ),
         findsOneWidget,
       );
-      expect(find.text('保存成功'), findsOneWidget);
+      expect(find.text('保存成功'), findsWidgets);
       expect(find.text('工具输出已截断'), findsOneWidget);
       expect(
         tester
@@ -134,7 +258,9 @@ void main() {
               ),
             )
             .dy,
-        lessThan(tester.getTopLeft(find.text('保存成功')).dy),
+        lessThan(
+          tester.getTopLeft(find.byKey(const ValueKey('run-entry-body-2'))).dy,
+        ),
       );
       await tester.tap(find.text('终止'));
       await tester.pumpAndSettle();

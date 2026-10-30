@@ -21,7 +21,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--platform', choices=['ios', 'android'], required=True)
     parser.add_argument('--device', required=True)
-    parser.add_argument('--suite', choices=['media', 'features', 'chat', 'main', 'web', 'voice', 'optimization', 'progress'], default='media')
+    parser.add_argument('--suite', choices=['media', 'features', 'chat', 'main', 'web', 'voice', 'optimization', 'progress', 'detail'], default='media')
     parser.add_argument('--mirror', action='store_true')
     parser.add_argument('--restore-media', action='store_true')
     args = parser.parse_args()
@@ -39,7 +39,7 @@ def main():
     if args.mirror:
         env['IMIND_MAVEN_MIRROR'] = 'aliyun'
     files = {'main': 'ios_e2e_test.dart', 'chat': 'chat_e2e_test.dart',
-             'media': 'media_e2e_test.dart', 'features': 'features_e2e_test.dart', 'web': 'web_interop_e2e_test.dart', 'voice': 'voice_e2e_test.dart', 'optimization': 'optimization_e2e_test.dart', 'progress': 'progress_e2e_test.dart'}
+             'media': 'media_e2e_test.dart', 'features': 'features_e2e_test.dart', 'web': 'web_interop_e2e_test.dart', 'voice': 'voice_e2e_test.dart', 'optimization': 'optimization_e2e_test.dart', 'progress': 'progress_e2e_test.dart', 'detail': 'detail_e2e_test.dart'}
     prefix = f'{args.platform}-{args.suite}' + ('-restore' if args.restore_media else '') + '-p1'
     output = ROOT / 'outputs/imind'
     output.mkdir(parents=True, exist_ok=True)
@@ -136,7 +136,12 @@ COMMIT;''')
         database.query(f"INSERT INTO agent(id,workspace_id,name,runtime_mode,status,visibility) VALUES({agent_sql},{workspace},'iMind progress fixture','local','offline','workspace');")
         for _, issue, task in fixtures:
             database.query(f"INSERT INTO agent_task_queue(id,agent_id,issue_id,runtime_id,status) VALUES({sql_literal(task)},{agent_sql},{sql_literal(issue)},{runtime_sql},'queued');")
-        database.query(f"INSERT INTO task_message(task_id,seq,type,content) VALUES({sql_literal(fixtures[0][2])},1,'thinking','Local fixture execution trace');")
+        database.query(f"""INSERT INTO task_message(task_id,seq,type,tool,content,input,output,output_truncated) VALUES
+({sql_literal(fixtures[0][2])},1,'thinking',NULL,'Local fixture execution trace',NULL,NULL,NULL),
+({sql_literal(fixtures[0][2])},2,'tool_use','Read',NULL,'{{"path":"/notes/local-fixture.md"}}'::jsonb,NULL,NULL),
+({sql_literal(fixtures[0][2])},3,'tool_result','Read',NULL,NULL,'Local fixture tool output',TRUE),
+({sql_literal(fixtures[0][2])},4,'text',NULL,'Local fixture message body',NULL,NULL,NULL),
+({sql_literal(fixtures[0][2])},5,'error',NULL,'Local fixture error detail',NULL,NULL,NULL);""")
         defines.update({'E2E_PROGRESS_NOTE':fixtures[0][0], 'E2E_PROGRESS_RUN':fixtures[0][2],
             'E2E_PROGRESS_OTHER_RUN':fixtures[1][2], 'E2E_PROGRESS_OTHER_ISSUE':fixtures[1][1]})
     previous = None
@@ -180,6 +185,19 @@ COMMIT;''')
                         if captured: image.write_bytes(capture.stdout)
                     if captured: report.setdefault('screenshots',[]).append(str(image))
                     else: report['screenshot_failed'] = True
+                if match := re.search(r'E2E_(?:DETAIL|PROGRESS_FOLD)_CAPTURE: ([a-z-]+)', line):
+                    image = output / f'{prefix}-{match[1]}.png'
+                    if args.platform == 'ios':
+                        capture = subprocess.run(['xcrun', 'simctl', 'io', args.device, 'screenshot', '--type=png', str(image)], capture_output=True, timeout=20)
+                        captured = capture.returncode == 0
+                    else:
+                        capture = subprocess.run(['adb', '-s', args.device, 'exec-out', 'screencap', '-p'], capture_output=True, timeout=20)
+                        captured = capture.returncode == 0 and capture.stdout.startswith(bytes.fromhex('89504e470d0a1a0a'))
+                        if captured: image.write_bytes(capture.stdout)
+                    if captured:
+                        report.setdefault('screenshots', []).append(str(image))
+                    else:
+                        report['screenshot_failed'] = True
                 if 'E2E_CHAT_RECONNECT_NOW' in line:
                     result = subprocess.run(['docker', 'compose', '--env-file', str(ROOT / '.env'),
                         '-f', str(APP.parent / 'docker-compose.yml'), 'restart', 'backend'],

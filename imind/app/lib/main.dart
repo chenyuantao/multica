@@ -16,6 +16,7 @@ import 'transcript.dart';
 import 'media.dart';
 import 'url_extract.dart';
 import 'input_insets.dart';
+import 'note_actions.dart';
 
 const _bg = Color(0xFFF2F2F6);
 const _ink = Color(0xFF1C1C1E);
@@ -1278,7 +1279,6 @@ class _NoteEditorState extends State<NoteEditor> {
   late final _titleFocus = FocusNode();
   UndoHistoryController _history = UndoHistoryController();
   Map<String, dynamic>? _note;
-  var _menu = false;
   var _editing = false;
   var _focusTitle = false;
   var _changed = false;
@@ -1388,6 +1388,9 @@ class _NoteEditorState extends State<NoteEditor> {
           });
     _note = saved;
     _changed = true;
+    if (mounted) {
+      setState(() => _title.text = '${saved['title'] ?? title}');
+    }
   }
 
   Future<void> _save() async {
@@ -1516,9 +1519,6 @@ class _NoteEditorState extends State<NoteEditor> {
     }
   }
 
-  String get _activeText =>
-      widget.focusTranscript ? _transcript.text : _body.text;
-
   Widget _editor(TextEditingController controller) {
     return _MarkdownEditor(
       controller: controller,
@@ -1562,7 +1562,6 @@ class _NoteEditorState extends State<NoteEditor> {
 
   @override
   Widget build(BuildContext context) {
-    final source = widget.note?['source_url'];
     return PopScope(
       canPop: _popping,
       onPopInvokedWithResult: (didPop, _) {
@@ -1594,6 +1593,9 @@ class _NoteEditorState extends State<NoteEditor> {
                   onPressed: _leave,
                   icon: const Icon(Icons.arrow_back),
                 ),
+          centerTitle: false,
+          titleSpacing: 0,
+          title: _editing ? null : DetailTitle(_title.text),
           actions: [
             if (_editing) ...[
               IconButton(
@@ -1613,12 +1615,17 @@ class _NoteEditorState extends State<NoteEditor> {
                   style: TextStyle(color: _blue, fontWeight: FontWeight.w600),
                 ),
               ),
-            ] else if (_note != null)
-              IconButton(
-                tooltip: '更多',
-                onPressed: () => setState(() => _menu = true),
-                icon: const Icon(Icons.more_horiz),
+            ] else if (_note != null) ...[
+              TextButton(
+                onPressed: _saving ? null : _ai,
+                child: const Text('AI+'),
               ),
+              NoteActions(
+                note: _note!,
+                onRename: _rename,
+                onDelete: _confirmDelete,
+              ),
+            ],
           ],
         ),
         body: Stack(
@@ -1632,44 +1639,25 @@ class _NoteEditorState extends State<NoteEditor> {
               ),
               child: Column(
                 children: [
-                  TextField(
-                    controller: _title,
-                    focusNode: _titleFocus,
-                    readOnly: !_editing,
-                    onTap: () => _beginEdit(title: true),
-                    style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
+                  if (_editing)
+                    TextField(
+                      controller: _title,
+                      focusNode: _titleFocus,
+                      readOnly: !_editing,
+                      onTap: () => _beginEdit(title: true),
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                      ),
+                      decoration: const InputDecoration(
+                        hintText: '无标题',
+                        border: InputBorder.none,
+                      ),
                     ),
-                    decoration: const InputDecoration(
-                      hintText: '无标题',
-                      border: InputBorder.none,
-                    ),
-                  ),
                   if (_error != null)
                     Align(
                       alignment: Alignment.centerLeft,
                       child: Text(_error!, style: const TextStyle(color: _red)),
-                    ),
-                  if (_tags.isNotEmpty || _activeText.trim().isNotEmpty)
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        [
-                          for (final tag in _tags) '#$tag',
-                          if (_activeText.trim().isNotEmpty)
-                            '${_activeText.trim().length} 字',
-                        ].join('  '),
-                        style: const TextStyle(color: _sub, fontSize: 12),
-                      ),
-                    ),
-                  if (source is String && source.isNotEmpty)
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        source,
-                        style: const TextStyle(color: _sub, fontSize: 12),
-                      ),
                     ),
                   if (widget.focusTranscript) ...[
                     const Align(
@@ -1697,101 +1685,6 @@ class _NoteEditorState extends State<NoteEditor> {
                 ],
               ),
             ),
-            if (_menu) _noteMenu(),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _noteMenu() {
-    return Positioned.fill(
-      child: GestureDetector(
-        onTap: () => setState(() => _menu = false),
-        child: ColoredBox(
-          color: const Color(0x0F000000),
-          child: SafeArea(
-            child: Align(
-              alignment: Alignment.topRight,
-              child: Padding(
-                padding: const EdgeInsets.only(top: 8, right: 12),
-                child: GestureDetector(
-                  onTap: () {},
-                  child: Material(
-                    color: const Color(0xF8FAFAFC),
-                    borderRadius: BorderRadius.circular(26),
-                    elevation: 16,
-                    child: SizedBox(
-                      width: 250,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 22,
-                              vertical: 14,
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(
-                                  Icons.ios_share,
-                                  size: 22,
-                                  color: _sub,
-                                ),
-                                const SizedBox(width: 16),
-                                const Text(
-                                  '导出',
-                                  style: TextStyle(fontSize: 17, color: _sub),
-                                ),
-                                const Spacer(),
-                                Text(
-                                  '暂不可用',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: _sub.withValues(alpha: 0.9),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          _editorMenuItem(Icons.edit_outlined, '重命名', _rename),
-                          _editorMenuItem(
-                            Icons.delete_outline,
-                            '删除',
-                            _confirmDelete,
-                            color: _red,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _editorMenuItem(
-    IconData icon,
-    String label,
-    VoidCallback onTap, {
-    Color? color,
-  }) {
-    return InkWell(
-      onTap: () {
-        setState(() => _menu = false);
-        onTap();
-      },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
-        child: Row(
-          children: [
-            Icon(icon, size: 22, color: color ?? const Color(0xFF3A3A3C)),
-            const SizedBox(width: 16),
-            Text(label, style: TextStyle(fontSize: 17, color: color)),
           ],
         ),
       ),
@@ -2030,6 +1923,37 @@ class _RecordingDetailState extends State<RecordingDetail> {
     }
   }
 
+  Future<void> _confirmDelete() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        content: const Text('删除这份音频？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('删除', style: TextStyle(color: _red)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await widget.api.deleteNote(
+        '${_note['id']}',
+        widget.machine,
+        '${_note['revision']}',
+      );
+      _changed = true;
+      _leave();
+    } catch (error) {
+      if (mounted) setState(() => _error = '$error');
+    }
+  }
+
   Future<void> _renameRecording() async {
     final controller = TextEditingController(text: '${_note['title']}');
     final title = await showDialog<String>(
@@ -2088,7 +2012,6 @@ class _RecordingDetailState extends State<RecordingDetail> {
   @override
   Widget build(BuildContext context) {
     final lines = parseTranscript('${_note['transcript'] ?? ''}');
-    final tags = noteTags(_note);
     return PopScope(
       canPop: _popping,
       onPopInvokedWithResult: (didPop, _) {
@@ -2127,13 +2050,18 @@ class _RecordingDetailState extends State<RecordingDetail> {
                           onTap: _leave,
                           child: const Icon(Icons.arrow_back, size: 22),
                         ),
-                      const Spacer(),
-                      if (!_editing)
-                        IconButton(
-                          tooltip: '重命名',
-                          onPressed: _saving ? null : _renameRecording,
-                          icon: const Icon(Icons.edit_outlined),
+                      Expanded(child: DetailTitle('${_note['title'] ?? ''}')),
+                      if (!_editing) ...[
+                        TextButton(
+                          onPressed: _saving ? null : _ai,
+                          child: const Text('AI+'),
                         ),
+                        NoteActions(
+                          note: _note,
+                          onRename: _renameRecording,
+                          onDelete: _confirmDelete,
+                        ),
+                      ],
                       if (_editing) ...[
                         IconButton(
                           tooltip: '撤销',
@@ -2165,25 +2093,6 @@ class _RecordingDetailState extends State<RecordingDetail> {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(20, 10, 20, 12),
-                child: Text(
-                  '${_note['title'] ?? ''}',
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                    height: 1.4,
-                  ),
-                ),
-              ),
-              if ('${_note['summary'] ?? ''}'.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-                  child: Text(
-                    '${_note['summary']}',
-                    style: const TextStyle(color: _sub),
-                  ),
-                ),
-              Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Row(
                   children: [
@@ -2200,20 +2109,6 @@ class _RecordingDetailState extends State<RecordingDetail> {
                 ),
               const SizedBox(height: 8),
               Expanded(child: _editing ? _editors() : _reading(lines)),
-              if (!_editing && (tags.isNotEmpty || _note['updated_at'] != null))
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-                  child: Text(
-                    [
-                      ...tags,
-                      formatWhen(_note['updated_at'] as String?),
-                    ].where((item) => item.isNotEmpty).join(' · '),
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFFA0A0A5),
-                    ),
-                  ),
-                ),
               if (!_editing)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 20),

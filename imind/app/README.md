@@ -88,6 +88,14 @@ Run `python3 tool/run_feature_e2e.py --platform ios|android --device <device> --
 
 ### Functional optimization acceptance
 
-Run `tool/run_feature_e2e.py --platform ios --device <iOS-27-UDID> --suite optimization`, then `--suite progress`, followed by the same suites on Android (`--mirror` if needed). Use local services for every suite. `optimization` checks clip raw text and prompt persistence, a single file chat and retry, naming failure preservation (or real generation when configured), and manual recording rename. `progress` creates an offline runtime and queue-only agent in the dedicated local database, opens real execution history and cancels one run while a second file's run stays queued. Its random fixture agent/runtime/tasks are removed on exit; no agent CLI runs.
+Run `tool/run_feature_e2e.py --platform ios --device <iOS-27-UDID> --suite optimization`, then `--suite progress`, followed by the same suites on Android (`--mirror` if needed). Use local services for every suite. `optimization` checks clip raw text and prompt persistence, a single file chat and retry, naming failure preservation (or real generation when configured), and manual recording rename. `progress` creates an offline runtime and queue-only agent in the dedicated local database, opens real execution history, checks independent default-collapsed thinking/tool/message/error entries and expansion retention across polling, and cancels one run while a second file's run stays queued. Its random fixture agent/runtime/tasks are removed on exit; no agent CLI runs.
 
 DeepSeek is configured in Workspace → General → iMind. The deployment requires `MULTICA_IMIND_SECRET_KEY` (32 random bytes encoded as base64) to encrypt workspace API keys. For local Docker, export it before the compose command; keep it in private local storage, outside the repository. The model API key is entered only in the admin setting, never in Flutter defines. Without a configured model key, the recording is saved, naming shows a retry action, and “保留原标题” exits safely. AI naming is also available from the selected file actions. Automatic recording naming runs only after note and media persistence succeeds.
+
+### Detail toolbar and chat keyboard acceptance
+
+```sh
+python3 tool/run_feature_e2e.py --platform ios --device <booted-iOS-UDID> --suite detail
+```
+
+The `detail` suite creates temporary notes, clips and recordings through the local API, opens their actual Flutter detail screens, and verifies the shared menu, metadata sheet, one-line toolbar title, inline editing and persistence, toolbar AI+ entry, and native keyboard behavior. It starts/stops the native microphone and real ASR while the keyboard is open, then checks dismissal from the chat header, message area and Send. Fixture files are deleted on exit; their dedicated file chats may remain in the acceptance workspace. Screenshots and logs use the `ios-detail-p1` prefix in `outputs/imind/`. Restore a normal build after running the suite.

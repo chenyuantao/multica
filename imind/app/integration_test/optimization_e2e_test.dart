@@ -126,7 +126,8 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await f.tap(find.byTooltip('重命名'));
+      await f.tap(find.byTooltip('更多'));
+      await f.tap(find.text('重命名'));
       await f.text(find.byType(TextField).last, '$title 手改');
       await f.tap(find.widgetWithText(TextButton, '完成'));
       await f.wait(find.text('$title 手改'));
