@@ -9,6 +9,7 @@ import 'package:uuid/uuid.dart';
 import 'package:web_socket_channel/io.dart';
 
 import 'api.dart';
+import 'chat_unread.dart';
 import 'input_insets.dart';
 import 'run_progress.dart';
 import 'voice_input.dart';
@@ -36,6 +37,7 @@ Future<void> showNoteAiChat(
   ),
   builder: (_) => NoteAiChatSheet(
     api: api,
+    unread: ChatUnreadScope.maybeOf(context),
     machine: machine,
     note: note,
     initialMessage: initialMessage,
@@ -51,6 +53,7 @@ class NoteAiChatSheet extends StatefulWidget {
     this.initialMessage,
     this.voiceRecorder,
     this.voiceSessionFactory,
+    this.unread,
   });
   final MulticaApi api;
   final String machine;
@@ -58,6 +61,7 @@ class NoteAiChatSheet extends StatefulWidget {
   final String? initialMessage;
   final AudioRecorder? voiceRecorder;
   final VoiceSessionFactory? voiceSessionFactory;
+  final ChatUnreadController? unread;
 
   @override
   State<NoteAiChatSheet> createState() => _NoteAiChatSheetState();
@@ -93,6 +97,7 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
   String? _runError;
   IOWebSocketChannel? _channel;
   StreamSubscription<dynamic>? _subscription;
+  StreamSubscription<Map<String, dynamic>>? _globalSubscription;
   Timer? _retry;
   Timer? _historyRetry;
   Timer? _stopPoll;
@@ -121,10 +126,12 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
   @override
   void dispose() {
     _disposed = true;
+    widget.unread?.setActiveChat(null);
     _retry?.cancel();
     _historyRetry?.cancel();
     _stopPoll?.cancel();
     unawaited(_subscription?.cancel());
+    unawaited(_globalSubscription?.cancel());
     unawaited(_channel?.sink.close());
     _voice.dispose();
     _input.dispose();
@@ -143,9 +150,17 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
       );
       if (_disposed) return;
       _issueId = chat['issue_id'] as String;
+      widget.unread?.setActiveChat(_issueId);
+      unawaited(widget.unread?.refresh() ?? Future<void>.value());
       _userId = (await widget.api.getMe())['id'] as String;
       unawaited(_loadAgentNames());
-      _connect();
+      if (widget.unread != null) {
+        _globalSubscription = widget.unread!.events.listen(
+          (frame) => _onFrame(jsonEncode(frame)),
+        );
+      } else {
+        _connect();
+      }
       unawaited(_loadRuns());
       await _loadLatest();
       if (!_disposed &&
@@ -201,6 +216,12 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
       _hasMore = page['has_more'] == true;
     });
     if (replace) _scrollToEnd();
+    try {
+      await (widget.unread?.markRead(issueId) ??
+          widget.api.markNoteChatRead(issueId));
+    } catch (_) {
+      // Keep the server unread state when marking read fails.
+    }
   }
 
   Future<void> _refreshHistory() async {
@@ -417,6 +438,13 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
           ? nestedComment
           : payload;
       _upsert(comment);
+      if (type == 'comment:created') {
+        unawaited(
+          (widget.unread?.markRead(_issueId!) ??
+                  widget.api.markNoteChatRead(_issueId!))
+              .catchError((Object _) {}),
+        );
+      }
       unawaited(_loadRuns());
     } else if (type == 'comment:deleted') {
       final id = payload['comment_id'] ?? payload['id'];

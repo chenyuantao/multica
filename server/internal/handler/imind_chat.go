@@ -40,6 +40,82 @@ type imindChatEnsureRequest struct {
 	Revision     string `json:"revision"`
 }
 
+// ListIMindChatUnread returns joined chats across accessible iMind shares
+// without creating a chat or joining the requester to one.
+func (h *Handler) ListIMindChatUnread(w http.ResponseWriter, r *http.Request) {
+	member, ok := ctxMember(r.Context())
+	if !ok {
+		writeError(w, http.StatusNotFound, "workspace not found")
+		return
+	}
+	userID, ok := requireUserID(w, r)
+	if !ok {
+		return
+	}
+	roots := []string{}
+	rootMachines := map[string]string{}
+	if h.FileShares != nil {
+		for _, peer := range h.FileShares.List() {
+			if h.canUseIMindShare(r, peer.Meta()) {
+				root := imindShareRootID(peer.Meta())
+				roots = append(roots, root)
+				rootMachines[root] = peer.Meta().Machine
+			}
+		}
+	}
+	if len(roots) == 0 {
+		writeJSON(w, http.StatusOK, map[string]any{"chats": []any{}})
+		return
+	}
+	rows, err := h.DB.Query(r.Context(), `SELECT c.share_root_id, c.note_id, c.issue_id, i.title
+		FROM imind_group_chat c
+		JOIN issue i ON i.id = c.issue_id AND i.workspace_id = c.workspace_id
+		JOIN issue_member m ON m.issue_id = c.issue_id AND m.workspace_id = c.workspace_id
+			AND m.member_type = 'member' AND m.member_id = $3
+		WHERE c.workspace_id = $1 AND c.share_root_id = ANY($2::text[])`,
+		member.WorkspaceID, roots, parseUUID(userID))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list note chats")
+		return
+	}
+	defer rows.Close()
+	type chatRow struct {
+		ShareMachine string `json:"share_machine"`
+		NoteID       string `json:"note_id"`
+		IssueID      string `json:"issue_id"`
+		Title        string `json:"title"`
+		UnreadCount  int64  `json:"unread_count"`
+	}
+	chats := []chatRow{}
+	ids := []pgtype.UUID{}
+	for rows.Next() {
+		var noteID, issueID pgtype.UUID
+		var root, title string
+		if err := rows.Scan(&root, &noteID, &issueID, &title); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to list note chats")
+			return
+		}
+		chats = append(chats, chatRow{ShareMachine: rootMachines[root], NoteID: uuidToString(noteID), IssueID: uuidToString(issueID), Title: title})
+		ids = append(ids, issueID)
+	}
+	if rows.Err() != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list note chats")
+		return
+	}
+	rows.Close()
+	counts := h.groupChatUnreadCounts(r.Context(), member.WorkspaceID, parseUUID(userID), ids)
+	visible := chats[:0]
+	for _, chat := range chats {
+		chat.UnreadCount = counts[chat.IssueID]
+		if chat.UnreadCount > 0 && len(h.FilterIMindChatAudience(r.Context(), chat.IssueID, []string{userID})) == 0 {
+			continue
+		}
+		visible = append(visible, chat)
+	}
+	chats = visible
+	writeJSON(w, http.StatusOK, map[string]any{"chats": chats})
+}
+
 // EnsureIMindChat binds a saved note to exactly one workspace chat and joins
 // the requesting member. The advisory transaction lock serializes first-open
 // races across API instances; the unique key remains the durable invariant.

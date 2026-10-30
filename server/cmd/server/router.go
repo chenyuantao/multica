@@ -1751,6 +1751,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			r.Put("/settings/clip-agent", h.PutIMindClipAgent)
 			r.Delete("/notes/{id}", h.DeleteIMindNote)
 			r.Post("/chats/ensure", h.EnsureIMindChat)
+			r.Get("/chats/unread", h.ListIMindChatUnread)
 			r.Post("/chats/{id}/retry", h.RetryIMindChatMessage)
 			r.Get("/settings/default-agent", h.GetIMindDefaultAgent)
 			r.With(middleware.RequireWorkspaceRole(queries, "owner", "admin")).Put("/settings/default-agent", h.PutIMindDefaultAgent)

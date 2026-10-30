@@ -2,12 +2,13 @@ package handler
 
 import (
 	"context"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"net/http"
 	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/multica-ai/multica/server/internal/fileshare"
 	"github.com/multica-ai/multica/server/internal/testutil"
@@ -34,6 +35,28 @@ func TestEnsureIMindChatIsIdempotentAndFileAccessGated(t *testing.T) {
 		"share_machine": "imind-chat-test", "type": "note", "title": "Chat note", "content": "saved content",
 	})
 	testutil.Call(t, h.PostIMindNotes, createReq).Want(http.StatusCreated).JSON(&note)
+	listUnread := func(userID string) []struct {
+		ShareMachine string `json:"share_machine"`
+		NoteID       string `json:"note_id"`
+		IssueID      string `json:"issue_id"`
+		UnreadCount  int64  `json:"unread_count"`
+	} {
+		t.Helper()
+		var out struct {
+			Chats []struct {
+				ShareMachine string `json:"share_machine"`
+				NoteID       string `json:"note_id"`
+				IssueID      string `json:"issue_id"`
+				UnreadCount  int64  `json:"unread_count"`
+			} `json:"chats"`
+		}
+		testutil.Call(t, h.ListIMindChatUnread, groupChatRequestAs(t, userID, http.MethodGet,
+			"/api/imind/chats/unread", nil)).Want(http.StatusOK).JSON(&out)
+		return out.Chats
+	}
+	if got := listUnread(testUserID); len(got) != 0 {
+		t.Fatalf("listing unread created a chat: %+v", got)
+	}
 
 	ensure := func(userID string) map[string]any {
 		t.Helper()
@@ -70,6 +93,23 @@ func TestEnsureIMindChatIsIdempotentAndFileAccessGated(t *testing.T) {
 		t.Fatalf("association count=%d, want 1", count)
 	}
 	issueID := first["issue_id"].(string)
+	for _, userID := range []string{testUserID, memberB} {
+		rows := listUnread(userID)
+		if len(rows) != 1 || rows[0].ShareMachine != "imind-chat-test" || rows[0].NoteID != note.ID || rows[0].IssueID != issueID || rows[0].UnreadCount != 0 {
+			t.Fatalf("wrong note chat unread mapping for %s: %+v", userID, rows)
+		}
+	}
+	dbfx.Exec(t, `INSERT INTO inbox_item (workspace_id, recipient_type, recipient_id, type, title, issue_id, read, details)
+		VALUES ($1, 'member', $2, 'new_comment', 'Chat note', $3, false, jsonb_build_object('comment_id', $4::text))`,
+		testWorkspaceID, memberB, issueID, "00000000-0000-0000-0000-00000000c101")
+	if got := listUnread(memberB)[0].UnreadCount; got != 1 {
+		t.Fatalf("file chat unread count = %d, want 1", got)
+	}
+	testutil.Call(t, h.MarkGroupChatRead, withURLParam(groupChatRequestAs(t, memberB, http.MethodPost,
+		"/api/group-chats/"+issueID+"/read", nil), "id", issueID)).Want(http.StatusOK)
+	if got := listUnread(memberB)[0].UnreadCount; got != 0 {
+		t.Fatalf("file chat unread count after read = %d, want 0", got)
+	}
 	dbfx.Cleanup(t, `DELETE FROM imind_group_chat WHERE issue_id=$1`, issueID)
 	var renamed iMindNoteResponse
 	renameReq := groupChatRequestAs(t, testUserID, http.MethodPut, "/api/imind/notes/"+note.ID, map[string]any{"share_machine": "imind-chat-test", "revision": note.Revision, "title": "Renamed Chat note", "content": "saved content", "transcript": ""})

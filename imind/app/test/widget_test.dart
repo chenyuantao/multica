@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:imind_app/api.dart';
+import 'package:imind_app/chat_unread.dart';
 import 'package:imind_app/main.dart';
 import 'package:imind_app/session.dart';
 
@@ -59,6 +60,7 @@ MulticaApi _api({
         '/api/imind/notes/list' => {
           'notes': [_note()],
         },
+        '/api/imind/chats/unread' => {'chats': []},
         '/api/imind/bootstrap' => {},
         '/api/imind/chats/ensure' => {
           'issue_id': _otherWorkspace,
@@ -111,6 +113,53 @@ void main() {
     expect(find.text('发送验证码'), findsOneWidget);
     expect(find.text('在这里，记录你的一切。'), findsOneWidget);
   });
+  testWidgets('首页与详情显示文件群聊未读，展开后清除', (tester) async {
+    var unread = 3;
+    var reads = 0;
+    final api = _api(
+      intercept: (request) async {
+        if (request.url.path == '/api/imind/chats/unread') {
+          return http.Response(
+            jsonEncode({
+              'chats': [
+                {
+                  'note_id': _id,
+                  'share_machine': 'mbp',
+                  'issue_id': _otherWorkspace,
+                  'title': '示例笔记',
+                  'unread_count': unread,
+                },
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.url.path == '/api/group-chats/$_otherWorkspace/read') {
+          reads++;
+          unread = 0;
+          return http.Response('{"count":3}', 200);
+        }
+        return null;
+      },
+    );
+    await _pump(tester, _storage(), api);
+    expect((await api.noteChatUnread()).first['unread_count'], 3);
+    final unreadController = ChatUnreadScope.maybeOf(
+      tester.element(find.byType(HomePage)),
+    )!;
+    await unreadController.refresh();
+    await tester.pump();
+    expect(unreadController.unreadForNote(_id, 'mbp'), 3);
+    expect(find.text('3'), findsOneWidget);
+    await tester.tap(find.text('示例笔记').first);
+    await tester.pumpAndSettle();
+    expect(find.text('3'), findsOneWidget);
+    await tester.tap(find.text('AI+').first);
+    await tester.pumpAndSettle();
+    expect(reads, greaterThan(0));
+    expect(find.text('3'), findsNothing);
+  });
   testWidgets('恢复有效选择并在共享根请求前校验工作区', (tester) async {
     final requests = <http.Request>[];
     final storage = _storage(machine: 'desktop');
@@ -125,8 +174,13 @@ void main() {
       ),
     );
     expect(find.text('示例笔记'), findsOneWidget);
-    expect(requests.first.url.path, '/api/workspaces');
-    for (final request in requests.skip(1)) {
+    expect(
+      requests.any((request) => request.url.path == '/api/workspaces'),
+      isTrue,
+    );
+    for (final request in requests.where(
+      (request) => request.url.path != '/api/workspaces',
+    )) {
       expect(request.headers['X-Workspace-ID'], _workspace);
       if (request.method == 'POST') {
         expect(jsonDecode(request.body)['share_machine'], 'desktop');

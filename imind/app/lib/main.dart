@@ -9,6 +9,7 @@ import 'package:image_picker/image_picker.dart';
 import 'asr_session.dart';
 
 import 'ai_chat.dart';
+import 'chat_unread.dart';
 import 'api.dart';
 import 'session.dart';
 import 'transcript.dart';
@@ -70,27 +71,37 @@ class SessionGate extends StatefulWidget {
   State<SessionGate> createState() => _SessionGateState();
 }
 
-class _SessionGateState extends State<SessionGate> {
+class _SessionGateState extends State<SessionGate> with WidgetsBindingObserver {
   final _navigator = GlobalKey<NavigatorState>();
   late final _api = widget.api ?? MulticaApi(baseUrl: defaultApiBase());
   late final _session = SessionController(
     api: _api,
     store: widget.sessionStore,
   );
+  late final _chatUnread = ChatUnreadController(_api);
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _session.addListener(_refreshSession);
     _session.restore(initialToken: widget.initialToken);
   }
 
   void _refreshSession() {
+    _chatUnread.configure(_session.data);
     if (mounted) setState(() {});
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) unawaited(_chatUnread.refresh());
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _chatUnread.dispose();
     _session.removeListener(_refreshSession);
     _session.dispose();
     if (widget.api == null) _api.close();
@@ -109,12 +120,15 @@ class _SessionGateState extends State<SessionGate> {
         sessionError: _session.error,
       );
     }
-    return NavigatorPopHandler<Object?>(
-      onPopWithResult: (result) => _navigator.currentState?.maybePop(result),
-      child: Navigator(
-        key: _navigator,
-        onGenerateRoute: (_) => MaterialPageRoute<void>(
-          builder: (_) => HomePage(session: _session),
+    return ChatUnreadScope(
+      controller: _chatUnread,
+      child: NavigatorPopHandler<Object?>(
+        onPopWithResult: (result) => _navigator.currentState?.maybePop(result),
+        child: Navigator(
+          key: _navigator,
+          onGenerateRoute: (_) => MaterialPageRoute<void>(
+            builder: (_) => HomePage(session: _session),
+          ),
         ),
       ),
     );
@@ -922,6 +936,8 @@ class _HomePageState extends State<HomePage> {
     final audio = note['audio'];
     final duration = audio is Map ? audio['duration_ms'] : null;
     final host = sourceHost(note['source_url']);
+    final unread =
+        ChatUnreadScope.maybeOf(context)?.unreadForNote(id, _machine) ?? 0;
     return InkWell(
       onLongPress: () => setState(() {
         _selecting = true;
@@ -996,6 +1012,11 @@ class _HomePageState extends State<HomePage> {
                 ],
               ),
             ),
+            if (unread > 0)
+              Padding(
+                padding: const EdgeInsets.only(left: 8, top: 4),
+                child: ChatUnreadBadge(count: unread),
+              ),
             if (_selecting)
               Padding(
                 padding: const EdgeInsets.only(left: 8, top: 8),
@@ -1333,8 +1354,9 @@ class _EditExitGuardState extends State<EditExitGuard> {
         !widget.editing ||
         widget.busy ||
         widget.popping ||
-        _confirming)
+        _confirming) {
       return;
+    }
     _confirming = true;
     try {
       final discard = await showDialog<bool>(
@@ -1776,9 +1798,10 @@ class _NoteEditorState extends State<NoteEditor> {
                 ),
               ),
             ] else if (_note != null) ...[
-              TextButton(
+              AiChatButton(
+                noteId: '${_note!['id']}',
+                machine: widget.machine,
                 onPressed: _saving ? null : _ai,
-                child: const Text('AI+'),
               ),
               NoteActions(
                 note: _note!,
@@ -2252,9 +2275,10 @@ class _RecordingDetailState extends State<RecordingDetail> {
                         ),
                       Expanded(child: DetailTitle('${_note['title'] ?? ''}')),
                       if (!_editing) ...[
-                        TextButton(
+                        AiChatButton(
+                          noteId: '${_note['id']}',
+                          machine: widget.machine,
                           onPressed: _saving ? null : _ai,
-                          child: const Text('AI+'),
                         ),
                         NoteActions(
                           note: _note,
@@ -3525,6 +3549,61 @@ class _MarkdownEditorState extends State<_MarkdownEditor> {
       ),
       onPressed: onPressed,
       child: Text(label),
+    );
+  }
+}
+
+class ChatUnreadBadge extends StatelessWidget {
+  const ChatUnreadBadge({super.key, required this.count});
+  final int count;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    constraints: const BoxConstraints(minWidth: 19, minHeight: 19),
+    padding: const EdgeInsets.symmetric(horizontal: 5),
+    decoration: const BoxDecoration(
+      color: _red,
+      borderRadius: BorderRadius.all(Radius.circular(10)),
+    ),
+    alignment: Alignment.center,
+    child: Text(
+      count > 99 ? '99+' : '$count',
+      style: const TextStyle(
+        color: Colors.white,
+        fontSize: 11,
+        fontWeight: FontWeight.w700,
+      ),
+    ),
+  );
+}
+
+class AiChatButton extends StatelessWidget {
+  const AiChatButton({
+    super.key,
+    required this.noteId,
+    required this.machine,
+    required this.onPressed,
+  });
+  final String noteId;
+  final String? machine;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final unread =
+        ChatUnreadScope.maybeOf(context)?.unreadForNote(noteId, machine) ?? 0;
+    return TextButton(
+      onPressed: onPressed,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text('AI+'),
+          if (unread > 0) ...[
+            const SizedBox(width: 5),
+            ChatUnreadBadge(count: unread),
+          ],
+        ],
+      ),
     );
   }
 }

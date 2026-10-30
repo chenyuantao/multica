@@ -1,6 +1,6 @@
 # iMind 接口与 Markdown 契约
 
-版本：v1 HTTP / imind_scope_revision_v1 + imind_rename_v1 + imind_media_v1 daemon（2026-10-29）
+版本：v1 HTTP / imind_scope_revision_v1 + imind_rename_v1 + imind_media_v1 daemon（2026-10-30）
 
 ## 身份与作用域
 
@@ -161,6 +161,8 @@ AI+ 输入框使用与录音页相同的 `record` PCM 采集和 `AsrSession`，�
 
 `POST /api/imind/chats/ensure` 请求 `{share_machine,note_id,revision}`，返回 `{issue_id,identifier,title,joined,chat}`。`revision` 必需，过期返回 `409 imind_conflict`。新笔记先成功保存；聊天使用已保存版本，保存失败保留草稿并反馈。
 
+`GET /api/imind/chats/unread` 返回当前工作区中用户已加入、且仍有共享根访问权限的文件群聊 `{chats:[{share_machine,note_id,issue_id,title,unread_count}]}`。只读，不创建群聊或加入成员；未读数取服务端 inbox 状态。取得群聊最新消息后调用既有 `POST /api/group-chats/{issue_id}/read`，成功后刷新未读映射。首页与详情按 `share_machine + note_id` 显示未读数；App 图标显示当前工作区可访问 iMind 群聊的未读消息总数。
+
 服务端 `imind_group_chat` 用工作区 UUID、共享根身份（owner + daemon ID + 规范化根目录的 SHA-256）与笔记元数据 UUID 绑定普通 group-chat issue。文件名及可变 machine 昵称不参与身份。事务锁串行首次创建，issue 与绑定原子提交，两个 concurrent 唯一索引防止重复。每次展开幂等加入当前用户，关闭只释放客户端监听，不退群。文件重命名复用原群聊，不同文件隔离。
 
 群聊普通 issue/评论接口、群聊列表/搜索和实时收件人都复核当前文件/共享根权限。成员资格不能扩大文件访问范围；共享目录不可用时暂停读取并可恢复同步。删除群聊或工作区按应用层清理关联，不使用 foreign key。
@@ -177,7 +179,7 @@ AI+ 输入框使用与录音页相同的 `record` PCM 采集和 `AsrSession`，�
 - 历史：`GET /api/issues/{id}/comments/page`，使用既有 `before_created_at/before_id` 分页。
 - 发送：`POST /api/issues/{id}/comments`，`{content,type:"comment",client_id:<UUID>}`。客户端为一次发送保留稳定 `client_id`；同工作区、任务、作者和 ID 的重试返回原评论，不重复发消息或调度。
 - 评论附带可选 `imind_agent_status`（`queued` / `unavailable`），在历史中持久保存。无可用智能体/分发失败保留评论，显示恢复入口；`POST /api/imind/chats/{id}/retry` 的 `{comment_id}` 只允许原作者且当前文件有权访问，已有活动运行时幂等返回，不重复调度。
-- WebSocket `/ws?workspace_id=<UUID>` 使用现有 auth 首帧（token 不在 URL），按群聊 issue ID 过滤 `comment:created/updated/deleted`、`group_chat:updated`、`imind:message_status` 和 `task:queued/running/completed/failed/cancelled`。重连回拉已加载历史窗口和活动运行，补齐更新与删除并按 ID 去重；共享根晚于服务恢复时继续重试。关闭、换文件及退出登录销毁监听和计时器。
+- WebSocket `/ws?workspace_id=<UUID>` 使用现有 auth 首帧（token 不在 URL）。登录会话维持一个工作区级连接，未读事件刷新当前工作区所有可访问 iMind 群聊的服务端计数；AI+ 弹层复用该连接，按当前 issue ID 过滤 `comment:created/updated/deleted`、`group_chat:updated`、`imind:message_status` 和 `task:queued/running/completed/failed/cancelled`。重连回拉未读映射、已加载历史窗口和活动运行，补齐更新与删除并按 ID 去重；共享根晚于服务恢复时继续重试。关闭弹层只释放其监听；退出登录或切换工作区销毁连接与旧角标。当前原生本地通知依赖 App 进程收到 WebSocket 事件，系统挂起或终止进程后的可靠送达需另接远程推送。
 - 活动运行来自 `GET /api/issues/{id}/task-runs`。每个运行独立红色终止按钮调用 `POST /api/issues/{id}/tasks/{taskId}/cancel`，提交中禁用，随后以响应、运行事件和重新读取状态收敛。失败保留反馈及重试，不取消其他群聊的运行。
 - Markdown 使用 `flutter_markdown`。`docs` / `obsidian` fenced JSON 的 `name/summary/path` 与 Web 同规则解析：相对 `.md` 路径、禁止绝对路径及 `.`/`..`，缺省标题取文件名、摘要合并空白，畸形内容保持可读。卡片经已认证的 `/api/docs/files/content` 打开，不直接打开服务器路径。
 

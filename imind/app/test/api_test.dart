@@ -56,6 +56,62 @@ const operations = [
 ];
 
 void main() {
+  test('文件群聊未读查询校验映射并发送标记已读请求', () async {
+    final requests = <http.Request>[];
+    final api =
+        MulticaApi(
+            baseUrl: 'http://localhost',
+            client: MockClient((request) async {
+              requests.add(request);
+              return http.Response(
+                jsonEncode(
+                  request.url.path == '/api/imind/chats/unread'
+                      ? {
+                          'chats': [
+                            {
+                              'note_id': noteId,
+                              'share_machine': 'mbp',
+                              'issue_id': workspaceId,
+                              'title': '笔记',
+                              'unread_count': 2,
+                            },
+                          ],
+                        }
+                      : {'count': 2},
+                ),
+                200,
+                headers: {'content-type': 'application/json'},
+              );
+            }),
+          )
+          ..token = 'test-session'
+          ..workspaceId = workspaceId;
+    addTearDown(api.close);
+    final rows = await api.noteChatUnread();
+    expect(rows.single['unread_count'], 2);
+    await api.markNoteChatRead(workspaceId);
+    expect(requests.map((r) => '${r.method} ${r.url.path}'), [
+      'GET /api/imind/chats/unread',
+      'POST /api/group-chats/$workspaceId/read',
+    ]);
+  });
+
+  test('拒绝畸形文件群聊未读数', () async {
+    final api = responding({
+      'chats': [
+        {
+          'note_id': noteId,
+          'share_machine': 'mbp',
+          'issue_id': workspaceId,
+          'title': '笔记',
+          'unread_count': -1,
+        },
+      ],
+    });
+    addTearDown(api.close);
+    await expectLater(api.noteChatUnread(), throwsA(apiError(502)));
+  });
+
   test('AI 标记发送保存版本并拒绝畸形响应', () async {
     final api =
         MulticaApi(

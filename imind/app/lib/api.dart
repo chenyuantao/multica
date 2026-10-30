@@ -363,6 +363,41 @@ class MulticaApi {
     };
   }
 
+  Future<List<Map<String, dynamic>>> noteChatUnread() async {
+    final data = _object(await _request('GET', '/api/imind/chats/unread'));
+    return [
+      for (final value in _list(data['chats'], 'chats'))
+        _noteChatUnreadRow(value),
+    ];
+  }
+
+  Map<String, dynamic> _noteChatUnreadRow(Object? value) {
+    final row = _object(value);
+    final noteId = _requiredString(row, 'note_id');
+    final issueId = _requiredString(row, 'issue_id');
+    final machine = _requiredString(row, 'share_machine');
+    final unread = row['unread_count'];
+    if (!validShareMachine(machine) ||
+        !validWorkspaceId(noteId) ||
+        !validWorkspaceId(issueId) ||
+        unread is! int ||
+        unread < 0) {
+      throw _malformed('chat unread');
+    }
+    return {
+      'note_id': noteId,
+      'share_machine': machine,
+      'issue_id': issueId,
+      'title': _string(row, 'title', 'AI+ 群聊'),
+      'unread_count': unread,
+    };
+  }
+
+  Future<void> markNoteChatRead(String issueId) async {
+    _checkId(issueId);
+    await _request('POST', '/api/group-chats/$issueId/read');
+  }
+
   Future<Map<String, dynamic>> noteChatHistory(
     String issueId, {
     String? beforeCreatedAt,
