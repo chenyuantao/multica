@@ -1,17 +1,20 @@
 package handler
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"path"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/multica-ai/multica/server/internal/fileshare"
 	"github.com/multica-ai/multica/server/internal/imind"
 	"github.com/multica-ai/multica/server/internal/obsidianvault"
 	"github.com/multica-ai/multica/server/internal/testutil"
+	"github.com/multica-ai/multica/server/internal/util/secretbox"
 )
 
 func TestIMindClipPlaceholderPersistsContextAndDispatchesInItsFileChat(t *testing.T) {
@@ -27,14 +30,74 @@ func TestIMindClipPlaceholderPersistsContextAndDispatchesInItsFileChat(t *testin
 	}
 	h := *testHandler
 	h.FileShares = hub
+	box, err := secretbox.New(make([]byte, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.IMindSecretBox = box
+	testutil.Call(t, h.PutIMindDeepSeek, groupChatRequestAs(t, testUserID, "PUT", "/settings", map[string]string{"api_key": "test-secret"})).Want(200)
+	t.Cleanup(func() {
+		testPool.Exec(ctx, `UPDATE workspace SET imind_deepseek_key=NULL WHERE id=$1`, testWorkspaceID)
+	})
+	gate := make(chan struct{})
+	defer func() {
+		select {
+		case <-gate:
+		default:
+			close(gate)
+		}
+	}()
+	h.IMindClipHTTP = &http.Client{Transport: imindNamingTransport(func(r *http.Request) (*http.Response, error) {
+		<-gate
+		if r.Method != "GET" || r.URL.String() != article.URL || r.Header.Get("Authorization") != "" {
+			t.Fatalf("wrong static fetch: %v", r)
+		}
+		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"text/html; charset=utf-8"}}, Body: io.NopCloser(strings.NewReader("<html><title>本地文章</title><body>静态文章主题</body></html>"))}, nil
+	})}
+	h.IMindNamingHTTP = &http.Client{Transport: imindNamingTransport(func(r *http.Request) (*http.Response, error) {
+		var payload struct {
+			Messages []struct {
+				Content string `json:"content"`
+			} `json:"messages"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(payload.Messages[1].Content, "静态文章主题") || !strings.Contains(payload.Messages[1].Content, article.URL) {
+			t.Fatal("naming lacks static HTML or URL")
+		}
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"choices":[{"message":{"content":"{\"title\":\"静态文章初始标题\",\"summary\":\"初始摘要\"}"}}]}`))}, nil
+	})}
+
 	defaultAgent := createHandlerTestAgent(t, "clip-default", nil)
 	clipAgent := createHandlerTestAgent(t, "clip-specialist", nil)
 	dbfx.Exec(t, `UPDATE workspace SET imind_default_agent_id=$2,imind_clip_agent_id=$3 WHERE id=$1`, testWorkspaceID, defaultAgent, clipAgent)
 	t.Cleanup(func() {
 		testPool.Exec(ctx, `UPDATE workspace SET imind_default_agent_id=NULL,imind_clip_agent_id=NULL WHERE id=$1`, testWorkspaceID)
 	})
+
 	var note iMindNoteResponse
 	testutil.Call(t, h.PostIMindNotes, groupChatRequestAs(t, testUserID, http.MethodPost, "/api/imind/notes", map[string]any{"share_machine": "clip-test", "type": "clip", "title": "生成中的剪藏1", "source_url": article.URL, "content": "文章 https://example.com/article", "clip": map[string]string{"original_text": "文章 https://example.com/article", "prompt": "保留要点"}})).Want(http.StatusCreated).JSON(&note)
+	if note.Title != "生成中的剪藏" || note.Content != "" {
+		t.Fatalf("placeholder not created immediately: %+v", note)
+	}
+	close(gate)
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		var current iMindNoteResponse
+		testutil.Call(t, h.PostIMindNote, groupChatRequestAs(t, testUserID, "POST", "/get", map[string]string{"share_machine": "clip-test", "id": note.ID})).Want(200).JSON(&current)
+		if current.Title == "静态文章初始标题" {
+			if current.Revision != note.Revision {
+				t.Fatal("initial naming changed the clipping revision")
+			}
+			note = current
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("background initial naming did not complete: %+v", current)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 	if note.Type != "clip" || note.Clip == nil || note.Clip.Prompt != "保留要点" {
 		t.Fatalf("placeholder lost context: %+v", note)
 	}
@@ -151,5 +214,87 @@ func TestIMindClipPlaceholderPersistsContextAndDispatchesInItsFileChat(t *testin
 	}
 	if n := dbfx.Count(t, `SELECT count(*) FROM comment WHERE issue_id=$1 AND author_type='agent' AND content=$2`, issueID, "已剪藏并回写同一文件"); n != 1 {
 		t.Fatalf("completion not visible in file chat: %d", n)
+	}
+}
+
+func TestIMindInitialClipNamingRetriesAndPreservesPlaceholder(t *testing.T) {
+	h := *testHandler
+	hub := fileshare.NewHub()
+	peer := fileshare.NewLocal(fileshare.ShareMeta{DaemonID: "clip-retry", Machine: "clip-retry", OwnerUserID: testUserID, WorkspaceID: testWorkspaceID, Visibility: fileshare.VisibilityWorkspace, Enabled: true, IMindScopeRevision: true, IMindRename: true, IMindMedia: true}, t.TempDir())
+	if err := hub.Register(peer); err != nil {
+		t.Fatal(err)
+	}
+	h.FileShares = hub
+	box, err := secretbox.New(make([]byte, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.IMindSecretBox = box
+	testutil.Call(t, h.PutIMindDeepSeek, groupChatRequestAs(t, testUserID, "PUT", "/settings", map[string]string{"api_key": "test-key"})).Want(200)
+	t.Cleanup(func() {
+		testPool.Exec(t.Context(), `UPDATE workspace SET imind_deepseek_key=NULL WHERE id=$1`, testWorkspaceID)
+	})
+	for _, tc := range []struct {
+		name                        string
+		failFetch, failName, edited bool
+		want                        string
+	}{
+		{"fetch failure", true, false, false, "生成中的剪藏"},
+		{"model failure", false, true, false, "生成中的剪藏"},
+		{"retry succeeds", false, false, false, "网页标题"},
+		{"completed body wins", false, false, true, "生成中的剪藏"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var created iMindNoteResponse
+			testutil.Call(t, h.PostIMindNotes, groupChatRequestAs(t, testUserID, "POST", "/notes", map[string]any{"share_machine": "clip-retry", "type": "clip", "title": "unused", "content": "original paste"})).Want(201).JSON(&created)
+			file, err := h.FileShares.ReadScoped(t.Context(), peer, strings.TrimPrefix(created.Path, "clip-retry/"), fileshare.IMindScope)
+			if err != nil {
+				t.Fatal(err)
+			}
+			note := created.Note
+			source := "https://example.com/article"
+			note.SourceURL = &source
+			fetches, names := 0, 0
+			h.IMindClipHTTP = &http.Client{Transport: imindNamingTransport(func(*http.Request) (*http.Response, error) {
+				fetches++
+				status := 200
+				if tc.failFetch {
+					status = 403
+				}
+				return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader("<title>网页标题</title>"))}, nil
+			})}
+			h.IMindNamingHTTP = &http.Client{Transport: imindNamingTransport(func(*http.Request) (*http.Response, error) {
+				names++
+				body := `{"choices":[{"message":{"content":"{\"title\":\"网页标题\",\"summary\":\"摘要\"}"}}]}`
+				if tc.failName || names == 1 {
+					body = `{"choices":[]}`
+				}
+				if tc.edited && names == 2 {
+					changed := created.Note
+					changed.Content = "完整正文"
+					raw, err := changed.Markdown()
+					if err != nil {
+						t.Fatal(err)
+					}
+					var out obsidianvault.FileContent
+					if err := peer.Call(t.Context(), fileshare.OpWrite, obsidianvault.EditRequest{Path: file.Path, Op: "overwrite", Content: raw, BaseRevision: file.Revision, Scope: fileshare.IMindScope}, &out); err != nil {
+						t.Fatal(err)
+					}
+				}
+				return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body))}, nil
+			})}
+			h.nameInitialIMindClip(t.Context(), parseUUID(testWorkspaceID), peer, note, file)
+			var current iMindNoteResponse
+			testutil.Call(t, h.PostIMindNote, groupChatRequestAs(t, testUserID, "POST", "/get", map[string]string{"share_machine": "clip-retry", "id": note.ID})).Want(200).JSON(&current)
+			if !strings.HasPrefix(current.Title, tc.want) || current.Clip == nil || current.Clip.OriginalText != "original paste" || fetches != 2 {
+				t.Fatalf("unexpected result: %+v fetches=%d names=%d", current, fetches, names)
+			}
+			if tc.edited && current.Content != "完整正文" {
+				t.Fatal("initial naming overwrote completed article")
+			}
+			if !tc.edited && current.Revision != file.Revision {
+				t.Fatal("initial naming changed body revision")
+			}
+		})
 	}
 }

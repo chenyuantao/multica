@@ -421,6 +421,8 @@ type Handler struct {
 	IMindSecretBox *secretbox.Box
 	// IMindNamingHTTP permits isolated provider transport in tests.
 	IMindNamingHTTP *http.Client
+	// IMindClipHTTP permits isolated static page fetching in tests.
+	IMindClipHTTP *http.Client
 	// PluginSurfaceTokens seal short-lived launch claims. Nil disables surface
 	// launches; wired from a domain-separated MULTICA_PLUGIN_SECRET_KEY at boot.
 	PluginSurfaceTokens *secretbox.Box

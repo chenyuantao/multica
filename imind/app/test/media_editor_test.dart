@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:imind_app/api.dart';
+import 'package:imind_app/ai_chat.dart';
 import 'package:imind_app/main.dart';
 import 'package:imind_app/media.dart';
 
@@ -30,6 +31,59 @@ class Picker extends ImagePicker {
 }
 
 void main() {
+  for (final body in ['', '  \n', '完整文章正文']) {
+    testWidgets('clip detail opens AI+ only when latest body is empty: $body', (
+      tester,
+    ) async {
+      final latest = <String, dynamic>{
+        'id': id,
+        'revision': 'latest',
+        'title': '剪藏标题',
+        'type': 'clip',
+        'content': body,
+        'transcript': '',
+        'tags': <String>[],
+      };
+      var reads = 0;
+      final api =
+          MulticaApi(
+              baseUrl: 'http://localhost',
+              enableRealtime: false,
+              client: MockClient((request) async {
+                if (request.url.path == '/api/imind/notes/get') reads++;
+                return http.Response(
+                  jsonEncode(
+                    request.url.path == '/api/imind/notes/get' ? latest : {},
+                  ),
+                  200,
+                  headers: {'content-type': 'application/json'},
+                );
+              }),
+            )
+            ..token = 'token'
+            ..workspaceId = '11111111-1111-4111-8111-111111111111';
+      addTearDown(api.close);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: NoteEditor(
+            api: api,
+            machine: 'mbp',
+            note: {
+              ...latest,
+              'content': body.trim().isEmpty ? 'stale body' : '',
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(reads, 1);
+      expect(
+        find.byType(NoteAiChatSheet),
+        body.trim().isEmpty ? findsOneWidget : findsNothing,
+      );
+      if (body.trim().isNotEmpty) expect(find.text(body), findsOneWidget);
+    });
+  }
   testWidgets('new notes open in edit mode', (tester) async {
     final api = MulticaApi(
       baseUrl: 'http://localhost',

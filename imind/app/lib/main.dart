@@ -528,9 +528,9 @@ class _HomePageState extends State<HomePage> {
       final note = await _api.createNote({
         'share_machine': machine,
         'type': 'clip',
-        'title': '生成中的剪藏1',
+        'title': '生成中的剪藏',
         'source_url': clip['url'],
-        'content': clip['original'],
+        'content': '',
         'clip': {'original_text': clip['original'], 'prompt': clip['prompt']},
       });
       if (!mounted) return;
@@ -1465,6 +1465,46 @@ class _NoteEditorState extends State<NoteEditor> {
     _history.addListener(_refresh);
     _body.addListener(_refresh);
     _transcript.addListener(_refresh);
+
+    if (_note?['type'] == 'clip') {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_openPendingClipChat());
+      });
+    }
+  }
+
+  Future<void> _openPendingClipChat() async {
+    final machine = widget.machine;
+    if (machine == null || _note == null) return;
+    try {
+      final latest = await widget.api.getNote(machine, '${_note!['id']}');
+      if (!mounted || _editing || _popping) return;
+      setState(() {
+        _note = latest;
+        _title.text = '${latest['title']}';
+        _body.text = '${latest['content'] ?? ''}';
+      });
+      if (_body.text.trim().isNotEmpty ||
+          ModalRoute.of(context)?.isCurrent != true) {
+        return;
+      }
+      await showNoteAiChat(
+        context,
+        api: widget.api,
+        machine: machine,
+        note: latest,
+      );
+      if (!mounted) return;
+      final updated = await widget.api.getNote(machine, '${latest['id']}');
+      if (!mounted || _editing) return;
+      setState(() {
+        _note = updated;
+        _title.text = '${updated['title']}';
+        _body.text = '${updated['content'] ?? ''}';
+      });
+    } catch (error) {
+      if (mounted) setState(() => _error = '$error');
+    }
   }
 
   void _refresh() {

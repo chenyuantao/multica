@@ -102,10 +102,10 @@ func TestIMindPromptOverridesReachNamingAndAgentContext(t *testing.T) {
 				body["transcript"] = "spoken"
 			}
 			if noteType == "clip" {
-				body["source_url"] = "https://example.test/article"
-				body["clip"] = map[string]string{"original_text": "article", "prompt": "keep examples"}
+				body["clip"] = map[string]string{"original_text": "body {{FILE_PATH}}", "prompt": "keep examples"}
 				body["transcript"] = ""
 			}
+
 			testutil.Call(t, h.PostIMindNotes, request("POST", "/notes", body)).Want(201).JSON(&note)
 			var chat struct {
 				IssueID string `json:"issue_id"`
@@ -121,7 +121,7 @@ func TestIMindPromptOverridesReachNamingAndAgentContext(t *testing.T) {
 				kind = "clip"
 			}
 			turn, ok := h.iMindNoteContext(t.Context(), issue)
-			if !ok || !strings.HasPrefix(turn.Text, kind+"|prompt-host/iMind/Original "+noteType+".md|iMind/Original "+noteType+".md|") || !strings.Contains(turn.Text, "imind_version:") || !strings.Contains(turn.Text, "body {{FILE_PATH}}") || !strings.Contains(turn.Text, `Existing tags (JSON): ["已有标签"]`) {
+			if !ok || !strings.HasPrefix(turn.Text, kind+"|prompt-host/iMind/"+note.Title+".md|iMind/"+note.Title+".md|") || !strings.Contains(turn.Text, "imind_version:") || !strings.Contains(turn.Text, "body {{FILE_PATH}}") || !strings.Contains(turn.Text, `Existing tags (JSON): ["已有标签"]`) {
 				t.Fatalf("configured agent context missing: %+v", turn)
 			}
 			if noteType == "clip" {

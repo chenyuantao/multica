@@ -221,6 +221,17 @@ func (h *Handler) PostIMindNotes(w http.ResponseWriter, r *http.Request) {
 	}
 	note.Tags, note.SourceURL, note.Content, note.Transcript, note.Audio = req.Tags, req.SourceURL, req.Content, req.Transcript, req.Audio
 	note.Clip = req.Clip
+	if note.Type == "clip" {
+		note.Title = "生成中的剪藏"
+		if note.Clip == nil {
+			note.Clip = &imind.ClipMetadata{OriginalText: req.Content}
+		}
+		note.Content = ""
+	}
+	if err := note.Validate(); err != nil {
+		writeErrorCode(w, http.StatusBadRequest, "imind_invalid_note", err.Error())
+		return
+	}
 	raw, err := note.Markdown()
 	if err != nil {
 		writeErrorCode(w, http.StatusBadRequest, "imind_invalid_note", err.Error())
@@ -247,6 +258,17 @@ func (h *Handler) PostIMindNotes(w http.ResponseWriter, r *http.Request) {
 		break
 	}
 	writeJSON(w, http.StatusCreated, iMindNoteResponse{Note: note, Path: fileshare.Join(peer.Meta().Machine, file.Path), Revision: file.Revision})
+	if note.Type == "clip" && note.SourceURL != nil {
+		member, ok := ctxMember(r.Context())
+		if ok {
+			background := context.WithoutCancel(r.Context())
+			go func() {
+				ctx, cancel := context.WithTimeout(background, 110*time.Second)
+				defer cancel()
+				h.nameInitialIMindClip(ctx, member.WorkspaceID, peer, note, file)
+			}()
+		}
+	}
 }
 
 func (h *Handler) PutIMindNote(w http.ResponseWriter, r *http.Request) {
