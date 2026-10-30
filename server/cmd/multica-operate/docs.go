@@ -91,6 +91,31 @@ func newMvCmd() *cobra.Command {
 	return cmd
 }
 
+func newRenameCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "rename <knowledge-path> <new-name>",
+		Short: "Rename a knowledge note or directory",
+		Long:  "Renames an entry in its current directory. Markdown notes must retain the .md extension.\n\n" + docsPathHelp,
+		Args:  cobra.ExactArgs(2),
+		RunE:  runRename,
+	}
+	cmd.Flags().Bool("json", false, "Print the result as JSON")
+	return cmd
+}
+
+func runRename(cmd *cobra.Command, args []string) error {
+	cmd.SilenceUsage = true
+	var result obsidianvault.MoveResult
+	if err := docsCall(cmd, http.MethodPost, "/api/docs/rename", map[string]string{"path": args[0], "name": args[1]}, &result); err != nil {
+		return err
+	}
+	if asJSON(cmd) {
+		return printJSON(result)
+	}
+	fmt.Fprintf(os.Stdout, "renamed %s to %s\n", result.From, result.Path)
+	return nil
+}
+
 func runLs(cmd *cobra.Command, args []string) error {
 	cmd.SilenceUsage = true
 	path := ""

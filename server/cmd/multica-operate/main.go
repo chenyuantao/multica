@@ -39,7 +39,7 @@ Each machine has one share, bound to the daemon id its multica runtimes register
 	root.SilenceErrors = true
 	root.PersistentFlags().String("profile", "", "Configuration profile name shared with the multica CLI")
 	root.AddCommand(newLoginCmd(), newShareCmd(), newUnshareCmd(), newVisibilityCmd(), newStatusCmd(), newPathCmd(), newDaemonCmd(),
-		newLsCmd(), newSearchCmd(), newReadCmd(), newWriteCmd(), newMvCmd(),
+		newLsCmd(), newSearchCmd(), newReadCmd(), newWriteCmd(), newMvCmd(), newRenameCmd(),
 		newChatCmd(), newTaskCmd(), newReminderCmd(), newContactCmd())
 	return root
 }

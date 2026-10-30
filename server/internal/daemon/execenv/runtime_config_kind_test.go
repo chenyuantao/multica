@@ -181,7 +181,7 @@ func TestBuildMetaSkillContentSlimKindMatrix(t *testing.T) {
 			"Never `curl` / `wget`",
 			"Reminder list, create, update, and delete are `multica-operate reminder`",
 			"only when Agent Identity tells you to manage the reminder list",
-			"`multica-operate` ls, search, read, write, and mv",
+			"`multica-operate` ls, search, read, write, mv, and rename",
 			"This does not cover sharing or unsharing a directory, or deleting a note",
 		} {
 			if !strings.Contains(out, want) {

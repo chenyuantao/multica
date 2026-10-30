@@ -41,6 +41,8 @@ func fakeDocsServer(t *testing.T, notes map[string]string) *[]docsCallRecord {
 			_ = json.NewEncoder(w).Encode(map[string]string{"path": path, "content": notes[path], "revision": "rev-" + notes[path]})
 		}
 		switch r.Method + " " + r.URL.Path {
+		case "POST /api/docs/rename":
+			_ = json.NewEncoder(w).Encode(map[string]string{"from": path, "path": "mbp/renamed.md"})
 		case "POST /api/docs/children":
 			_ = json.NewEncoder(w).Encode(map[string]any{"path": path, "nodes": []map[string]string{
 				{"name": "notes", "path": "mbp/notes", "type": "dir"},
@@ -164,5 +166,17 @@ func TestReadAndLs(t *testing.T) {
 	}
 	if out, err := runFileCmd(t, "ls", "mbp"); err != nil || out != "mbp/notes/\nmbp/a.md\n" {
 		t.Fatalf("ls: out=%q err=%v", out, err)
+	}
+}
+
+func TestRenameCommand(t *testing.T) {
+	calls := fakeDocsServer(t, map[string]string{})
+	out, err := runFileCmd(t, "rename", "mbp/a.md", "renamed.md")
+	if err != nil || out != "renamed mbp/a.md to mbp/renamed.md\n" {
+		t.Fatalf("out=%q err=%v", out, err)
+	}
+	call := (*calls)[0]
+	if call.Method != http.MethodPost || call.Path != "/api/docs/rename" || call.Body["path"] != "mbp/a.md" || call.Body["name"] != "renamed.md" {
+		t.Fatalf("call = %#v", call)
 	}
 }

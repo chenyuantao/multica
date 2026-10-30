@@ -48,6 +48,7 @@ machines you can use, one `<machine>/` each. A knowledge path is
   `docs_conflict`, read again and merge your change in — never retry the same
   write.
 - Move: `multica-operate mv <knowledge-path> <dest-dir>`, within one machine.
+- Rename: `multica-operate rename <knowledge-path> <new-name>`; keep the `.md` extension for notes.
 
 **You seeing a share does not mean the reader can.** Write to a share only when
 the user asked for it, or it is visible to the person you are answering:
