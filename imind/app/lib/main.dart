@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:record/record.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:image_picker/image_picker.dart';
@@ -17,6 +16,8 @@ import 'media.dart';
 import 'url_extract.dart';
 import 'input_insets.dart';
 import 'note_actions.dart';
+import 'tag_picker.dart';
+import 'voice_input.dart';
 
 const _bg = Color(0xFFF2F2F6);
 const _ink = Color(0xFF1C1C1E);
@@ -234,17 +235,18 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   final _scaffold = GlobalKey<ScaffoldState>();
   MulticaApi get _api => widget.session.api;
-  var _reloading = false;
+  Future<void>? _reloadInProgress;
   var _naming = false;
   List<Map<String, dynamic>> _notes = const [];
   String? _machine;
   String? _error;
   String? _kind;
-  String? _tag;
+  final _tags = <String>{};
   var _ready = false;
   var _newestFirst = true;
   var _selecting = false;
   var _menu = false;
+  var _tagging = false;
   final _selected = <String>{};
 
   @override
@@ -253,9 +255,15 @@ class _HomePageState extends State<HomePage> {
     _reload();
   }
 
-  Future<void> _reload() async {
-    if (_reloading || widget.session.data == null) return;
-    _reloading = true;
+  Future<void> _reload() {
+    if (_reloadInProgress != null) return _reloadInProgress!;
+    if (widget.session.data == null) return Future.value();
+    final future = _loadNotes();
+    _reloadInProgress = future;
+    return future.whenComplete(() => _reloadInProgress = null);
+  }
+
+  Future<void> _loadNotes() async {
     try {
       final workspaces = await _api.workspaces();
       if (!mounted) return;
@@ -329,15 +337,13 @@ class _HomePageState extends State<HomePage> {
         _ready = true;
         _error = '无法加载笔记，请重试';
       });
-    } finally {
-      _reloading = false;
     }
   }
 
   List<Map<String, dynamic>> get _visible {
     final items = _notes.where((note) {
       if (_kind != null && note['type'] != _kind) return false;
-      if (_tag != null && !noteTags(note).contains(_tag)) return false;
+      if (_tags.isNotEmpty && !noteTags(note).any(_tags.contains)) return false;
       return true;
     }).toList();
     if (!_newestFirst) return items.reversed.toList();
@@ -353,7 +359,6 @@ class _HomePageState extends State<HomePage> {
   }
 
   String get _heading {
-    if (_tag != null) return '# $_tag';
     return switch (_kind) {
       'recording' => '音频',
       'note' => '笔记',
@@ -374,12 +379,12 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _openEditor() async {
-    final saved = await Navigator.of(context).push<bool>(
+    await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => NoteEditor(api: _api, machine: _machine),
       ),
     );
-    if (saved == true) _reload();
+    if (mounted) _reload();
   }
 
   Future<void> _openRecord() async {
@@ -568,34 +573,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _tagChosen() async {
-    final controller = TextEditingController();
-    final tag = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('标记'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (final item in _allTags)
-              ListTile(
-                title: Text('#$item'),
-                onTap: () => Navigator.pop(context, item),
-              ),
-            TextField(
-              controller: controller,
-              decoration: const InputDecoration(hintText: '新建标签'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text('使用新标签'),
-          ),
-        ],
-      ),
-    );
-    Future<void>.delayed(const Duration(milliseconds: 350), controller.dispose);
+    final tag = await pickNoteTag(context, tags: _allTags);
     if (tag == null || tag.trim().isEmpty) return;
     final name = tag.trim();
     await _patchChosen((note) {
@@ -645,6 +623,32 @@ class _HomePageState extends State<HomePage> {
       _actionError(error);
     } finally {
       if (mounted) setState(() => _naming = false);
+    }
+    await _reload();
+  }
+
+  Future<void> _aiTagChosen() async {
+    final machine = _machine;
+    if (machine == null || _tagging) return;
+    setState(() => _tagging = true);
+    try {
+      for (final note in _chosen) {
+        await _api.tagNote(
+          machine,
+          '${note['id']}',
+          revision: '${note['revision']}',
+        );
+      }
+      if (mounted) {
+        setState(() {
+          _selecting = false;
+          _selected.clear();
+        });
+      }
+    } on ApiException catch (error) {
+      _actionError(error);
+    } finally {
+      if (mounted) setState(() => _tagging = false);
     }
     await _reload();
   }
@@ -723,7 +727,7 @@ class _HomePageState extends State<HomePage> {
         _error == null &&
         _notes.isEmpty &&
         _kind == null &&
-        _tag == null;
+        _tags.isEmpty;
     return Scaffold(
       key: _scaffold,
       backgroundColor: _bg,
@@ -735,18 +739,20 @@ class _HomePageState extends State<HomePage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _header(),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
-                  child: Text(
-                    _heading,
-                    style: const TextStyle(
-                      fontSize: 34,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.6,
+                if (_allTags.isNotEmpty) _tagFilters(),
+                if (_kind != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+                    child: Text(
+                      _heading,
+                      style: const TextStyle(
+                        fontSize: 34,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.6,
+                      ),
                     ),
                   ),
-                ),
-                if (_tag != null || _kind != null)
+                if (_tags.isNotEmpty || _kind != null)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(18, 0, 18, 6),
                     child: Text(
@@ -771,6 +777,11 @@ class _HomePageState extends State<HomePage> {
                       icon: Icons.mic_none,
                       label: '录音',
                       onPressed: _machine == null ? null : _openRecord,
+                    ),
+                    PillButton(
+                      icon: Icons.link,
+                      label: '剪藏',
+                      onPressed: _machine == null ? null : _clip,
                     ),
                     PillButton(
                       icon: Icons.edit_outlined,
@@ -827,7 +838,14 @@ class _HomePageState extends State<HomePage> {
               onTap: () => _scaffold.currentState?.openDrawer(),
               child: const Icon(Icons.menu, size: 22),
             ),
+            const SizedBox(width: 12),
+            const DetailTitle('iMind'),
             const Spacer(),
+            if (_tags.isNotEmpty)
+              TextButton(
+                onPressed: () => setState(_tags.clear),
+                child: const Text('取消'),
+              ),
             _round(
               label: '更多',
               onTap: () => setState(() => _menu = true),
@@ -841,26 +859,62 @@ class _HomePageState extends State<HomePage> {
 
   Widget _body(bool showHero, List<Map<String, dynamic>> visible) {
     if (!_ready) return const Center(child: CircularProgressIndicator());
+    Widget content;
     if (_error != null && _notes.isEmpty) {
-      return Center(
+      content = Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
           child: Text(_error!, textAlign: TextAlign.center),
         ),
       );
-    }
-    if (showHero) return const _EmptyHero();
-    if (visible.isEmpty) {
-      return const Center(
+    } else if (showHero) {
+      return RefreshIndicator(onRefresh: _reload, child: const _EmptyHero());
+    } else if (visible.isEmpty) {
+      content = const Center(
         child: Text('没有文件', style: TextStyle(color: _sub)),
       );
+    } else {
+      return RefreshIndicator(
+        onRefresh: _reload,
+        child: ListView.builder(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(16, 6, 16, 120),
+          itemCount: visible.length,
+          itemBuilder: (_, index) => _tile(visible[index]),
+        ),
+      );
     }
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 6, 16, 120),
-      itemCount: visible.length,
-      itemBuilder: (_, index) => _tile(visible[index]),
+    return RefreshIndicator(
+      onRefresh: _reload,
+      child: LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: SizedBox(height: constraints.maxHeight, child: content),
+        ),
+      ),
     );
   }
+
+  Widget _tagFilters() => SingleChildScrollView(
+    scrollDirection: Axis.horizontal,
+    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+    child: Row(
+      children: [
+        for (final tag in _allTags)
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: FilterChip(
+              shape: const StadiumBorder(),
+              label: Text('#$tag'),
+              selected: _tags.contains(tag),
+              onSelected: (_) => setState(() {
+                if (!_tags.add(tag)) _tags.remove(tag);
+              }),
+            ),
+          ),
+      ],
+    ),
+  );
 
   Widget _tile(Map<String, dynamic> note) {
     final id = '${note['id']}';
@@ -973,6 +1027,11 @@ class _HomePageState extends State<HomePage> {
           child: Row(
             children: [
               _bar('标记', Icons.tag, _selected.isEmpty ? null : _tagChosen),
+              _bar(
+                _tagging ? '正在标记' : 'AI 标记',
+                Icons.auto_fix_high,
+                _selected.isEmpty || _tagging ? null : _aiTagChosen,
+              ),
               _bar('导出', Icons.ios_share, null),
               _bar(
                 _naming ? '正在命名' : 'AI 命名',
@@ -1050,7 +1109,6 @@ class _HomePageState extends State<HomePage> {
                           _menuItem(Icons.swap_vert, '排序方式', () {
                             setState(() => _newestFirst = !_newestFirst);
                           }),
-                          _menuItem(Icons.link, '网页剪藏', _clip),
                         ],
                       ),
                     ),
@@ -1113,7 +1171,7 @@ class _HomePageState extends State<HomePage> {
               '全部',
               Icons.layers_outlined,
               const Color(0xFF3DBE6A),
-              _kind == null && _tag == null,
+              _kind == null && _tags.isEmpty,
               () => _pickKind(null),
             ),
             _nav(
@@ -1147,7 +1205,13 @@ class _HomePageState extends State<HomePage> {
             ),
             const Divider(indent: 18, endIndent: 18, color: Color(0xFFDCDCE1)),
             for (final tag in _allTags)
-              _nav('#$tag', Icons.tag, _ink, _tag == tag, () => _pickTag(tag)),
+              _nav(
+                '#$tag',
+                Icons.tag,
+                _ink,
+                _tags.contains(tag),
+                () => _pickTag(tag),
+              ),
           ],
         ),
       ),
@@ -1157,7 +1221,6 @@ class _HomePageState extends State<HomePage> {
   void _pickKind(String? kind) {
     setState(() {
       _kind = kind;
-      _tag = null;
       _selecting = false;
       _selected.clear();
     });
@@ -1166,8 +1229,7 @@ class _HomePageState extends State<HomePage> {
 
   void _pickTag(String tag) {
     setState(() {
-      _tag = tag;
-      _kind = null;
+      if (!_tags.add(tag)) _tags.remove(tag);
       _selecting = false;
       _selected.clear();
     });
@@ -1211,6 +1273,7 @@ class _EmptyHero extends StatelessWidget {
       (Icons.hub_outlined, '续写润色、提炼要点、上下文连贯记忆、深度问答 —— 你的全能 AI 写作助手。'),
     ];
     return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(26, 70, 26, 140),
       children: [
         const Text(
@@ -1242,6 +1305,90 @@ class _EmptyHero extends StatelessWidget {
       ],
     );
   }
+}
+
+class EditExitGuard extends StatefulWidget {
+  const EditExitGuard({
+    super.key,
+    required this.editing,
+    required this.busy,
+    required this.popping,
+    required this.onDiscard,
+    required this.child,
+  });
+  final bool editing, busy, popping;
+  final Future<void> Function() onDiscard;
+  final Widget child;
+
+  @override
+  State<EditExitGuard> createState() => _EditExitGuardState();
+}
+
+class _EditExitGuardState extends State<EditExitGuard> {
+  bool _confirming = false;
+  double _dragDistance = 0;
+
+  Future<void> _confirmExit() async {
+    if (!mounted ||
+        !widget.editing ||
+        widget.busy ||
+        widget.popping ||
+        _confirming)
+      return;
+    _confirming = true;
+    try {
+      final discard = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('放弃修改？'),
+          content: const Text('未保存的修改将丢失。'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('取消'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('放弃'),
+            ),
+          ],
+        ),
+      );
+      if (discard == true && mounted && !widget.busy) await widget.onDiscard();
+    } finally {
+      _confirming = false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => PopScope(
+    canPop: widget.popping || (!widget.editing && !widget.busy),
+    onPopInvokedWithResult: (didPop, _) {
+      if (!didPop) _confirmExit();
+    },
+    child: Stack(
+      children: [
+        widget.child,
+        if (widget.editing && Theme.of(context).platform == TargetPlatform.iOS)
+          PositionedDirectional(
+            start: 0,
+            top: 0,
+            bottom: 0,
+            width: 24,
+            child: GestureDetector(
+              key: const ValueKey('edit-back-edge'),
+              behavior: HitTestBehavior.translucent,
+              onHorizontalDragStart: (_) => _dragDistance = 0,
+              onHorizontalDragUpdate: (details) =>
+                  _dragDistance += details.primaryDelta ?? 0,
+              onHorizontalDragEnd: (_) {
+                if (_dragDistance >= 80) _confirmExit();
+              },
+            ),
+          ),
+      ],
+    ),
+  );
 }
 
 class NoteEditor extends StatefulWidget {
@@ -1285,10 +1432,6 @@ class _NoteEditorState extends State<NoteEditor> {
   var _saving = false;
   var _popping = false;
   String? _error;
-  late String _titleSnapshot;
-  late String _bodySnapshot;
-  late String _transcriptSnapshot;
-  late List<String> _tagSnapshot;
 
   @override
   void initState() {
@@ -1296,17 +1439,10 @@ class _NoteEditorState extends State<NoteEditor> {
     _note = widget.note == null
         ? null
         : Map<String, dynamic>.from(widget.note!);
+    _editing = widget.note == null;
     _history.addListener(_refresh);
     _body.addListener(_refresh);
     _transcript.addListener(_refresh);
-    _capture();
-  }
-
-  void _capture() {
-    _titleSnapshot = _title.text;
-    _bodySnapshot = _body.text;
-    _transcriptSnapshot = _transcript.text;
-    _tagSnapshot = List<String>.of(_tags);
   }
 
   void _refresh() {
@@ -1332,7 +1468,6 @@ class _NoteEditorState extends State<NoteEditor> {
     if (!_body.selection.isValid) {
       _body.selection = TextSelection.collapsed(offset: _body.text.length);
     }
-    _capture();
     final previous = _history;
     previous.removeListener(_refresh);
     _history = UndoHistoryController()..addListener(_refresh);
@@ -1346,15 +1481,12 @@ class _NoteEditorState extends State<NoteEditor> {
     });
   }
 
-  void _discard() {
-    _title.text = _titleSnapshot;
-    _body.text = _bodySnapshot;
-    _transcript.text = _transcriptSnapshot;
-    _tags
-      ..clear()
-      ..addAll(_tagSnapshot);
-    setState(() => _editing = false);
-    FocusManager.instance.primaryFocus?.unfocus();
+  Future<void> _discard() async {
+    if (_saving || _popping) return;
+    setState(() => _saving = true);
+    await _stopEditorVoice(_body);
+    await _stopEditorVoice(_transcript);
+    if (mounted) _leave();
   }
 
   void _leave() {
@@ -1400,6 +1532,8 @@ class _NoteEditorState extends State<NoteEditor> {
       _error = null;
     });
     try {
+      await _stopEditorVoice(_body);
+      await _stopEditorVoice(_transcript);
       await _persist();
       if (!mounted) return;
       setState(() => _editing = false);
@@ -1471,34 +1605,64 @@ class _NoteEditorState extends State<NoteEditor> {
     if (ok == true) await _delete();
   }
 
-  Future<void> _pickTag() async {
-    final controller = TextEditingController();
-    final tag = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('标签'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(hintText: '新建标签'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text('添加'),
-          ),
-        ],
-      ),
-    );
-    Future<void>.delayed(const Duration(milliseconds: 350), controller.dispose);
-    final name = tag?.trim() ?? '';
-    if (!mounted || name.isEmpty || _tags.contains(name)) return;
-    setState(() => _tags.add(name));
+  Future<void> _markTag() async {
+    final machine = widget.machine;
+    if (machine == null || _note == null || _saving) return;
+    setState(() => _saving = true);
+    try {
+      final notes = await widget.api.notes(machine);
+      if (!mounted) return;
+      final tags = {for (final note in notes) ...noteTags(note)}.toList()
+        ..sort();
+      final tag = await pickNoteTag(context, tags: tags);
+      if (tag == null || _tags.contains(tag) || !mounted) return;
+      setState(() => _tags.add(tag));
+      try {
+        await _persist();
+      } catch (_) {
+        _tags.remove(tag);
+        rethrow;
+      }
+      if (mounted) setState(() => _error = null);
+    } catch (error) {
+      if (mounted) setState(() => _error = '$error');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _aiTag() async {
+    final machine = widget.machine;
+    if (machine == null || _note == null || _saving) return;
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      final updated = await widget.api.tagNote(
+        machine,
+        '${_note!['id']}',
+        revision: '${_note!['revision']}',
+      );
+      if (!mounted) return;
+      setState(() {
+        _note = updated;
+        _tags
+          ..clear()
+          ..addAll(noteTags(updated));
+        _changed = true;
+      });
+    } catch (error) {
+      if (mounted) setState(() => _error = '$error');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   Future<void> _pickImage(ImageSource source) async {
     final machine = widget.machine;
     if (machine == null || _saving) return;
+    setState(() => _saving = true);
     try {
       final selected = await MediaService(widget.api)
           .pickImage(source, picker: widget.imagePicker);
@@ -1516,6 +1680,8 @@ class _NoteEditorState extends State<NoteEditor> {
       if (mounted) setState(() => _error = null);
     } catch (error) {
       if (mounted) setState(() => _error = '图片未插入，原有文字已保留。$error');
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -1524,10 +1690,9 @@ class _NoteEditorState extends State<NoteEditor> {
       controller: controller,
       history: _history,
       editing: _editing,
-      onBeginEdit: () => _beginEdit(),
+      onBeginEdit: null,
       autofocus: !_focusTitle,
-      onAi: _ai,
-      onTag: _pickTag,
+
       onCamera: () => _pickImage(ImageSource.camera),
       onGallery: () => _pickImage(ImageSource.gallery),
       mediaApi: widget.api,
@@ -1562,16 +1727,11 @@ class _NoteEditorState extends State<NoteEditor> {
 
   @override
   Widget build(BuildContext context) {
-    return PopScope(
-      canPop: _popping,
-      onPopInvokedWithResult: (didPop, _) {
-        if (didPop || _popping) return;
-        if (_editing) {
-          _discard();
-          return;
-        }
-        _leave();
-      },
+    return EditExitGuard(
+      editing: _editing,
+      busy: _saving,
+      popping: _popping,
+      onDiscard: _discard,
       child: Scaffold(
         resizeToAvoidBottomInset: false,
         backgroundColor: Colors.white,
@@ -1622,6 +1782,10 @@ class _NoteEditorState extends State<NoteEditor> {
               ),
               NoteActions(
                 note: _note!,
+                enabled: !_saving,
+                onEdit: _beginEdit,
+                onTag: _markTag,
+                onAiTag: _aiTag,
                 onRename: _rename,
                 onDelete: _confirmDelete,
               ),
@@ -1675,10 +1839,7 @@ class _NoteEditorState extends State<NoteEditor> {
                       ),
                       SizedBox(
                         height: 220,
-                        child: _MarkdownEditor(
-                          controller: _transcript,
-                          onTag: _pickTag,
-                        ),
+                        child: _MarkdownEditor(controller: _transcript),
                       ),
                     ],
                   ],
@@ -1711,7 +1872,6 @@ class RecordingDetail extends StatefulWidget {
 
 class _RecordingDetailState extends State<RecordingDetail> {
   final AudioPlayer _player = AudioPlayer();
-  final Map<String, Future<Uint8List>> _imageReads = {};
   late Map<String, dynamic> _note = widget.note;
   late final _content = TextEditingController(
     text: '${widget.note['content'] ?? ''}',
@@ -1733,8 +1893,6 @@ class _RecordingDetailState extends State<RecordingDetail> {
   Duration _audioDuration = Duration.zero;
   var _popping = false;
   String? _error;
-  late String _contentSnapshot;
-  late String _transcriptSnapshot;
 
   @override
   void initState() {
@@ -1756,7 +1914,6 @@ class _RecordingDetailState extends State<RecordingDetail> {
     });
     _contentHistory.addListener(_rebuild);
     _transcriptHistory.addListener(_rebuild);
-    _capture();
   }
 
   void _rebuild() {
@@ -1823,33 +1980,22 @@ class _RecordingDetailState extends State<RecordingDetail> {
     return '$minutes:$seconds';
   }
 
-  Future<Uint8List> _readImage(String name) => _imageReads.putIfAbsent(
-    name,
-    () => MediaService(widget.api)
-        .read(machine: widget.machine, noteId: '${_note['id']}', name: name),
-  );
-
-  void _capture() {
-    _contentSnapshot = _content.text;
-    _transcriptSnapshot = _transcriptText.text;
-  }
-
   UndoHistoryController get _activeHistory =>
       _tab == 0 ? _transcriptHistory : _contentHistory;
 
   void _beginEdit() {
     if (_editing) return;
-    _capture();
     setState(() {
       _editing = true;
       _error = null;
     });
   }
 
-  void _discard() {
-    _content.text = _contentSnapshot;
-    _transcriptText.text = _transcriptSnapshot;
-    _closeEdit();
+  Future<void> _discard() async {
+    if (_saving || _popping) return;
+    setState(() => _saving = true);
+    await _stopEditorVoice(_tab == 0 ? _transcriptText : _content);
+    if (mounted) _leave();
   }
 
   void _closeEdit() {
@@ -1882,6 +2028,7 @@ class _RecordingDetailState extends State<RecordingDetail> {
       _error = null;
     });
     try {
+      await _stopEditorVoice(_tab == 0 ? _transcriptText : _content);
       final saved = await widget.api.updateNote('${_note['id']}', {
         'share_machine': widget.machine,
         'revision': _note['revision'],
@@ -1996,6 +2143,64 @@ class _RecordingDetailState extends State<RecordingDetail> {
     }
   }
 
+  Future<void> _markTag() async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      final notes = await widget.api.notes(widget.machine);
+      if (!mounted) return;
+      final tags = {for (final note in notes) ...noteTags(note)}.toList()
+        ..sort();
+      final tag = await pickNoteTag(context, tags: tags);
+      if (tag == null || noteTags(_note).contains(tag) || !mounted) return;
+      final updated = await widget.api.updateNote('${_note['id']}', {
+        'share_machine': widget.machine,
+        'revision': _note['revision'],
+        'title': _note['title'],
+        'tags': [...noteTags(_note), tag],
+        'content': _note['content'],
+        'transcript': _note['transcript'],
+        'audio': _note['audio'],
+      });
+      if (mounted) {
+        setState(() {
+          _note = updated;
+          _changed = true;
+          _error = null;
+        });
+      }
+    } catch (error) {
+      if (mounted) setState(() => _error = '$error');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _aiTag() async {
+    if (_saving) return;
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      final updated = await widget.api.tagNote(
+        widget.machine,
+        '${_note['id']}',
+        revision: '${_note['revision']}',
+      );
+      if (mounted) {
+        setState(() {
+          _note = updated;
+          _changed = true;
+        });
+      }
+    } catch (error) {
+      if (mounted) setState(() => _error = '$error');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
   Future<void> _ai() async {
     if (_editing) {
       await _save();
@@ -2012,16 +2217,11 @@ class _RecordingDetailState extends State<RecordingDetail> {
   @override
   Widget build(BuildContext context) {
     final lines = parseTranscript('${_note['transcript'] ?? ''}');
-    return PopScope(
-      canPop: _popping,
-      onPopInvokedWithResult: (didPop, _) {
-        if (didPop || _popping) return;
-        if (_editing) {
-          _discard();
-          return;
-        }
-        _leave();
-      },
+    return EditExitGuard(
+      editing: _editing,
+      busy: _saving,
+      popping: _popping,
+      onDiscard: _discard,
       child: Scaffold(
         resizeToAvoidBottomInset: false,
         backgroundColor: Colors.white,
@@ -2058,6 +2258,10 @@ class _RecordingDetailState extends State<RecordingDetail> {
                         ),
                         NoteActions(
                           note: _note,
+                          enabled: !_saving,
+                          onEdit: _beginEdit,
+                          onTag: _markTag,
+                          onAiTag: _aiTag,
                           onRename: _renameRecording,
                           onDelete: _confirmDelete,
                         ),
@@ -2193,7 +2397,10 @@ class _RecordingDetailState extends State<RecordingDetail> {
   Widget _tabButton(String label, int index) {
     final on = _tab == index;
     return GestureDetector(
-      onTap: () => setState(() => _tab = index),
+      onTap: () async {
+        await _stopEditorVoice(_tab == 0 ? _transcriptText : _content);
+        if (mounted) setState(() => _tab = index);
+      },
       child: Column(
         children: [
           Text(
@@ -2228,7 +2435,6 @@ class _RecordingDetailState extends State<RecordingDetail> {
         controller: transcript ? _transcriptText : _content,
         history: transcript ? _transcriptHistory : _contentHistory,
         editing: true,
-        onAi: _ai,
         onCamera: () => _pickImage(ImageSource.camera),
         onGallery: () => _pickImage(ImageSource.gallery),
         mediaApi: widget.api,
@@ -2243,7 +2449,7 @@ class _RecordingDetailState extends State<RecordingDetail> {
       final raw = '${_note['transcript'] ?? ''}'.trim();
       return GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: _beginEdit,
+        onTap: null,
         child: Align(
           alignment: Alignment.topLeft,
           child: Padding(
@@ -2263,7 +2469,7 @@ class _RecordingDetailState extends State<RecordingDetail> {
           children: [
             GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onTap: _beginEdit,
+              onTap: null,
               child: ConstrainedBox(
                 constraints: BoxConstraints(minHeight: constraints.maxHeight),
                 child: Column(
@@ -2298,50 +2504,18 @@ class _RecordingDetailState extends State<RecordingDetail> {
     final content = '${_note['content'] ?? ''}'.trim();
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: _beginEdit,
+      onTap: null,
       child: Align(
         alignment: Alignment.topLeft,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
           child: content.isEmpty
               ? const Text('还没有笔记', style: TextStyle(color: _sub, fontSize: 16))
-              : MarkdownBody(
+              : IMindMarkdown(
                   data: content,
-                  sizedImageBuilder: (config) {
-                    final name = imindMediaName(
-                      config.uri.toString(),
-                      '${_note['id']}',
-                    );
-                    if (name == null) {
-                      return const Icon(Icons.broken_image_outlined);
-                    }
-                    return FutureBuilder<Uint8List>(
-                      future: _readImage(name),
-                      builder: (context, snapshot) {
-                        if (snapshot.hasError) {
-                          _imageReads.remove(name);
-                          return const Padding(
-                            padding: EdgeInsets.all(12),
-                            child: Text('图片读取失败，请重新打开笔记重试。'),
-                          );
-                        }
-                        if (!snapshot.hasData) {
-                          return const Padding(
-                            padding: EdgeInsets.all(20),
-                            child: Center(child: CircularProgressIndicator()),
-                          );
-                        }
-                        return Image.memory(
-                          snapshot.data!,
-                          fit: BoxFit.contain,
-                          width: config.width,
-                          height: config.height,
-                          errorBuilder: (_, _, _) =>
-                              const Icon(Icons.broken_image_outlined),
-                        );
-                      },
-                    );
-                  },
+                  api: widget.api,
+                  machine: widget.machine,
+                  noteId: '${_note['id']}',
                 ),
         ),
       ),
@@ -3049,7 +3223,10 @@ class _SideNoteState extends State<_SideNote> {
             icon: const Icon(Icons.redo),
           ),
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () async {
+              await _stopEditorVoice(widget.body);
+              if (context.mounted) Navigator.pop(context);
+            },
             child: const Text(
               '保存',
               style: TextStyle(color: _blue, fontWeight: FontWeight.w600),
@@ -3077,10 +3254,6 @@ class _SideNoteState extends State<_SideNote> {
                 mediaApi: widget.api,
                 mediaMachine: widget.machine,
                 mediaNoteId: widget.currentNoteId(),
-                onAi: () async {
-                  await widget.onAi();
-                  if (mounted) setState(() {});
-                },
                 onCamera: () => _pickImage(ImageSource.camera),
                 onGallery: () => _pickImage(ImageSource.gallery),
               ),
@@ -3097,6 +3270,16 @@ class _SideNoteState extends State<_SideNote> {
   }
 }
 
+final _editorVoices = <TextEditingController, VoiceInput>{};
+Future<void> _stopEditorVoice(TextEditingController controller) async {
+  final voice = _editorVoices[controller];
+  if (voice == null) return;
+  while (voice.connecting) {
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+  }
+  if (voice.active) await voice.stop();
+}
+
 class _MarkdownEditor extends StatefulWidget {
   const _MarkdownEditor({
     super.key,
@@ -3105,8 +3288,6 @@ class _MarkdownEditor extends StatefulWidget {
     this.editing,
     this.onBeginEdit,
     this.autofocus = true,
-    this.onAi,
-    this.onTag,
     this.onCamera,
     this.onGallery,
     this.mediaApi,
@@ -3119,8 +3300,6 @@ class _MarkdownEditor extends StatefulWidget {
   final bool? editing;
   final VoidCallback? onBeginEdit;
   final bool autofocus;
-  final VoidCallback? onAi;
-  final VoidCallback? onTag;
   final VoidCallback? onCamera;
   final VoidCallback? onGallery;
   final MulticaApi? mediaApi;
@@ -3136,6 +3315,7 @@ class _MarkdownEditorState extends State<_MarkdownEditor> {
   UndoHistoryController? _ownedHistory;
   final _focus = FocusNode();
   var _localEditing = false;
+  VoiceInput? _voice;
 
   bool get _isEditing => widget.editing ?? _localEditing;
 
@@ -3146,6 +3326,14 @@ class _MarkdownEditorState extends State<_MarkdownEditor> {
     super.initState();
     if (widget.history == null) _ownedHistory = UndoHistoryController();
     _undo.addListener(_rebuild);
+    if (widget.mediaApi != null && widget.mediaMachine != null) {
+      _voice = VoiceInput(
+        api: widget.mediaApi!,
+        machine: widget.mediaMachine!,
+        input: widget.controller,
+      )..addListener(_rebuild);
+      _editorVoices[widget.controller] = _voice!;
+    }
   }
 
   @override
@@ -3174,6 +3362,11 @@ class _MarkdownEditorState extends State<_MarkdownEditor> {
   @override
   void dispose() {
     _undo.removeListener(_rebuild);
+    if (_editorVoices[widget.controller] == _voice) {
+      _editorVoices.remove(widget.controller);
+    }
+    _voice?.removeListener(_rebuild);
+    _voice?.dispose();
     _focus.dispose();
     _ownedHistory?.dispose();
     super.dispose();
@@ -3213,6 +3406,8 @@ class _MarkdownEditorState extends State<_MarkdownEditor> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (_voice?.error != null)
+          Text(_voice!.error!, style: const TextStyle(color: _red)),
         Expanded(child: _isEditing ? _field() : _preview()),
         if (_isEditing) const Divider(height: 1, color: Color(0xFFE5E5EA)),
         if (_isEditing)
@@ -3224,15 +3419,37 @@ class _MarkdownEditorState extends State<_MarkdownEditor> {
                   _tool('撤回', _undo.value.canUndo ? _undo.undo : null),
                   _tool('重做', _undo.value.canRedo ? _undo.redo : null),
                 ],
-                if (widget.onAi != null)
-                  _tool('AI+', widget.onAi, color: const Color(0xFF6E56CF)),
-                if (widget.onTag != null) _tool('标签', widget.onTag),
-                if (widget.onCamera != null) _tool('拍照', widget.onCamera),
-                if (widget.onGallery != null) _tool('选图', widget.onGallery),
-                _tool('标题', () => _apply('# ', '')),
-                _tool('加粗', () => _apply('**', '**')),
-                _tool('列表', () => _apply('* ', '')),
-                _tool('有序列表', () => _apply('1. ', '')),
+                if (_voice != null)
+                  IconButton(
+                    tooltip: _voice!.active ? '停止语音输入' : '语音输入',
+                    onPressed: _voice!.connecting || _voice!.stopping
+                        ? null
+                        : () =>
+                              _voice!.active ? _voice!.stop() : _voice!.start(),
+                    icon: Icon(
+                      _voice!.active ? Icons.stop_circle : Icons.mic_none,
+                    ),
+                  ),
+                if (widget.onCamera != null)
+                  _tool('拍照', _voice?.active == true ? null : widget.onCamera),
+                if (widget.onGallery != null)
+                  _tool('选图', _voice?.active == true ? null : widget.onGallery),
+                _tool(
+                  '标题',
+                  _voice?.active == true ? null : () => _apply('# ', ''),
+                ),
+                _tool(
+                  '加粗',
+                  _voice?.active == true ? null : () => _apply('**', '**'),
+                ),
+                _tool(
+                  '列表',
+                  _voice?.active == true ? null : () => _apply('* ', ''),
+                ),
+                _tool(
+                  '有序列表',
+                  _voice?.active == true ? null : () => _apply('1. ', ''),
+                ),
               ],
             ),
           ),
@@ -3260,7 +3477,7 @@ class _MarkdownEditorState extends State<_MarkdownEditor> {
     final raw = widget.controller.text.trim();
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: _beginEdit,
+      onTap: widget.editing == false ? null : _beginEdit,
       child: Align(
         alignment: Alignment.topLeft,
         child: raw.isEmpty
@@ -3285,6 +3502,8 @@ class _MarkdownEditorState extends State<_MarkdownEditor> {
       undoController: _undo,
       autofocus: widget.autofocus,
       maxLines: null,
+      readOnly: _voice?.active == true,
+      style: const TextStyle(fontSize: 16),
       expands: true,
       textAlignVertical: TextAlignVertical.top,
       keyboardType: TextInputType.multiline,

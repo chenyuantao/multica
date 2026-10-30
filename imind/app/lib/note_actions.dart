@@ -22,17 +22,32 @@ class NoteActions extends StatelessWidget {
     required this.note,
     required this.onRename,
     required this.onDelete,
+    this.onEdit,
+    this.onTag,
+    this.onAiTag,
+    this.enabled = true,
   });
   final Map<String, dynamic> note;
   final VoidCallback onRename;
   final VoidCallback onDelete;
+  final VoidCallback? onEdit;
+  final VoidCallback? onTag;
+  final VoidCallback? onAiTag;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) => PopupMenuButton<String>(
     tooltip: '更多',
+    enabled: enabled,
     icon: const Icon(Icons.more_horiz),
     onSelected: (action) {
       switch (action) {
+        case 'edit':
+          onEdit?.call();
+        case 'tag':
+          onTag?.call();
+        case 'aiTag':
+          onAiTag?.call();
         case 'info':
           showModalBottomSheet<void>(
             context: context,
@@ -86,11 +101,15 @@ class NoteActions extends StatelessWidget {
           onDelete();
       }
     },
-    itemBuilder: (_) => const [
-      PopupMenuItem(value: 'info', child: Text('Info · 文件信息')),
-      PopupMenuItem(value: 'rename', child: Text('重命名')),
-      PopupMenuItem(enabled: false, child: Text('导出 · 暂不可用')),
-      PopupMenuItem(
+    itemBuilder: (_) => [
+      if (onEdit != null) const PopupMenuItem(value: 'edit', child: Text('编辑')),
+      if (onTag != null) const PopupMenuItem(value: 'tag', child: Text('标记')),
+      if (onAiTag != null)
+        const PopupMenuItem(value: 'aiTag', child: Text('AI 标记')),
+      const PopupMenuItem(value: 'info', child: Text('Info · 文件信息')),
+      const PopupMenuItem(value: 'rename', child: Text('重命名')),
+      const PopupMenuItem(enabled: false, child: Text('导出 · 暂不可用')),
+      const PopupMenuItem(
         value: 'delete',
         child: Text('删除', style: TextStyle(color: Colors.red)),
       ),

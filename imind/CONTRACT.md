@@ -189,6 +189,8 @@ AI+ 输入框使用与录音页相同的 `record` PCM 采集和 `AsrSession`，�
 
 `POST /api/imind/notes/{id}/ai-name` 请求 `{share_machine,revision}`，读取该 md 已保存正文和转写，由服务端向 `https://api.deepseek.com/chat/completions` 请求标题和摘要。使用快速 `deepseek-flash`、`thinking: {type: "disabled"}`、`reasoning: {effort: "low"}`，两个入口共用同一调用。成功沿用更新/重命名与重名后缀契约，返回完整 note；summary 保存于 YAML，标题仅来自文件名。生成期间发生修改返回 409，不能覆盖新版本。
 
+`POST /api/imind/notes/{id}/ai-tag` 请求 `{share_machine,revision}`，使用同一工作区的 DeepSeek Key 和快速非思考模型生成 2–10 个标签，优先匹配当前授权共享根中已保存笔记的标签。成功合并原有标签并返回完整 note；模型响应无效或调用失败返回 502，未配置返回 503，生成期间笔记改变返回 409，均不覆盖笔记。
+
 Flutter 录音在笔记、音频和图片全部保存成功后立即调用命名接口；手动 AI 命名读取所选 revision。无 Key 返回 503 `imind_deepseek_unconfigured`，上游失败返回 502 `imind_naming_failed`，均不修改原文件。录音页显示已保存与重试命名入口，可保留原标题退出；用户随后可手动重命名。生成摘要在录音详情展示。
 
 - `GET /api/imind/settings/deepseek` 返回 `{configured:boolean}`，不返回密钥。`PUT` 请求 `{api_key:string}`，空字符串清除；只有工作区 owner/admin 可写。
@@ -205,6 +207,7 @@ Flutter 录音在笔记、音频和图片全部保存成功后立即调用命名
 
 | 变量 | 值 |
 | --- | --- |
+| `EXISTING_TAGS` | 当前授权共享根已保存笔记标签的 JSON 数组；智能体自定义模板未引用时仍附加上下文 |
 | `FILE_CONTENT` | 完整 Markdown 字符串，包含 YAML 元数据、正文和转写分隔符 |
 | `FILE_PATH` | 包含主机名的共享文件路径，如 `mac/iMind/笔记.md` |
 | `FILE_RELATIVE_PATH` | 相对共享根目录的路径，如 `iMind/笔记.md` |
@@ -236,3 +239,11 @@ Ensure 把已配置默认智能体和剪藏智能体按权限加入同一个文�
 ## 非目标
 
 - 导出、回收站恢复、真机拍照与实际听音不属于本轮模拟器优化验收。
+
+## 2026-10-30 客户端交互
+
+- 首页在返回详情（包括系统侧滑返回）后重新读取列表；下拉刷新同样调用现有列表 API，空列表仍可下拉。
+- 首页 hashtag 胶囊可多选：标签间为 OR，与文件类型筛选为 AND；「取消」清除标签选择，保留类型条件。筛选由客户端基于授权列表执行，不改变列表接口。
+- 已保存笔记阅读态仅通过右上角「编辑」进入编辑；新笔记直接进入编辑。阅读态允许系统返回手势。编辑态系统返回或 iOS 边缘返回手势先拦截并展示二次确认；「继续编辑」保留草稿，「放弃」停止语音输入后完整退出详情页，顶部「放弃」也直接完整退出。保存成功仍返回阅读态。
+- 图片在授权读取后通过 `imind/image_viewer` 原生通道查看：iOS Quick Look、Android ACTION_VIEW 与受限缓存 FileProvider；外部图片按现有 URL 读取，不附带账户凭据。
+- 编辑器复用 VoiceInput / AsrSession，转写写入启动时的光标位置，保留后文；活动期间锁定手动正文及格式操作，停止排空最终结果后可继续编辑，保存前等待停止。

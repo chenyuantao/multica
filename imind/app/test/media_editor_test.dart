@@ -8,6 +8,7 @@ import 'package:http/testing.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:imind_app/api.dart';
 import 'package:imind_app/main.dart';
+import 'package:imind_app/media.dart';
 
 const id = '22222222-2222-4222-8222-222222222222';
 final png = base64Decode(
@@ -29,6 +30,74 @@ class Picker extends ImagePicker {
 }
 
 void main() {
+  testWidgets('new notes open in edit mode', (tester) async {
+    final api = MulticaApi(
+      baseUrl: 'http://localhost',
+      client: MockClient((_) async => http.Response('{}', 200)),
+    );
+    addTearDown(api.close);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NoteEditor(api: api, machine: 'mbp'),
+      ),
+    );
+    expect(find.byType(TextField), findsNWidgets(2));
+    expect(find.text('保存'), findsOneWidget);
+    expect(find.byTooltip('语音输入'), findsOneWidget);
+  });
+
+  testWidgets('shared image opens native viewer with authenticated bytes', (
+    tester,
+  ) async {
+    final api =
+        MulticaApi(
+            baseUrl: 'http://localhost',
+            client: MockClient((_) async => http.Response.bytes(png, 200)),
+          )
+          ..token = 'token'
+          ..workspaceId = '11111111-1111-4111-8111-111111111111';
+    addTearDown(api.close);
+    MethodCall? call;
+    const channel = MethodChannel('imind/image_viewer');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (value) async {
+          call = value;
+          return null;
+        });
+    addTearDown(
+      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: IMindMarkdown(
+            data: '![图片](media/$id/aaaaaaaaaaaaaaaa.png)',
+            api: api,
+            machine: 'mbp',
+            noteId: id,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final gesture = tester.widget<GestureDetector>(
+      find
+          .ancestor(
+            of: find.byType(Image),
+            matching: find.byWidgetPredicate(
+              (w) => w is GestureDetector && w.onTap != null,
+            ),
+          )
+          .first,
+    );
+    gesture.onTap!();
+    await tester.pumpAndSettle();
+    expect(call?.method, 'open');
+    expect(call?.arguments['bytes'], png);
+    expect(call?.arguments['extension'], 'png');
+  });
+
   for (final outcome in ['cancel', 'denied', 'upload-failed', 'success']) {
     testWidgets(
       'image selection $outcome preserves draft and uses durable reference',
@@ -92,7 +161,9 @@ void main() {
             ),
           ),
         );
-        await tester.tap(find.text('Original text'));
+        await tester.tap(find.byTooltip('更多'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('编辑'));
         await tester.pumpAndSettle();
         await tester.pump(const Duration(seconds: 1));
         await tester.tap(find.text('选图'));

@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
@@ -167,6 +168,7 @@ class IMindMarkdown extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MarkdownBody(
     data: data,
+    styleSheet: MarkdownStyleSheet(p: const TextStyle(fontSize: 16)),
     sizedImageBuilder: (config) {
       final uri = config.uri;
       final pending = pendingImages[uri.path];
@@ -186,10 +188,35 @@ class IMindMarkdown extends StatelessWidget {
         );
       }
       if (uri.scheme == 'https' || uri.scheme == 'http') {
-        return Image.network(
-          uri.toString(),
-          fit: BoxFit.contain,
-          errorBuilder: (_, _, _) => const Text('图片无法读取'),
+        return GestureDetector(
+          onTap: () async {
+            try {
+              final data = await NetworkAssetBundle(uri).load(uri.toString());
+              final bytes = data.buffer.asUint8List(
+                data.offsetInBytes,
+                data.lengthInBytes,
+              );
+              final ext =
+                  bytes.length >= 12 && bytes[0] == 0x52 && bytes[8] == 0x57
+                  ? 'webp'
+                  : bytes.length >= 8 && bytes[0] == 0x89 && bytes[1] == 0x50
+                  ? 'png'
+                  : 'jpg';
+              await const MethodChannel(
+                'imind/image_viewer',
+              ).invokeMethod<void>('open', {'bytes': bytes, 'extension': ext});
+            } catch (_) {
+              if (context.mounted) {
+                ScaffoldMessenger.of(context)
+                    .showSnackBar(const SnackBar(content: Text('无法打开图片')));
+              }
+            }
+          },
+          child: Image.network(
+            uri.toString(),
+            fit: BoxFit.contain,
+            errorBuilder: (_, _, _) => const Text('图片无法读取'),
+          ),
         );
       }
       return const Text('图片引用无效或尚未保存');
@@ -237,10 +264,26 @@ class _SharedImageState extends State<_SharedImage> {
           child: Center(child: CircularProgressIndicator()),
         );
       }
-      return Image.memory(
-        Uint8List.fromList(snapshot.data!),
-        fit: BoxFit.contain,
-        errorBuilder: (_, _, _) => const Text('图片内容无法显示'),
+      return GestureDetector(
+        onTap: () async {
+          try {
+            await const MethodChannel('imind/image_viewer')
+                .invokeMethod<void>('open', {
+                  'bytes': Uint8List.fromList(snapshot.data!),
+                  'extension': widget.name.split('.').last.toLowerCase(),
+                });
+          } catch (_) {
+            if (context.mounted) {
+              ScaffoldMessenger.of(context)
+                  .showSnackBar(const SnackBar(content: Text('无法打开图片')));
+            }
+          }
+        },
+        child: Image.memory(
+          Uint8List.fromList(snapshot.data!),
+          fit: BoxFit.contain,
+          errorBuilder: (_, _, _) => const Text('图片内容无法显示'),
+        ),
       );
     },
   );

@@ -232,7 +232,9 @@ void main() {
     await _pump(tester, storage, api);
     await tester.tap(find.text('示例笔记'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('示例正文'));
+    await tester.tap(find.byTooltip('更多'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, '修改后的正文');
     await tester.tap(find.text('保存'));
@@ -261,9 +263,13 @@ void main() {
     );
     await tester.tap(find.text('示例笔记'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('示例正文'));
+    await tester.tap(find.byTooltip('更多'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, '修改后的正文');
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('AI+'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, '整理重点');
@@ -301,7 +307,11 @@ void main() {
     );
     await tester.tap(find.text('示例笔记'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('示例正文'));
+    await tester.tap(find.byTooltip('更多'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('AI+'));
     await tester.pumpAndSettle();
@@ -356,7 +366,11 @@ void main() {
     );
     await tester.tap(find.text('示例笔记'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('示例正文'));
+    await tester.tap(find.byTooltip('更多'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('AI+'));
     await tester.pumpAndSettle();
@@ -453,7 +467,11 @@ void main() {
     );
     await tester.tap(find.text('示例笔记'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('示例正文'));
+    await tester.tap(find.byTooltip('更多'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('AI+'));
     await tester.pumpAndSettle();
@@ -481,23 +499,132 @@ void main() {
     expect(find.text('已授权文档内容'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
-  testWidgets('系统返回保留编辑放弃与返回首页行为', (tester) async {
+  testWidgets('系统返回确认放弃，取消保留草稿', (tester) async {
     await _pump(tester, _storage(), _api());
     await tester.tap(find.text('示例笔记'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('示例正文'));
+    await tester.tap(find.byTooltip('更多'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, '未保存的修改');
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
-    expect(find.byType(NoteEditor), findsOneWidget);
-    expect(find.text('示例正文'), findsOneWidget);
-    expect(find.text('放弃'), findsNothing);
+    expect(find.text('放弃修改？'), findsOneWidget);
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(find.text('未保存的修改'), findsOneWidget);
     await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(of: find.byType(AlertDialog), matching: find.text('放弃')),
+    );
     await tester.pumpAndSettle();
     expect(find.byType(NoteEditor), findsNothing);
     expect(find.text('示例笔记'), findsOneWidget);
   });
+
+  for (final recording in [false, true]) {
+    testWidgets('iOS 边缘滑动确认退出详情 recording=$recording', (tester) async {
+      final api = _api();
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(platform: TargetPlatform.iOS),
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => recording
+                        ? RecordingDetail(
+                            api: api,
+                            machine: 'mbp',
+                            note: {
+                              ..._note(),
+                              'type': 'recording',
+                              'transcript': '原文',
+                            },
+                          )
+                        : NoteEditor(api: api, machine: 'mbp', note: _note()),
+                  ),
+                ),
+                child: const Text('打开详情'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('打开详情'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('更多'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).last, '保留草稿');
+      await tester.dragFrom(const Offset(5, 350), const Offset(110, 0));
+      await tester.pumpAndSettle();
+      expect(find.text('放弃修改？'), findsOneWidget);
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+      expect(find.text('保留草稿'), findsOneWidget);
+      await tester.dragFrom(const Offset(5, 350), const Offset(110, 0));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.text('放弃'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('打开详情'), findsOneWidget);
+      expect(
+        find.byType(recording ? RecordingDetail : NoteEditor),
+        findsNothing,
+      );
+    });
+
+    testWidgets('顶部放弃直接退出详情 recording=$recording', (tester) async {
+      final api = _api();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => recording
+                        ? RecordingDetail(
+                            api: api,
+                            machine: 'mbp',
+                            note: {
+                              ..._note(),
+                              'type': 'recording',
+                              'transcript': '原文',
+                            },
+                          )
+                        : NoteEditor(api: api, machine: 'mbp', note: _note()),
+                  ),
+                ),
+                child: const Text('打开详情'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('打开详情'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('更多'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('放弃'));
+      await tester.pumpAndSettle();
+      expect(find.text('放弃修改？'), findsNothing);
+      expect(find.text('打开详情'), findsOneWidget);
+    });
+  }
   testWidgets('验证码登录成功后保存完整会话并保留首页', (tester) async {
     final storage = MemorySessionStorage();
     await _pump(
@@ -624,7 +751,11 @@ void main() {
     );
     await tester.tap(find.text('示例笔记'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('示例正文'));
+    await tester.tap(find.byTooltip('更多'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('AI+'));
     await tester.pumpAndSettle();

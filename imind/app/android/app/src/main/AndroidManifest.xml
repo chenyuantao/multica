@@ -7,6 +7,9 @@
         android:allowBackup="false"
         android:usesCleartextTraffic="false"
         android:icon="@mipmap/ic_launcher">
+        <provider android:name="androidx.core.content.FileProvider" android:authorities="${applicationId}.imageviewer" android:exported="false" android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/image_viewer_paths" />
+        </provider>
         <activity
             android:name=".MainActivity"
             android:exported="true"
