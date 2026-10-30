@@ -41,4 +41,4 @@
 
 已为连接的 iPhone 17（iOS 26.3）构建并签名普通 Release 包，安装成功，bundle ID 为 `ai.multica.imindApp`。使用默认 HTTPS 预览服务，不包含本地 E2E 地址、测试入口或会话 defines。签名配置只通过构建参数传入，没有改写仓库中的团队配置。
 
-[真机构建日志](../outputs/imind/ios-device-release-build.log)、[签名日志](../outputs/imind/ios-device-sign-build.log)、[安装结果](../outputs/imind/ios-device-install.json)。首次自动启动被设备锁屏拦截；安装成功与真机功能 E2E 分开记录。
+[真机构建日志](../outputs/imind/ios-device-release-build.log)、[签名日志](../outputs/imind/ios-device-sign-build.log)、[安装结果](../outputs/imind/ios-device-install.json)。解锁后自动启动成功，截图确认已登录首页与笔记列表正常显示，见[启动结果](../outputs/imind/ios-device-launch.json)与[真机截图](../outputs/imind/ios-device-launch.png)。本次真机确认范围为安装和启动，不计作真机功能 E2E。
