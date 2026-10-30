@@ -21,10 +21,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--platform', choices=['ios', 'android'], required=True)
     parser.add_argument('--device', required=True)
-    parser.add_argument('--suite', choices=['media', 'features', 'chat', 'main', 'web', 'voice', 'optimization', 'progress', 'detail'], default='media')
+    parser.add_argument('--suite', choices=['media', 'features', 'chat', 'main', 'web', 'voice', 'optimization', 'progress', 'detail', 'interaction'], default='media')
     parser.add_argument('--mirror', action='store_true')
     parser.add_argument('--restore-media', action='store_true')
     args = parser.parse_args()
+    if args.suite == 'interaction' and args.platform != 'ios':
+        parser.error('Interaction acceptance currently supports iOS only')
     config = json.loads((Path.home() / '.multica/profiles/imind-android/config.json').read_text())
     base = urlparse(config['server_url'])
     if base.hostname not in ('localhost', '127.0.0.1') or base.scheme != 'http' or base.username:
@@ -39,7 +41,7 @@ def main():
     if args.mirror:
         env['IMIND_MAVEN_MIRROR'] = 'aliyun'
     files = {'main': 'ios_e2e_test.dart', 'chat': 'chat_e2e_test.dart',
-             'media': 'media_e2e_test.dart', 'features': 'features_e2e_test.dart', 'web': 'web_interop_e2e_test.dart', 'voice': 'voice_e2e_test.dart', 'optimization': 'optimization_e2e_test.dart', 'progress': 'progress_e2e_test.dart', 'detail': 'detail_e2e_test.dart'}
+             'media': 'media_e2e_test.dart', 'features': 'features_e2e_test.dart', 'web': 'web_interop_e2e_test.dart', 'voice': 'voice_e2e_test.dart', 'optimization': 'optimization_e2e_test.dart', 'progress': 'progress_e2e_test.dart', 'detail': 'detail_e2e_test.dart', 'interaction': 'interaction_e2e_test.dart'}
     prefix = f'{args.platform}-{args.suite}' + ('-restore' if args.restore_media else '') + '-p1'
     output = ROOT / 'outputs/imind'
     output.mkdir(parents=True, exist_ok=True)
@@ -93,7 +95,7 @@ COMMIT;''')
         code = database.query(f"SELECT code FROM verification_code WHERE email={quoted} AND used=FALSE AND expires_at>now() AND attempts<5 AND created_at>={sql_literal(boundary)}::timestamptz ORDER BY created_at DESC LIMIT 1;")
         defines['E2E_PEER_TOKEN'] = auth('/auth/verify-code',{'email':email,'code':code})['token']
         del code
-    if args.suite == 'voice':
+    if args.suite in ('voice', 'interaction'):
         import base64
         import wave
         with tempfile.TemporaryDirectory(prefix='imind-voice-') as directory:
@@ -104,6 +106,15 @@ COMMIT;''')
                 str(speech / 'speech.aiff'), str(speech / 'speech.wav')], check=True)
             with wave.open(str(speech / 'speech.wav'), 'rb') as source:
                 defines['E2E_PCM'] = base64.b64encode(source.readframes(source.getnframes())).decode()
+    if args.suite == 'interaction':
+        import base64
+        import struct
+        import zlib
+        def chunk(kind, data):
+            return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data))
+        pixels = b''.join(b'\x00' + bytes([40, 130, 210]) * 320 for _ in range(240))
+        image = b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', 320, 240, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(pixels)) + chunk(b'IEND', b'')
+        defines['E2E_IMAGE'] = base64.b64encode(image).decode()
     if args.suite == 'progress':
         import uuid
         import atexit
