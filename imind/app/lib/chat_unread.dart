@@ -20,6 +20,8 @@ class ChatUnreadController extends ChangeNotifier {
   Stream<Map<String, dynamic>> get events => _events.stream;
   static const _platform = MethodChannel('imind/chat_notifications');
   final Map<String, Map<String, dynamic>> _chats = {};
+  // A temporarily unavailable share must not turn old unread into new alerts.
+  final Map<String, int> _lastUnread = {};
   IOWebSocketChannel? _channel;
   StreamSubscription<dynamic>? _subscription;
   Timer? _retry;
@@ -55,6 +57,7 @@ class ChatUnreadController extends ChangeNotifier {
     _activeIssueId = null;
     _hasBaseline = false;
     _chats.clear();
+    _lastUnread.clear();
     notifyListeners();
     unawaited(_setBadge(0));
     unawaited(_clearAll());
@@ -89,7 +92,7 @@ class ChatUnreadController extends ChangeNotifier {
           }
         }
         for (final row in rows) {
-          final before = previous[_key(row)]?['unread_count'] as int? ?? 0;
+          final before = _lastUnread[row['issue_id']] ?? 0;
           final after = row['unread_count'] as int;
           if (after > before && row['issue_id'] != _activeIssueId) {
             unawaited(
@@ -99,6 +102,9 @@ class ChatUnreadController extends ChangeNotifier {
             unawaited(_clearChat(row['issue_id'] as String));
           }
         }
+      }
+      for (final row in rows) {
+        _lastUnread[row['issue_id'] as String] = row['unread_count'] as int;
       }
       _hasBaseline = true;
     } catch (_) {

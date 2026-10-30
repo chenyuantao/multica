@@ -92,4 +92,81 @@ void main() {
     });
     expect(calls.where((call) => call.method == 'clearAll'), isNotEmpty);
   });
+  test('share reconnect does not re-notify historical unread but detects new messages', () async {
+    final calls = <MethodCall>[];
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    const channel = MethodChannel('imind/chat_notifications');
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    var available = true;
+    var count = 2;
+    final api =
+        MulticaApi(
+            baseUrl: 'http://localhost',
+            enableRealtime: false,
+            client: MockClient(
+              (_) async => http.Response(
+                jsonEncode({
+                  'chats': [
+                    if (available)
+                      {
+                        'share_machine': 'mbp',
+                        'note_id': note,
+                        'issue_id': issue,
+                        'title': '文件群聊',
+                        'unread_count': count,
+                      },
+                  ],
+                }),
+                200,
+                headers: {'content-type': 'application/json'},
+              ),
+            ),
+          )
+          ..token = 'session'
+          ..workspaceId = workspace;
+    addTearDown(api.close);
+    final controller = ChatUnreadController(api);
+    addTearDown(controller.dispose);
+    controller.configure(
+      const SessionData(
+        baseUrl: 'http://localhost',
+        token: 'session',
+        workspaceId: workspace,
+        machine: 'mbp',
+      ),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(controller.totalUnread, 2);
+    available = false;
+    await controller.refresh();
+    expect(controller.totalUnread, 0);
+    available = true;
+    await controller.refresh();
+    expect(controller.totalUnread, 2);
+    expect(calls.where((call) => call.method == 'notify'), isEmpty);
+    available = false;
+    await controller.refresh();
+    count = 3;
+    available = true;
+    await controller.refresh();
+    await Future<void>.delayed(Duration.zero);
+    expect(controller.totalUnread, 3);
+    expect(calls.where((call) => call.method == 'notify'), hasLength(1));
+    controller.configure(null);
+    controller.configure(
+      const SessionData(
+        baseUrl: 'http://localhost',
+        token: 'session',
+        workspaceId: workspace,
+        machine: 'mbp',
+      ),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(calls.where((call) => call.method == 'notify'), hasLength(1));
+  });
 }

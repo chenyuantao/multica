@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart' hide Flow;
 import 'package:flutter/services.dart';
@@ -105,14 +106,29 @@ Future<Map<String, dynamic>> fixture(
   String type, {
   List<String> tags = const [],
   String? content,
-}) => f.api.createNote({
-  'share_machine': Flow.machine,
-  'type': type,
-  'title': '交互验收 $type ${DateTime.now().microsecondsSinceEpoch}',
-  'content': content ?? '阅读正文与编辑字号一致',
-  if (type == 'recording') 'transcript': '录音转写原文',
-  'tags': tags,
-});
+}) async {
+  final title = '交互验收 $type ${DateTime.now().microsecondsSinceEpoch}';
+  final body = content ?? '阅读正文与编辑字号一致';
+  final note = await f.api.createNote({
+    'share_machine': Flow.machine,
+    'type': type,
+    'title': title,
+    'content': body,
+    if (type == 'recording') 'transcript': '录音转写原文',
+    'tags': tags,
+  });
+  if (type != 'clip') return note;
+  // Clip creation always creates an empty placeholder; complete the saved fixture.
+  return f.api.updateNote('${note['id']}', {
+    'share_machine': Flow.machine,
+    'revision': note['revision'],
+    'title': title,
+    'content': body,
+    'transcript': '',
+    'tags': tags,
+  });
+}
+
 Future<void> clean(Flow f, List<Map<String, dynamic>> notes) async {
   await f.tester.pumpWidget(const SizedBox());
   await f.tester.pumpAndSettle();
@@ -162,8 +178,8 @@ void main() {
         await f.tap(find.byTooltip('更多'));
         expect(find.text('网页剪藏'), findsNothing);
         await f.tap(find.text('排序方式'));
-        await f.tap(find.byTooltip('更多'));
-        await f.tap(find.text('排序方式'));
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
         await f.tap(clip);
         expect(find.text('网页剪藏'), findsOneWidget);
         await tester.binding.handlePopRoute();
@@ -206,6 +222,89 @@ void main() {
     },
   );
 
+  testWidgets(
+    'real saved timestamps sort in four directions and search composes with tags',
+    (tester) async {
+      final f = Flow(tester);
+      final tag = '000-search-${DateTime.now().microsecondsSinceEpoch}';
+      final notes = <Map<String, dynamic>>[];
+      try {
+        notes.add(
+          await fixture(f, 'note', tags: [tag], content: 'Alpha body needle'),
+        );
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 1100)),
+        );
+        notes.add(
+          await fixture(f, 'note', tags: [tag], content: 'Beta body haystack'),
+        );
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 1100)),
+        );
+        notes[0] = await f.api.updateNote('${notes[0]['id']}', {
+          'share_machine': Flow.machine,
+          'revision': notes[0]['revision'],
+          'title': 'Search ALPHA ${DateTime.now().microsecondsSinceEpoch}',
+          'content': 'Alpha body needle',
+          'transcript': '',
+          'tags': [tag],
+        });
+        await f.start();
+        await f.wait(find.text('${notes[0]['title']}'));
+        await f.tap(find.widgetWithText(FilterChip, '#$tag'));
+        Future<void> order(String label, int first) async {
+          await f.tap(find.byTooltip('更多'));
+          await f.tap(find.text('排序方式'));
+          await f.tap(find.text(label));
+          expect(
+            tester.getTopLeft(find.text('${notes[first]['title']}')).dy,
+            lessThan(
+              tester.getTopLeft(find.text('${notes[1 - first]['title']}')).dy,
+            ),
+          );
+        }
+
+        await order('创建时间 · 倒序', 1);
+        await order('创建时间 · 正序', 0);
+        await order('更新时间 · 倒序', 0);
+        await order('更新时间 · 正序', 1);
+        await f.tap(find.byTooltip('搜索'));
+        final input = find.byType(TextField);
+        await tester.enterText(input, 'alpha');
+        await tester.pump(const Duration(milliseconds: 350));
+        await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
+        await tester.pumpAndSettle();
+        await f.wait(find.text('${notes[0]['title']}'));
+        expect(find.text('${notes[1]['title']}'), findsNothing);
+        await tester.enterText(input, 'HAYSTACK');
+        await tester.pump(const Duration(milliseconds: 350));
+        await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
+        await tester.pumpAndSettle();
+        await f.wait(find.text('${notes[1]['title']}'));
+        expect(tester.widget<TextField>(input).controller!.text, 'HAYSTACK');
+        expect(find.text('${notes[0]['title']}'), findsNothing);
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+        expect(find.byType(TextField), findsNothing);
+        expect(find.text('${notes[0]['title']}'), findsOneWidget);
+        expect(find.text('${notes[1]['title']}'), findsOneWidget);
+        expect(
+          tester
+              .widget<FilterChip>(find.widgetWithText(FilterChip, '#$tag'))
+              .selected,
+          isTrue,
+        );
+        await capture(tester, 'search-sort');
+        expect(tester.takeException(), isNull);
+        debugPrint(
+          'E2E_INTERACTION: four real timestamp sorts, case-insensitive title/body search and system back preserving tags passed',
+        );
+      } finally {
+        await clean(f, notes);
+      }
+    },
+  );
+
   for (final type in ['note', 'clip', 'recording']) {
     testWidgets(
       '$type read-only taps, native edge pop, edit confirmation and full discard',
@@ -230,11 +329,15 @@ void main() {
             expect(markdown.styleSheet!.p!.fontSize, 16);
           }
           final size = tester.getSize(find.byType(Scaffold).last);
-          await tester.timedDragFrom(
-            Offset(1, size.height / 2),
-            Offset(size.width * .85, 0),
-            const Duration(milliseconds: 500),
-          );
+          if (Platform.isIOS) {
+            await tester.timedDragFrom(
+              Offset(1, size.height / 2),
+              Offset(size.width * .85, 0),
+              const Duration(milliseconds: 500),
+            );
+          } else {
+            await tester.binding.handlePopRoute();
+          }
           await f.wait(find.byTooltip('菜单'));
           await f.tap(find.text('${note['title']}'));
           await menu(f, '编辑');
@@ -244,10 +347,14 @@ void main() {
           expect(find.widgetWithText(TextButton, '标签'), findsNothing);
           expect(find.byTooltip('语音输入'), findsOneWidget);
           await f.text(field, '取消后保留草稿');
-          await tester.dragFrom(
-            Offset(1, size.height / 2),
-            const Offset(220, 0),
-          );
+          if (Platform.isIOS) {
+            await tester.dragFrom(
+              Offset(1, size.height / 2),
+              const Offset(220, 0),
+            );
+          } else {
+            await tester.binding.handlePopRoute();
+          }
           await f.wait(find.text('放弃修改？'));
           await capture(tester, '$type-exit-confirm');
           await f.tap(find.widgetWithText(TextButton, '取消'));
@@ -272,11 +379,18 @@ void main() {
           await menu(f, '编辑');
           await f.text(find.byType(TextField).last, '顶部放弃草稿');
           await f.tap(find.widgetWithText(TextButton, '放弃'));
-          await f.wait(find.byTooltip('菜单'));
+          await f.wait(find.byTooltip('返回'));
+          expect(find.byType(TextField), findsNothing);
           expect(find.text('顶部放弃草稿'), findsNothing);
+          expect(
+            find.text(type == 'recording' ? '录音转写原文' : '阅读正文与编辑字号一致'),
+            findsOneWidget,
+          );
+          await f.tap(find.byTooltip('返回'));
+          await f.wait(find.byTooltip('菜单'));
           expect(tester.takeException(), isNull);
           debugPrint(
-            'E2E_INTERACTION: $type native read pop, menu edit, cancel retains draft, confirm and top discard exit detail passed',
+            'E2E_INTERACTION: $type native read pop, menu edit, cancel retains draft, confirm exits and top discard restores reading passed',
           );
         } finally {
           await clean(f, [note]);
@@ -317,6 +431,7 @@ void main() {
         await readyDetail(f);
         saved = await f.api.getNote(Flow.machine, '${note['id']}');
         expect(saved['tags'], containsAll(['原有标签', '学习', '手建标签']));
+        final beforeAiRevision = saved['revision'];
         await menu(f, 'AI 标记');
         await until(
           tester,
@@ -328,7 +443,8 @@ void main() {
         );
         saved = await f.api.getNote(Flow.machine, '${note['id']}');
         expect(saved['tags'], containsAll(['原有标签', '学习', '手建标签']));
-        expect((saved['tags'] as List).length, greaterThan(3));
+        expect((saved['tags'] as List).length, greaterThanOrEqualTo(3));
+        expect(saved['revision'], isNot(beforeAiRevision));
         expect(saved['content'], note['content']);
         expect(saved['title'], note['title']);
         await capture(tester, 'detail-ai-tags');
@@ -418,6 +534,7 @@ void main() {
         await tester.binding.handlePopRoute();
         await tester.pumpAndSettle();
         expect(find.byKey(const ValueKey('detail-title')), findsOneWidget);
+        await capture(tester, 'image-native-return');
         expect(tester.takeException(), isNull);
         debugPrint(
           'E2E_INTERACTION: image actual touch/native viewer returned to working detail',
@@ -461,9 +578,9 @@ void main() {
           'E2E_INTERACTION: editor actual native mic ready/start/stop passed',
         );
         await f.tap(find.widgetWithText(TextButton, '放弃'));
+        await f.wait(find.byTooltip('返回'));
         await tester.pump(const Duration(seconds: 1));
         RecordPlatform.instance = pcm;
-        await f.tap(find.text('${note['title']}'));
         await menu(f, '编辑');
         var field = find.byType(TextField).last;
         var controller = tester.widget<TextField>(field).controller!;
@@ -525,9 +642,14 @@ void main() {
           () =>
               tester.widget<TextField>(field).readOnly && pcm.timers.isNotEmpty,
         );
+        final stopsBeforeDiscard = pcm.stops;
         await f.tap(find.widgetWithText(TextButton, '放弃'));
-        await f.wait(find.byTooltip('菜单'));
+        await f.wait(find.byTooltip('返回'));
+        expect(find.byType(TextField), findsNothing);
         expect(pcm.timers, isEmpty);
+        expect(pcm.stops, greaterThan(stopsBeforeDiscard));
+        await f.tap(find.byTooltip('返回'));
+        await f.wait(find.byTooltip('菜单'));
         expect(pcm.disposals, greaterThan(0));
         expect(
           (await f.api.getNote(Flow.machine, '${note['id']}'))['content'],

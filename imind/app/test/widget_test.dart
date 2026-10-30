@@ -787,7 +787,7 @@ void main() {
       );
     });
 
-    testWidgets('顶部放弃直接退出详情 recording=$recording', (tester) async {
+    testWidgets('顶部放弃恢复原文并停留详情 recording=$recording', (tester) async {
       final api = _api();
       await tester.pumpWidget(
         MaterialApp(
@@ -822,9 +822,25 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('编辑'));
       await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).last, '未保存的草稿');
       await tester.tap(find.text('放弃'));
       await tester.pumpAndSettle();
       expect(find.text('放弃修改？'), findsNothing);
+      expect(find.text('打开详情'), findsNothing);
+      expect(find.byType(TextField), findsNothing);
+      expect(find.text('未保存的草稿'), findsNothing);
+      await tester.tap(find.byTooltip('更多'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<TextField>(find.byType(TextField).last).controller!.text,
+        recording ? '原文' : '示例正文',
+      );
+      await tester.tap(find.text('放弃'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('返回'));
+      await tester.pumpAndSettle();
       expect(find.text('打开详情'), findsOneWidget);
     });
   }

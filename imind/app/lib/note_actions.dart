@@ -106,7 +106,7 @@ class NoteActions extends StatelessWidget {
       if (onTag != null) const PopupMenuItem(value: 'tag', child: Text('标记')),
       if (onAiTag != null)
         const PopupMenuItem(value: 'aiTag', child: Text('AI 标记')),
-      const PopupMenuItem(value: 'info', child: Text('Info · 文件信息')),
+      const PopupMenuItem(value: 'info', child: Text('文件信息')),
       const PopupMenuItem(value: 'rename', child: Text('重命名')),
       const PopupMenuItem(enabled: false, child: Text('导出 · 暂不可用')),
       const PopupMenuItem(

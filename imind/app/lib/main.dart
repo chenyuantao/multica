@@ -1685,6 +1685,36 @@ class _NoteEditorState extends State<NoteEditor> {
     });
   }
 
+  Future<void> _discardEdit() async {
+    if (_saving || _popping) return;
+    final saved = _note;
+    if (saved == null) {
+      await _discard();
+      return;
+    }
+    setState(() => _saving = true);
+    await _stopEditorVoice(_body);
+    await _stopEditorVoice(_transcript);
+    if (!mounted) return;
+    final previous = _history;
+    previous.removeListener(_refresh);
+    _history = UndoHistoryController()..addListener(_refresh);
+    setState(() {
+      _title.text = '${saved['title'] ?? ''}';
+      _body.text = '${saved['content'] ?? ''}';
+      _transcript.text = '${saved['transcript'] ?? ''}';
+      _tags
+        ..clear()
+        ..addAll(noteTags(saved));
+      _editing = false;
+      _focusTitle = false;
+      _saving = false;
+      _error = null;
+    });
+    FocusManager.instance.primaryFocus?.unfocus();
+    WidgetsBinding.instance.addPostFrameCallback((_) => previous.dispose());
+  }
+
   Future<void> _discard() async {
     if (_saving || _popping) return;
     setState(() => _saving = true);
@@ -1953,7 +1983,7 @@ class _NoteEditorState extends State<NoteEditor> {
           leadingWidth: _editing ? 80 : null,
           leading: _editing
               ? TextButton(
-                  onPressed: _saving ? null : _discard,
+                  onPressed: _saving ? null : _discardEdit,
                   child: const Text(
                     '放弃',
                     style: TextStyle(color: _ink, fontSize: 16),
@@ -2203,6 +2233,21 @@ class _RecordingDetailState extends State<RecordingDetail> {
       _editing = true;
       _error = null;
     });
+  }
+
+  Future<void> _discardEdit() async {
+    if (_saving || _popping) return;
+    setState(() => _saving = true);
+    await _stopEditorVoice(_transcriptText);
+    await _stopEditorVoice(_content);
+    if (!mounted) return;
+    setState(() {
+      _content.text = '${_note['content'] ?? ''}';
+      _transcriptText.text = '${_note['transcript'] ?? ''}';
+      _saving = false;
+      _error = null;
+    });
+    _closeEdit();
   }
 
   Future<void> _discard() async {
@@ -2459,7 +2504,7 @@ class _RecordingDetailState extends State<RecordingDetail> {
                     children: [
                       if (_editing)
                         TextButton(
-                          onPressed: _saving ? null : _discard,
+                          onPressed: _saving ? null : _discardEdit,
                           child: const Text(
                             '放弃',
                             style: TextStyle(color: _ink, fontSize: 16),

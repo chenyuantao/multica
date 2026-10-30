@@ -79,6 +79,18 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+        // Read-only native evidence for integration tests; unavailable in Release.
+        if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) {
+            MethodChannel(engine.dartExecutor.binaryMessenger, "imind/notification_inspection").setMethodCallHandler { call, result ->
+                if (call.method != "state") { result.notImplemented(); return@setMethodCallHandler }
+                val active = manager.activeNotifications
+                result.success(mapOf(
+                    "authorized" to canNotify(),
+                    "badge" to (active.firstOrNull { it.id == badgeNotification }?.notification?.number ?: 0),
+                    "delivered" to active.filter { it.id == 11 }.map { "imind-chat-${it.tag}" }
+                ))
+            }
+        }
         MethodChannel(engine.dartExecutor.binaryMessenger, "imind/image_viewer").setMethodCallHandler { call, result ->
             if (call.method != "open") { result.notImplemented(); return@setMethodCallHandler }
             try {

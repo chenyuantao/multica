@@ -18,6 +18,7 @@ import UserNotifications
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    UNUserNotificationCenter.current().delegate = self
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
@@ -69,6 +70,27 @@ import UserNotifications
         result(FlutterMethodNotImplemented)
       }
     }
+    #if DEBUG
+    // Read-only native evidence for device integration tests; absent in Release.
+    let inspection = FlutterMethodChannel(name: "imind/notification_inspection", binaryMessenger: engineBridge.applicationRegistrar.messenger())
+    inspection.setMethodCallHandler { call, result in
+      guard call.method == "state" else { result(FlutterMethodNotImplemented); return }
+      let center = UNUserNotificationCenter.current()
+      center.getNotificationSettings { settings in
+        center.getDeliveredNotifications { delivered in
+          DispatchQueue.main.async {
+            result([
+              "authorized": settings.authorizationStatus == .authorized,
+              "authorizationStatus": settings.authorizationStatus.rawValue,
+              "badge": UIApplication.shared.applicationIconBadgeNumber,
+              "delivered": delivered.map { $0.request.identifier },
+              "foregroundDelegate": center.delegate != nil,
+            ])
+          }
+        }
+      }
+    }
+    #endif
     let channel = FlutterMethodChannel(name: "imind/image_viewer", binaryMessenger: engineBridge.applicationRegistrar.messenger())
     channel.setMethodCallHandler { [weak self] call, result in
       guard call.method == "open", let args = call.arguments as? [String: Any],
