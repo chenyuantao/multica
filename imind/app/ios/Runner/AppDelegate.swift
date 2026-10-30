@@ -6,6 +6,11 @@ import UserNotifications
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate, QLPreviewControllerDataSource {
   private var imageURL: URL?
+  private weak var imagePreview: UINavigationController?
+
+  @objc private func closeImagePreview() {
+    imagePreview?.dismiss(animated: true)
+  }
 
   func numberOfPreviewItems(in controller: QLPreviewController) -> Int { 1 }
   func previewController(_ controller: QLPreviewController, previewItemAt index: Int) -> QLPreviewItem { imageURL! as NSURL }
@@ -76,12 +81,17 @@ import UserNotifications
         self.imageURL = url
         let preview = QLPreviewController()
         preview.dataSource = self
+        preview.navigationItem.leftBarButtonItem = UIBarButtonItem(
+          barButtonSystemItem: .done, target: self, action: #selector(self.closeImagePreview))
+        let navigation = UINavigationController(rootViewController: preview)
+        navigation.modalPresentationStyle = .fullScreen
+        self.imagePreview = navigation
         guard let root = UIApplication.shared.connectedScenes.compactMap({ ($0 as? UIWindowScene)?.keyWindow?.rootViewController }).first else {
           result(FlutterError(code: "open_failed", message: "No window", details: nil)); return
         }
         var presenter = root
         while let presented = presenter.presentedViewController { presenter = presented }
-        presenter.present(preview, animated: true)
+        presenter.present(navigation, animated: true)
         result(nil)
       } catch { result(FlutterError(code: "open_failed", message: error.localizedDescription, details: nil)) }
     }
