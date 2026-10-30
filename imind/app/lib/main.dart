@@ -246,6 +246,18 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
+enum _HomeSort {
+  createdDescending('创建时间 · 倒序', 'created_at', true),
+  createdAscending('创建时间 · 正序', 'created_at', false),
+  updatedDescending('更新时间 · 倒序', 'updated_at', true),
+  updatedAscending('更新时间 · 正序', 'updated_at', false);
+
+  const _HomeSort(this.label, this.field, this.descending);
+  final String label;
+  final String field;
+  final bool descending;
+}
+
 class _HomePageState extends State<HomePage> {
   final _scaffold = GlobalKey<ScaffoldState>();
   MulticaApi get _api => widget.session.api;
@@ -257,7 +269,11 @@ class _HomePageState extends State<HomePage> {
   String? _kind;
   final _tags = <String>{};
   var _ready = false;
-  var _newestFirst = true;
+  var _sort = _HomeSort.updatedDescending;
+  var _searching = false;
+  final _searchInput = TextEditingController();
+  Timer? _searchTimer;
+  var _query = '';
   var _selecting = false;
   var _menu = false;
   var _tagging = false;
@@ -268,6 +284,60 @@ class _HomePageState extends State<HomePage> {
     super.initState();
     _reload();
   }
+
+  @override
+  void dispose() {
+    _searchTimer?.cancel();
+    _searchInput.dispose();
+    super.dispose();
+  }
+
+  void _searchChanged(String value) {
+    _searchTimer?.cancel();
+    final query = value.trim().toLowerCase();
+    if (query.isEmpty) {
+      setState(() => _query = '');
+      return;
+    }
+    _searchTimer = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) setState(() => _query = query);
+    });
+  }
+
+  void _closeSearch() {
+    _searchTimer?.cancel();
+    FocusScope.of(context).unfocus();
+    _searchInput.clear();
+    setState(() {
+      _searching = false;
+      _query = '';
+    });
+  }
+
+  Future<void> _chooseSort() => showModalBottomSheet<void>(
+    context: context,
+    useSafeArea: true,
+    builder: (sheetContext) => Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Padding(padding: EdgeInsets.all(16), child: Text('排序方式')),
+        for (final sort in _HomeSort.values)
+          ListTile(
+            title: Text(sort.label),
+            selected: _sort == sort,
+            leading: Icon(
+              _sort == sort
+                  ? Icons.radio_button_checked
+                  : Icons.radio_button_unchecked,
+            ),
+            onTap: () {
+              setState(() => _sort = sort);
+              Navigator.pop(sheetContext);
+            },
+          ),
+      ],
+    ),
+  );
 
   Future<void> _reload() {
     if (_reloadInProgress != null) return _reloadInProgress!;
@@ -358,9 +428,26 @@ class _HomePageState extends State<HomePage> {
     final items = _notes.where((note) {
       if (_kind != null && note['type'] != _kind) return false;
       if (_tags.isNotEmpty && !noteTags(note).any(_tags.contains)) return false;
+      if (_query.isNotEmpty &&
+          !'${note['title'] ?? ''}'.toLowerCase().contains(_query) &&
+          !'${note['content'] ?? ''}'.toLowerCase().contains(_query)) {
+        return false;
+      }
       return true;
     }).toList();
-    if (!_newestFirst) return items.reversed.toList();
+    items.sort((a, b) {
+      final first =
+          DateTime.tryParse('${a[_sort.field] ?? ''}')
+              ?.microsecondsSinceEpoch ??
+          0;
+      final second =
+          DateTime.tryParse('${b[_sort.field] ?? ''}')
+              ?.microsecondsSinceEpoch ??
+          0;
+      final order = first.compareTo(second);
+      if (order == 0) return '${a['id']}'.compareTo('${b['id']}');
+      return _sort.descending ? -order : order;
+    });
     return items;
   }
 
@@ -741,75 +828,82 @@ class _HomePageState extends State<HomePage> {
         _error == null &&
         _notes.isEmpty &&
         _kind == null &&
-        _tags.isEmpty;
-    return Scaffold(
-      key: _scaffold,
-      backgroundColor: _bg,
-      drawer: _drawer(),
-      body: Stack(
-        children: [
-          SafeArea(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _header(),
-                if (_allTags.isNotEmpty) _tagFilters(),
-                if (_kind != null)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
-                    child: Text(
-                      _heading,
-                      style: const TextStyle(
-                        fontSize: 34,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.6,
+        _tags.isEmpty &&
+        _query.isEmpty;
+    return PopScope(
+      canPop: !_searching,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _searching) _closeSearch();
+      },
+      child: Scaffold(
+        key: _scaffold,
+        backgroundColor: _bg,
+        drawer: _drawer(),
+        body: Stack(
+          children: [
+            SafeArea(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _header(),
+                  if (_allTags.isNotEmpty) _tagFilters(),
+                  if (_kind != null)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+                      child: Text(
+                        _heading,
+                        style: const TextStyle(
+                          fontSize: 34,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.6,
+                        ),
                       ),
                     ),
-                  ),
-                if (_tags.isNotEmpty || _kind != null)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(18, 0, 18, 6),
-                    child: Text(
-                      '${visible.length} 个文件',
-                      style: const TextStyle(fontSize: 13, color: _sub),
+                  if (_tags.isNotEmpty || _kind != null || _query.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(18, 0, 18, 6),
+                      child: Text(
+                        '${visible.length} 个文件',
+                        style: const TextStyle(fontSize: 13, color: _sub),
+                      ),
                     ),
-                  ),
-                Expanded(child: _body(showHero, visible)),
-              ],
-            ),
-          ),
-          if (!_selecting)
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 28,
-              child: Center(
-                child: ActionPill(
-                  children: [
-                    PillButton(
-                      dark: true,
-                      icon: Icons.mic_none,
-                      label: '录音',
-                      onPressed: _machine == null ? null : _openRecord,
-                    ),
-                    PillButton(
-                      icon: Icons.link,
-                      label: '剪藏',
-                      onPressed: _machine == null ? null : _clip,
-                    ),
-                    PillButton(
-                      icon: Icons.edit_outlined,
-                      label: '笔记',
-                      onPressed: _machine == null ? null : _openEditor,
-                    ),
-                  ],
-                ),
+                  Expanded(child: _body(showHero, visible)),
+                ],
               ),
             ),
-          if (_selecting)
-            Positioned(left: 0, right: 0, bottom: 0, child: _selectBar()),
-          if (_menu) _menuLayer(),
-        ],
+            if (!_selecting)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 28,
+                child: Center(
+                  child: ActionPill(
+                    children: [
+                      PillButton(
+                        dark: true,
+                        icon: Icons.mic_none,
+                        label: '录音',
+                        onPressed: _machine == null ? null : _openRecord,
+                      ),
+                      PillButton(
+                        icon: Icons.link,
+                        label: '剪藏',
+                        onPressed: _machine == null ? null : _clip,
+                      ),
+                      PillButton(
+                        icon: Icons.edit_outlined,
+                        label: '笔记',
+                        onPressed: _machine == null ? null : _openEditor,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            if (_selecting)
+              Positioned(left: 0, right: 0, bottom: 0, child: _selectBar()),
+            if (_menu) _menuLayer(),
+          ],
+        ),
       ),
     );
   }
@@ -841,6 +935,36 @@ class _HomePageState extends State<HomePage> {
         ),
       );
     }
+    if (_searching) {
+      return SizedBox(
+        height: 54,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              _round(
+                label: '返回',
+                onTap: _closeSearch,
+                child: const Icon(Icons.arrow_back, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextField(
+                  controller: _searchInput,
+                  autofocus: true,
+                  textInputAction: TextInputAction.search,
+                  decoration: const InputDecoration(
+                    hintText: '搜索标题或内容',
+                    border: InputBorder.none,
+                  ),
+                  onChanged: _searchChanged,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     return SizedBox(
       height: 54,
       child: Padding(
@@ -860,6 +984,12 @@ class _HomePageState extends State<HomePage> {
                 onPressed: () => setState(_tags.clear),
                 child: const Text('取消'),
               ),
+            _round(
+              label: '搜索',
+              onTap: () => setState(() => _searching = true),
+              child: const Icon(Icons.search, size: 22),
+            ),
+            const SizedBox(width: 8),
             _round(
               label: '更多',
               onTap: () => setState(() => _menu = true),
@@ -1127,9 +1257,7 @@ class _HomePageState extends State<HomePage> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          _menuItem(Icons.swap_vert, '排序方式', () {
-                            setState(() => _newestFirst = !_newestFirst);
-                          }),
+                          _menuItem(Icons.swap_vert, '排序方式', _chooseSort),
                         ],
                       ),
                     ),
