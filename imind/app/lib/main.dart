@@ -9,6 +9,7 @@ import 'package:image_picker/image_picker.dart';
 import 'asr_session.dart';
 
 import 'ai_chat.dart';
+import 'note_chat_prefetch.dart';
 import 'chat_unread.dart';
 import 'api.dart';
 import 'session.dart';
@@ -1576,6 +1577,7 @@ class _NoteEditorState extends State<NoteEditor> {
   late final _titleFocus = FocusNode();
   UndoHistoryController _history = UndoHistoryController();
   Map<String, dynamic>? _note;
+  NoteChatPrefetch? _chatPrefetch;
   var _editing = false;
   var _focusTitle = false;
   var _changed = false;
@@ -1590,6 +1592,7 @@ class _NoteEditorState extends State<NoteEditor> {
         ? null
         : Map<String, dynamic>.from(widget.note!);
     _editing = widget.note == null;
+    _prepareChat();
     _history.addListener(_refresh);
     _body.addListener(_refresh);
     _transcript.addListener(_refresh);
@@ -1599,6 +1602,13 @@ class _NoteEditorState extends State<NoteEditor> {
         if (mounted) unawaited(_openPendingClipChat());
       });
     }
+  }
+
+  void _prepareChat() {
+    final machine = widget.machine;
+    final note = _note;
+    if (machine == null || note == null) return;
+    _chatPrefetch = NoteChatPrefetch(widget.api, machine, note);
   }
 
   Future<void> _openPendingClipChat() async {
@@ -1612,6 +1622,9 @@ class _NoteEditorState extends State<NoteEditor> {
         _title.text = '${latest['title']}';
         _body.text = '${latest['content'] ?? ''}';
       });
+      if (!(_chatPrefetch?.matches(widget.api, machine, latest) ?? false)) {
+        _prepareChat();
+      }
       if (_body.text.trim().isNotEmpty ||
           ModalRoute.of(context)?.isCurrent != true) {
         return;
@@ -1621,6 +1634,7 @@ class _NoteEditorState extends State<NoteEditor> {
         api: widget.api,
         machine: machine,
         note: latest,
+        prefetch: _chatPrefetch,
       );
       if (!mounted) return;
       final updated = await widget.api.getNote(machine, '${latest['id']}');
@@ -1899,19 +1913,26 @@ class _NoteEditorState extends State<NoteEditor> {
       _error = null;
     });
     try {
-      await _persist();
+      if (_editing || _note == null) await _persist();
       if (!mounted) return;
       setState(() => _editing = false);
+      if (!(_chatPrefetch?.matches(widget.api, machine, _note!) ?? false)) {
+        _prepareChat();
+      }
       await showNoteAiChat(
         context,
         api: widget.api,
         machine: machine,
         note: _note!,
+        prefetch: _chatPrefetch,
       );
     } catch (error) {
       if (mounted) setState(() => _error = '$error');
     } finally {
-      if (mounted) setState(() => _saving = false);
+      if (mounted) {
+        setState(() => _saving = false);
+        _prepareChat();
+      }
     }
   }
 
@@ -2063,6 +2084,7 @@ class RecordingDetail extends StatefulWidget {
 
 class _RecordingDetailState extends State<RecordingDetail> {
   final AudioPlayer _player = AudioPlayer();
+  NoteChatPrefetch? _chatPrefetch;
   late Map<String, dynamic> _note = widget.note;
   late final _content = TextEditingController(
     text: '${widget.note['content'] ?? ''}',
@@ -2088,6 +2110,7 @@ class _RecordingDetailState extends State<RecordingDetail> {
   @override
   void initState() {
     super.initState();
+    _chatPrefetch = NoteChatPrefetch(widget.api, widget.machine, _note);
     _player.onPlayerComplete.listen((_) {
       if (mounted) {
         setState(() {
@@ -2397,12 +2420,19 @@ class _RecordingDetailState extends State<RecordingDetail> {
       await _save();
       if (_error != null || !mounted) return;
     }
+    if (!(_chatPrefetch?.matches(widget.api, widget.machine, _note) ?? false)) {
+      _chatPrefetch = NoteChatPrefetch(widget.api, widget.machine, _note);
+    }
     await showNoteAiChat(
       context,
       api: widget.api,
       machine: widget.machine,
       note: _note,
+      prefetch: _chatPrefetch,
     );
+    if (mounted) {
+      _chatPrefetch = NoteChatPrefetch(widget.api, widget.machine, _note);
+    }
   }
 
   @override

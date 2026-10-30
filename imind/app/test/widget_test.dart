@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -6,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:imind_app/api.dart';
 import 'package:imind_app/chat_unread.dart';
+import 'package:imind_app/ai_chat.dart';
 import 'package:imind_app/main.dart';
 import 'package:imind_app/session.dart';
 
@@ -108,6 +110,109 @@ Future<void> _pump(
 }
 
 void main() {
+  testWidgets(
+    'detail preloads chat before tap without saving or marking read',
+    (tester) async {
+      var ensures = 0, histories = 0, reads = 0, saves = 0;
+      final api = _api(
+        intercept: (request) async {
+          if (request.url.path == '/api/imind/chats/ensure') ensures++;
+          if (request.url.path ==
+              '/api/issues/$_otherWorkspace/comments/page') {
+            histories++;
+          }
+          if (request.url.path == '/api/group-chats/$_otherWorkspace/read') {
+            reads++;
+          }
+          if (request.method == 'PUT') saves++;
+          return null;
+        },
+      );
+      await _pump(tester, _storage(), api);
+      await tester.tap(find.text('示例笔记'));
+      await tester.pumpAndSettle();
+      expect(ensures, 1);
+      expect(histories, 1);
+      expect(reads, 0);
+      await tester.tap(find.text('AI+'));
+      await tester.pumpAndSettle();
+      expect(find.byType(NoteAiChatSheet), findsOneWidget);
+      expect(ensures, 1);
+      expect(saves, 0);
+      expect(reads, greaterThan(0));
+    },
+  );
+
+  testWidgets('chat opens while preparation and mark-read are still pending', (
+    tester,
+  ) async {
+    final ensureGate = Completer<void>();
+    final readGate = Completer<void>();
+    final meGate = Completer<void>();
+    addTearDown(() {
+      if (!ensureGate.isCompleted) ensureGate.complete();
+      if (!readGate.isCompleted) readGate.complete();
+      if (!meGate.isCompleted) meGate.complete();
+    });
+    final api = _api(
+      intercept: (request) async {
+        if (request.url.path == '/api/imind/chats/ensure') {
+          await ensureGate.future;
+        }
+        if (request.url.path == '/api/group-chats/$_otherWorkspace/read') {
+          await readGate.future;
+        }
+        if (request.url.path == '/api/me') {
+          await meGate.future;
+        }
+        return null;
+      },
+    );
+    await _pump(tester, _storage(), api);
+    await tester.tap(find.text('示例笔记'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('AI+'));
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(find.byType(NoteAiChatSheet), findsOneWidget);
+    ensureGate.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('围绕这份文件开始讨论'), findsOneWidget);
+    expect(find.byType(TextField), findsOneWidget);
+    readGate.complete();
+    meGate.complete();
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets(
+    'failed preparation stays quiet until open and retry reloads it',
+    (tester) async {
+      var ensures = 0;
+      final api = _api(
+        intercept: (request) async {
+          if (request.url.path == '/api/imind/chats/ensure') {
+            ensures++;
+            if (ensures == 1) {
+              return http.Response('unavailable', 503);
+            }
+          }
+          return null;
+        },
+      );
+      await _pump(tester, _storage(), api);
+      await tester.tap(find.text('示例笔记'));
+      await tester.pumpAndSettle();
+      expect(ensures, 1);
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.text('AI+'));
+      await tester.pumpAndSettle();
+      expect(find.text('无法打开此文件的群聊'), findsOneWidget);
+      await tester.tap(find.text('重试'));
+      await tester.pumpAndSettle();
+      expect(ensures, 2);
+      expect(find.text('围绕这份文件开始讨论'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
   testWidgets('unread badges stay circular for one digit, two digits and 99+', (
     tester,
   ) async {

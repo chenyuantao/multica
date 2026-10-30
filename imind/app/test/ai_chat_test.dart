@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:imind_app/ai_chat.dart';
 import 'package:imind_app/api.dart';
+import 'package:imind_app/note_chat_prefetch.dart';
 
 const issueId = '11111111-1111-4111-8111-111111111111';
 const noteId = '22222222-2222-4222-8222-222222222222';
@@ -105,7 +106,7 @@ Future<ChatApi> openChat(WidgetTester tester, {ChatApi? providedApi}) async {
     ),
   );
   await tester.tap(find.text('打开群聊'));
-  // Let history finish while mark-read deliberately keeps the loading UI mounted.
+  // Keep the read receipt pending while history and the sheet finish loading.
   await tester.pump(const Duration(milliseconds: 500));
   await tester.pump();
   api.read.complete();
@@ -124,6 +125,28 @@ void expectLatestVisible(WidgetTester tester) {
 }
 
 void main() {
+  test(
+    'prepared requests are scoped to note revision, machine and session',
+    () async {
+      final api = ChatApi();
+      addTearDown(api.close);
+      final note = <String, dynamic>{'id': noteId, 'revision': 'r'};
+      final prepared = NoteChatPrefetch(api, 'mbp', note);
+      await prepared.history;
+      expect(prepared.matches(api, 'mbp', note), isTrue);
+      expect(prepared.matches(api, 'other', note), isFalse);
+      expect(
+        prepared.matches(api, 'mbp', {...note, 'revision': 'new'}),
+        isFalse,
+      );
+      expect(prepared.matches(api, 'mbp', {...note, 'id': issueId}), isFalse);
+      api.workspaceId = issueId;
+      expect(prepared.matches(api, 'mbp', note), isFalse);
+      api.workspaceId = null;
+      api.token = 'new-session';
+      expect(prepared.matches(api, 'mbp', note), isFalse);
+    },
+  );
   testWidgets('history scrolls to newest after delayed initial loading', (
     tester,
   ) async {

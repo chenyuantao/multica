@@ -10,6 +10,7 @@ import 'package:web_socket_channel/io.dart';
 
 import 'api.dart';
 import 'agent_mentions.dart';
+import 'note_chat_prefetch.dart';
 import 'chat_unread.dart';
 import 'input_insets.dart';
 import 'run_progress.dart';
@@ -29,6 +30,7 @@ Future<void> showNoteAiChat(
   required String machine,
   required Map<String, dynamic> note,
   String? initialMessage,
+  NoteChatPrefetch? prefetch,
 }) => showModalBottomSheet<void>(
   context: context,
   isScrollControlled: true,
@@ -42,6 +44,7 @@ Future<void> showNoteAiChat(
     machine: machine,
     note: note,
     initialMessage: initialMessage,
+    prefetch: prefetch,
   ),
 );
 
@@ -52,6 +55,7 @@ class NoteAiChatSheet extends StatefulWidget {
     required this.machine,
     required this.note,
     this.initialMessage,
+    this.prefetch,
     this.voiceRecorder,
     this.voiceSessionFactory,
     this.unread,
@@ -60,6 +64,7 @@ class NoteAiChatSheet extends StatefulWidget {
   final String machine;
   final Map<String, dynamic> note;
   final String? initialMessage;
+  final NoteChatPrefetch? prefetch;
   final AudioRecorder? voiceRecorder;
   final VoiceSessionFactory? voiceSessionFactory;
   final ChatUnreadController? unread;
@@ -111,6 +116,7 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
   bool _disposed = false;
   bool _initialMessageSent = false;
   double _keyboardInset = 0;
+  bool _prefetchUsed = false;
 
   @override
   void initState() {
@@ -156,17 +162,24 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
     try {
       final noteId = '${widget.note['id'] ?? ''}';
       if (!validWorkspaceId(noteId)) throw ApiException(400, '请先保存笔记再使用 AI+');
-      final chat = await widget.api.ensureNoteChat(
-        widget.machine,
-        noteId,
-        revision: widget.note['revision'] as String,
-      );
+      final prepared =
+          !_prefetchUsed &&
+              (widget.prefetch?.matches(
+                    widget.api,
+                    widget.machine,
+                    widget.note,
+                  ) ??
+                  false)
+          ? widget.prefetch!
+          : NoteChatPrefetch(widget.api, widget.machine, widget.note);
+      _prefetchUsed = true;
+      final chat = await prepared.chat;
       if (_disposed) return;
       _issueId = chat['issue_id'] as String;
       widget.unread?.setActiveChat(_issueId);
       unawaited(widget.unread?.refresh() ?? Future<void>.value());
-      _userId = (await widget.api.getMe())['id'] as String;
-      unawaited(_loadAgentNames());
+      unawaited(_loadUser(prepared.me));
+      unawaited(_loadAgentNames(prepared.agents));
       if (widget.unread != null) {
         _globalSubscription = widget.unread!.events.listen(
           (frame) => _onFrame(jsonEncode(frame)),
@@ -174,8 +187,10 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
       } else {
         _connect();
       }
-      unawaited(_loadRuns());
-      await _loadLatest();
+      unawaited(_loadRuns(prepared.runs));
+      await _loadLatest(initial: prepared.history);
+      // Render the prepared window first, then catch changes since preparation.
+      if (!_disposed) unawaited(_refreshHistory());
       if (!_disposed &&
           !_initialMessageSent &&
           (widget.initialMessage?.trim().isNotEmpty ?? false)) {
@@ -193,10 +208,31 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
     }
   }
 
-  Future<void> _loadLatest({bool replace = true}) async {
+  Future<void> _loadUser(Future<Map<String, dynamic>> request) async {
+    try {
+      final me = await request;
+      if (!_disposed) setState(() => _userId = me['id'] as String);
+    } catch (error) {
+      if (!_disposed) setState(() => _error = '$error');
+    }
+  }
+
+  Future<void> _markRead(String issueId) async {
+    try {
+      await (widget.unread?.markRead(issueId) ??
+          widget.api.markNoteChatRead(issueId));
+    } catch (_) {
+      // Keep the server unread state when marking read fails.
+    }
+  }
+
+  Future<void> _loadLatest({
+    bool replace = true,
+    Future<Map<String, dynamic>>? initial,
+  }) async {
     final issueId = _issueId;
     if (issueId == null) return;
-    var page = await widget.api.noteChatHistory(issueId);
+    var page = await (initial ?? widget.api.noteChatHistory(issueId));
     final incoming = (page['comments'] as List)
         .cast<Map<String, dynamic>>()
         .toList();
@@ -230,14 +266,10 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
         ..clear()
         ..addAll(incoming);
       _hasMore = page['has_more'] == true;
+      _loading = false;
     });
-    if (!_loading) _scrollToEnd();
-    try {
-      await (widget.unread?.markRead(issueId) ??
-          widget.api.markNoteChatRead(issueId));
-    } catch (_) {
-      // Keep the server unread state when marking read fails.
-    }
+    _scrollToEnd();
+    unawaited(_markRead(issueId));
   }
 
   Future<void> _refreshHistory() async {
@@ -313,7 +345,9 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
     return name is String && name.trim().isNotEmpty ? name : 'Agent';
   }
 
-  Future<void> _loadAgentNames() async {
+  Future<void> _loadAgentNames([
+    Future<List<Map<String, dynamic>>>? initial,
+  ]) async {
     if (_agentNamesRequested) return;
     _agentNamesRequested = true;
     setState(() {
@@ -321,7 +355,7 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
       _agentsError = null;
     });
     try {
-      final agents = await widget.api.workspaceAgents();
+      final agents = await (initial ?? widget.api.workspaceAgents());
       if (_disposed) return;
       setState(() {
         _agents = agents
@@ -352,11 +386,11 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
     }
   }
 
-  Future<void> _loadRuns() async {
+  Future<void> _loadRuns([Future<List<Map<String, dynamic>>>? initial]) async {
     final issueId = _issueId;
     if (issueId == null) return;
     try {
-      final runs = await widget.api.noteChatRuns(issueId);
+      final runs = await (initial ?? widget.api.noteChatRuns(issueId));
       if (!_disposed) {
         setState(() {
           _runs = [
