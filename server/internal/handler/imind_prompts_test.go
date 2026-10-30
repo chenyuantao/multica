@@ -97,7 +97,7 @@ func TestIMindPromptOverridesReachNamingAndAgentContext(t *testing.T) {
 	for _, noteType := range []string{"note", "recording", "clip"} {
 		t.Run(noteType, func(t *testing.T) {
 			var note iMindNoteResponse
-			body := map[string]any{"share_machine": "prompt-host", "type": noteType, "title": "Original " + noteType, "content": "body {{FILE_PATH}}", "transcript": ""}
+			body := map[string]any{"share_machine": "prompt-host", "type": noteType, "title": "Original " + noteType, "content": "body {{FILE_PATH}}", "transcript": "", "tags": []string{"已有标签"}}
 			if noteType == "recording" {
 				body["transcript"] = "spoken"
 			}
@@ -121,11 +121,11 @@ func TestIMindPromptOverridesReachNamingAndAgentContext(t *testing.T) {
 				kind = "clip"
 			}
 			turn, ok := h.iMindNoteContext(t.Context(), issue)
-			if !ok || !strings.HasPrefix(turn.Text, kind+"|prompt-host/iMind/Original "+noteType+".md|iMind/Original "+noteType+".md|") || !strings.Contains(turn.Text, "imind_version:") || !strings.Contains(turn.Text, "body {{FILE_PATH}}") {
+			if !ok || !strings.HasPrefix(turn.Text, kind+"|prompt-host/iMind/Original "+noteType+".md|iMind/Original "+noteType+".md|") || !strings.Contains(turn.Text, "imind_version:") || !strings.Contains(turn.Text, "body {{FILE_PATH}}") || !strings.Contains(turn.Text, `Existing tags (JSON): ["已有标签"]`) {
 				t.Fatalf("configured agent context missing: %+v", turn)
 			}
 			if noteType == "clip" {
-				if !strings.HasSuffix(turn.Text, "|keep examples") {
+				if !strings.Contains(turn.Text, "|keep examples\nExisting tags (JSON):") {
 					t.Fatal(turn.Text)
 				}
 				return

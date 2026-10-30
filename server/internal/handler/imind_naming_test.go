@@ -89,7 +89,7 @@ func TestIMindNamingPersistsSavedRevisionAndProtectsKey(t *testing.T) {
 		t.Fatalf("unexpected config fields: %v", config)
 	}
 	var note iMindNoteResponse
-	testutil.Call(t, h.PostIMindNotes, request(testUserID, "POST", "/api/imind/notes", map[string]any{"share_machine": "imind-naming", "type": "recording", "title": "旧标题", "transcript": "saved transcript", "content": "saved content"})).Want(201).JSON(&note)
+	testutil.Call(t, h.PostIMindNotes, request(testUserID, "POST", "/api/imind/notes", map[string]any{"share_machine": "imind-naming", "type": "recording", "title": "旧标题", "transcript": "saved transcript", "content": "saved content", "tags": []string{"原有"}})).Want(201).JSON(&note)
 	originalRevision := note.Revision
 	h.IMindNamingHTTP = &http.Client{Transport: imindNamingTransport(func(*http.Request) (*http.Response, error) {
 		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"choices":[{"message":{"content":"{\"title\":\"新标题\",\"summary\":\"摘要\"}"}}]}`))}, nil
@@ -102,11 +102,61 @@ func TestIMindNamingPersistsSavedRevisionAndProtectsKey(t *testing.T) {
 		t.Fatalf("unexpected named note: %+v", note)
 	}
 	testutil.Call(t, h.PostIMindAIName, name(originalRevision)).Want(409)
+	originalRevision = note.Revision
+	h.IMindNamingHTTP = &http.Client{Transport: imindNamingTransport(func(r *http.Request) (*http.Response, error) {
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(body["messages"].([]any)[1].(map[string]any)["content"].(string), "saved content") || !strings.Contains(body["messages"].([]any)[1].(map[string]any)["content"].(string), `"原有"`) {
+			t.Fatal("saved content missing")
+		}
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"choices":[{"message":{"content":"{\"tags\":[\"原有\",\"工作\",\"计划\"]}"}}]}`))}, nil
+	})}
+	tag := func(revision string) *http.Request {
+		return withURLParam(request(testUserID, "POST", "/tag", map[string]string{"share_machine": "imind-naming", "revision": revision}), "id", note.ID)
+	}
+	testutil.Call(t, h.PostIMindAITag, tag(note.Revision)).Want(200).JSON(&note)
+	if len(note.Tags) != 3 || note.Tags[0] != "原有" || note.Tags[1] != "工作" || note.Tags[2] != "计划" {
+		t.Fatalf("unexpected tags: %v", note.Tags)
+	}
+	testutil.Call(t, h.PostIMindAITag, tag(originalRevision)).Want(409)
 	testutil.Call(t, h.PutIMindDeepSeek, request(testUserID, "PUT", "/api/imind/settings/deepseek", map[string]any{"api_key": ""})).Want(200)
 	testutil.Call(t, h.PostIMindAIName, name(note.Revision)).Want(503)
 	var got iMindNoteResponse
 	testutil.Call(t, h.PostIMindNote, request(testUserID, "POST", "/api/imind/notes/get", map[string]string{"share_machine": "imind-naming", "id": note.ID})).Want(200).JSON(&got)
 	if got.Title != note.Title || got.Summary != note.Summary {
 		t.Fatal("failure changed saved note")
+	}
+}
+
+func TestIMindTagProviderValidation(t *testing.T) {
+	for _, tc := range []struct {
+		content string
+		valid   bool
+	}{
+		{`{"tags":["工作","计划"]}`, true},
+		{`{"tags":["one"]}`, false},
+		{`{"tags":["one","one"]}`, false},
+		{`{"tags":["one","#two"]}`, false},
+		{`{"tags":"bad"}`, false},
+	} {
+		t.Run(tc.content, func(t *testing.T) {
+			client := &http.Client{Transport: imindNamingTransport(func(r *http.Request) (*http.Response, error) {
+				var payload map[string]any
+				if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+					t.Fatal(err)
+				}
+				if payload["model"] != "deepseek-flash" || payload["thinking"].(map[string]any)["type"] != "disabled" {
+					t.Fatal(payload)
+				}
+				body, _ := json.Marshal(map[string]any{"choices": []any{map[string]any{"message": map[string]string{"content": tc.content}}}})
+				return &http.Response{StatusCode: 200, Body: io.NopCloser(bytes.NewReader(body))}, nil
+			})}
+			_, err := generateIMindTags(context.Background(), client, "key", "note")
+			if (err == nil) != tc.valid {
+				t.Fatalf("error: %v", err)
+			}
+		})
 	}
 }

@@ -487,7 +487,17 @@ func (h *Handler) iMindNoteContext(ctx context.Context, issue db.Issue) (groupch
 			if note.Type == "clip" {
 				kind = "clip"
 			}
-			text, err := h.renderIMindPrompt(ctx, issue.WorkspaceID, kind, imind.PromptValues(note, file.Content, peer.Meta().Machine, file.Path, file.Revision))
+			tags, err := h.imindExistingTags(ctx, peer)
+			if err != nil {
+				return groupchat.Turn{}, false
+			}
+			tagsJSON, _ := json.Marshal(tags)
+			values := imind.PromptValues(note, file.Content, peer.Meta().Machine, file.Path, file.Revision)
+			values["EXISTING_TAGS"] = string(tagsJSON)
+			text, err := h.renderIMindPrompt(ctx, issue.WorkspaceID, kind, values)
+			if err == nil {
+				text += "\nExisting tags (JSON): " + string(tagsJSON) + "\nWhen assigning tags, prefer matching existing tags."
+			}
 			if err != nil {
 				return groupchat.Turn{}, false
 			}

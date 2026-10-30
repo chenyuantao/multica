@@ -1742,6 +1742,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			r.Post("/notes", h.PostIMindNotes)
 			r.Put("/notes/{id}", h.PutIMindNote)
 			r.Post("/notes/{id}/ai-name", h.PostIMindAIName)
+			r.Post("/notes/{id}/ai-tag", h.PostIMindAITag)
 			r.Get("/settings/prompts", h.GetIMindPrompts)
 			r.Put("/settings/prompts", h.PutIMindPrompt)
 			r.Get("/settings/deepseek", h.GetIMindDeepSeek)

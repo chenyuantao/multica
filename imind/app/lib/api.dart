@@ -195,6 +195,25 @@ class MulticaApi {
     );
   }
 
+  Future<Map<String, dynamic>> tagNote(
+    String machine,
+    String id, {
+    required String revision,
+  }) async {
+    _checkMachine(machine);
+    _checkId(id);
+    _requiredString({'revision': revision}, 'revision', status: 400);
+    return _note(
+      await _request(
+        'POST',
+        '/api/imind/notes/$id/ai-tag',
+        timeout: const Duration(seconds: 55),
+        body: {'share_machine': machine, 'revision': revision},
+      ),
+      expectedId: id,
+    );
+  }
+
   Future<void> deleteNote(String id, String machine, String revision) async {
     _checkId(id);
     _checkMachine(machine);

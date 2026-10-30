@@ -35,6 +35,7 @@ Future<void> invoke(MulticaApi api, String operation) async =>
       'create' => api.createNote({'share_machine': 'mbp'}),
       'get' => api.getNote('mbp', noteId),
       'name' => api.nameNote('mbp', noteId, 'r'),
+      'tag' => api.tagNote('mbp', noteId, revision: 'r'),
       'update' => api.updateNote(noteId, {
         'share_machine': 'mbp',
         'revision': 'r',
@@ -50,10 +51,38 @@ const operations = [
   'get',
   'update',
   'name',
+  'tag',
   'delete',
 ];
 
 void main() {
+  test('AI 标记发送保存版本并拒绝畸形响应', () async {
+    final api =
+        MulticaApi(
+            baseUrl: 'http://localhost',
+            client: MockClient((request) async {
+              expect(request.url.path, '/api/imind/notes/$noteId/ai-tag');
+              expect(jsonDecode(request.body), {
+                'share_machine': 'mbp',
+                'revision': 'r',
+              });
+              return http.Response(
+                jsonEncode({
+                  'id': noteId,
+                  'tags': ['one'],
+                }),
+                200,
+              );
+            }),
+          )
+          ..token = 'test-session'
+          ..workspaceId = workspaceId;
+    addTearDown(api.close);
+    await expectLater(
+      api.tagNote('mbp', noteId, revision: 'r'),
+      throwsA(apiError(502)),
+    );
+  });
   test('AI命名传已保存revision并解析摘要与文件身份', () async {
     final api =
         MulticaApi(

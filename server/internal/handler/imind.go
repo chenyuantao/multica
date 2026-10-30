@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -111,6 +112,37 @@ func (h *Handler) PostIMindBootstrap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"path": fileshare.Join(peer.Meta().Machine, iMindDir)})
+}
+
+// imindExistingTags reads the same scoped, parseable saved notes as the list endpoint.
+func (h *Handler) imindExistingTags(ctx context.Context, peer fileshare.Peer) ([]string, error) {
+	var children obsidianvault.ChildrenResult
+	if err := peer.Call(ctx, fileshare.OpChildren, map[string]string{"path": iMindDir, "scope": fileshare.IMindScope}, &children); err != nil {
+		return nil, err
+	}
+	seen := map[string]bool{}
+	tags := []string{}
+	for _, node := range children.Nodes {
+		if node.Type != obsidianvault.TypeFile || !strings.HasSuffix(node.Name, ".md") || node.Path != iMindDir+"/"+node.Name {
+			continue
+		}
+		file, err := h.FileShares.ReadScoped(ctx, peer, node.Path, fileshare.IMindScope)
+		if err != nil || file.Path != node.Path {
+			continue
+		}
+		note, err := imind.Parse(file.Content, strings.TrimSuffix(node.Name, ".md"))
+		if err != nil {
+			continue
+		}
+		for _, tag := range note.Tags {
+			if !seen[tag] {
+				seen[tag] = true
+				tags = append(tags, tag)
+			}
+		}
+	}
+	sort.Strings(tags)
+	return tags, nil
 }
 
 func (h *Handler) PostIMindNotesList(w http.ResponseWriter, r *http.Request) {
