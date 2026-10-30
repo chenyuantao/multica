@@ -74,7 +74,8 @@ func (h *Handler) dispatchGroupChatReply(ctx context.Context, issue db.Issue, co
 	if !ok {
 		return nil
 	}
-	if h.isIMindChatIssue(ctx, issue) {
+	addressed := groupchat.Route(comment.Content, participantsOf(roster))
+	if h.isIMindChatIssue(ctx, issue) && addressed.Kind != groupchat.KindDirect && addressed.Kind != groupchat.KindNamed {
 		if h.dispatchIMindClip(ctx, issue, comment) {
 			return nil
 		}

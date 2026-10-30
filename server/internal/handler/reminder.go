@@ -511,13 +511,13 @@ func (h *Handler) loadOwnedReminder(w http.ResponseWriter, r *http.Request) (db.
 	return issue, userID, true
 }
 
-// admitReminderMentionedAgents adds each agent a person @mentions in a task
-// chat or reminder, whether or not it worked there before, so the ordinary
+// admitChatMentionedAgents adds each agent a person @mentions in a task
+// chat, reminder, or iMind file chat, whether or not it worked there before, so the ordinary
 // group chat dispatch reaches it. An agent the person may not bring into a
 // chat is left out, and rejectNonMemberAgentMentions refuses the message as
-// it would in any chat that is not a task.
-func (h *Handler) admitReminderMentionedAgents(r *http.Request, issue db.Issue, content string) {
-	if !isTaskChat(issue) {
+// it would in other group chats.
+func (h *Handler) admitChatMentionedAgents(r *http.Request, issue db.Issue, content string) {
+	if !isTaskChat(issue) && (len(util.ParseMentions(content)) == 0 || !h.isIMindChatIssue(r.Context(), issue)) {
 		return
 	}
 	ctx := r.Context()
@@ -608,7 +608,7 @@ func (h *Handler) dispatchReminderTitleMentions(r *http.Request, issue db.Issue,
 	if !isReminder(issue) {
 		return
 	}
-	h.admitReminderMentionedAgents(r, issue, content)
+	h.admitChatMentionedAgents(r, issue, content)
 	already := map[string]struct{}{}
 	for _, m := range util.ParseMentions(previous) {
 		if m.Type == "agent" {

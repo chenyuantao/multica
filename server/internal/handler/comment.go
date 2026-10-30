@@ -1903,7 +1903,7 @@ func (h *Handler) CreateComment(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	h.admitReminderMentionedAgents(r, issue, req.Content)
+	h.admitChatMentionedAgents(r, issue, req.Content)
 	if h.rejectNonMemberAgentMentions(w, r, issue, req.Content) {
 		return
 	}

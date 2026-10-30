@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"github.com/google/uuid"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -299,5 +300,60 @@ func TestIMindChatBindingWaitersReleasePoolConnections(t *testing.T) {
 	}
 	if err := <-done; err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestIMindMentionJoinsAgentBeforeSendingAndOverridesProcessors(t *testing.T) {
+	h := *testHandler
+	hub := fileshare.NewHub()
+	peer := fileshare.NewLocal(fileshare.ShareMeta{DaemonID: "mention-test", Machine: "mention-test", OwnerUserID: testUserID, WorkspaceID: testWorkspaceID, Visibility: fileshare.VisibilityWorkspace, Enabled: true, IMindScopeRevision: true, IMindRename: true, IMindMedia: true}, t.TempDir())
+	if err := hub.Register(peer); err != nil {
+		t.Fatal(err)
+	}
+	h.FileShares = hub
+	processor := createHandlerTestAgent(t, "mention-default", nil)
+	chosen := createHandlerTestAgent(t, "chosen agent", nil)
+	archived := createHandlerTestAgent(t, "archived mention", nil)
+	dbfx.Exec(t, `UPDATE agent SET archived_at=now() WHERE id=$1`, archived)
+	actor := groupChatWorkspaceMember(t, "mention participant", "mention-participant@multica.test")
+	dbfx.Exec(t, `UPDATE workspace SET imind_default_agent_id=$2,imind_clip_agent_id=$2 WHERE id=$1`, testWorkspaceID, processor)
+	t.Cleanup(func() {
+		testPool.Exec(context.Background(), `UPDATE workspace SET imind_default_agent_id=NULL,imind_clip_agent_id=NULL WHERE id=$1`, testWorkspaceID)
+	})
+	for _, kind := range []string{"note", "clip"} {
+		t.Run(kind, func(t *testing.T) {
+			var note iMindNoteResponse
+			testutil.Call(t, h.PostIMindNotes, groupChatRequestAs(t, testUserID, "POST", "/notes", map[string]any{"share_machine": "mention-test", "type": kind, "title": "Mentions"})).Want(201).JSON(&note)
+			var chat struct {
+				ID string `json:"issue_id"`
+			}
+			for _, user := range []string{testUserID, actor} {
+				testutil.Call(t, h.EnsureIMindChat, groupChatRequestAs(t, user, "POST", "/ensure", map[string]string{"share_machine": "mention-test", "note_id": note.ID, "revision": note.Revision})).Want(200).JSON(&chat)
+			}
+			dbfx.Cleanup(t, `DELETE FROM imind_group_chat WHERE issue_id=$1`, chat.ID)
+
+			rejectedID := uuid.NewString()
+			testutil.Call(t, h.CreateComment, withURLParam(groupChatRequestAs(t, actor, "POST", "/comments", map[string]string{"content": "[@archived](mention://agent/" + archived + ") process file", "client_id": rejectedID}), "id", chat.ID)).Want(400)
+			if n := dbfx.Count(t, `SELECT count(*) FROM comment WHERE issue_id=$1 AND client_id=$2`, chat.ID, rejectedID); n != 0 {
+				t.Fatal("failed admission saved a message")
+			}
+			clientID := uuid.NewString()
+			for i := 0; i < 2; i++ {
+				status := 201
+				if i == 1 {
+					status = 200
+				}
+				testutil.Call(t, h.CreateComment, withURLParam(groupChatRequestAs(t, actor, "POST", "/comments", map[string]string{"content": "[@chosen agent](mention://agent/" + chosen + ") please process this file", "client_id": clientID}), "id", chat.ID)).Want(status)
+			}
+			if n := dbfx.Count(t, `SELECT count(*) FROM issue_member WHERE issue_id=$1 AND member_type='agent' AND member_id=$2`, chat.ID, chosen); n != 1 {
+				t.Fatalf("memberships=%d", n)
+			}
+			if n := dbfx.Count(t, `SELECT count(*) FROM agent_task_queue WHERE issue_id=$1 AND agent_id=$2`, chat.ID, chosen); n != 1 {
+				t.Fatalf("selected runs=%d", n)
+			}
+			if n := dbfx.Count(t, `SELECT count(*) FROM agent_task_queue WHERE issue_id=$1 AND agent_id=$2`, chat.ID, processor); n != 0 {
+				t.Fatalf("default processor intercepted explicit mention: %d", n)
+			}
+		})
 	}
 }

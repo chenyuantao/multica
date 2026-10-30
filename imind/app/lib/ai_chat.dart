@@ -9,6 +9,7 @@ import 'package:uuid/uuid.dart';
 import 'package:web_socket_channel/io.dart';
 
 import 'api.dart';
+import 'agent_mentions.dart';
 import 'chat_unread.dart';
 import 'input_insets.dart';
 import 'run_progress.dart';
@@ -77,6 +78,10 @@ class _PendingMessage {
 
 class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
   final _input = TextEditingController();
+  final _mentions = AgentMentionDraft();
+  List<Map<String, dynamic>> _agents = [];
+  bool _agentsLoading = false;
+  String? _agentsError;
   late final VoiceInput _voice;
   final _scroll = ScrollController();
   final _messages = <Map<String, dynamic>>[];
@@ -105,6 +110,7 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
   int _retryCount = 0;
   bool _disposed = false;
   bool _initialMessageSent = false;
+  double _keyboardInset = 0;
 
   @override
   void initState() {
@@ -116,7 +122,13 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
       recorder: widget.voiceRecorder,
       sessionFactory: widget.voiceSessionFactory,
     )..addListener(_voiceChanged);
+    _input.addListener(_composerChanged);
     _load();
+  }
+
+  void _composerChanged() {
+    _mentions.update(_input.text);
+    if (!_disposed) setState(() {});
   }
 
   void _voiceChanged() {
@@ -134,6 +146,7 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
     unawaited(_globalSubscription?.cancel());
     unawaited(_channel?.sink.close());
     _voice.dispose();
+    _input.removeListener(_composerChanged);
     _input.dispose();
     _scroll.dispose();
     super.dispose();
@@ -173,7 +186,10 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
     } catch (error) {
       if (!_disposed) setState(() => _error = '$error');
     } finally {
-      if (!_disposed) setState(() => _loading = false);
+      if (!_disposed) {
+        setState(() => _loading = false);
+        _scrollToEnd();
+      }
     }
   }
 
@@ -215,7 +231,7 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
         ..addAll(incoming);
       _hasMore = page['has_more'] == true;
     });
-    if (replace) _scrollToEnd();
+    if (!_loading) _scrollToEnd();
     try {
       await (widget.unread?.markRead(issueId) ??
           widget.api.markNoteChatRead(issueId));
@@ -252,7 +268,7 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_disposed && _scroll.hasClients) {
         _scroll.animateTo(
-          _scroll.position.maxScrollExtent,
+          _scroll.position.minScrollExtent,
           duration: const Duration(milliseconds: 180),
           curve: Curves.easeOut,
         );
@@ -300,10 +316,24 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
   Future<void> _loadAgentNames() async {
     if (_agentNamesRequested) return;
     _agentNamesRequested = true;
+    setState(() {
+      _agentsLoading = true;
+      _agentsError = null;
+    });
     try {
       final agents = await widget.api.workspaceAgents();
       if (_disposed) return;
       setState(() {
+        _agents = agents
+            .where(
+              (agent) =>
+                  validWorkspaceId(agent['id']) &&
+                  agent['name'] is String &&
+                  (agent['name'] as String).trim().isNotEmpty &&
+                  !(agent['name'] as String).contains(RegExp(r'[\r\n]')) &&
+                  agent['archived_at'] == null,
+            )
+            .toList();
         for (final agent in agents) {
           final id = agent['id'];
           final name = agent['name'];
@@ -316,7 +346,9 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
         ];
       });
     } catch (_) {
-      // Names are optional enrichment; chat and run controls remain available.
+      if (!_disposed) setState(() => _agentsError = '无法加载 Agent');
+    } finally {
+      if (!_disposed) setState(() => _agentsLoading = false);
     }
   }
 
@@ -491,7 +523,7 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
 
   Future<void> _send([_PendingMessage? retry]) async {
     if (retry == null && _voice.active) return;
-    final text = retry?.text ?? _input.text.trim();
+    final text = retry?.text ?? _mentions.encode(_input.text).trim();
     if (text.isEmpty || _issueId == null) return;
     final pending = retry ?? _PendingMessage(text);
     if (retry == null) {
@@ -619,10 +651,78 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
     'deferred',
     'running',
   }.contains(run['status']);
+  Widget _agentPicker(AgentMentionQuery query) {
+    final matches = _agents
+        .where(
+          (a) => (a['name'] as String).toLowerCase().contains(
+            query.query.toLowerCase(),
+          ),
+        )
+        .toList();
+    return TextFieldTapRegion(
+      child: Material(
+        color: Colors.white,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 160),
+          child: _agentsLoading
+              ? const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: LinearProgressIndicator(),
+                )
+              : _agentsError != null
+              ? _notice(
+                  _agentsError!,
+                  actionLabel: '重试',
+                  action: () {
+                    _agentNamesRequested = false;
+                    unawaited(_loadAgentNames());
+                  },
+                )
+              : matches.isEmpty
+              ? const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: Text('没有匹配的 Agent'),
+                )
+              : ListView(
+                  shrinkWrap: true,
+                  primary: false,
+                  padding: EdgeInsets.zero,
+                  children: [
+                    for (final agent in matches)
+                      ListTile(
+                        dense: true,
+                        title: Text(agent['name'] as String),
+                        subtitle:
+                            _agents
+                                    .where((a) => a['name'] == agent['name'])
+                                    .length >
+                                1
+                            ? Text(agent['id'] as String)
+                            : null,
+                        onTap: () {
+                          _input.value = _mentions.pick(
+                            _input.value,
+                            agent['id'] as String,
+                            agent['name'] as String,
+                          );
+                        },
+                      ),
+                  ],
+                ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final mention = _voice.active ? null : _mentions.active(_input.value);
     final noteTitle = '${widget.note['title'] ?? '未命名'}';
     final media = MediaQuery.of(context);
+    if (_keyboardInset != media.viewInsets.bottom) {
+      _keyboardInset = media.viewInsets.bottom;
+      if (_keyboardInset > 0) _scrollToEnd();
+    }
     final availableHeight =
         media.size.height - inputBottomInset(context) - media.padding.top;
     return Padding(
@@ -698,13 +798,15 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
               Expanded(
                 child: NotificationListener<ScrollNotification>(
                   onNotification: (event) {
-                    if (event.metrics.pixels <= 24 && _hasMore) {
+                    if (event.metrics.extentAfter <= 24 && _hasMore) {
                       unawaited(_loadMore());
                     }
                     return false;
                   },
                   child: ListView(
                     controller: _scroll,
+                    // Keep the newest message anchored as the keyboard resizes the list.
+                    reverse: true,
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
                     children: [
                       if (_loadingMore)
@@ -721,10 +823,11 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
                         ),
                       ..._conversation(),
                       for (final pending in _pending) _pendingBubble(pending),
-                    ],
+                    ].reversed.toList(),
                   ),
                 ),
               ),
+              if (mention != null) _agentPicker(mention),
               if (_voice.error != null) _notice(_voice.error!),
               if (_voice.active)
                 Padding(
@@ -1106,12 +1209,7 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Flexible(
-            child: Text(
-              message.text,
-              style: const TextStyle(color: Colors.white),
-            ),
-          ),
+          Flexible(child: _renderContent(message.text, Colors.white)),
           const SizedBox(width: 8),
           if (message.sending)
             const SizedBox(
