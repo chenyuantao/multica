@@ -108,6 +108,49 @@ Future<void> _pump(
 }
 
 void main() {
+  testWidgets('unread badges stay circular for one digit, two digits and 99+', (
+    tester,
+  ) async {
+    for (final count in [1, 9, 10, 99, 100, 9999]) {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MediaQuery(
+            data: const MediaQueryData(textScaler: TextScaler.linear(2)),
+            child: Scaffold(
+              body: Center(
+                child: TextButton(
+                  onPressed: () {},
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('AI+'),
+                      ChatUnreadBadge(count: count),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      final badge = find.byType(ChatUnreadBadge);
+      final size = tester.getSize(badge);
+      expect(size.width, size.height);
+      final decoration =
+          tester
+                  .widget<DecoratedBox>(
+                    find.descendant(
+                      of: badge,
+                      matching: find.byType(DecoratedBox),
+                    ),
+                  )
+                  .decoration
+              as BoxDecoration;
+      expect(decoration.shape, BoxShape.circle);
+      expect(find.text(count > 99 ? '99+' : '$count'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    }
+  });
   testWidgets('login is the signed-out home', (tester) async {
     await tester.pumpWidget(const IMindApp(initialToken: ''));
     expect(find.text('发送验证码'), findsOneWidget);
@@ -155,6 +198,7 @@ void main() {
     await tester.tap(find.text('示例笔记').first);
     await tester.pumpAndSettle();
     expect(find.text('3'), findsOneWidget);
+    expect(tester.getSize(find.byType(ChatUnreadBadge)), const Size(19, 19));
     await tester.tap(find.text('AI+').first);
     await tester.pumpAndSettle();
     expect(reads, greaterThan(0));

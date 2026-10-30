@@ -3727,19 +3727,20 @@ class ChatUnreadBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    constraints: const BoxConstraints(minWidth: 19, minHeight: 19),
-    padding: const EdgeInsets.symmetric(horizontal: 5),
-    decoration: const BoxDecoration(
-      color: _red,
-      borderRadius: BorderRadius.all(Radius.circular(10)),
-    ),
+    width: count < 10 ? 19 : 24,
+    height: count < 10 ? 19 : 24,
+    padding: const EdgeInsets.all(3),
+    decoration: const BoxDecoration(color: _red, shape: BoxShape.circle),
     alignment: Alignment.center,
-    child: Text(
-      count > 99 ? '99+' : '$count',
-      style: const TextStyle(
-        color: Colors.white,
-        fontSize: 11,
-        fontWeight: FontWeight.w700,
+    child: FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Text(
+        count > 99 ? '99+' : '$count',
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     ),
   );
