@@ -85,11 +85,16 @@ class NoteActions extends StatelessWidget {
                             'content',
                             'transcript',
                             'title',
+                            'metadata',
                           }.contains(entry.key))
                             _field(
                               _labels[entry.key] ?? entry.key,
                               entry.value,
                             ),
+                        if (note['metadata']
+                            case final Map<String, dynamic> metadata)
+                          for (final entry in metadata.entries)
+                            _field(entry.key, entry.value),
                       ],
                     ),
                   ),

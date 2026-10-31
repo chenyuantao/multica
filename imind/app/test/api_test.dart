@@ -56,6 +56,32 @@ const operations = [
 ];
 
 void main() {
+  test('note responses preserve extra YAML metadata and tolerate missing or malformed metadata', () async {
+    for (final metadata in [
+      null,
+      [],
+      'invalid',
+      {
+        'author': 'Writer',
+        'title': 'YAML title',
+        'custom': {'published': true},
+      },
+    ]) {
+      final api = responding({
+        'id': noteId,
+        'revision': 'r',
+        'metadata': metadata,
+      });
+      addTearDown(api.close);
+      final note = await api.getNote('mbp', noteId);
+      expect(
+        note['metadata'],
+        metadata is Map ? metadata : <String, dynamic>{},
+      );
+      expect(note['title'], '无标题');
+    }
+  });
+
   test('文件群聊未读查询校验映射并发送标记已读请求', () async {
     final requests = <http.Request>[];
     final api =

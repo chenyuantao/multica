@@ -2,9 +2,11 @@
 package imind
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/url"
 	"strings"
 	"time"
@@ -41,7 +43,43 @@ type ClipMetadata struct {
 	Prompt       string `yaml:"prompt" json:"prompt"`
 }
 
+// Metadata preserves additional YAML values while exposing JSON-compatible data.
+type Metadata map[string]any
+
+func (m Metadata) MarshalJSON() ([]byte, error) {
+	return json.Marshal(metadataJSONValue(map[string]any(m)))
+}
+
+func metadataJSONValue(value any) any {
+	switch value := value.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(value))
+		for key, item := range value {
+			out[key] = metadataJSONValue(item)
+		}
+		return out
+	case map[any]any:
+		out := make(map[string]any, len(value))
+		for key, item := range value {
+			out[fmt.Sprint(key)] = metadataJSONValue(item)
+		}
+		return out
+	case []any:
+		out := make([]any, len(value))
+		for i, item := range value {
+			out[i] = metadataJSONValue(item)
+		}
+		return out
+	case float64:
+		if math.IsNaN(value) || math.IsInf(value, 0) {
+			return fmt.Sprint(value)
+		}
+	}
+	return value
+}
+
 type Note struct {
+	Metadata   Metadata      `yaml:"-" json:"metadata,omitempty"`
 	ID         string        `yaml:"id" json:"id"`
 	Summary    string        `yaml:"summary,omitempty" json:"summary,omitempty"`
 	Clip       *ClipMetadata `yaml:"clip,omitempty" json:"clip,omitempty"`
@@ -57,6 +95,7 @@ type Note struct {
 }
 
 type frontmatter struct {
+	Metadata  Metadata      `yaml:",inline"`
 	Summary   string        `yaml:"summary,omitempty"`
 	Clip      *ClipMetadata `yaml:"clip,omitempty"`
 	Version   int           `yaml:"imind_version"`
@@ -144,7 +183,7 @@ func (n Note) Markdown() (string, error) {
 		return "", err
 	}
 	fm, err := yaml.Marshal(frontmatter{
-		Version: Version, ID: n.ID, Type: n.Type, Summary: n.Summary, Clip: n.Clip,
+		Version: Version, ID: n.ID, Type: n.Type, Summary: n.Summary, Clip: n.Clip, Metadata: n.Metadata,
 		CreatedAt: n.CreatedAt.UTC(), UpdatedAt: n.UpdatedAt.UTC(),
 		Tags: n.Tags, SourceURL: n.SourceURL, Audio: n.Audio,
 	})
@@ -180,7 +219,6 @@ func Parse(markdown, title string) (Note, error) {
 	header := markdown[len("---\n"):end]
 	var fm frontmatter
 	decoder := yaml.NewDecoder(strings.NewReader(header))
-	decoder.KnownFields(true)
 	if err := decoder.Decode(&fm); err != nil {
 		return Note{}, fmt.Errorf("%w: frontmatter", ErrInvalidNote)
 	}
@@ -204,6 +242,7 @@ func Parse(markdown, title string) (Note, error) {
 		ID: fm.ID, Type: fm.Type, Title: title, Summary: fm.Summary, Clip: fm.Clip, CreatedAt: fm.CreatedAt, UpdatedAt: fm.UpdatedAt,
 		Tags: nonNil(fm.Tags), SourceURL: fm.SourceURL, Audio: fm.Audio,
 		Content: strings.TrimSpace(content), Transcript: strings.TrimSpace(transcript),
+		Metadata: fm.Metadata,
 	}
 	return note, note.Validate()
 }
@@ -287,8 +326,6 @@ func validFrontmatterTypes(header string) bool {
 					return false
 				}
 			}
-		default:
-			return false
 		}
 	}
 	return true

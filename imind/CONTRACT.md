@@ -50,7 +50,7 @@ audio: null
 - 普通笔记和剪藏的 transcript 区为空；录音笔记的 transcript 区可为空（录音尚未产生文字）。
 - `audio` 是可选对象。旧转写记录可只有 `{"duration_ms":112000,"format":"pcm_s16le","sample_rate_hz":16000}`；有原始音频的记录为 `{"duration_ms":112000,"format":"wav_pcm_s16le","sample_rate_hz":16000,"file":"audio.wav"}`。`file` 只能是 `audio.wav`，相对于该笔记的媒体目录，不能是端侧临时路径。
 - HTML 注释分隔符为唯一可信边界，不依赖 `## 原文` 标题；四个分隔符必须各一份、独立行、顺序正确，区外不能有额外非空文本。正文与转写不能包含保留 imind 分隔符。
-- UTF-8/头部字段与类型严格校验，拒绝 NUL、重复 JSON 键、未知请求字段、多个 JSON 值及非法类型。
+- YAML 允许新增自定义字段（例如 `title`、`author`），读取后通过响应的 `metadata` 对象返回并在文件信息中逐项显示；编辑和重命名保留这些字段。YAML 中的 `title` 仅作元数据，文件名仍是显示标题的来源。已知字段类型、UTF-8、正文分隔符和版本仍校验；拒绝 NUL、重复 YAML/JSON 键、未知请求字段、多个 JSON 值及非法类型。
 - 时间戳使用 `MM:SS.mmm`，支持超过两位的分钟。原文片段保留多行 Markdown，不只读取第一行。
 - `updated_at` 由服务端生成。客户端提交的 `title` 用于确定文件名；元数据不保存标题。`tags`、正文、转写由客户端提交。
 

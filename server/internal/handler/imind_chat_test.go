@@ -5,6 +5,7 @@ import (
 	"github.com/google/uuid"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/multica-ai/multica/server/internal/fileshare"
+	"github.com/multica-ai/multica/server/internal/obsidianvault"
 	"github.com/multica-ai/multica/server/internal/testutil"
 )
 
@@ -36,6 +38,18 @@ func TestEnsureIMindChatIsIdempotentAndFileAccessGated(t *testing.T) {
 		"share_machine": "imind-chat-test", "type": "note", "title": "Chat note", "content": "saved content",
 	})
 	testutil.Call(t, h.PostIMindNotes, createReq).Want(http.StatusCreated).JSON(&note)
+	// Agent writes may add YAML metadata through the generic document tools.
+	raw, err := note.Note.Markdown()
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw = strings.Replace(raw, "imind_version: 1", "imind_version: 1\ntitle: YAML title\nauthor: Writer", 1)
+	var edited obsidianvault.FileContent
+	if err := peer.Call(ctx, fileshare.OpWrite, obsidianvault.EditRequest{Path: strings.TrimPrefix(note.Path, "imind-chat-test/"), Op: "overwrite", Content: raw, BaseRevision: note.Revision, Scope: fileshare.IMindScope}, &edited); err != nil {
+		t.Fatal(err)
+	}
+	note.Revision = edited.Revision
+
 	listUnread := func(userID string) []struct {
 		ShareMachine string `json:"share_machine"`
 		NoteID       string `json:"note_id"`
@@ -116,6 +130,10 @@ func TestEnsureIMindChatIsIdempotentAndFileAccessGated(t *testing.T) {
 	renameReq := groupChatRequestAs(t, testUserID, http.MethodPut, "/api/imind/notes/"+note.ID, map[string]any{"share_machine": "imind-chat-test", "revision": note.Revision, "title": "Renamed Chat note", "content": "saved content", "transcript": ""})
 	testutil.Call(t, h.PutIMindNote, withURLParam(renameReq, "id", note.ID)).Want(http.StatusOK).JSON(&renamed)
 	note = renamed
+	if note.Metadata["author"] != "Writer" || note.Metadata["title"] != "YAML title" {
+		t.Fatalf("rename dropped agent metadata: %#v", note.Metadata)
+	}
+
 	chat, err := h.Queries.GetIssue(ctx, parseUUID(issueID))
 	if err != nil || chat.Title != "iMind · "+note.Title {
 		t.Fatalf("chat title did not follow filename: title=%q err=%v", chat.Title, err)
