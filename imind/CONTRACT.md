@@ -180,6 +180,9 @@ AI+ 输入框使用与录音页相同的 `record` PCM 采集和 `AsrSession`，�
 - `GET /api/imind/settings/default-agent` 返回 `{agent_id: UUID|null}`，工作区成员可读。
 - `PUT /api/imind/settings/default-agent` 请求及响应相同，只有 owner/admin 可写，并校验工作区和智能体使用权限。Web/Desktop 的“工作区 → 常规 → iMind”配置此项；不存在或不可访问的配置显示不可用，可重新选择或清除。
 - 默认处理智能体作用于已有及新建文件群聊。每次消息都校验、加入并交给既有群聊运行调度；无配置时复用 `groupchat.ChooseAnswerer` 的 JEV 选择及原有入群/排队流程。Flutter 不选择智能体，不生成本地替代回答。
+- JEV 未配置、调用失败或返回不完整/非法选择时，服务端使用当前工作区已配置的 DeepSeek API Key 回退一次。Key 继续沿用加密存储的 `imind_deepseek_key`，仅失败时读取，不跨工作区复用；JEV 成功时不调用 DeepSeek。回退覆盖自动选人、群聊执行顺序、消息筛选及追加请求判定，明确指定单个智能体或只有一个候选时仍直接路由。
+- DeepSeek 使用 `deepseek-flash` 非思考模式，设置 `response_format: {type: "json_object"}`；系统提示词要求返回 `{"answers":{"问题键":{"type":"choice","choice":"候选键","confidence":0.95}}}`。服务端校验每个问题均有答案、候选键合法、置信度在 0–1 之间，拒绝截断或无效 JSON。回退请求最多等待 20 秒，不沿用 JEV 代理；请求取消后不启动回退。Key 未配置、无法解密或两家均失败时保留原来的降级/重试行为，日志记录回退结果但不记录 Key。
+- `groupchat: no agent can answer` 表示权限过滤后没有候选智能体，此时不会调用任何模型，DeepSeek 回退也不能补出候选。应检查工作区智能体、归档状态和当前用户的使用权限。
 - 运行上下文从共享根读取当前已保存 md，明确包含可访问的 `<machine>/iMind/<filename>.md` 引用、读取 revision、正文和转写；不会将未保存编辑冒称落盘内容。
 
 ### 消息、实时与取消

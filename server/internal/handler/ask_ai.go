@@ -176,7 +176,7 @@ func (h *Handler) chooseAskAgent(w http.ResponseWriter, r *http.Request, member 
 			Description: agent.Description,
 		})
 	}
-	agentID, err := groupchat.ChooseAnswerer(ctx, h.GroupChatDecider, state)
+	agentID, err := groupchat.ChooseAnswerer(ctx, h.groupChatEvaluator(member.WorkspaceID), state)
 	switch {
 	case errors.Is(err, groupchat.ErrNoAnswerer):
 		writeErrorCode(w, http.StatusUnprocessableEntity, "ask_ai_no_agent", "no agent can answer")
@@ -331,7 +331,8 @@ func (h *Handler) hideAskChatMessages(ctx context.Context, issue db.Issue, task 
 	if page == nil || page.Chat == nil || len(page.Chat.Messages) == 0 {
 		return
 	}
-	if h.GroupChatDecider == nil || !h.GroupChatDecider.Enabled() || !task.AgentID.Valid {
+	ev := h.groupChatEvaluator(issue.WorkspaceID)
+	if ev == nil || !ev.Enabled() || !task.AgentID.Valid {
 		return
 	}
 	roster, ok := h.groupChatRosterIfChat(ctx, issue)
@@ -391,7 +392,7 @@ func (h *Handler) hideAskChatMessages(ctx context.Context, issue db.Issue, task 
 		})
 		protected["ask-question"] = true
 	}
-	hidden, err := groupchat.FilterForAgent(ctx, h.GroupChatDecider, card, excerpts, protected)
+	hidden, err := groupchat.FilterForAgent(ctx, ev, card, excerpts, protected)
 	if err != nil {
 		slog.Warn("ask ai message filter failed", "issue_id", uuidToString(issue.ID), "agent_id", agentID, "error", err)
 		return

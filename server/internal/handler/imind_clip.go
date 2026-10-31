@@ -97,7 +97,7 @@ func (h *Handler) dispatchIMindClip(ctx context.Context, issue db.Issue, comment
 				state.Agents = append(state.Agents, groupchat.AskAgent{ID: uuidToString(candidate.ID), Name: candidate.Name, Description: candidate.Description})
 			}
 		}
-		chosen, err := groupchat.ChooseAnswerer(ctx, h.GroupChatDecider, state)
+		chosen, err := groupchat.ChooseAnswerer(ctx, h.groupChatEvaluator(issue.WorkspaceID), state)
 		if err != nil {
 			return true
 		}

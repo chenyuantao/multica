@@ -110,7 +110,7 @@ func (h *Handler) dispatchGroupChatReply(ctx context.Context, issue db.Issue, co
 		return nil
 	}
 	state := h.groupChatJudgmentState(ctx, issue, roster)
-	plan, err := groupchat.Decide(ctx, h.GroupChatDecider, state, people, address)
+	plan, err := groupchat.Decide(ctx, h.groupChatEvaluator(issue.WorkspaceID), state, people, address)
 	if err != nil {
 		slog.Info("group chat plan fell back", "issue_id", uuidToString(issue.ID), "kind", address.Kind, "error", err)
 		plan = groupchat.FallbackPlan(people, address)
@@ -141,9 +141,9 @@ func (h *Handler) attachIMindDefaultAgent(ctx context.Context, issue db.Issue, a
 			}
 			state.Agents = append(state.Agents, groupchat.AskAgent{ID: uuidToString(candidate.ID), Name: candidate.Name, Description: candidate.Description})
 		}
-		chosen, chooseErr := groupchat.ChooseAnswerer(ctx, h.GroupChatDecider, state)
+		chosen, chooseErr := groupchat.ChooseAnswerer(ctx, h.groupChatEvaluator(issue.WorkspaceID), state)
 		if chooseErr != nil {
-			slog.Warn("iMind agent selection failed", "issue_id", uuidToString(issue.ID), "error", chooseErr)
+			slog.Warn("iMind agent selection failed", "issue_id", uuidToString(issue.ID), "workspace_id", uuidToString(issue.WorkspaceID), "candidate_count", len(state.Agents), "error", chooseErr)
 			return
 		}
 		agentID, err = util.ParseUUID(chosen)
@@ -219,7 +219,8 @@ func (h *Handler) enqueueGroupChatPlan(ctx context.Context, issue db.Issue, comm
 // never wrote a session and stays on the normal enqueue path. Jev being off,
 // or any error, leaves the unfinished request alone.
 func (h *Handler) cancelSupersededGroupChatTask(ctx context.Context, issue db.Issue, agentID, commentID pgtype.UUID) bool {
-	if h.GroupChatDecider == nil || !h.GroupChatDecider.Enabled() {
+	ev := h.groupChatEvaluator(issue.WorkspaceID)
+	if ev == nil || !ev.Enabled() {
 		return false
 	}
 	tasks, err := h.Queries.ListActiveTasksByIssue(ctx, issue.ID)
@@ -241,7 +242,7 @@ func (h *Handler) cancelSupersededGroupChatTask(ctx context.Context, issue db.Is
 		slog.Warn("group chat latest message failed to load", "comment_id", uuidToString(commentID), "error", err)
 		return false
 	}
-	supersede, exchange, err := groupchat.Supersedes(ctx, h.GroupChatDecider, prev.Content, latest.Content)
+	supersede, exchange, err := groupchat.Supersedes(ctx, ev, prev.Content, latest.Content)
 	if err != nil {
 		slog.Warn("group chat supersede judgment failed", "issue_id", uuidToString(issue.ID), "agent_id", uuidToString(agentID), "error", err)
 		return false
@@ -668,7 +669,8 @@ func (h *Handler) attachGroupChatTranscript(ctx context.Context, resp *AgentTask
 // A failure leaves the transcript unchanged. The latest check message and the
 // contiguous messages that person sent just before it are never hidden.
 func (h *Handler) hideIrrelevantGroupChatMessages(ctx context.Context, transcript *groupchat.Transcript, turns []groupchat.Turn, triggerIDs []string, roster []groupChatPerson, issue db.Issue, task db.AgentTaskQueue) {
-	if h.GroupChatDecider == nil || !h.GroupChatDecider.Enabled() || !task.AgentID.Valid {
+	ev := h.groupChatEvaluator(issue.WorkspaceID)
+	if ev == nil || !ev.Enabled() || !task.AgentID.Valid {
 		return
 	}
 	agentID := uuidToString(task.AgentID)
@@ -685,7 +687,7 @@ func (h *Handler) hideIrrelevantGroupChatMessages(ctx context.Context, transcrip
 		return
 	}
 	protected := groupchat.RequiredVisible(turns, triggerIDs)
-	hidden, err := groupchat.FilterForAgent(ctx, h.GroupChatDecider, card, transcript.Excerpts, protected)
+	hidden, err := groupchat.FilterForAgent(ctx, ev, card, transcript.Excerpts, protected)
 	if err != nil {
 		slog.Warn("group chat message filter failed", "issue_id", uuidToString(issue.ID), "agent_id", agentID, "error", err)
 		return
