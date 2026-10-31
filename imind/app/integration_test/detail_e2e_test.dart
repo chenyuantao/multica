@@ -56,9 +56,19 @@ void main() {
           () => Future<void>.delayed(const Duration(seconds: 2)),
         );
         await f.tap(find.byTooltip('更多'));
-        for (final label in ['文件信息', '重命名', '导出 · 暂不可用', '删除']) {
+        for (final label in [
+          '编辑',
+          '重命名',
+          'AI 重命名',
+          '标记',
+          'AI 标记',
+          '文件信息',
+          '导出 · 暂不可用',
+          '删除',
+        ]) {
           expect(find.text(label), findsOneWidget);
         }
+        expect(find.byType(PopupMenuDivider), findsNWidgets(3));
         await f.tap(find.text('文件信息'));
         expect(find.text('字数'), findsOneWidget);
         expect(find.text('${body.length}'), findsWidgets);
@@ -81,7 +91,8 @@ void main() {
           () => Future<void>.delayed(const Duration(seconds: 2)),
         );
         await f.tap(find.byTooltip('关闭信息'));
-        await f.tap(find.text(type == 'recording' ? '录音原文，可以点击编辑' : body));
+        await f.tap(find.byTooltip('更多'));
+        await f.tap(find.text('编辑'));
         await f.wait(find.widgetWithText(TextButton, '保存'));
         await f.text(find.byType(TextField).last, '已编辑 $type');
         await f.tap(find.widgetWithText(TextButton, '保存'));

@@ -21,6 +21,7 @@ class NoteActions extends StatelessWidget {
     super.key,
     required this.note,
     required this.onRename,
+    required this.onAiRename,
     required this.onDelete,
     this.onEdit,
     this.onTag,
@@ -29,6 +30,7 @@ class NoteActions extends StatelessWidget {
   });
   final Map<String, dynamic> note;
   final VoidCallback onRename;
+  final VoidCallback onAiRename;
   final VoidCallback onDelete;
   final VoidCallback? onEdit;
   final VoidCallback? onTag;
@@ -97,17 +99,25 @@ class NoteActions extends StatelessWidget {
           );
         case 'rename':
           onRename();
+        case 'aiRename':
+          onAiRename();
         case 'delete':
           onDelete();
       }
     },
     itemBuilder: (_) => [
-      if (onEdit != null) const PopupMenuItem(value: 'edit', child: Text('编辑')),
+      if (onEdit != null) ...[
+        const PopupMenuItem(value: 'edit', child: Text('编辑')),
+        const PopupMenuDivider(),
+      ],
+      const PopupMenuItem(value: 'rename', child: Text('重命名')),
+      const PopupMenuItem(value: 'aiRename', child: Text('AI 重命名')),
+      const PopupMenuDivider(),
       if (onTag != null) const PopupMenuItem(value: 'tag', child: Text('标记')),
       if (onAiTag != null)
         const PopupMenuItem(value: 'aiTag', child: Text('AI 标记')),
+      if (onTag != null || onAiTag != null) const PopupMenuDivider(),
       const PopupMenuItem(value: 'info', child: Text('文件信息')),
-      const PopupMenuItem(value: 'rename', child: Text('重命名')),
       const PopupMenuItem(enabled: false, child: Text('导出 · 暂不可用')),
       const PopupMenuItem(
         value: 'delete',
@@ -115,7 +125,6 @@ class NoteActions extends StatelessWidget {
       ),
     ],
   );
-
   static const _labels = {
     'id': 'ID',
     'type': '类型',

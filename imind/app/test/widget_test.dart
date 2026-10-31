@@ -883,6 +883,9 @@ void main() {
     expect(storage.values, isEmpty);
   });
   testWidgets('首页手动重命名读取完整笔记并保留正文转写音频', (tester) async {
+    tester.platformDispatcher.accessibilityFeaturesTestValue =
+        const FakeAccessibilityFeatures(disableAnimations: true);
+    addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
     Map<String, dynamic>? written;
     var detailReads = 0;
     const audio = {
@@ -939,6 +942,7 @@ void main() {
     await tester.enterText(find.byType(TextField).last, '用户新标题');
     await tester.tap(find.widgetWithText(TextButton, '完成'));
     await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 350));
     expect(detailReads, 1);
     expect(written!['title'], '用户新标题');
     expect(written!['revision'], 'r');

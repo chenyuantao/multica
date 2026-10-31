@@ -19,6 +19,7 @@ Future<void> pumpHome(
   WidgetTester tester,
   List<Map<String, dynamic>> notes, {
   Future<void> Function()? onList,
+  bool settle = true,
 }) async {
   final storage = MemorySessionStorage();
   storage.values[SessionStore.sessionKey] = jsonEncode({
@@ -58,10 +59,63 @@ Future<void> pumpHome(
       sessionStore: SessionStore(storage: storage),
     ),
   );
-  await tester.pumpAndSettle();
+  if (settle) {
+    await tester.pumpAndSettle();
+  } else {
+    for (var i = 0; i < 20; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+  }
 }
 
 void main() {
+  testWidgets('generating items fade until polling receives a body', (
+    tester,
+  ) async {
+    var calls = 0;
+    final notes = <Map<String, dynamic>>[
+      {
+        'id': firstId,
+        'title': 'Generating',
+        'revision': 'r',
+        'type': 'recording',
+        'content': '  ',
+      },
+      {
+        'id': secondId,
+        'title': 'Empty note',
+        'revision': 'r',
+        'type': 'note',
+        'content': '',
+      },
+    ];
+    await pumpHome(
+      tester,
+      notes,
+      settle: false,
+      onList: () async {
+        calls++;
+      },
+    );
+    Finder fadeFor(String title) => find
+        .ancestor(of: find.text(title), matching: find.byType(FadeTransition))
+        .first;
+    double opacity(String title) =>
+        tester.widget<FadeTransition>(fadeFor(title)).opacity.value;
+
+    final initial = opacity('Generating');
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(opacity('Generating'), isNot(initial));
+    expect(opacity('Empty note'), 1);
+    notes[0]['content'] = 'Completed body';
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+    expect(opacity('Generating'), 1);
+    final completedCalls = calls;
+    await tester.pump(const Duration(seconds: 6));
+    expect(calls, completedCalls);
+  });
+
   testWidgets('tag filters combine with OR and clear together', (tester) async {
     await pumpHome(tester, [
       {

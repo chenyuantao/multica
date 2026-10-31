@@ -239,6 +239,68 @@ class _LoginPageState extends State<LoginPage> {
   }
 }
 
+bool _isGeneratingNote(Map<String, dynamic> note) =>
+    (note['type'] == 'recording' || note['type'] == 'clip') &&
+    '${note['content'] ?? ''}'.trim().isEmpty;
+
+class _GeneratingNoteFade extends StatefulWidget {
+  const _GeneratingNoteFade({
+    super.key,
+    required this.generating,
+    required this.child,
+  });
+
+  final bool generating;
+  final Widget child;
+
+  @override
+  State<_GeneratingNoteFade> createState() => _GeneratingNoteFadeState();
+}
+
+class _GeneratingNoteFadeState extends State<_GeneratingNoteFade>
+    with SingleTickerProviderStateMixin {
+  late final _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1000),
+    value: 1,
+  );
+  late final _opacity = Tween<double>(
+    begin: 0.35,
+    end: 1,
+  ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncAnimation();
+  }
+
+  @override
+  void didUpdateWidget(covariant _GeneratingNoteFade oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncAnimation();
+  }
+
+  void _syncAnimation() {
+    if (widget.generating && !MediaQuery.disableAnimationsOf(context)) {
+      if (!_controller.isAnimating) _controller.repeat(reverse: true);
+    } else {
+      _controller.stop();
+      _controller.value = 1;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      FadeTransition(opacity: _opacity, child: widget.child);
+}
+
 class HomePage extends StatefulWidget {
   const HomePage({super.key, required this.session});
   final SessionController session;
@@ -274,6 +336,7 @@ class _HomePageState extends State<HomePage> {
   var _searching = false;
   final _searchInput = TextEditingController();
   Timer? _searchTimer;
+  Timer? _generationTimer;
   var _query = '';
   var _selecting = false;
   var _menu = false;
@@ -289,6 +352,7 @@ class _HomePageState extends State<HomePage> {
   @override
   void dispose() {
     _searchTimer?.cancel();
+    _generationTimer?.cancel();
     _searchInput.dispose();
     super.dispose();
   }
@@ -410,6 +474,10 @@ class _HomePageState extends State<HomePage> {
         _ready = true;
         _selected.removeWhere((id) => !notes.any((note) => note['id'] == id));
       });
+      _generationTimer?.cancel();
+      _generationTimer = notes.any(_isGeneratingNote)
+          ? Timer.periodic(const Duration(seconds: 3), (_) => _reload())
+          : null;
     } on ApiException catch (error) {
       if (error.status == 401 || !mounted) return;
       setState(() {
@@ -1069,99 +1137,103 @@ class _HomePageState extends State<HomePage> {
     final host = sourceHost(note['source_url']);
     final unread =
         ChatUnreadScope.maybeOf(context)?.unreadForNote(id, _machine) ?? 0;
-    return InkWell(
-      onLongPress: () => setState(() {
-        _selecting = true;
-        _menu = false;
-        _selected.add(id);
-      }),
-      onTap: () {
-        if (_selecting) {
-          setState(() {
-            if (!_selected.add(id)) _selected.remove(id);
-          });
-          return;
-        }
-        _open(note);
-      },
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(10, 15, 10, 15),
-        decoration: const BoxDecoration(
-          border: Border(bottom: BorderSide(color: _line)),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '${note['title'] ?? ''}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 15.5, height: 1.4),
-                  ),
-                  const SizedBox(height: 7),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 4,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      _Meta(
-                        icon: noteIcon(type),
-                        color: noteColor(type),
-                        text: noteTypeLabel(type),
-                      ),
-                      Text(
-                        formatWhen(note['updated_at'] as String?),
-                        style: const TextStyle(fontSize: 12, color: _sub),
-                      ),
-                      if (duration is num && duration > 0)
+    return _GeneratingNoteFade(
+      key: ValueKey(id),
+      generating: _isGeneratingNote(note),
+      child: InkWell(
+        onLongPress: () => setState(() {
+          _selecting = true;
+          _menu = false;
+          _selected.add(id);
+        }),
+        onTap: () {
+          if (_selecting) {
+            setState(() {
+              if (!_selected.add(id)) _selected.remove(id);
+            });
+            return;
+          }
+          _open(note);
+        },
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(10, 15, 10, 15),
+          decoration: const BoxDecoration(
+            border: Border(bottom: BorderSide(color: _line)),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${note['title'] ?? ''}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 15.5, height: 1.4),
+                    ),
+                    const SizedBox(height: 7),
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
                         _Meta(
-                          icon: Icons.schedule,
-                          text: clockFromMs(duration.toInt()),
+                          icon: noteIcon(type),
+                          color: noteColor(type),
+                          text: noteTypeLabel(type),
                         ),
-                      if (host != null) _Meta(icon: Icons.link, text: host),
-                      for (final tag in noteTags(note))
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFE5E5EA),
-                            borderRadius: BorderRadius.circular(4),
+                        Text(
+                          formatWhen(note['updated_at'] as String?),
+                          style: const TextStyle(fontSize: 12, color: _sub),
+                        ),
+                        if (duration is num && duration > 0)
+                          _Meta(
+                            icon: Icons.schedule,
+                            text: clockFromMs(duration.toInt()),
                           ),
-                          child: Text(
-                            tag,
-                            style: const TextStyle(
-                              fontSize: 10.5,
-                              color: Color(0xFF6C6C70),
+                        if (host != null) _Meta(icon: Icons.link, text: host),
+                        for (final tag in noteTags(note))
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFE5E5EA),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              tag,
+                              style: const TextStyle(
+                                fontSize: 10.5,
+                                color: Color(0xFF6C6C70),
+                              ),
                             ),
                           ),
-                        ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            if (unread > 0)
-              Padding(
-                padding: const EdgeInsets.only(left: 8, top: 4),
-                child: ChatUnreadBadge(count: unread),
-              ),
-            if (_selecting)
-              Padding(
-                padding: const EdgeInsets.only(left: 8, top: 8),
-                child: Icon(
-                  _selected.contains(id)
-                      ? Icons.check_box
-                      : Icons.check_box_outline_blank,
-                  size: 22,
-                  color: _selected.contains(id)
-                      ? _dark
-                      : const Color(0xFFE5E5EA),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-          ],
+              if (unread > 0)
+                Padding(
+                  padding: const EdgeInsets.only(left: 8, top: 4),
+                  child: ChatUnreadBadge(count: unread),
+                ),
+              if (_selecting)
+                Padding(
+                  padding: const EdgeInsets.only(left: 8, top: 8),
+                  child: Icon(
+                    _selected.contains(id)
+                        ? Icons.check_box
+                        : Icons.check_box_outline_blank,
+                    size: 22,
+                    color: _selected.contains(id)
+                        ? _dark
+                        : const Color(0xFFE5E5EA),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -1865,6 +1937,33 @@ class _NoteEditorState extends State<NoteEditor> {
     }
   }
 
+  Future<void> _aiRename() async {
+    final machine = widget.machine;
+    final note = _note;
+    if (machine == null || note == null || _saving) return;
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      final updated = await widget.api.nameNote(
+        machine,
+        '${note['id']}',
+        '${note['revision']}',
+      );
+      if (!mounted) return;
+      setState(() {
+        _note = updated;
+        _title.text = '${updated['title'] ?? ''}';
+        _changed = true;
+      });
+    } catch (error) {
+      if (mounted) setState(() => _error = '$error');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
   Future<void> _aiTag() async {
     final machine = widget.machine;
     if (machine == null || _note == null || _saving) return;
@@ -2029,6 +2128,7 @@ class _NoteEditorState extends State<NoteEditor> {
                 onTag: _markTag,
                 onAiTag: _aiTag,
                 onRename: _rename,
+                onAiRename: _aiRename,
                 onDelete: _confirmDelete,
               ),
             ],
@@ -2435,6 +2535,30 @@ class _RecordingDetailState extends State<RecordingDetail> {
     }
   }
 
+  Future<void> _aiRename() async {
+    if (_saving) return;
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      final updated = await widget.api.nameNote(
+        widget.machine,
+        '${_note['id']}',
+        '${_note['revision']}',
+      );
+      if (!mounted) return;
+      setState(() {
+        _note = updated;
+        _changed = true;
+      });
+    } catch (error) {
+      if (mounted) setState(() => _error = '$error');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
   Future<void> _aiTag() async {
     if (_saving) return;
     setState(() {
@@ -2530,6 +2654,7 @@ class _RecordingDetailState extends State<RecordingDetail> {
                           onTag: _markTag,
                           onAiTag: _aiTag,
                           onRename: _renameRecording,
+                          onAiRename: _aiRename,
                           onDelete: _confirmDelete,
                         ),
                       ],
