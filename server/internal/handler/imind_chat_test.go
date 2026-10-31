@@ -116,6 +116,10 @@ func TestEnsureIMindChatIsIdempotentAndFileAccessGated(t *testing.T) {
 	renameReq := groupChatRequestAs(t, testUserID, http.MethodPut, "/api/imind/notes/"+note.ID, map[string]any{"share_machine": "imind-chat-test", "revision": note.Revision, "title": "Renamed Chat note", "content": "saved content", "transcript": ""})
 	testutil.Call(t, h.PutIMindNote, withURLParam(renameReq, "id", note.ID)).Want(http.StatusOK).JSON(&renamed)
 	note = renamed
+	chat, err := h.Queries.GetIssue(ctx, parseUUID(issueID))
+	if err != nil || chat.Title != "iMind · "+note.Title {
+		t.Fatalf("chat title did not follow filename: title=%q err=%v", chat.Title, err)
+	}
 	if got := ensure(testUserID); got["issue_id"] != issueID {
 		t.Fatal("rename changed chat identity")
 	}

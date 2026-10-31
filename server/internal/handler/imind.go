@@ -315,28 +315,10 @@ func (h *Handler) PutIMindNote(w http.ResponseWriter, r *http.Request) {
 		writeShareError(w, r, err)
 		return
 	}
-	base := iMindFilename(note.Title)
-	if base != strings.TrimSuffix(path.Base(updated.Path), ".md") {
-		for suffix := 1; ; suffix++ {
-			name := base
-			if suffix > 1 {
-				name += fmt.Sprintf(" (%d)", suffix)
-			}
-			if name+".md" == path.Base(updated.Path) {
-				break
-			}
-			var result obsidianvault.MoveResult
-			err := peer.Call(ctx, fileshare.OpRename, map[string]string{"path": updated.Path, "name": name + ".md", "scope": fileshare.IMindScope}, &result)
-			if errors.Is(err, obsidianvault.ErrExists) {
-				continue
-			}
-			if err != nil {
-				writeShareError(w, r, err)
-				return
-			}
-			updated.Path = result.Path
-			break
-		}
+	updated.Path, err = h.renameIMindNote(ctx, peer, note.ID, updated.Path, note.Title)
+	if err != nil {
+		writeShareError(w, r, err)
+		return
 	}
 	note.Title = strings.TrimSuffix(path.Base(updated.Path), ".md")
 	writeJSON(w, http.StatusOK, iMindNoteResponse{Note: note, Path: fileshare.Join(peer.Meta().Machine, updated.Path), Revision: updated.Revision})
@@ -568,4 +550,30 @@ func containsIMindTag(tags []string, needle string) bool {
 		}
 	}
 	return false
+}
+
+// renameIMindNote keeps every iMind naming entry point tied to the final filename.
+// Callers hold lockIMindNote so suffix resolution and chat updates stay ordered.
+func (h *Handler) renameIMindNote(ctx context.Context, peer fileshare.Peer, noteID, filePath, title string) (string, error) {
+	base := iMindFilename(title)
+	for suffix := 1; ; suffix++ {
+		name := base
+		if suffix > 1 {
+			name += fmt.Sprintf(" (%d)", suffix)
+		}
+		if name+".md" != path.Base(filePath) {
+			var result obsidianvault.MoveResult
+			err := peer.Call(ctx, fileshare.OpRename, map[string]string{"path": filePath, "name": name + ".md", "scope": fileshare.IMindScope}, &result)
+			if errors.Is(err, obsidianvault.ErrExists) {
+				continue
+			}
+			if err != nil {
+				return filePath, err
+			}
+			filePath = result.Path
+		}
+		// Also reconcile unchanged filenames after a previous chat update failed.
+		err := h.syncIMindChatTitle(ctx, peer.Meta(), noteID, strings.TrimSuffix(path.Base(filePath), ".md"))
+		return filePath, err
+	}
 }

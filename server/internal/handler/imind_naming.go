@@ -5,11 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/multica-ai/multica/server/internal/fileshare"
 	"github.com/multica-ai/multica/server/internal/obsidianvault"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -305,17 +305,7 @@ func (h *Handler) nameInitialIMindClip(ctx context.Context, workspaceID pgtype.U
 		return
 	}
 	// Rename only: the clipping agent may already hold this content revision.
-	base := iMindFilename(result.Title)
-	for suffix := 1; suffix <= 100; suffix++ {
-		name := base
-		if suffix > 1 {
-			name += fmt.Sprintf(" (%d)", suffix)
-		}
-		var renamed obsidianvault.MoveResult
-		err := peer.Call(ctx, fileshare.OpRename, map[string]string{"path": file.Path, "name": name + ".md", "scope": fileshare.IMindScope}, &renamed)
-		if errors.Is(err, obsidianvault.ErrExists) {
-			continue
-		}
-		return
+	if _, err := h.renameIMindNote(ctx, peer, note.ID, file.Path, result.Title); err != nil {
+		slog.Warn("initial iMind clip rename failed", "note_id", note.ID, "error", err)
 	}
 }

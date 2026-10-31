@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -128,6 +129,8 @@ func (h *Handler) EnsureIMindChat(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	unlock := lockIMindNote(peer.Meta().Machine, req.NoteID)
+	defer unlock()
 	file, note, ok := h.readIMindNote(w, r, peer, req.NoteID)
 	if !ok {
 		return
@@ -438,4 +441,38 @@ func (h *Handler) imindDefaultProcessor(ctx context.Context, issue db.Issue, act
 		return pgtype.UUID{}, true
 	}
 	return id, true
+}
+
+// A note without a chat stays unbound; renaming never creates or joins a chat.
+func (h *Handler) syncIMindChatTitle(ctx context.Context, meta fileshare.ShareMeta, noteID, filename string) error {
+	if h.DB == nil {
+		return nil
+	}
+	workspaceID, err := util.ParseUUID(meta.WorkspaceID)
+	if err != nil {
+		return err
+	}
+	noteUUID, err := util.ParseUUID(noteID)
+	if err != nil {
+		return err
+	}
+	var issueID pgtype.UUID
+	err = h.DB.QueryRow(ctx, `UPDATE issue i
+		SET title=$4, revision=i.revision+1, updated_at=now(),
+			last_activity_at=GREATEST(COALESCE(i.last_activity_at, i.updated_at), now())
+		FROM imind_group_chat c
+		WHERE c.workspace_id=$1 AND c.share_root_id=$2 AND c.note_id=$3
+			AND i.id=c.issue_id AND i.workspace_id=c.workspace_id
+			AND i.title IS DISTINCT FROM $4
+		RETURNING i.id`, workspaceID, imindShareRootID(meta), noteUUID, "iMind · "+filename).Scan(&issueID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("sync iMind chat title: %w", err)
+	}
+	h.publish(protocol.EventGroupChatUpdated, meta.WorkspaceID, "system", "", map[string]any{
+		"issue_id": uuidToString(issueID),
+	})
+	return nil
 }

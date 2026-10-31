@@ -251,6 +251,11 @@ func TestIMindInitialClipNamingRetriesAndPreservesPlaceholder(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			var chat struct {
+				IssueID string `json:"issue_id"`
+			}
+			testutil.Call(t, h.EnsureIMindChat, groupChatRequestAs(t, testUserID, "POST", "/ensure", map[string]string{"share_machine": "clip-retry", "note_id": created.ID, "revision": created.Revision})).Want(200).JSON(&chat)
+			dbfx.Cleanup(t, `DELETE FROM imind_group_chat WHERE issue_id=$1`, chat.IssueID)
 			note := created.Note
 			source := "https://example.com/article"
 			note.SourceURL = &source
@@ -286,6 +291,10 @@ func TestIMindInitialClipNamingRetriesAndPreservesPlaceholder(t *testing.T) {
 			h.nameInitialIMindClip(t.Context(), parseUUID(testWorkspaceID), peer, note, file)
 			var current iMindNoteResponse
 			testutil.Call(t, h.PostIMindNote, groupChatRequestAs(t, testUserID, "POST", "/get", map[string]string{"share_machine": "clip-retry", "id": note.ID})).Want(200).JSON(&current)
+			issue, err := h.Queries.GetIssue(t.Context(), parseUUID(chat.IssueID))
+			if err != nil || issue.Title != "iMind · "+current.Title {
+				t.Fatalf("initial naming chat title=%q filename=%q err=%v", issue.Title, current.Title, err)
+			}
 			if !strings.HasPrefix(current.Title, tc.want) || current.Clip == nil || current.Clip.OriginalText != "original paste" || fetches != 2 {
 				t.Fatalf("unexpected result: %+v fetches=%d names=%d", current, fetches, names)
 			}
