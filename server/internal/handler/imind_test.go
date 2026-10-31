@@ -618,6 +618,19 @@ func TestIMindBootstrapRejectsNonDirectoryAndIsIdempotent(t *testing.T) {
 			t.Fatalf("bootstrap = %d %s", w.Code, w.Body.String())
 		}
 	}
+	guide, err := os.ReadFile(filepath.Join(root, iMindDir, "AGENTS.md"))
+	if err != nil || string(guide) != imind.AgentInstructions {
+		t.Fatalf("bootstrap did not install the agent guide: %v", err)
+	}
+	list := httptest.NewRecorder()
+	h.PostIMindNotesList(list, iMindRequest(http.MethodPost, "/api/imind/notes/list", `{"share_machine":"mbp"}`))
+	var result struct {
+		Notes []iMindNoteResponse `json:"notes"`
+	}
+	decodeDocs(t, list, http.StatusOK, &result)
+	if len(result.Notes) != 0 {
+		t.Fatalf("guide appeared as a note: %#v", result.Notes)
+	}
 	other := t.TempDir()
 	if err := os.WriteFile(filepath.Join(other, iMindDir), []byte("not a directory"), 0o644); err != nil {
 		t.Fatal(err)

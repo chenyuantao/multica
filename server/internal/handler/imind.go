@@ -394,7 +394,7 @@ func (h *Handler) ensureIMindDir(w http.ResponseWriter, r *http.Request, peer fi
 	var children obsidianvault.ChildrenResult
 	err := peer.Call(ctx, fileshare.OpChildren, map[string]string{"path": iMindDir, "scope": fileshare.IMindScope}, &children)
 	if err == nil {
-		return true
+		return h.syncIMindAgentInstructions(w, r, ctx, peer)
 	}
 	if !errors.Is(err, obsidianvault.ErrNotFound) {
 		writeShareError(w, r, err)
@@ -411,7 +411,7 @@ func (h *Handler) ensureIMindDir(w http.ResponseWriter, r *http.Request, peer fi
 			return false
 		}
 	}
-	return true
+	return h.syncIMindAgentInstructions(w, r, ctx, peer)
 }
 
 // iMindFilename produces a portable, visible filename; the note ID remains in frontmatter.
