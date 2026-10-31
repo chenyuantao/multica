@@ -90,6 +90,14 @@ func TestIMindRenameSyncsExistingChatAcrossNoteTypes(t *testing.T) {
 			if !strings.HasPrefix(note.Title, "AI title") {
 				t.Fatalf("AI rename did not run: %q", note.Title)
 			}
+			// Agent document tools use the generic rename endpoint.
+			var moved struct {
+				Path string `json:"path"`
+			}
+			testutil.Call(t, h.PostDocsRename, groupChatRequestAs(t, testUserID, "POST", "/api/docs/rename", map[string]string{"path": note.Path, "name": "Agent renamed " + kind + ".md"})).Want(200).JSON(&moved)
+			assertChat("Agent renamed "+kind, 3)
+			testutil.Call(t, h.PostDocsRename, groupChatRequestAs(t, testUserID, "POST", "/api/docs/rename", map[string]string{"path": moved.Path, "name": strings.TrimPrefix(occupied.Path, "rename-sync/iMind/")})).Want(409)
+			assertChat("Agent renamed "+kind, 3)
 			if count := dbfx.Count(t, `SELECT count(*) FROM imind_group_chat WHERE workspace_id=$1 AND share_root_id=$2 AND note_id=$3 AND issue_id=$4`, testWorkspaceID, imindShareRootID(peer.Meta()), note.ID, chat.IssueID); count != 1 {
 				t.Fatal("rename changed chat binding")
 			}

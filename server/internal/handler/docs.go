@@ -249,6 +249,10 @@ func (h *Handler) PostDocsRename(w http.ResponseWriter, r *http.Request) {
 	}
 	machine := target.peer.Meta().Machine
 	h.FileShares.Invalidate(machine)
+	if err := h.syncIMindChatForPath(ctx, target.peer, result.Path); err != nil {
+		writeShareError(w, r, err)
+		return
+	}
 	result.From = fileshare.Join(machine, result.From)
 	result.Path = fileshare.Join(machine, result.Path)
 	writeJSON(w, http.StatusOK, result)

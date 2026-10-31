@@ -6,12 +6,15 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"path"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/multica-ai/multica/server/internal/fileshare"
+	"github.com/multica-ai/multica/server/internal/imind"
 	"github.com/multica-ai/multica/server/internal/service"
 	"github.com/multica-ai/multica/server/internal/util"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
@@ -475,4 +478,22 @@ func (h *Handler) syncIMindChatTitle(ctx context.Context, meta fileshare.ShareMe
 		"issue_id": uuidToString(issueID),
 	})
 	return nil
+}
+
+// Generic document tools can rename iMind files without using the note API.
+func (h *Handler) syncIMindChatForPath(ctx context.Context, peer fileshare.Peer, filePath string) error {
+	if h.DB == nil || path.Dir(filePath) != iMindDir || !strings.HasSuffix(filePath, ".md") {
+		return nil
+	}
+	file, err := h.FileShares.ReadScoped(ctx, peer, filePath, fileshare.IMindScope)
+	if err != nil {
+		return err
+	}
+	title := strings.TrimSuffix(path.Base(filePath), ".md")
+	note, err := imind.Parse(file.Content, title)
+	if err != nil {
+		// Ordinary Markdown files may also live in this directory.
+		return nil
+	}
+	return h.syncIMindChatTitle(ctx, peer.Meta(), note.ID, title)
 }
