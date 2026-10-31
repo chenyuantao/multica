@@ -170,6 +170,31 @@ void main() {
     expect(find.byType(RefreshProgressIndicator), findsNothing);
   });
 
+  testWidgets('sidebar tag edit opens the unified management page', (
+    tester,
+  ) async {
+    await pumpHome(tester, [
+      {
+        'id': firstId,
+        'revision': 'r',
+        'title': 'First',
+        'type': 'note',
+        'tags': ['Work'],
+      },
+    ]);
+    tester.state<ScaffoldState>(find.byType(Scaffold).last).openDrawer();
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byTooltip('编辑标签'));
+    await tester.tap(find.byTooltip('编辑标签'));
+    await tester.pumpAndSettle();
+    expect(find.text('标签管理'), findsOneWidget);
+    expect(find.text('Work'), findsOneWidget);
+    expect(find.text('新建标签'), findsNothing);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('First'), findsOneWidget);
+  });
+
   testWidgets('long press exposes manual and AI tagging', (tester) async {
     await pumpHome(tester, [
       {'id': firstId, 'revision': 'r', 'title': 'First', 'type': 'note'},

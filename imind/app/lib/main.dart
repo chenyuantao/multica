@@ -470,6 +470,7 @@ class _HomePageState extends State<HomePage> {
       setState(() {
         _machine = machine;
         _notes = notes;
+        _tags.removeWhere((tag) => !_allTags.contains(tag));
         _error = null;
         _ready = true;
         _selected.removeWhere((id) => !notes.any((note) => note['id'] == id));
@@ -743,14 +744,29 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _tagChosen() async {
-    final tag = await pickNoteTag(context, tags: _allTags);
-    if (tag == null || tag.trim().isEmpty) return;
-    final name = tag.trim();
-    await _patchChosen((note) {
-      final tags = noteTags(note);
-      if (!tags.contains(name)) tags.add(name);
-      return {'tags': tags};
-    });
+    final machine = _machine;
+    if (machine == null) return;
+    final saved = await assignNoteTags(
+      context,
+      api: _api,
+      machine: machine,
+      noteIds: _chosen.map((note) => '${note['id']}').toList(),
+    );
+    if (saved == true && mounted) {
+      setState(() {
+        _selecting = false;
+        _selected.clear();
+      });
+    }
+    await _reload();
+  }
+
+  Future<void> _manageTags() async {
+    final machine = _machine;
+    if (machine == null) return;
+    Navigator.pop(context);
+    await manageNoteTags(context, api: _api, machine: machine);
+    await _reload();
   }
 
   Future<void> _renameChosen() async {
@@ -1418,11 +1434,25 @@ class _HomePageState extends State<HomePage> {
               () => _pickKind('clip'),
             ),
             _nav('回收站', Icons.delete_outline, _red, false, null),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(38, 22, 20, 8),
-              child: Text(
-                '标签',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(38, 22, 20, 8),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      '标签',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: '编辑标签',
+                    onPressed: _manageTags,
+                    icon: const Icon(Icons.edit_outlined),
+                  ),
+                ],
               ),
             ),
             const Divider(indent: 18, endIndent: 18, color: Color(0xFFDCDCE1)),
@@ -1916,20 +1946,22 @@ class _NoteEditorState extends State<NoteEditor> {
     if (machine == null || _note == null || _saving) return;
     setState(() => _saving = true);
     try {
-      final notes = await widget.api.notes(machine);
+      await assignNoteTags(
+        context,
+        api: widget.api,
+        machine: machine,
+        noteIds: ['${_note!['id']}'],
+      );
+      final updated = await widget.api.getNote(machine, '${_note!['id']}');
       if (!mounted) return;
-      final tags = {for (final note in notes) ...noteTags(note)}.toList()
-        ..sort();
-      final tag = await pickNoteTag(context, tags: tags);
-      if (tag == null || _tags.contains(tag) || !mounted) return;
-      setState(() => _tags.add(tag));
-      try {
-        await _persist();
-      } catch (_) {
-        _tags.remove(tag);
-        rethrow;
-      }
-      if (mounted) setState(() => _error = null);
+      setState(() {
+        _note = updated;
+        _tags
+          ..clear()
+          ..addAll(noteTags(updated));
+        _changed = true;
+        _error = null;
+      });
     } catch (error) {
       if (mounted) setState(() => _error = '$error');
     } finally {
@@ -2506,21 +2538,16 @@ class _RecordingDetailState extends State<RecordingDetail> {
     if (_saving) return;
     setState(() => _saving = true);
     try {
-      final notes = await widget.api.notes(widget.machine);
-      if (!mounted) return;
-      final tags = {for (final note in notes) ...noteTags(note)}.toList()
-        ..sort();
-      final tag = await pickNoteTag(context, tags: tags);
-      if (tag == null || noteTags(_note).contains(tag) || !mounted) return;
-      final updated = await widget.api.updateNote('${_note['id']}', {
-        'share_machine': widget.machine,
-        'revision': _note['revision'],
-        'title': _note['title'],
-        'tags': [...noteTags(_note), tag],
-        'content': _note['content'],
-        'transcript': _note['transcript'],
-        'audio': _note['audio'],
-      });
+      await assignNoteTags(
+        context,
+        api: widget.api,
+        machine: widget.machine,
+        noteIds: ['${_note['id']}'],
+      );
+      final updated = await widget.api.getNote(
+        widget.machine,
+        '${_note['id']}',
+      );
       if (mounted) {
         setState(() {
           _note = updated;

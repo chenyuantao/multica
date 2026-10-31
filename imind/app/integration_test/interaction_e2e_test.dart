@@ -419,7 +419,8 @@ void main() {
         await f.start();
         await f.tap(find.text('${note['title']}'));
         await menu(f, '标记');
-        await f.tap(find.widgetWithText(ActionChip, '学习'));
+        await f.tap(find.widgetWithText(CheckboxListTile, '学习'));
+        await f.tap(find.widgetWithText(TextButton, '保存'));
         await readyDetail(f);
         var saved = await f.api.getNote(Flow.machine, '${note['id']}');
         expect(saved['tags'], contains('学习'));
@@ -428,6 +429,7 @@ void main() {
         await f.wait(find.byType(TextField));
         await f.text(find.byType(TextField).last, '手建标签');
         await f.tap(find.widgetWithText(TextButton, '添加'));
+        await f.tap(find.widgetWithText(TextButton, '保存'));
         await readyDetail(f);
         saved = await f.api.getNote(Flow.machine, '${note['id']}');
         expect(saved['tags'], containsAll(['原有标签', '学习', '手建标签']));

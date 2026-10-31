@@ -158,7 +158,7 @@ void main() {
       }
       await f.tap(find.text('标记'));
       await f.text(find.byType(TextField).last, '$tag-batch');
-      await f.tap(find.text('使用新标签'));
+      await f.tap(find.widgetWithText(TextButton, '保存'));
       await f.gone(find.text('导出'));
       saved = await f.api.getNote(Flow.machine, note['id'] as String);
       expect(saved['tags'], contains('$tag-batch'));
