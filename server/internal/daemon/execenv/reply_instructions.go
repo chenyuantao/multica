@@ -279,13 +279,13 @@ func buildCommentReplyInstructionsSlim(provider, issueID, triggerCommentID strin
 }
 
 // BuildGroupChatReplyInstructions is the reply block for a group-chat run.
-// Group chat messages are always top-level, so the post carries no --parent.
+// The platform delivers the final output as a top-level group message.
 func BuildGroupChatReplyInstructions(issueID string, squadLeader bool) string {
-	lead := "Post your reply as a new group message. Do NOT pass --parent: group chat messages are never threaded. Do not create a sub-issue or @mention another agent to hand work off — this chat already chooses who speaks next.\n\n"
+	lead := "Return your final reply directly. The platform automatically saves it as a new group message in this chat. Do not call `multica issue comment add` or send the result to another chat. Do not create a sub-issue or @mention another agent to hand work off — this chat already chooses who speaks next.\n\n"
 	if squadLeader {
-		lead = "Unless your outcome is `no_action`, post your reply as a new group message. Do NOT pass --parent: group chat messages are never threaded. Do not create a sub-issue or @mention another agent to hand work off — this chat already chooses who speaks next.\n\n"
+		lead += "If your outcome is `no_action`, follow the no_action rule in your Squad Operating Protocol.\n"
 	}
-	return buildReplyPostInstructions(lead, "multica issue comment add "+issueID)
+	return lead
 }
 
 // buildReplyPostInstructions renders the post cookbook for addCmd, the

@@ -756,6 +756,10 @@ func writeWorkflowAutopilot(b *strings.Builder) {
 // it here does move brief bytes when the same agent runs leader one turn and
 // worker the next. Owner-accepted tradeoff; decision recorded in MUL-5811.
 func writeWorkflowIssue(b *strings.Builder, ctx TaskContextForEnv) {
+	if ctx.GroupChat {
+		b.WriteString("This is a group chat. Read the conversation and file context supplied in the per-turn message, complete the request, and return your final reply directly. The platform automatically saves that final reply as a new group message. Do not call `multica issue comment add` to deliver it, or send it to another chat. Do not change the chat's issue status for the lifecycle of your run. Do not create a sub-issue or assign another agent; this chat already chooses who speaks next.\n\n")
+		return
+	}
 	b.WriteString("**Every issue turn runs the same workflow.** The per-turn user message carries what triggered this run — an assignment handoff, or a triggering comment with its id and your `--parent` value — plus this issue's real id and ready-to-run context-read commands; assemble other calls from `## Available Commands`.\n\n")
 
 	b.WriteString("1. Read the issue (`multica issue get`) to understand the context.\n")
@@ -1046,6 +1050,12 @@ func writeOutput(b *strings.Builder, kind taskKind, ctx TaskContextForEnv) {
 			writeDocsNotePolicy(b)
 		}
 	default:
+		if ctx.GroupChat {
+			b.WriteString("Return your final reply directly. The platform automatically saves it as a new group message in this chat; no comment API call is needed. Keep it concise and state the outcome.\n\n")
+			writeInlineBlocksPolicy(b)
+			writeDocsNotePolicy(b)
+			break
+		}
 		if ctx.IsSquadLeader {
 			b.WriteString("⚠️ **Final results MUST be delivered via `multica issue comment add`** — unless your outcome is `no_action`, which your Squad Operating Protocol states in full. For every other outcome (`action`, `failed`) a comment is mandatory. The user does NOT see your terminal output or run logs — only comments on the issue.\n\n")
 		} else {
