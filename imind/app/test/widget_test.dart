@@ -111,6 +111,79 @@ Future<void> _pump(
 }
 
 void main() {
+  for (final type in ['note', 'clip']) {
+    testWidgets('$type 详情底部双色胶囊直接打开 AI 和编辑', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: NoteEditor(
+            api: _api(),
+            machine: 'mbp',
+            note: {..._note(), 'type': type},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final pill = find.byType(ActionPill);
+      expect(pill, findsOneWidget);
+      expect(
+        tester.getBottomRight(pill).dy,
+        tester.view.physicalSize.height / tester.view.devicePixelRatio - 28,
+      );
+      final buttons = tester
+          .widgetList<PillButton>(
+            find.descendant(of: pill, matching: find.byType(PillButton)),
+          )
+          .toList();
+      expect(buttons.map((button) => button.label), ['AI+', '编辑']);
+      expect(buttons.map((button) => button.dark), [true, false]);
+      expect(
+        find.descendant(of: find.byType(AppBar), matching: find.text('AI+')),
+        findsNothing,
+      );
+      await tester.tap(find.byTooltip('更多'));
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(PopupMenuItem<String>, '编辑'), findsNothing);
+      await tester.tap(find.text('文件信息'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('关闭信息'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+      expect(find.byType(ActionPill), findsNothing);
+      expect(find.text('保存'), findsOneWidget);
+      await tester.tap(find.text('放弃'));
+      await tester.pumpAndSettle();
+      expect(find.byType(ActionPill), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('长文章末尾能滚到胶囊上方且编辑内容不增加换行', (tester) async {
+    final content = '${List.filled(80, '文章段落').join('\n\n')}\n\n文章结尾';
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NoteEditor(api: _api(), machine: 'mbp', note: _note(content)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.drag(
+      find.byType(SingleChildScrollView),
+      const Offset(0, -10000),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester.getBottomRight(find.text('文章结尾')).dy,
+      lessThan(tester.getTopLeft(find.byType(ActionPill)).dy),
+    );
+    await tester.tap(find.text('编辑'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ActionPill), findsNothing);
+    expect(
+      tester.widget<TextField>(find.byType(TextField).last).controller!.text,
+      content,
+    );
+  });
+
   testWidgets(
     'detail preloads chat before tap without saving or marking read',
     (tester) async {
@@ -437,8 +510,10 @@ void main() {
     await _pump(tester, storage, api);
     await tester.tap(find.text('示例笔记'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('更多'));
-    await tester.pumpAndSettle();
+    if (find.text('编辑').evaluate().isEmpty) {
+      await tester.tap(find.byTooltip('更多'));
+      await tester.pumpAndSettle();
+    }
     await tester.tap(find.text('编辑'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, '修改后的正文');
@@ -468,8 +543,10 @@ void main() {
     );
     await tester.tap(find.text('示例笔记'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('更多'));
-    await tester.pumpAndSettle();
+    if (find.text('编辑').evaluate().isEmpty) {
+      await tester.tap(find.byTooltip('更多'));
+      await tester.pumpAndSettle();
+    }
     await tester.tap(find.text('编辑'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, '修改后的正文');
@@ -512,8 +589,10 @@ void main() {
     );
     await tester.tap(find.text('示例笔记'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('更多'));
-    await tester.pumpAndSettle();
+    if (find.text('编辑').evaluate().isEmpty) {
+      await tester.tap(find.byTooltip('更多'));
+      await tester.pumpAndSettle();
+    }
     await tester.tap(find.text('编辑'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('保存'));
@@ -571,8 +650,10 @@ void main() {
     );
     await tester.tap(find.text('示例笔记'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('更多'));
-    await tester.pumpAndSettle();
+    if (find.text('编辑').evaluate().isEmpty) {
+      await tester.tap(find.byTooltip('更多'));
+      await tester.pumpAndSettle();
+    }
     await tester.tap(find.text('编辑'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('保存'));
@@ -672,8 +753,10 @@ void main() {
     );
     await tester.tap(find.text('示例笔记'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('更多'));
-    await tester.pumpAndSettle();
+    if (find.text('编辑').evaluate().isEmpty) {
+      await tester.tap(find.byTooltip('更多'));
+      await tester.pumpAndSettle();
+    }
     await tester.tap(find.text('编辑'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('保存'));
@@ -708,8 +791,10 @@ void main() {
     await _pump(tester, _storage(), _api());
     await tester.tap(find.text('示例笔记'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('更多'));
-    await tester.pumpAndSettle();
+    if (find.text('编辑').evaluate().isEmpty) {
+      await tester.tap(find.byTooltip('更多'));
+      await tester.pumpAndSettle();
+    }
     await tester.tap(find.text('编辑'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, '未保存的修改');
@@ -762,8 +847,10 @@ void main() {
       );
       await tester.tap(find.text('打开详情'));
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('更多'));
-      await tester.pumpAndSettle();
+      if (find.text('编辑').evaluate().isEmpty) {
+        await tester.tap(find.byTooltip('更多'));
+        await tester.pumpAndSettle();
+      }
       await tester.tap(find.text('编辑'));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField).last, '保留草稿');
@@ -820,8 +907,10 @@ void main() {
       );
       await tester.tap(find.text('打开详情'));
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('更多'));
-      await tester.pumpAndSettle();
+      if (find.text('编辑').evaluate().isEmpty) {
+        await tester.tap(find.byTooltip('更多'));
+        await tester.pumpAndSettle();
+      }
       await tester.tap(find.text('编辑'));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField).last, '未保存的草稿');
@@ -831,8 +920,10 @@ void main() {
       expect(find.text('打开详情'), findsNothing);
       expect(find.byType(TextField), findsNothing);
       expect(find.text('未保存的草稿'), findsNothing);
-      await tester.tap(find.byTooltip('更多'));
-      await tester.pumpAndSettle();
+      if (find.text('编辑').evaluate().isEmpty) {
+        await tester.tap(find.byTooltip('更多'));
+        await tester.pumpAndSettle();
+      }
       await tester.tap(find.text('编辑'));
       await tester.pumpAndSettle();
       expect(
@@ -976,8 +1067,10 @@ void main() {
     );
     await tester.tap(find.text('示例笔记'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('更多'));
-    await tester.pumpAndSettle();
+    if (find.text('编辑').evaluate().isEmpty) {
+      await tester.tap(find.byTooltip('更多'));
+      await tester.pumpAndSettle();
+    }
     await tester.tap(find.text('编辑'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('保存'));

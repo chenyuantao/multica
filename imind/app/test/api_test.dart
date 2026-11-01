@@ -56,6 +56,32 @@ const operations = [
 ];
 
 void main() {
+  test(
+    'workspace members parse profile fields and reject malformed identities',
+    () async {
+      final api = responding([
+        {'user_id': noteId, 'name': 'Lay', 'avatar_url': '/avatar.png'},
+        {'user_id': workspaceId, 'name': 42, 'avatar_url': false},
+      ]);
+      addTearDown(api.close);
+      final members = await api.workspaceMembers();
+      expect(members.first['name'], 'Lay');
+      expect(members.first['avatar_url'], '/avatar.png');
+      expect(members.last['name'], '');
+      expect(members.last['avatar_url'], isNull);
+      for (final body in [
+        <String, dynamic>{},
+        [
+          <String, dynamic>{'user_id': 'bad'},
+        ],
+      ]) {
+        final invalid = responding(body);
+        addTearDown(invalid.close);
+        await expectLater(invalid.workspaceMembers(), throwsA(apiError(502)));
+      }
+    },
+  );
+
   test('note responses preserve extra YAML metadata and tolerate missing or malformed metadata', () async {
     for (final metadata in [
       null,

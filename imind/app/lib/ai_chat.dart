@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:math' show min;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:uuid/uuid.dart';
@@ -14,7 +15,9 @@ import 'note_quotes.dart';
 import 'agent_mentions.dart';
 import 'note_chat_prefetch.dart';
 import 'chat_unread.dart';
+import 'chat_time.dart';
 import 'input_insets.dart';
+import 'markdown_style.dart';
 import 'run_progress.dart';
 import 'voice_input.dart';
 
@@ -101,6 +104,8 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
   final _retryingComments = <String>{};
   String? _issueId;
   String? _userId;
+  final _members = <String, Map<String, dynamic>>{};
+  final _agentProfiles = <String, Map<String, dynamic>>{};
   String? _error;
   bool _loading = true;
   bool _loadingMore = false;
@@ -185,6 +190,7 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
       widget.unread?.setActiveChat(_issueId);
       unawaited(widget.unread?.refresh() ?? Future<void>.value());
       unawaited(_loadUser(prepared.me));
+      unawaited(_loadMembers());
       unawaited(_loadAgentNames(prepared.agents));
       if (widget.unread != null) {
         _globalSubscription = widget.unread!.events.listen(
@@ -217,9 +223,29 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
   Future<void> _loadUser(Future<Map<String, dynamic>> request) async {
     try {
       final me = await request;
-      if (!_disposed) setState(() => _userId = me['id'] as String);
+      if (!_disposed) {
+        setState(() {
+          _userId = me['id'] as String;
+          _members[_userId!] = me;
+        });
+      }
     } catch (error) {
       if (!_disposed) setState(() => _error = '$error');
+    }
+  }
+
+  Future<void> _loadMembers() async {
+    try {
+      final members = await widget.api.workspaceMembers();
+      if (!_disposed) {
+        setState(() {
+          for (final member in members) {
+            _members[member['user_id'] as String] = member;
+          }
+        });
+      }
+    } catch (_) {
+      // Missing profiles must not prevent reading or sending messages.
     }
   }
 
@@ -379,6 +405,7 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
           final name = agent['name'];
           if (id is String && name is String && name.trim().isNotEmpty) {
             _agentNames[id] = name;
+            _agentProfiles[id] = agent;
           }
         }
         _runs = [
@@ -670,7 +697,10 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
           content: SizedBox(
             width: 520,
             child: SingleChildScrollView(
-              child: MarkdownBody(data: '${file['content'] ?? ''}'),
+              child: MarkdownBody(
+                data: '${file['content'] ?? ''}',
+                styleSheet: imindMarkdownStyle(context),
+              ),
             ),
           ),
           actions: [
@@ -974,6 +1004,103 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
     ),
   );
 
+  Map<String, dynamic>? _authorProfile(Map<String, dynamic> message) =>
+      message['author_type'] == 'agent'
+      ? _agentProfiles[message['author_id']]
+      : _members[message['author_id']];
+
+  String _authorName(Map<String, dynamic> message) {
+    final name = _authorProfile(message)?['name'];
+    if (name is String && name.trim().isNotEmpty) return name;
+    return switch (message['author_type']) {
+      'agent' => 'Agent',
+      'system' => '系统',
+      _ => '成员',
+    };
+  }
+
+  Widget _authorAvatar(Map<String, dynamic> message, String name) {
+    final url = _authorProfile(message)?['avatar_url'];
+    final uri = url is String && url.isNotEmpty
+        ? Uri.tryParse(widget.api.baseUrl)?.resolve(url)
+        : null;
+    final fallback = Center(
+      child: message['author_type'] == 'agent'
+          ? const Icon(Icons.smart_toy_outlined, size: 22, color: _aiMuted)
+          : Text(name.characters.first, style: const TextStyle(fontSize: 18)),
+    );
+    return Semantics(
+      label: '$name 的头像',
+      image: true,
+      excludeSemantics: true,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: SizedBox(
+          width: 36,
+          height: 36,
+          child: ColoredBox(
+            color: _aiBg,
+            child:
+                uri != null && (uri.scheme == 'http' || uri.scheme == 'https')
+                ? Image.network(
+                    uri.toString(),
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => fallback,
+                  )
+                : fallback,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _selectableMessage(String content, Color color) => _MessageTapTarget(
+    onDoubleTap: () {
+      FocusManager.instance.primaryFocus?.unfocus();
+      Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          fullscreenDialog: true,
+          builder: (pageContext) => Scaffold(
+            key: const ValueKey('ai-message-fullscreen'),
+            backgroundColor: Colors.white,
+            body: SafeArea(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  SingleChildScrollView(
+                    padding: const EdgeInsets.all(24),
+                    child: SelectionArea(
+                      child: _renderContent(content, _aiInk),
+                    ),
+                  ),
+                  Positioned(
+                    top: 12,
+                    left: 12,
+                    child: ElevatedButton.icon(
+                      key: const ValueKey('ai-message-close'),
+                      onPressed: () => Navigator.of(pageContext).pop(),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _aiInk,
+                        foregroundColor: Colors.white,
+                        elevation: 4,
+                        minimumSize: const Size(0, 44),
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        shape: const StadiumBorder(),
+                      ),
+                      icon: const Icon(Icons.close, size: 18),
+                      label: const Text('关闭'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    },
+    child: SelectionArea(child: _renderContent(content, color)),
+  );
+
   Widget _messageBubble(Map<String, dynamic> message) {
     final mine =
         message['author_type'] == 'member' && message['author_id'] == _userId;
@@ -983,46 +1110,78 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
               .where((run) => run['id'] == message['source_task_id'])
               .firstOrNull
         : null;
-    return Align(
-      alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 320),
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: mine ? const Color(0xFF23262C) : _aiBg,
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(18),
-            topRight: const Radius.circular(18),
-            bottomLeft: Radius.circular(mine ? 18 : 6),
-            bottomRight: Radius.circular(mine ? 6 : 18),
-          ),
+    final name = _authorName(message);
+    final bubble = Container(
+      constraints: const BoxConstraints(maxWidth: 320),
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: mine ? const Color(0xFF23262C) : _aiBg,
+        borderRadius: BorderRadius.only(
+          topLeft: const Radius.circular(18),
+          topRight: const Radius.circular(18),
+          bottomLeft: Radius.circular(mine ? 18 : 6),
+          bottomRight: Radius.circular(mine ? 6 : 18),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _renderContent(content, mine ? Colors.white : _aiInk),
-            if (sourceRun != null) _runControls(sourceRun),
-            if (mine && _dispatchStates[message['id']] == 'unavailable')
-              TextButton.icon(
-                onPressed: _retryingComments.contains(message['id'])
-                    ? null
-                    : () => _retryDispatch(message['id'] as String),
-                icon: _retryingComments.contains(message['id'])
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.refresh, size: 16),
-                label: const Text('Agent 暂不可用 · 重试'),
-                style: TextButton.styleFrom(
-                  foregroundColor: _aiRed,
-                  padding: EdgeInsets.zero,
-                ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _selectableMessage(content, mine ? Colors.white : _aiInk),
+          if (sourceRun != null) _runControls(sourceRun),
+          if (mine && _dispatchStates[message['id']] == 'unavailable')
+            TextButton.icon(
+              onPressed: _retryingComments.contains(message['id'])
+                  ? null
+                  : () => _retryDispatch(message['id'] as String),
+              icon: _retryingComments.contains(message['id'])
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.refresh, size: 16),
+              label: const Text('Agent 暂不可用 · 重试'),
+              style: TextButton.styleFrom(
+                foregroundColor: _aiRed,
+                padding: EdgeInsets.zero,
               ),
+            ),
+        ],
+      ),
+    );
+    return Padding(
+      key: ValueKey('chat-message-${message['id']}'),
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        mainAxisAlignment: mine
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (!mine) ...[
+            _authorAvatar(message, name),
+            const SizedBox(width: 8),
           ],
-        ),
+          Flexible(
+            child: Column(
+              crossAxisAlignment: mine
+                  ? CrossAxisAlignment.end
+                  : CrossAxisAlignment.start,
+              children: [
+                if (!mine)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 5),
+                    child: Text(
+                      name,
+                      style: const TextStyle(color: _aiMuted, fontSize: 12),
+                    ),
+                  ),
+                bubble,
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1040,8 +1199,27 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
               (_active(run) || run['status'] == 'failed'),
         )
         .toList();
+    Map<String, dynamic>? previous;
     for (final message in _messages) {
+      if (needsChatTimeSeparator(
+        previous?['created_at'],
+        message['created_at'],
+      )) {
+        yield Padding(
+          key: ValueKey('chat-time-${message['id']}'),
+          padding: const EdgeInsets.fromLTRB(0, 12, 0, 18),
+          child: Text(
+            chatTimeLabel(
+              message['created_at'],
+              previous: previous?['created_at'],
+            ),
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: _aiMuted, fontSize: 12),
+          ),
+        );
+      }
       yield _messageBubble(message);
+      previous = message;
       for (final run in placeholders.where(
         (run) => run['trigger_comment_id'] == message['id'],
       )) {
@@ -1142,27 +1320,22 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
   };
 
   Widget _renderContent(String content, Color textColor) {
+    final style = imindMarkdownStyle(
+      context,
+      textColor: textColor,
+      bodyFontSize: 15,
+      bodyHeight: 1.55,
+    );
     final parts = _splitDocFences(content);
     if (parts.length == 1 && parts.single is String) {
-      return MarkdownBody(
-        data: content,
-        styleSheet: MarkdownStyleSheet.fromTheme(
-          Theme.of(context),
-        ).copyWith(p: TextStyle(color: textColor, fontSize: 15, height: 1.55)),
-      );
+      return MarkdownBody(data: content, styleSheet: style);
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         for (final part in parts)
           if (part is String)
-            MarkdownBody(
-              data: part,
-              styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context))
-                  .copyWith(
-                    p: TextStyle(color: textColor, fontSize: 15, height: 1.55),
-                  ),
-            )
+            MarkdownBody(data: part, styleSheet: style)
           else
             _docCard(part as _DocNote),
       ],
@@ -1173,7 +1346,7 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
     onTap: () => _openDoc(note),
     borderRadius: BorderRadius.circular(10),
     child: Container(
-      width: 285,
+      width: double.infinity,
       margin: const EdgeInsets.symmetric(vertical: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -1234,7 +1407,7 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Flexible(child: _renderContent(message.text, Colors.white)),
+          Flexible(child: _selectableMessage(message.text, Colors.white)),
           const SizedBox(width: 8),
           if (message.sending)
             const SizedBox(
@@ -1263,6 +1436,56 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
         ],
       ),
     ),
+  );
+}
+
+class _MessageTapTarget extends StatefulWidget {
+  const _MessageTapTarget({required this.child, required this.onDoubleTap});
+  final Widget child;
+  final VoidCallback onDoubleTap;
+
+  @override
+  State<_MessageTapTarget> createState() => _MessageTapTargetState();
+}
+
+class _MessageTapTargetState extends State<_MessageTapTarget> {
+  PointerDownEvent? _down;
+  PointerUpEvent? _lastTap;
+
+  @override
+  Widget build(BuildContext context) => Listener(
+    // SelectionArea's double-tap recognizer otherwise wins the gesture arena.
+    onPointerDown: (event) => _down = event,
+    onPointerMove: (event) {
+      if (_down != null &&
+          (event.position - _down!.position).distance > kTouchSlop) {
+        _down = null;
+        _lastTap = null;
+      }
+    },
+    onPointerCancel: (_) {
+      _down = null;
+      _lastTap = null;
+    },
+    onPointerUp: (event) {
+      final down = _down;
+      final last = _lastTap;
+      _down = null;
+      if (down == null ||
+          event.timeStamp - down.timeStamp >= kLongPressTimeout) {
+        _lastTap = null;
+        return;
+      }
+      if (last != null &&
+          event.timeStamp - last.timeStamp <= kDoubleTapTimeout &&
+          (event.position - last.position).distance <= kDoubleTapSlop) {
+        _lastTap = null;
+        widget.onDoubleTap();
+      } else {
+        _lastTap = event;
+      }
+    },
+    child: widget.child,
   );
 }
 

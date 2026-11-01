@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:imind_app/ai_chat.dart';
 import 'package:imind_app/api.dart';
@@ -48,6 +49,8 @@ class ChatApi extends MulticaApi {
   @override
   Future<List<Map<String, dynamic>>> workspaceAgents() async => agentRows;
   @override
+  Future<List<Map<String, dynamic>>> workspaceMembers() async => [];
+  @override
   Future<List<Map<String, dynamic>>> noteChatRuns(String issueId) async => [];
   @override
   Future<void> markNoteChatRead(String issueId) => read.future;
@@ -78,6 +81,40 @@ class ChatApi extends MulticaApi {
       ],
     };
   }
+}
+
+class DisplayChatApi extends ChatApi {
+  DisplayChatApi({
+    this.content = 'Hello selection copy',
+    this.authorType = 'member',
+  });
+  final String authorType;
+  final String content;
+
+  @override
+  Future<List<Map<String, dynamic>>> workspaceMembers() async => [
+    {'user_id': 'peer', 'name': 'Lay'},
+  ];
+
+  @override
+  Future<Map<String, dynamic>> noteChatHistory(
+    String issueId, {
+    String? beforeCreatedAt,
+    String? beforeId,
+    int limit = 50,
+  }) async => {
+    'has_more': false,
+    'comments': [
+      {
+        'id': 'peer-message',
+        'issue_id': issueId,
+        'created_at': DateTime(2026, 10, 31, 11, 6).toIso8601String(),
+        'author_type': authorType,
+        'author_id': 'peer',
+        'content': content,
+      },
+    ],
+  };
 }
 
 Future<ChatApi> openChat(WidgetTester tester, {ChatApi? providedApi}) async {
@@ -125,6 +162,141 @@ void expectLatestVisible(WidgetTester tester) {
 }
 
 void main() {
+  testWidgets('peer message shows name, avatar and centered time', (
+    tester,
+  ) async {
+    await openChat(tester, providedApi: DisplayChatApi());
+    expect(find.text('Lay'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is Semantics && widget.properties.label == 'Lay 的头像',
+      ),
+      findsOneWidget,
+    );
+    final time = tester.widget<Text>(
+      find.descendant(
+        of: find.byKey(const ValueKey('chat-time-peer-message')),
+        matching: find.byType(Text),
+      ),
+    );
+    expect(time.textAlign, TextAlign.center);
+    expect(time.data, endsWith('11:06'));
+  });
+
+  testWidgets('agent uses its own profile and resolves relative avatar URL', (
+    tester,
+  ) async {
+    final api = DisplayChatApi(authorType: 'agent')
+      ..agentRows = [
+        {
+          'id': 'peer',
+          'name': 'Assistant',
+          'avatar_url': '/api/files/avatar.png',
+        },
+      ];
+    await openChat(tester, providedApi: api);
+    expect(find.text('Assistant'), findsOneWidget);
+    expect(find.text('Lay'), findsNothing);
+    final image = tester.widget<Image>(find.byType(Image));
+    expect(
+      (image.image as NetworkImage).url,
+      'http://localhost/api/files/avatar.png',
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('long press selects and copies part of a message', (
+    tester,
+  ) async {
+    String? copied;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copied = call.arguments['text'] as String;
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+    await openChat(tester, providedApi: DisplayChatApi());
+    await tester.longPress(find.text('Hello selection copy'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('ai-message-fullscreen')), findsNothing);
+    await tester.tap(find.text('Copy').last);
+    await tester.pumpAndSettle();
+    expect(copied, isNotEmpty);
+    expect('Hello selection copy', contains(copied!));
+    expect(copied, isNot('Hello selection copy'));
+  });
+
+  testWidgets('double tap opens enlarged selectable and scrollable message', (
+    tester,
+  ) async {
+    final content = List.generate(
+      35,
+      (i) => 'Paragraph $i with selectable words.',
+    ).join('\n\n');
+    await openChat(tester, providedApi: DisplayChatApi(content: content));
+    final text = find.text('Paragraph 34 with selectable words.');
+    await tester.ensureVisible(text);
+    await tester.pumpAndSettle();
+    await tester.tap(text);
+    await tester.pump(const Duration(milliseconds: 80));
+    await tester.tap(text);
+    await tester.pumpAndSettle();
+    final page = find.byKey(const ValueKey('ai-message-fullscreen'));
+    expect(page, findsOneWidget);
+    expect(
+      find.descendant(of: page, matching: find.byType(AppBar)),
+      findsNothing,
+    );
+    final close = find.byKey(const ValueKey('ai-message-close'));
+    final closeTop = tester.getTopLeft(close);
+
+    expect(
+      find.descendant(of: page, matching: find.byType(SelectionArea)),
+      findsOneWidget,
+    );
+    final enlarged = tester.widget<Text>(
+      find.descendant(
+        of: page,
+        matching: find.text('Paragraph 0 with selectable words.'),
+      ),
+    );
+    expect(enlarged.textSpan!.style!.fontSize, 18);
+    await tester.longPress(
+      find.descendant(
+        of: page,
+        matching: find.text('Paragraph 0 with selectable words.'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Copy'), findsWidgets);
+    await tester.tap(find.text('Copy').last);
+    await tester.pumpAndSettle();
+    final scroll = find.descendant(
+      of: page,
+      matching: find.byType(SingleChildScrollView),
+    );
+    await tester.drag(scroll, const Offset(0, -2500));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Paragraph 34 with selectable words.').hitTestable(),
+      findsOneWidget,
+    );
+    expect(tester.getTopLeft(close), closeTop);
+    await tester.tap(close);
+    await tester.pumpAndSettle();
+    expect(page, findsNothing);
+    expect(find.text('AI+ 群聊'), findsOneWidget);
+  });
+
   test(
     'prepared requests are scoped to note revision, machine and session',
     () async {

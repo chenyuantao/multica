@@ -2166,15 +2166,9 @@ class _NoteEditorState extends State<NoteEditor> {
                 ),
               ),
             ] else if (_note != null) ...[
-              AiChatButton(
-                noteId: '${_note!['id']}',
-                machine: widget.machine,
-                onPressed: _saving ? null : _ai,
-              ),
               NoteActions(
                 note: _note!,
                 enabled: !_saving,
-                onEdit: _beginEdit,
                 onTag: _markTag,
                 onAiTag: _aiTag,
                 onRename: _rename,
@@ -2238,6 +2232,29 @@ class _NoteEditorState extends State<NoteEditor> {
                 ],
               ),
             ),
+            if (!_editing && _note != null)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 28,
+                child: Center(
+                  child: ActionPill(
+                    children: [
+                      AiChatButton(
+                        noteId: '${_note!['id']}',
+                        machine: widget.machine,
+                        onPressed: _saving ? null : _ai,
+                        pill: true,
+                      ),
+                      PillButton(
+                        icon: Icons.edit_outlined,
+                        label: '编辑',
+                        onPressed: _saving ? null : _beginEdit,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -3926,6 +3943,10 @@ class _MarkdownEditorState extends State<_MarkdownEditor> {
         child: raw.isEmpty
             ? const Text('正文', style: TextStyle(color: _sub, fontSize: 16))
             : SingleChildScrollView(
+                // Keep three blank lines inside the scrollable preview.
+                padding: EdgeInsets.only(
+                  bottom: MediaQuery.textScalerOf(context).scale(24) * 3,
+                ),
                 child: widget.quotes != null
                     ? QuotedMarkdown(
                         data: raw,
@@ -4011,7 +4032,9 @@ class AiChatButton extends StatelessWidget {
     required this.noteId,
     required this.machine,
     required this.onPressed,
+    this.pill = false,
   });
+  final bool pill;
   final String noteId;
   final String? machine;
   final VoidCallback? onPressed;
@@ -4020,6 +4043,15 @@ class AiChatButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final unread =
         ChatUnreadScope.maybeOf(context)?.unreadForNote(noteId, machine) ?? 0;
+    if (pill) {
+      return PillButton(
+        dark: true,
+        icon: Icons.auto_awesome,
+        label: 'AI+',
+        onPressed: onPressed,
+        trailing: unread > 0 ? ChatUnreadBadge(count: unread) : null,
+      );
+    }
     return TextButton(
       onPressed: onPressed,
       child: Row(
@@ -4062,11 +4094,13 @@ class PillButton extends StatelessWidget {
     required this.label,
     required this.onPressed,
     this.dark = false,
+    this.trailing,
   });
   final IconData icon;
   final String label;
   final VoidCallback? onPressed;
   final bool dark;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -4099,6 +4133,7 @@ class PillButton extends StatelessWidget {
                     color: foreground,
                   ),
                 ),
+                if (trailing != null) ...[const SizedBox(width: 5), trailing!],
               ],
             ),
           ),

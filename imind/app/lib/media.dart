@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 
 import 'api.dart';
+import 'markdown_style.dart';
 
 class MediaService {
   const MediaService(this.api);
@@ -168,7 +169,7 @@ class IMindMarkdown extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MarkdownBody(
     data: data,
-    styleSheet: MarkdownStyleSheet(p: const TextStyle(fontSize: 16)),
+    styleSheet: imindMarkdownStyle(context),
     sizedImageBuilder: (config) {
       final uri = config.uri;
       final pending = pendingImages[uri.path];

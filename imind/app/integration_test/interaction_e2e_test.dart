@@ -97,7 +97,9 @@ Future<void> readyDetail(Flow f) => until(
 
 Future<void> menu(Flow f, String label) async {
   await readyDetail(f);
-  await f.tap(find.byTooltip('更多'));
+  if (label != '编辑' || find.text('编辑').evaluate().isEmpty) {
+    await f.tap(find.byTooltip('更多'));
+  }
   await f.tap(find.text(label));
 }
 

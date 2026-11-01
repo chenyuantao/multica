@@ -215,8 +215,6 @@ void main() {
             ),
           ),
         );
-        await tester.tap(find.byTooltip('更多'));
-        await tester.pumpAndSettle();
         await tester.tap(find.text('编辑'));
         await tester.pumpAndSettle();
         await tester.pump(const Duration(seconds: 1));

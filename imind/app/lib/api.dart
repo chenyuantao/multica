@@ -112,6 +112,23 @@ class MulticaApi {
     return [for (final item in value) _object(item)];
   }
 
+  Future<List<Map<String, dynamic>>> workspaceMembers() async {
+    final workspace = workspaceId;
+    if (!validWorkspaceId(workspace)) throw ApiException(400, '请先选择工作区');
+    final value = await _request('GET', '/api/workspaces/$workspace/members');
+    return [for (final item in _list(value, 'members')) _chatMember(item)];
+  }
+
+  static Map<String, dynamic> _chatMember(Object? value) {
+    final data = _object(value);
+    if (!validWorkspaceId(data['user_id'])) throw _malformed('member.user_id');
+    return {
+      'user_id': data['user_id'],
+      'name': data['name'] is String ? data['name'] : '',
+      'avatar_url': data['avatar_url'] is String ? data['avatar_url'] : null,
+    };
+  }
+
   Future<List<Map<String, dynamic>>> shares() async {
     final body = _object(await _request('GET', '/api/imind/shares'));
     return [for (final value in _list(body['shares'], 'shares')) _share(value)];

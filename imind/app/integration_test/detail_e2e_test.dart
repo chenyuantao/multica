@@ -50,7 +50,10 @@ void main() {
         expect(find.text('详情标签'), findsNothing);
         expect(find.text('https://example.com/detail-test'), findsNothing);
         expect(find.byTooltip('重命名'), findsNothing);
-        expect(find.text('编辑'), findsNothing);
+        expect(
+          find.text('编辑'),
+          type == 'recording' ? findsNothing : findsOneWidget,
+        );
         debugPrint('E2E_DETAIL_CAPTURE: $type-toolbar');
         await tester.runAsync(
           () => Future<void>.delayed(const Duration(seconds: 2)),
@@ -68,7 +71,10 @@ void main() {
         ]) {
           expect(find.text(label), findsOneWidget);
         }
-        expect(find.byType(PopupMenuDivider), findsNWidgets(3));
+        expect(
+          find.byType(PopupMenuDivider),
+          findsNWidgets(type == 'recording' ? 3 : 2),
+        );
         await f.tap(find.text('文件信息'));
         expect(find.text('字数'), findsOneWidget);
         expect(find.text('${body.length}'), findsWidgets);
@@ -91,7 +97,7 @@ void main() {
           () => Future<void>.delayed(const Duration(seconds: 2)),
         );
         await f.tap(find.byTooltip('关闭信息'));
-        await f.tap(find.byTooltip('更多'));
+        if (type == 'recording') await f.tap(find.byTooltip('更多'));
         await f.tap(find.text('编辑'));
         await f.wait(find.widgetWithText(TextButton, '保存'));
         await f.text(find.byType(TextField).last, '已编辑 $type');
