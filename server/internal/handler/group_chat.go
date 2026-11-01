@@ -260,22 +260,15 @@ func (h *Handler) ListGroupChats(w http.ResponseWriter, r *http.Request) {
 		if issue.IsDirectChat && !kept[key] {
 			continue
 		}
-		// Membership keeps a conversation listed even when its source note
-		// cannot be read. Source access still gates message content and details.
-		canReadSource := len(h.FilterIMindChatAudience(ctx, key, []string{userID})) > 0
 		var last *db.Comment
-		if c, found := lastByIssue[key]; found && canReadSource {
+		if c, found := lastByIssue[key]; found {
 			last = &c
 		}
 		resp := groupChatToResponse(issue, prefix, membersByIssue[key], last, userID)
-		if canReadSource {
-			if speakers := pending[key]; len(speakers) > 0 {
-				resp.PendingSpeakers = speakers
-			}
-			resp.UnreadCount = unread[key]
-		} else {
-			resp.Description = ""
+		if speakers := pending[key]; len(speakers) > 0 {
+			resp.PendingSpeakers = speakers
 		}
+		resp.UnreadCount = unread[key]
 		out = append(out, resp)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"chats": out})
@@ -326,9 +319,6 @@ func (h *Handler) SearchGroupChats(w http.ResponseWriter, r *http.Request) {
 	}
 	hits := make([]GroupChatSearchHit, 0, len(rows))
 	for _, row := range rows {
-		if len(h.FilterIMindChatAudience(r.Context(), uuidToString(row.IssueID), []string{userID})) == 0 {
-			continue
-		}
 		hits = append(hits, GroupChatSearchHit{
 			ChatID:    uuidToString(row.IssueID),
 			MessageID: uuidToString(row.CommentID),

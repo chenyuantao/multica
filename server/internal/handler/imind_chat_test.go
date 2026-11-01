@@ -4,7 +4,6 @@ import (
 	"context"
 	"github.com/google/uuid"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
@@ -244,18 +243,9 @@ func TestEnsureIMindChatIsIdempotentAndFileAccessGated(t *testing.T) {
 		}
 	}
 
-	// A member's group-chat membership does not outlive access to its source file.
+	// Existing members retain conversation access when the source goes offline.
 	hub.Unregister(peer)
-	if users := h.FilterIMindChatAudience(ctx, issueID, []string{testUserID, memberB}); len(users) != 0 {
-		t.Fatalf("revoked file still receives realtime: %v", users)
-	}
-	req := newRequestAs(testUserID, http.MethodGet, "/api/issues/"+issueID, nil)
-	req = withURLParam(req, "id", issueID)
-	w := httptest.NewRecorder()
-	_, ok := h.loadIssueForUser(w, req, issueID)
-	if ok || w.Code != http.StatusNotFound {
-		t.Fatalf("revoked file access: ok=%v status=%d", ok, w.Code)
-	}
+	testutil.Call(t, h.GetIssue, withURLParam(groupChatRequestAs(t, testUserID, http.MethodGet, "/api/issues/"+issueID, nil), "id", issueID)).Want(http.StatusOK)
 }
 
 func TestIMindShareRootIdentitySurvivesMachineRenameOnly(t *testing.T) {

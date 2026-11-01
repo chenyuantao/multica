@@ -108,15 +108,9 @@ func (h *Handler) ListIMindChatUnread(w http.ResponseWriter, r *http.Request) {
 	}
 	rows.Close()
 	counts := h.groupChatUnreadCounts(r.Context(), member.WorkspaceID, parseUUID(userID), ids)
-	visible := chats[:0]
-	for _, chat := range chats {
-		chat.UnreadCount = counts[chat.IssueID]
-		if chat.UnreadCount > 0 && len(h.FilterIMindChatAudience(r.Context(), chat.IssueID, []string{userID})) == 0 {
-			continue
-		}
-		visible = append(visible, chat)
+	for i := range chats {
+		chats[i].UnreadCount = counts[chats[i].IssueID]
 	}
-	chats = visible
 	writeJSON(w, http.StatusOK, map[string]any{"chats": chats})
 }
 
@@ -378,49 +372,6 @@ func (h *Handler) imindRunStatus(ctx context.Context, issue db.Issue, comment db
 		}
 	}
 	return "unavailable"
-}
-
-// FilterIMindChatAudience rechecks file permissions at event delivery, including
-// connections that joined before a shared root became private or was disabled.
-func (h *Handler) FilterIMindChatAudience(ctx context.Context, issueID string, users []string) []string {
-	id, err := util.ParseUUID(issueID)
-	if err != nil {
-		return nil
-	}
-	var root string
-	err = h.DB.QueryRow(ctx, `SELECT share_root_id FROM imind_group_chat WHERE issue_id=$1`, id).Scan(&root)
-	if err == pgx.ErrNoRows {
-		return users
-	}
-	if err != nil {
-		return nil
-	}
-	peer := h.imindPeerByRoot(root)
-	if peer == nil || !peer.Meta().Enabled {
-		return nil
-	}
-	issue, err := h.Queries.GetIssue(ctx, id)
-	if err != nil {
-		return nil
-	}
-	if _, ok := h.iMindNoteContext(ctx, issue); !ok {
-		return nil
-	}
-	meta := peer.Meta()
-	out := make([]string, 0, len(users))
-	for _, user := range users {
-		uid, err := util.ParseUUID(user)
-		if err != nil {
-			continue
-		}
-		if _, err := h.Queries.GetMemberByUserAndWorkspace(ctx, db.GetMemberByUserAndWorkspaceParams{UserID: uid, WorkspaceID: issue.WorkspaceID}); err != nil {
-			continue
-		}
-		if meta.Visibility == fileshare.VisibilityWorkspace || meta.OwnerUserID == user {
-			out = append(out, user)
-		}
-	}
-	return out
 }
 
 // A configured default applies on every message, including existing file chats.

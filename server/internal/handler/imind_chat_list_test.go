@@ -12,7 +12,7 @@ import (
 	"github.com/multica-ai/multica/server/internal/testutil"
 )
 
-func TestListIMindChatsKeepsJoinedMetadataWhenSourceUnavailable(t *testing.T) {
+func TestIMindChatMembersKeepMessagesWhenSourceUnavailable(t *testing.T) {
 	root := t.TempDir()
 	if err := os.Mkdir(filepath.Join(root, "iMind"), 0o755); err != nil {
 		t.Fatal(err)
@@ -30,7 +30,7 @@ func TestListIMindChatsKeepsJoinedMetadataWhenSourceUnavailable(t *testing.T) {
 		t.Fatal(err)
 	}
 	hub := fileshare.NewHub()
-	peer := fileshare.NewLocal(fileshare.ShareMeta{DaemonID: "persistent-chat-list", Machine: "list-source", OwnerUserID: testUserID, WorkspaceID: testWorkspaceID, Visibility: fileshare.VisibilityWorkspace, Enabled: true}, root)
+	peer := fileshare.NewLocal(fileshare.ShareMeta{DaemonID: "persistent-chat-list", Machine: "list-source", OwnerUserID: testUserID, WorkspaceID: testWorkspaceID, Visibility: fileshare.VisibilityWorkspace, Enabled: true, IMindScopeRevision: true, IMindRename: true, IMindMedia: true}, root)
 	if err := hub.Register(peer); err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,7 @@ func TestListIMindChatsKeepsJoinedMetadataWhenSourceUnavailable(t *testing.T) {
 		}
 		return nil
 	}
-	check := func(userID string, canRead bool) {
+	check := func(userID string) {
 		t.Helper()
 		chat := list(userID)
 		if chat == nil {
@@ -66,48 +66,66 @@ func TestListIMindChatsKeepsJoinedMetadataWhenSourceUnavailable(t *testing.T) {
 		if chat.Title != "iMind · persistent chat" || len(chat.Members) != 2 {
 			t.Fatalf("chat metadata changed: %+v", chat)
 		}
-		if canRead {
-			if chat.LastMessage == nil || chat.LastMessage.Content != "Protected message preview" || chat.Description != "Protected announcement" {
-				t.Fatalf("authorized preview missing: %+v", chat)
+		if chat.LastMessage == nil || chat.LastMessage.Content != "Protected message preview" || chat.Description != "Protected announcement" {
+			t.Fatalf("member cannot read chat preview: %+v", chat)
+		}
+		testutil.Call(t, h.GetIssue, withURLParam(groupChatRequestAs(t, userID, http.MethodGet, "/api/issues/"+issueID, nil), "id", issueID)).Want(http.StatusOK)
+		var page CommentPageResponse
+		testutil.Call(t, h.ListCommentsPage, withURLParam(groupChatRequestAs(t, userID, http.MethodGet, "/comments/page", nil), "id", issueID)).Want(http.StatusOK).JSON(&page)
+		if len(page.Comments) != 1 || page.Comments[0].Content != "Protected message preview" {
+			t.Fatalf("member cannot read message history: %+v", page)
+		}
+		var search struct {
+			Hits []GroupChatSearchHit `json:"hits"`
+		}
+		testutil.Call(t, h.SearchGroupChats, groupChatRequestAs(t, userID, http.MethodGet, "/api/group-chats/search?q=Protected", nil)).Want(http.StatusOK).JSON(&search)
+		found := false
+		for _, hit := range search.Hits {
+			if hit.ChatID == issueID {
+				found = true
 			}
-		} else {
-			if chat.LastMessage != nil || chat.Description != "" || len(chat.PendingSpeakers) != 0 || chat.UnreadCount != 0 {
-				t.Fatalf("unavailable source leaked protected details: %+v", chat)
-			}
-			if got := h.FilterIMindChatAudience(t.Context(), issueID, []string{userID}); len(got) != 0 {
-				t.Fatalf("unavailable file still receives realtime: %v", got)
-			}
-			testutil.Call(t, h.GetIssue, withURLParam(groupChatRequestAs(t, userID, http.MethodGet, "/api/issues/"+issueID, nil), "id", issueID)).Want(http.StatusNotFound)
+		}
+		if !found {
+			t.Fatal("member cannot search chat messages")
 		}
 	}
-	check(guest, true)
+	checkFileDenied := func(userID string) {
+		t.Helper()
+		testutil.Call(t, h.PostIMindNote, groupChatRequestAs(t, userID, http.MethodPost, "/api/imind/notes/read", map[string]string{"share_machine": peer.Meta().Machine, "id": note.ID})).Want(http.StatusNotFound)
+		testutil.Call(t, h.CreateComment, withURLParam(groupChatRequestAs(t, userID, http.MethodPost, "/comments", map[string]string{"content": "Process the original file"}), "id", issueID)).Want(http.StatusNotFound)
+	}
+	check(guest)
 	hub.Unregister(peer)
-	check(guest, false)
-	check(testUserID, false)
+	checkFileDenied(guest)
+	check(guest)
+	check(testUserID)
+	testutil.Call(t, h.ListCommentsPage, withURLParam(groupChatRequestAs(t, outsider, http.MethodGet, "/comments/page", nil), "id", issueID)).Want(http.StatusNotFound)
 	if chat := list(outsider); chat != nil {
 		t.Fatal("nonmember sees a joined chat")
 	}
 	if err := hub.Register(peer); err != nil {
 		t.Fatal(err)
 	}
-	check(guest, true)
+	check(guest)
 	if err := os.WriteFile(notePath, []byte("temporarily invalid Markdown"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	check(guest, false)
+	check(guest)
 	if err := os.WriteFile(notePath, []byte(raw), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	check(guest, true)
+	check(guest)
 	visibility := fileshare.VisibilityPrivate
 	if _, err := hub.UpdateAccess(testUserID, peer.Meta().DaemonID, fileshare.AccessPatch{Visibility: &visibility}); err != nil {
 		t.Fatal(err)
 	}
-	check(guest, false)
-	check(testUserID, true)
+	check(guest)
+	checkFileDenied(guest)
+	check(testUserID)
 	enabled := false
 	if _, err := hub.UpdateAccess(testUserID, peer.Meta().DaemonID, fileshare.AccessPatch{Enabled: &enabled}); err != nil {
 		t.Fatal(err)
 	}
-	check(testUserID, false)
+	check(testUserID)
+	checkFileDenied(testUserID)
 }

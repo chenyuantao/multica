@@ -710,7 +710,7 @@ func main() {
 		LLMMaxRetries:       llmMaxRetries,
 		LLMDisableThinking:  llmDisableThinking,
 	})
-	registerScopedListeners(bus, broadcaster, newGroupChatAudience(db.New(pool), h.FilterIMindChatAudience))
+	registerScopedListeners(bus, broadcaster, newGroupChatAudience(db.New(pool)))
 	var replicaQueries *db.Queries
 	if replicaPool != nil {
 		replicaQueries = db.New(replicaPool)

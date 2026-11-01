@@ -1115,8 +1115,11 @@ func (h *Handler) gateGroupChatIssue(w http.ResponseWriter, r *http.Request, iss
 		writeError(w, http.StatusNotFound, "issue not found")
 		return db.Issue{}, false
 	}
-	// File-specific iMind chats inherit the current file authorization. Chat
-	// membership alone must not preserve access after a shared root is revoked.
+	if r.Method == http.MethodGet || r.Method == http.MethodHead {
+		return issue, true
+	}
+	// Mutations may dispatch agents with source-file context and still require
+	// current file authorization. Reading the conversation only needs membership.
 	var rootID string
 	var noteID pgtype.UUID
 	err = h.DB.QueryRow(r.Context(), `SELECT share_root_id,note_id FROM imind_group_chat WHERE workspace_id=$1 AND issue_id=$2`, issue.WorkspaceID, issue.ID).Scan(&rootID, &noteID)
