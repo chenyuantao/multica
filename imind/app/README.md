@@ -2,6 +2,18 @@
 
 Flutter iOS/Android client for the local Multica backend. See `../CONTRACT.md` for API and Markdown storage contracts.
 
+## App branding
+
+The display name is `iMind` on Android and iOS. The vector icon master is kept
+in `assets/branding/icon.svg`; `icon.png` is its generated 2048px transparent
+render. Run `swift tool/generate_app_icons.swift` from this directory on macOS
+with `librsvg` installed (`brew install librsvg`) to regenerate that render and
+the Android density variants,
+adaptive icon foregrounds, and all iOS AppIcon sizes. iOS icons have an opaque
+white background; Android adaptive icons use a white background layer and a
+transparent foreground with mask-safe padding. App IDs remain unchanged for
+in-place updates.
+
 ## Android E2E
 
 Start the local backend and file-share daemon described in `../HANDOFF.md`. Boot a dedicated Android emulator and confirm `adb devices` reports it as `device`. The validation AVD uses Android 15 with 4 GB RAM; the older 2 GB AVD became unresponsive during repeated package installation. Preserve existing emulator data when investigating this.
