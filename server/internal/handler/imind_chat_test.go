@@ -37,12 +37,13 @@ func TestEnsureIMindChatIsIdempotentAndFileAccessGated(t *testing.T) {
 		"share_machine": "imind-chat-test", "type": "note", "title": "Chat note", "content": "saved content",
 	})
 	testutil.Call(t, h.PostIMindNotes, createReq).Want(http.StatusCreated).JSON(&note)
-	// Agent writes may add YAML metadata through the generic document tools.
+	// Agent writes may update the author and add YAML metadata through the generic document tools.
+	note.Author = "Writer"
+	note.Metadata = map[string]any{"title": "YAML title"}
 	raw, err := note.Note.Markdown()
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw = strings.Replace(raw, "imind_version: 1", "imind_version: 1\ntitle: YAML title\nauthor: Writer", 1)
 	var edited obsidianvault.FileContent
 	if err := peer.Call(ctx, fileshare.OpWrite, obsidianvault.EditRequest{Path: strings.TrimPrefix(note.Path, "imind-chat-test/"), Op: "overwrite", Content: raw, BaseRevision: note.Revision, Scope: fileshare.IMindScope}, &edited); err != nil {
 		t.Fatal(err)
@@ -129,8 +130,8 @@ func TestEnsureIMindChatIsIdempotentAndFileAccessGated(t *testing.T) {
 	renameReq := groupChatRequestAs(t, testUserID, http.MethodPut, "/api/imind/notes/"+note.ID, map[string]any{"share_machine": "imind-chat-test", "revision": note.Revision, "title": "Renamed Chat note", "content": "saved content", "transcript": ""})
 	testutil.Call(t, h.PutIMindNote, withURLParam(renameReq, "id", note.ID)).Want(http.StatusOK).JSON(&renamed)
 	note = renamed
-	if note.Metadata["author"] != "Writer" || note.Metadata["title"] != "YAML title" {
-		t.Fatalf("rename dropped agent metadata: %#v", note.Metadata)
+	if note.Author != "Writer" || note.Metadata["title"] != "YAML title" {
+		t.Fatalf("rename dropped agent metadata: author=%q metadata=%#v", note.Author, note.Metadata)
 	}
 
 	chat, err := h.Queries.GetIssue(ctx, parseUUID(issueID))

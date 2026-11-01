@@ -5,7 +5,9 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -23,8 +25,9 @@ func TestIMindClipPlaceholderPersistsContextAndDispatchesInItsFileChat(t *testin
 		w.Write([]byte("# 本地剪藏文章\n\n受控模型提取的正文。"))
 	}))
 	defer article.Close()
+	root := t.TempDir()
 	hub := fileshare.NewHub()
-	peer := fileshare.NewLocal(fileshare.ShareMeta{DaemonID: "clip-daemon", Machine: "clip-test", OwnerUserID: testUserID, WorkspaceID: testWorkspaceID, Visibility: fileshare.VisibilityWorkspace, Enabled: true, IMindScopeRevision: true, IMindRename: true, IMindMedia: true}, t.TempDir())
+	peer := fileshare.NewLocal(fileshare.ShareMeta{DaemonID: "clip-daemon", Machine: "clip-test", OwnerUserID: testUserID, WorkspaceID: testWorkspaceID, Visibility: fileshare.VisibilityWorkspace, Enabled: true, IMindScopeRevision: true, IMindRename: true, IMindMedia: true}, root)
 	if err := hub.Register(peer); err != nil {
 		t.Fatal(err)
 	}
@@ -82,22 +85,27 @@ func TestIMindClipPlaceholderPersistsContextAndDispatchesInItsFileChat(t *testin
 		t.Fatalf("placeholder not created immediately: %+v", note)
 	}
 	close(gate)
+	// Wait for the background rename before reading a directory snapshot through the API.
 	deadline := time.Now().Add(3 * time.Second)
 	for {
-		var current iMindNoteResponse
-		testutil.Call(t, h.PostIMindNote, groupChatRequestAs(t, testUserID, "POST", "/get", map[string]string{"share_machine": "clip-test", "id": note.ID})).Want(200).JSON(&current)
-		if current.Title == "静态文章初始标题" {
-			if current.Revision != note.Revision {
-				t.Fatal("initial naming changed the clipping revision")
-			}
-			note = current
+		_, err := os.Stat(filepath.Join(root, "iMind", "静态文章初始标题.md"))
+		if err == nil {
 			break
 		}
+		if !os.IsNotExist(err) {
+			t.Fatal(err)
+		}
 		if time.Now().After(deadline) {
-			t.Fatalf("background initial naming did not complete: %+v", current)
+			t.Fatal("background initial naming did not complete")
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+	var current iMindNoteResponse
+	testutil.Call(t, h.PostIMindNote, groupChatRequestAs(t, testUserID, "POST", "/get", map[string]string{"share_machine": "clip-test", "id": note.ID})).Want(200).JSON(&current)
+	if current.Title != "静态文章初始标题" || current.Revision != note.Revision {
+		t.Fatalf("initial naming did not preserve the clipping revision: %+v", current)
+	}
+	note = current
 	if note.Type != "clip" || note.Clip == nil || note.Clip.Prompt != "保留要点" {
 		t.Fatalf("placeholder lost context: %+v", note)
 	}

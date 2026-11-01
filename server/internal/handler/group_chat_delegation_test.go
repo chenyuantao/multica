@@ -25,6 +25,7 @@ func TestGroupChatRunDoesNotDelegate(t *testing.T) {
 		"title": "delegation off",
 		"members": []map[string]string{
 			{"member_type": "agent", "member_id": agentA},
+			{"member_type": "agent", "member_id": agentB},
 		},
 	})).Want(http.StatusCreated).JSON(&chat)
 	t.Cleanup(func() {
@@ -39,7 +40,7 @@ func TestGroupChatRunDoesNotDelegate(t *testing.T) {
 	})
 
 	taskID := createHandlerTestTaskForAgentOnIssue(t, agentA, chat.ID)
-	dbfx.Exec(t, `UPDATE agent_task_queue SET originator_user_id = $1 WHERE id = $2`, testUserID, taskID)
+	dbfx.Exec(t, `UPDATE agent_task_queue SET originator_user_id = $1, accountable_user_id = $1 WHERE id = $2`, testUserID, taskID)
 	asSpeaker := func(method, path string, body any) *http.Request {
 		req := newRequest(method, path, body)
 		req.Header.Set("X-Agent-ID", agentA)
@@ -102,7 +103,7 @@ func TestGroupChatRunDoesNotDelegate(t *testing.T) {
 		"status": "todo",
 	})).Want(http.StatusCreated).JSON(&ordinary)
 	ordinaryTask := createHandlerTestTaskForAgentOnIssue(t, agentA, ordinary.ID)
-	dbfx.Exec(t, `UPDATE agent_task_queue SET originator_user_id = $1 WHERE id = $2`, testUserID, ordinaryTask)
+	dbfx.Exec(t, `UPDATE agent_task_queue SET originator_user_id = $1, accountable_user_id = $1 WHERE id = $2`, testUserID, ordinaryTask)
 	t.Cleanup(func() {
 		testPool.Exec(ctx, `DELETE FROM agent_task_queue WHERE issue_id = $1`, ordinary.ID)
 		testPool.Exec(ctx, `DELETE FROM issue WHERE id = $1`, ordinary.ID)

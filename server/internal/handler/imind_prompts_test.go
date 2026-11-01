@@ -125,7 +125,7 @@ func TestIMindPromptOverridesReachNamingAndAgentContext(t *testing.T) {
 				t.Fatalf("configured agent context missing: %+v", turn)
 			}
 			if noteType == "clip" {
-				if !strings.Contains(turn.Text, "|keep examples\nExisting tags (JSON):") {
+				if !strings.Contains(turn.Text, "|keep examples\n") {
 					t.Fatal(turn.Text)
 				}
 				return

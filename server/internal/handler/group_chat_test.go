@@ -139,11 +139,12 @@ func TestGroupChatMembershipLifecycle(t *testing.T) {
 	if listed == nil || listed.LastCommentAt == nil || listed.LastMessage == nil {
 		t.Fatalf("chat after message = %+v, want last_comment_at and last_message", listed)
 	}
-	if listed.LastMessage.ID != created.ID {
-		t.Fatalf("last_message = %s, want %s", listed.LastMessage.ID, created.ID)
+	// Dispatch immediately appends the agent's thinking message after the user's message.
+	if listed.LastMessage.AuthorID != agentIn || listed.LastMessage.Content != groupchat.ThinkingMessage || listed.LastMessage.RefMessageID == nil || *listed.LastMessage.RefMessageID != created.ID {
+		t.Fatalf("last_message = %+v, want the agent's thinking reply to %s", listed.LastMessage, created.ID)
 	}
 	var lastCommentAt, commentCreatedAt string
-	dbfx.QueryRow(t, `SELECT i.last_comment_at::text, c.created_at::text FROM issue i JOIN comment c ON c.issue_id = i.id WHERE i.id = $1 AND c.id = $2`, chat.ID, created.ID).Scan(&lastCommentAt, &commentCreatedAt)
+	dbfx.QueryRow(t, `SELECT i.last_comment_at::text, c.created_at::text FROM issue i JOIN comment c ON c.issue_id = i.id WHERE i.id = $1 AND c.id = $2`, chat.ID, listed.LastMessage.ID).Scan(&lastCommentAt, &commentCreatedAt)
 	if lastCommentAt != commentCreatedAt {
 		t.Fatalf("last_comment_at = %s, want the message time %s", lastCommentAt, commentCreatedAt)
 	}
