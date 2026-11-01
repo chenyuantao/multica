@@ -20,6 +20,8 @@ import 'input_insets.dart';
 import 'note_actions.dart';
 import 'tag_picker.dart';
 import 'voice_input.dart';
+import 'note_quotes.dart';
+import 'quoted_markdown.dart';
 
 const _bg = Color(0xFFF2F2F6);
 const _ink = Color(0xFF1C1C1E);
@@ -1677,6 +1679,7 @@ class NoteEditor extends StatefulWidget {
 }
 
 class _NoteEditorState extends State<NoteEditor> {
+  final _quotes = NoteQuoteDraft();
   late final _title = TextEditingController(
     text: widget.note?['title'] as String? ?? '',
   );
@@ -1748,6 +1751,7 @@ class _NoteEditorState extends State<NoteEditor> {
         machine: machine,
         note: latest,
         prefetch: _chatPrefetch,
+        quotes: _quotes,
       );
       if (!mounted) return;
       final updated = await widget.api.getNote(machine, '${latest['id']}');
@@ -1768,6 +1772,7 @@ class _NoteEditorState extends State<NoteEditor> {
 
   @override
   void dispose() {
+    _quotes.dispose();
     _history.removeListener(_refresh);
     _body.removeListener(_refresh);
     _transcript.removeListener(_refresh);
@@ -2074,6 +2079,7 @@ class _NoteEditorState extends State<NoteEditor> {
       mediaApi: widget.api,
       mediaMachine: widget.machine,
       mediaNoteId: _note?['id'] as String?,
+      quotes: _quotes,
     );
   }
 
@@ -2097,6 +2103,7 @@ class _NoteEditorState extends State<NoteEditor> {
         machine: machine,
         note: _note!,
         prefetch: _chatPrefetch,
+        quotes: _quotes,
       );
     } catch (error) {
       if (mounted) setState(() => _error = '$error');
@@ -2256,6 +2263,7 @@ class RecordingDetail extends StatefulWidget {
 }
 
 class _RecordingDetailState extends State<RecordingDetail> {
+  final _quotes = NoteQuoteDraft();
   final AudioPlayer _player = AudioPlayer();
   NoteChatPrefetch? _chatPrefetch;
   late Map<String, dynamic> _note = widget.note;
@@ -2309,6 +2317,7 @@ class _RecordingDetailState extends State<RecordingDetail> {
 
   @override
   void dispose() {
+    _quotes.dispose();
     _contentHistory.removeListener(_rebuild);
     _transcriptHistory.removeListener(_rebuild);
     _content.dispose();
@@ -2636,6 +2645,7 @@ class _RecordingDetailState extends State<RecordingDetail> {
       machine: widget.machine,
       note: _note,
       prefetch: _chatPrefetch,
+      quotes: _quotes,
     );
     if (mounted) {
       _chatPrefetch = NoteChatPrefetch(widget.api, widget.machine, _note);
@@ -2941,7 +2951,8 @@ class _RecordingDetailState extends State<RecordingDetail> {
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
           child: content.isEmpty
               ? const Text('还没有笔记', style: TextStyle(color: _sub, fontSize: 16))
-              : IMindMarkdown(
+              : QuotedMarkdown(
+                  draft: _quotes,
                   data: content,
                   api: widget.api,
                   machine: widget.machine,
@@ -3724,7 +3735,9 @@ class _MarkdownEditor extends StatefulWidget {
     this.mediaMachine,
     this.mediaNoteId,
     this.pendingImages = const {},
+    this.quotes,
   });
+  final NoteQuoteDraft? quotes;
   final TextEditingController controller;
   final UndoHistoryController? history;
   final bool? editing;
@@ -3913,13 +3926,21 @@ class _MarkdownEditorState extends State<_MarkdownEditor> {
         child: raw.isEmpty
             ? const Text('正文', style: TextStyle(color: _sub, fontSize: 16))
             : SingleChildScrollView(
-                child: IMindMarkdown(
-                  data: raw,
-                  api: widget.mediaApi,
-                  machine: widget.mediaMachine,
-                  noteId: widget.mediaNoteId,
-                  pendingImages: widget.pendingImages,
-                ),
+                child: widget.quotes != null
+                    ? QuotedMarkdown(
+                        data: raw,
+                        draft: widget.quotes!,
+                        api: widget.mediaApi,
+                        machine: widget.mediaMachine,
+                        noteId: widget.mediaNoteId,
+                      )
+                    : IMindMarkdown(
+                        data: raw,
+                        api: widget.mediaApi,
+                        machine: widget.mediaMachine,
+                        noteId: widget.mediaNoteId,
+                        pendingImages: widget.pendingImages,
+                      ),
               ),
       ),
     );

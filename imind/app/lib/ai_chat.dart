@@ -9,6 +9,8 @@ import 'package:uuid/uuid.dart';
 import 'package:web_socket_channel/io.dart';
 
 import 'api.dart';
+import 'ai_composer.dart';
+import 'note_quotes.dart';
 import 'agent_mentions.dart';
 import 'note_chat_prefetch.dart';
 import 'chat_unread.dart';
@@ -31,6 +33,7 @@ Future<void> showNoteAiChat(
   required Map<String, dynamic> note,
   String? initialMessage,
   NoteChatPrefetch? prefetch,
+  NoteQuoteDraft? quotes,
 }) => showModalBottomSheet<void>(
   context: context,
   isScrollControlled: true,
@@ -45,6 +48,7 @@ Future<void> showNoteAiChat(
     note: note,
     initialMessage: initialMessage,
     prefetch: prefetch,
+    quotes: quotes,
   ),
 );
 
@@ -56,6 +60,7 @@ class NoteAiChatSheet extends StatefulWidget {
     required this.note,
     this.initialMessage,
     this.prefetch,
+    this.quotes,
     this.voiceRecorder,
     this.voiceSessionFactory,
     this.unread,
@@ -65,6 +70,7 @@ class NoteAiChatSheet extends StatefulWidget {
   final Map<String, dynamic> note;
   final String? initialMessage;
   final NoteChatPrefetch? prefetch;
+  final NoteQuoteDraft? quotes;
   final AudioRecorder? voiceRecorder;
   final VoiceSessionFactory? voiceSessionFactory;
   final ChatUnreadController? unread;
@@ -557,13 +563,15 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
 
   Future<void> _send([_PendingMessage? retry]) async {
     if (retry == null && _voice.active) return;
-    final text = retry?.text ?? _mentions.encode(_input.text).trim();
+    final message = _mentions.encode(_input.text).trim();
+    final text = retry?.text ?? widget.quotes?.compose(message) ?? message;
     if (text.isEmpty || _issueId == null) return;
     final pending = retry ?? _PendingMessage(text);
     if (retry == null) {
       setState(() {
         _pending.add(pending);
         _input.clear();
+        widget.quotes?.markSent(widget.quotes!.pending);
       });
       _scrollToEnd();
     } else {
@@ -878,65 +886,48 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
                 // Voice notices insert siblings without replacing the focused input.
                 key: const ValueKey('ai-composer'),
                 padding: const EdgeInsets.fromLTRB(16, 2, 16, 14),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _input,
-                        onTapOutside: (_) =>
-                            FocusManager.instance.primaryFocus?.unfocus(),
-                        // Keep the keyboard connection while dictation owns the draft.
-                        inputFormatters: [
-                          if (_voice.active)
-                            TextInputFormatter.withFunction(
-                              (oldValue, _) => oldValue,
-                            ),
-                        ],
-                        minLines: 1,
-                        maxLines: 5,
-                        decoration: const InputDecoration(
-                          hintText: '告诉 AI+ 你想怎么写…',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.all(Radius.circular(24)),
-                            borderSide: BorderSide.none,
-                          ),
-                          filled: true,
-                          fillColor: _aiBg,
-                          contentPadding: EdgeInsets.symmetric(
-                            horizontal: 18,
-                            vertical: 12,
-                          ),
-                        ),
-                        scrollPadding: EdgeInsets.only(
-                          bottom: MediaQuery.viewInsetsOf(context).bottom + 16,
-                        ),
-                        onSubmitted: (_) => _send(),
-                      ),
-                    ),
-                    TextFieldTapRegion(
-                      child: IconButton(
-                        tooltip: _voice.active ? '停止语音输入' : '语音输入',
-                        onPressed:
-                            _issueId == null ||
-                                _voice.connecting ||
-                                _voice.stopping
-                            ? null
-                            : () => _voice.active
-                                  ? _voice.stop()
-                                  : _voice.start(),
-                        icon: Icon(
-                          _voice.active ? Icons.stop_circle : Icons.mic_none,
-                          color: _voice.active ? _aiRed : _aiMuted,
+                    if (widget.quotes != null)
+                      ListenableBuilder(
+                        listenable: widget.quotes!,
+                        builder: (context, _) => Wrap(
+                          spacing: 8,
+                          children: [
+                            for (final quote in widget.quotes!.pending)
+                              InputChip(
+                                key: ValueKey('quote-chip-${quote.number}'),
+                                shape: const StadiumBorder(),
+                                label: Text('${quote.number}'),
+                                tooltip:
+                                    '${quote.markdown}\n${quote.instruction}',
+                                deleteButtonTooltipMessage:
+                                    '删除引用 ${quote.number}',
+                                onDeleted: () => widget.quotes!.remove(quote),
+                              ),
+                          ],
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton.filled(
-                      tooltip: '发送',
-                      onPressed: _issueId == null || _voice.active
+                    AiComposer(
+                      controller: _input,
+                      inputFormatters: [
+                        if (_voice.active)
+                          TextInputFormatter.withFunction(
+                            (oldValue, _) => oldValue,
+                          ),
+                      ],
+                      onSend: _issueId == null || _voice.active
                           ? null
                           : () => _send(),
-                      icon: const Icon(Icons.arrow_upward),
+                      voiceActive: _voice.active,
+                      onVoice:
+                          _issueId == null ||
+                              _voice.connecting ||
+                              _voice.stopping
+                          ? null
+                          : () =>
+                                _voice.active ? _voice.stop() : _voice.start(),
                     ),
                   ],
                 ),
