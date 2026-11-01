@@ -1,0 +1,133 @@
+name: iMind Android Debug
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, feat/group-chat-im]
+    paths:
+      - imind/app/**
+      - .github/workflows/imind-android-debug.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: imind-android-debug
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: write
+    env:
+      PUB_HOSTED_URL: https://pub.flutter-io.cn
+      UPDATE_MANIFEST: https://github.com/${{ github.repository }}/releases/download/imind-debug/version.json
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    defaults:
+      run:
+        working-directory: imind/app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.8'
+          channel: stable
+          cache: true
+      - name: Restore stable debug signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.IMIND_ANDROID_DEBUG_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$KEYSTORE_BASE64" || { echo '::error::Configure IMIND_ANDROID_DEBUG_KEYSTORE_BASE64 with the existing Android debug keystore.'; exit 1; }
+          umask 077
+          python3 - <<'PY'
+          import base64, os, pathlib
+          path = pathlib.Path(os.environ['RUNNER_TEMP']) / 'imind-debug.keystore'
+          path.write_bytes(base64.b64decode(os.environ['KEYSTORE_BASE64'], validate=True))
+          with open(os.environ['GITHUB_ENV'], 'a') as output:
+              output.write(f'IMIND_DEBUG_KEYSTORE={path}\n')
+          PY
+      - name: Verify
+        run: |
+          flutter pub get --enforce-lockfile
+          flutter analyze
+          flutter test --concurrency=1
+      - name: Build APK and manifest
+        env:
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: |
+          code=$((1000 + BUILD_NUMBER))
+          name="1.0.0-debug.$code"
+          echo "IMIND_BUILD_CODE=$code" >> "$GITHUB_ENV"
+          echo "IMIND_BUILD_NAME=$name" >> "$GITHUB_ENV"
+          flutter build apk --debug --build-number="$code" --build-name="$name" \
+            --dart-define="IMIND_UPDATE_MANIFEST_URL=$UPDATE_MANIFEST"
+          mkdir -p build/distribution
+          cp build/app/outputs/flutter-apk/app-debug.apk build/distribution/imind-debug.apk
+          export code name
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib
+          apk = pathlib.Path('build/distribution/imind-debug.apk')
+          code = int(os.environ['code'])
+          manifest = {
+              'application_id': 'ai.multica.imind_app',
+              'channel': 'imind-debug',
+              'version_code': code,
+              'version_name': os.environ['name'],
+              'apk_url': f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/releases/download/imind-debug-{code}/imind-debug.apk",
+              'sha256': hashlib.file_digest(apk.open('rb'), 'sha256').hexdigest(),
+              'size': apk.stat().st_size,
+              'commit': os.environ['GITHUB_SHA'],
+          }
+          pathlib.Path('build/distribution/version.json').write_text(json.dumps(manifest, indent=2) + '\n')
+          PY
+      - name: Publish version and update channel
+        run: |
+          # The channel points to immutable version assets. Never replace an APK
+          # that an installed client may already be downloading.
+          tag="imind-debug-$IMIND_BUILD_CODE"
+          published=false
+          if gh release view "$tag" --json isDraft --jq '.isDraft' > build/distribution/is-draft; then
+            if [[ "$(cat build/distribution/is-draft)" == false ]]; then
+              echo "::notice::Build $tag was already published; leaving its assets unchanged."
+              published=true
+              gh release download "$tag" --pattern version.json --dir build/distribution --clobber
+            fi
+          else
+            gh release create "$tag" --target "$GITHUB_SHA" --draft --prerelease --latest=false \
+              --title "iMind Android $IMIND_BUILD_NAME" \
+              --notes "Android debug testing build. Install imind-debug.apk once to enable update checks. Commit: $GITHUB_SHA"
+          fi
+          if [[ "$published" == false ]]; then
+            gh release upload "$tag" build/distribution/imind-debug.apk build/distribution/version.json --clobber
+            gh release edit "$tag" --draft=false --latest=false
+          fi
+          if ! gh release view imind-debug >/dev/null 2>&1; then
+            gh release create imind-debug --target "$GITHUB_SHA" --prerelease --latest=false \
+              --title 'iMind Android debug channel' \
+              --notes 'version.json points to the current Android debug build. Versioned releases contain the installable APKs.'
+          fi
+          # An older queued run must not move the channel backwards.
+          has_manifest=$(gh release view imind-debug --json assets --jq 'any(.assets[]; .name == "version.json")')
+          if [[ "$has_manifest" == true ]]; then
+            gh release download imind-debug --pattern version.json --dir build/current --clobber
+          fi
+          if python3 - <<'PY'
+          import json, os, pathlib, sys
+          current = pathlib.Path('build/current/version.json')
+          if current.exists():
+              if json.loads(current.read_text())['version_code'] >= int(os.environ['IMIND_BUILD_CODE']):
+                  sys.exit(1)
+          PY
+          then
+            gh release upload imind-debug build/distribution/version.json --clobber
+          fi
+      - name: Remove signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/imind-debug.keystore"

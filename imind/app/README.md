@@ -14,6 +14,64 @@ white background; Android adaptive icons use a white background layer and a
 transparent foreground with mask-safe padding. App IDs remain unchanged for
 in-place updates.
 
+## Android debug distribution and updates
+
+`.github/workflows/imind-android-debug.yml` builds and publishes on pushes that
+change `imind/app/` on `main` or `feat/group-chat-im`, or through a manual Actions
+run. It runs analysis and Flutter tests before building a normal debug APK with
+no test entrypoint or embedded account session. The API base remains the app's
+default public backend.
+
+Configure the repository secret `IMIND_ANDROID_DEBUG_KEYSTORE_BASE64` with the
+base64-encoded **existing** `~/.android/debug.keystore` used for the currently
+installed app (standard `androiddebugkey` alias and `android` passwords). Supply
+the key to `gh secret set` via stdin; never print it or commit it. CI restores it
+to a private temporary file and deletes it after the job. It must remain stable
+across builds: generating a new key for each runner prevents in-place updates.
+For local distribution builds, `IMIND_DEBUG_KEYSTORE=/absolute/path/to/key`
+selects the same key; ordinary local builds keep Flutter's usual debug key.
+
+The version code is `1000 + github.run_number` for this workflow; do not reset
+its numbering or distribute local builds with higher version codes. Each build
+has its own prerelease `imind-debug-<version_code>` containing `imind-debug.apk`
+and `version.json`. Published APKs are never overwritten. The separate
+`imind-debug` prerelease contains the moving `version.json` channel pointer;
+neither channel changes the repository's latest stable release. Reruns can
+repair channel publication using the already published build manifest, and
+older queued runs cannot roll the pointer backwards.
+
+Install the first versioned APK manually. Older apps without the updater cannot
+discover the first update. The distribution build embeds:
+
+```sh
+--dart-define=IMIND_UPDATE_MANIFEST_URL=https://github.com/chenyuantao/multica/releases/download/imind-debug/version.json
+```
+
+On startup and foreground resume (at most once every five minutes per process),
+the app checks that channel and prompts only for a higher version. Choosing
+Download fetches the APK, checks its byte size, SHA-256, package name, version
+code and signing certificate, then opens Android's installer. If Android asks
+for permission to install from iMind, enable it, return and choose Continue
+installation. Installation requires system confirmation. Matching package and
+signing key preserve existing app data. Download can be cancelled; network or
+metadata failures leave the app usable. Declining a version suppresses its
+prompt until the process restarts. Returning from background is checked too;
+it does not require force-stopping the app.
+
+Unconfigured local builds, integration-test builds, iOS and release mode do not
+check this channel. The installer permission and APK file provider exist only
+in the Android debug manifest. Public repositories need no download token. Do
+not embed a GitHub token for a private repository; private distribution requires
+a separate authenticated backend and is not supported by this direct-download
+channel. Reachability of GitHub and its asset hosts is required on the device.
+
+For a local bootstrap build, run from `imind/app/`:
+
+```sh
+flutter build apk --debug \
+  --dart-define=IMIND_UPDATE_MANIFEST_URL=https://github.com/chenyuantao/multica/releases/download/imind-debug/version.json
+```
+
 ## Android E2E
 
 Start the local backend and file-share daemon described in `../HANDOFF.md`. Boot a dedicated Android emulator and confirm `adb devices` reports it as `device`. The validation AVD uses Android 15 with 4 GB RAM; the older 2 GB AVD became unresponsive during repeated package installation. Preserve existing emulator data when investigating this.

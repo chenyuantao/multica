@@ -19,9 +19,13 @@ import java.io.File
 class MainActivity : FlutterActivity() {
     private val chatChannel = "imind_chats"
     private val badgeNotification = 10
+    private var debugUpdater: DebugAppUpdater? = null
 
     override fun configureFlutterEngine(engine: FlutterEngine) {
         super.configureFlutterEngine(engine)
+        if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) {
+            debugUpdater = DebugAppUpdater(this, engine.dartExecutor.binaryMessenger)
+        }
         val manager = getSystemService(NotificationManager::class.java)
         if (Build.VERSION.SDK_INT >= 26) {
             manager.createNotificationChannel(NotificationChannel(chatChannel, "AI+ 群聊", NotificationManager.IMPORTANCE_DEFAULT).apply {
@@ -106,6 +110,11 @@ class MainActivity : FlutterActivity() {
                 result.success(null)
             } catch (e: Exception) { result.error("open_failed", e.message, null) }
         }
+    }
+
+    override fun onDestroy() {
+        debugUpdater?.close()
+        super.onDestroy()
     }
 
     private fun canNotify(): Boolean = Build.VERSION.SDK_INT < 33 ||

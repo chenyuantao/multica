@@ -1,5 +1,13 @@
 # Release runbook
 
+## iMind Android debug builds
+
+The independent `iMind Android Debug` workflow publishes versioned APK
+prereleases and an `imind-debug` manifest channel. It does not publish a stable
+release or modify the desktop/backend release workflow. Signing setup, initial
+installation, version numbering and update behavior are documented in
+[`imind/app/README.md`](../imind/app/README.md#android-debug-distribution-and-updates).
+
 ## Normal release
 
 Release from a reviewed commit on `main` by creating and pushing a new semantic

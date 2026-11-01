@@ -5,6 +5,9 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Distribution builds restore the existing debug key from a CI secret.
+val imindDebugKeystore = System.getenv("IMIND_DEBUG_KEYSTORE")
+
 android {
     namespace = "ai.multica.imind_app"
     compileSdk = flutter.compileSdkVersion
@@ -28,6 +31,17 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+    }
+
+    signingConfigs {
+        getByName("debug") {
+            if (!imindDebugKeystore.isNullOrBlank()) {
+                storeFile = file(imindDebugKeystore)
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
+        }
     }
 
     buildTypes {

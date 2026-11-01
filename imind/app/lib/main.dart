@@ -20,6 +20,7 @@ import 'input_insets.dart';
 import 'note_actions.dart';
 import 'tag_picker.dart';
 import 'voice_input.dart';
+import 'debug_update.dart';
 import 'note_quotes.dart';
 import 'quoted_markdown.dart';
 
@@ -50,10 +51,12 @@ class IMindApp extends StatelessWidget {
         scaffoldBackgroundColor: _bg,
         colorScheme: ColorScheme.fromSeed(seedColor: _dark),
       ),
-      home: SessionGate(
-        initialToken: initialToken,
-        api: api,
-        sessionStore: sessionStore,
+      home: DebugUpdateGate(
+        child: SessionGate(
+          initialToken: initialToken,
+          api: api,
+          sessionStore: sessionStore,
+        ),
       ),
     );
   }
