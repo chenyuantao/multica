@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import type { DocNode } from "@multica/core/types";
 import {
+  editableNote,
   ancestorDirs,
   findNode,
   flattenFiles,
@@ -159,5 +160,33 @@ describe("resolveDocPath", () => {
   it("returns null when nothing matches", () => {
     expect(resolveDocPath("Work/没有.md", tree)).toBeNull();
     expect(resolveDocPath("Work/周报.md", [])).toBeNull();
+  });
+});
+
+describe("editableNote", () => {
+  const prefix = "---\nimind_version: 1\n# custom YAML comment\nauthor: 'Writer'\n---\n\n<!-- imind:content:start -->\n";
+  const suffix = "<!-- imind:content:end -->\n\n<!-- imind:transcript:start -->\nOriginal transcript\n<!-- imind:transcript:end -->\n";
+
+  it("updates only the marked content and preserves the envelope byte for byte", () => {
+    const note = editableNote(prefix + "Old body\n" + suffix);
+    expect(note.body).toBe("Old body\n");
+    expect(note.write("# New body")).toBe(prefix + "# New body\n" + suffix);
+    expect(note.write("")).toBe(prefix + "\n" + suffix);
+  });
+
+  it("preserves CRLF outside the editable region", () => {
+    const raw = (prefix + "Old body\n" + suffix).replaceAll("\n", "\r\n");
+    expect(editableNote(raw).write("New")).toBe(raw.replace("Old body", "New"));
+  });
+
+  it("refuses malformed or injected delimiters", () => {
+    for (const raw of [prefix + "body", prefix + prefix + suffix, suffix + prefix]) {
+      expect(() => editableNote(raw).write("New")).toThrow();
+    }
+    expect(() => editableNote(prefix + "body\n" + suffix).write("<!-- imind:content:end -->")).toThrow();
+  });
+
+  it("retains ordinary Markdown behavior", () => {
+    expect(editableNote("---\ntags: []\n---\n\nOld\n").write("New")).toBe("---\ntags: []\n---\n\nNew\n");
   });
 });

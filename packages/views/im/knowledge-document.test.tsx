@@ -93,6 +93,25 @@ describe("KnowledgeDocument", () => {
     expect(saveMutateAsync.mock.calls[1]?.[0]).toMatchObject({ base_revision: "r2" });
   });
 
+  it("keeps iMind markers and transcript outside the editor when saving", async () => {
+    const original = file.content;
+    const prefix = "---\nimind_version: 1\n---\n\n<!-- imind:content:start -->\n";
+    const suffix = "<!-- imind:content:end -->\n\n<!-- imind:transcript:start -->\nSpoken words\n<!-- imind:transcript:end -->\n";
+    file.content = prefix + "Body\n" + suffix;
+    try {
+      saveMutateAsync.mockImplementation(async (input) => ({ ...file, content: input.content, revision: "r2" }));
+      renderWithI18n(<KnowledgeDocument path={file.path} />);
+      const body = screen.getByRole("textbox", { name: "body" });
+      expect(body).toHaveValue("Body\n");
+      fireEvent.change(body, { target: { value: "Edited" } });
+      await waitFor(() => expect(saveMutateAsync).toHaveBeenCalledWith(expect.objectContaining({
+        content: prefix + "Edited\n" + suffix,
+      })));
+    } finally {
+      file.content = original;
+    }
+  });
+
   it("offers retry after a failed save", async () => {
     saveMutateAsync.mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce({ ...file, revision: "r2" });
     renderWithI18n(<KnowledgeDocument path={file.path} />);

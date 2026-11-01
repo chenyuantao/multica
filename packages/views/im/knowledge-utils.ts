@@ -115,3 +115,33 @@ export function resolveDocPath(cardPath: string, nodes: readonly DocNode[]): str
   matches.sort((a, b) => time(b) - time(a) || a.path.localeCompare(b.path));
   return matches[0]?.path ?? null;
 }
+
+/** Keeps iMind's envelope outside the rich editor, including the transcript. */
+export function editableNote(markdown: string): {
+  body: string;
+  write: (body: string) => string;
+} {
+  const start = "<!-- imind:content:start -->";
+  const end = "<!-- imind:content:end -->";
+  if (!markdown.includes("<!-- imind:")) {
+    const split = splitFrontmatter(markdown);
+    return { body: split.body, write: (body) => joinFrontmatter(split.frontmatter, body) };
+  }
+  const from = markdown.indexOf(start) + start.length;
+  const to = markdown.indexOf(end);
+  if (markdown.split(start).length !== 2 || markdown.split(end).length !== 2 || to < from ||
+      !/^\r?\n/.test(markdown.slice(from)) || !/\r?\n$/.test(markdown.slice(from, to))) {
+    // Never let a malformed managed document fall through to whole-body editing.
+    return { body: markdown, write: () => { throw new Error("Invalid iMind content delimiters"); } };
+  }
+  const newline = markdown.startsWith("\r\n", from) ? "\r\n" : "\n";
+  const prefix = markdown.slice(0, from) + newline;
+  const suffix = markdown.slice(to);
+  return {
+    body: markdown.slice(from + newline.length, to),
+    write: (body) => {
+      if (body.includes("<!-- imind:")) throw new Error("Reserved iMind delimiter");
+      return prefix + body.replace(/\s+$/, "") + newline + suffix;
+    },
+  };
+}

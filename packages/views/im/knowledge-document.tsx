@@ -14,7 +14,7 @@ import { DragStrip } from "../platform";
 import { AskAIBadge } from "./ask-ai-badge";
 import { useExcerptReveal } from "./doc-excerpt-reveal";
 import { collapseVaultImages, expandVaultImages } from "./knowledge-images";
-import { joinFrontmatter, noteTitle, parentDir, splitFrontmatter } from "./knowledge-utils";
+import { editableNote, noteTitle, parentDir } from "./knowledge-utils";
 
 interface KnowledgeDocumentProps {
   path: string;
@@ -88,10 +88,10 @@ function NoteEditor({
   const save = useSaveDocFile();
   const editorRef = useRef<ContentEditorRef>(null);
   const [initial] = useState(() => {
-    const split = splitFrontmatter(file.content);
-    return { frontmatter: split.frontmatter, body: expandVaultImages(file.path, split.body) };
+    const split = editableNote(file.content);
+    return { envelope: split, body: expandVaultImages(file.path, split.body) };
   });
-  const frontmatterRef = useRef(initial.frontmatter);
+  const envelopeRef = useRef(initial.envelope);
   // The server text this editor last agreed with; every save is based on it.
   const baseRef = useRef({ revision: file.revision, content: file.content });
   const pendingRef = useRef<string | null>(null);
@@ -136,13 +136,16 @@ function NoteEditor({
   const flush = async () => {
     if (discardedRef.current || savingRef.current || pendingRef.current === null) return;
     const body = pendingRef.current;
-    const content = joinFrontmatter(frontmatterRef.current, collapseVaultImages(body));
     pendingRef.current = null;
     const base = baseRef.current;
-    if (content === base.content) return;
     savingRef.current = true;
     report({ kind: "saving" });
     try {
+      const content = envelopeRef.current.write(collapseVaultImages(body));
+      if (content === base.content) {
+        report({ kind: "idle" });
+        return;
+      }
       const saved = await save.mutateAsync({
         path: file.path,
         content,
@@ -150,11 +153,11 @@ function NoteEditor({
         base_content: base.content,
       });
       baseRef.current = { revision: saved.revision, content: saved.content };
+      envelopeRef.current = editableNote(saved.content);
       // A merge with a concurrent change came back different; show it unless
       // the user has typed again, in which case the next save merges again.
       if (saved.content !== content && pendingRef.current === null) {
-        const next = splitFrontmatter(saved.content);
-        frontmatterRef.current = next.frontmatter;
+        const next = envelopeRef.current;
         editorRef.current?.adoptContent(expandVaultImages(file.path, next.body));
       }
       report({ kind: "saved" });
