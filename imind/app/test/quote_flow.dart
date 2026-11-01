@@ -153,3 +153,100 @@ Future<void> runQuoteFlow(
   await shot('05-chat-sent-message');
   expect(tester.takeException(), isNull);
 }
+
+Future<void> runMarkDeletionFlow(
+  WidgetTester tester, {
+  Future<void> Function(String)? capture,
+  bool recording = false,
+}) async {
+  final api = QuoteFlowApi();
+  final note = {
+    'id': noteId,
+    'revision': 'r',
+    'type': recording ? 'recording' : 'note',
+    'title': '标记删除',
+    'content': '**第一段**\n\n第二段',
+  };
+  addTearDown(api.close);
+  await tester.pumpWidget(
+    MaterialApp(
+      home: recording
+          ? RecordingDetail(api: api, machine: 'mbp', note: note)
+          : NoteEditor(api: api, machine: 'mbp', note: note),
+    ),
+  );
+  await tester.pumpAndSettle();
+  if (recording) {
+    await tester.tap(find.text('笔记'));
+    await tester.pumpAndSettle();
+  }
+  final draft = tester
+      .widget<QuotedMarkdown>(find.byType(QuotedMarkdown))
+      .draft;
+  draft.add(0, 3, '**第一段**', '补充');
+  draft.add(4, 7, '第二段', '精简');
+  await tester.pumpAndSettle();
+  Offset markPoint(String text) {
+    final paragraph = find.descendant(
+      of: find.byType(QuotedMarkdown),
+      matching: find.byWidgetPredicate(
+        (w) => w is RichText && w.text.toPlainText() == text,
+      ),
+    );
+    final render = tester.renderObject<RenderParagraph>(paragraph);
+    final boxes = render.getBoxesForSelection(
+      TextSelection(baseOffset: 0, extentOffset: text.length),
+    );
+    return render.localToGlobal(boxes.first.toRect().center);
+  }
+
+  Future<void> tapMark(String text) async {
+    await tester.tapAt(markPoint(text));
+    await tester.pumpAndSettle();
+  }
+
+  await tapMark('第一段');
+  expect(draft.deleting, isTrue);
+  expect(draft.selected, {1});
+  if (capture != null) await capture('06-single-selected');
+  expect(find.text('取消'), findsOneWidget);
+  expect(find.text('删除'), findsOneWidget);
+  expect(find.byTooltip('返回'), findsNothing);
+  expect(find.byTooltip('更多'), findsNothing);
+  expect(find.byType(ActionPill), findsNothing);
+  expect(
+    ModalRoute.of(
+      tester.element(find.byType(recording ? RecordingDetail : NoteEditor)),
+    )!.popDisposition,
+    RoutePopDisposition.doNotPop,
+  );
+  await tester.longPressAt(markPoint('第二段'));
+  await tester.pumpAndSettle();
+  expect(find.text('复制'), findsNothing);
+  expect(find.text('AI+ 划词评论'), findsNothing);
+  await tapMark('第二段');
+  expect(draft.selected, {1, 2});
+  if (capture != null) await capture('07-multi-selected');
+  await tapMark('第二段');
+  expect(draft.selected, {1});
+  await tester.tap(find.text('删除'));
+  await tester.pumpAndSettle();
+  expect(draft.quotes.single.number, 2);
+  expect(draft.pending.single.number, 2);
+  expect(draft.deleting, isTrue);
+  expect(draft.selected, isEmpty);
+  expect(
+    tester.widget<TextButton>(find.widgetWithText(TextButton, '删除')).onPressed,
+    isNull,
+  );
+  expect(find.byType(ActionPill), findsNothing);
+  if (capture != null) await capture('08-after-delete');
+  await tester.tap(find.text('取消'));
+  await tester.pumpAndSettle();
+  expect(draft.deleting, isFalse);
+  expect(find.byType(ActionPill), findsOneWidget);
+  if (!recording) expect(find.text('应用'), findsOneWidget);
+  expect(find.byTooltip('返回'), findsOneWidget);
+  expect(find.byTooltip('更多'), findsOneWidget);
+  expect(api.sent, isEmpty);
+}

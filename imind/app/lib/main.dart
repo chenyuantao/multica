@@ -2086,7 +2086,7 @@ class _NoteEditorState extends State<NoteEditor> {
     );
   }
 
-  Future<void> _ai() async {
+  Future<void> _ai({String? initialMessage}) async {
     final machine = widget.machine;
     if (machine == null || _saving) return;
     setState(() {
@@ -2107,6 +2107,7 @@ class _NoteEditorState extends State<NoteEditor> {
         note: _note!,
         prefetch: _chatPrefetch,
         quotes: _quotes,
+        initialMessage: initialMessage,
       );
     } catch (error) {
       if (mounted) setState(() => _error = '$error');
@@ -2120,145 +2121,180 @@ class _NoteEditorState extends State<NoteEditor> {
 
   @override
   Widget build(BuildContext context) {
-    return EditExitGuard(
-      editing: _editing,
-      busy: _saving,
-      popping: _popping,
-      onDiscard: _discard,
-      child: Scaffold(
-        resizeToAvoidBottomInset: false,
-        backgroundColor: Colors.white,
-        appBar: AppBar(
-          backgroundColor: Colors.white,
-          elevation: 0,
-          automaticallyImplyLeading: false,
-          leadingWidth: _editing ? 80 : null,
-          leading: _editing
-              ? TextButton(
-                  onPressed: _saving ? null : _discardEdit,
-                  child: const Text(
-                    '放弃',
-                    style: TextStyle(color: _ink, fontSize: 16),
+    return ListenableBuilder(
+      listenable: _quotes,
+      builder: (context, _) => PopScope(
+        canPop: !_quotes.deleting,
+        child: EditExitGuard(
+          editing: _editing,
+          busy: _saving,
+          popping: _popping,
+          onDiscard: _discard,
+          child: Scaffold(
+            resizeToAvoidBottomInset: false,
+            backgroundColor: Colors.white,
+            appBar: AppBar(
+              backgroundColor: Colors.white,
+              elevation: 0,
+              automaticallyImplyLeading: false,
+              leadingWidth: _editing || _quotes.deleting ? 80 : null,
+              leading: _quotes.deleting
+                  ? TextButton(
+                      onPressed: _quotes.cancelDeletion,
+                      child: const Text('取消'),
+                    )
+                  : _editing
+                  ? TextButton(
+                      onPressed: _saving ? null : _discardEdit,
+                      child: const Text(
+                        '放弃',
+                        style: TextStyle(color: _ink, fontSize: 16),
+                      ),
+                    )
+                  : IconButton(
+                      tooltip: '返回',
+                      onPressed: _leave,
+                      icon: const Icon(Icons.arrow_back),
+                    ),
+              centerTitle: false,
+              titleSpacing: 0,
+              title: _editing ? null : DetailTitle(_title.text),
+              actions: [
+                if (_quotes.deleting) ...[
+                  TextButton(
+                    onPressed: _quotes.selected.isEmpty
+                        ? null
+                        : _quotes.deleteSelected,
+                    child: const Text('删除', style: TextStyle(color: _red)),
                   ),
-                )
-              : IconButton(
-                  tooltip: '返回',
-                  onPressed: _leave,
-                  icon: const Icon(Icons.arrow_back),
-                ),
-          centerTitle: false,
-          titleSpacing: 0,
-          title: _editing ? null : DetailTitle(_title.text),
-          actions: [
-            if (_editing) ...[
-              IconButton(
-                tooltip: '撤销',
-                onPressed: _history.value.canUndo ? _history.undo : null,
-                icon: const Icon(Icons.undo),
-              ),
-              IconButton(
-                tooltip: '重做',
-                onPressed: _history.value.canRedo ? _history.redo : null,
-                icon: const Icon(Icons.redo),
-              ),
-              TextButton(
-                onPressed: _saving ? null : _save,
-                child: const Text(
-                  '保存',
-                  style: TextStyle(color: _blue, fontWeight: FontWeight.w600),
-                ),
-              ),
-            ] else if (_note != null) ...[
-              NoteActions(
-                note: _note!,
-                enabled: !_saving,
-                onTag: _markTag,
-                onAiTag: _aiTag,
-                onRename: _rename,
-                onAiRename: _aiRename,
-                onDelete: _confirmDelete,
-              ),
-            ],
-          ],
-        ),
-        body: Stack(
-          children: [
-            Padding(
-              padding: EdgeInsets.fromLTRB(
-                16,
-                0,
-                16,
-                16 + inputBottomInset(context),
-              ),
-              child: Column(
-                children: [
-                  if (_editing)
-                    TextField(
-                      controller: _title,
-                      focusNode: _titleFocus,
-                      readOnly: !_editing,
-                      onTap: () => _beginEdit(title: true),
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w800,
-                      ),
-                      decoration: const InputDecoration(
-                        hintText: '无标题',
-                        border: InputBorder.none,
+                ] else if (_editing) ...[
+                  IconButton(
+                    tooltip: '撤销',
+                    onPressed: _history.value.canUndo ? _history.undo : null,
+                    icon: const Icon(Icons.undo),
+                  ),
+                  IconButton(
+                    tooltip: '重做',
+                    onPressed: _history.value.canRedo ? _history.redo : null,
+                    icon: const Icon(Icons.redo),
+                  ),
+                  TextButton(
+                    onPressed: _saving ? null : _save,
+                    child: const Text(
+                      '保存',
+                      style: TextStyle(
+                        color: _blue,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                  if (_error != null)
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(_error!, style: const TextStyle(color: _red)),
-                    ),
-                  if (widget.focusTranscript) ...[
-                    const Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text('语音原文', style: TextStyle(color: _sub)),
-                    ),
-                    Expanded(child: _editor(_transcript)),
-                  ] else ...[
-                    Expanded(child: _editor(_body)),
-                    if (widget.showTranscript &&
-                        _transcript.text.isNotEmpty) ...[
-                      const Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text('语音原文', style: TextStyle(color: _sub)),
-                      ),
-                      SizedBox(
-                        height: 220,
-                        child: _MarkdownEditor(controller: _transcript),
-                      ),
-                    ],
-                  ],
+                  ),
+                ] else if (_note != null) ...[
+                  NoteActions(
+                    note: _note!,
+                    enabled: !_saving,
+                    onTag: _markTag,
+                    onAiTag: _aiTag,
+                    onRename: _rename,
+                    onAiRename: _aiRename,
+                    onDelete: _confirmDelete,
+                  ),
                 ],
-              ),
+              ],
             ),
-            if (!_editing && _note != null)
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 28,
-                child: Center(
-                  child: ActionPill(
+            body: Stack(
+              children: [
+                Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    16,
+                    0,
+                    16,
+                    16 + inputBottomInset(context),
+                  ),
+                  child: Column(
                     children: [
-                      AiChatButton(
-                        noteId: '${_note!['id']}',
-                        machine: widget.machine,
-                        onPressed: _saving ? null : _ai,
-                        pill: true,
-                      ),
-                      PillButton(
-                        icon: Icons.edit_outlined,
-                        label: '编辑',
-                        onPressed: _saving ? null : _beginEdit,
-                      ),
+                      if (_editing)
+                        TextField(
+                          controller: _title,
+                          focusNode: _titleFocus,
+                          readOnly: !_editing,
+                          onTap: () => _beginEdit(title: true),
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                          ),
+                          decoration: const InputDecoration(
+                            hintText: '无标题',
+                            border: InputBorder.none,
+                          ),
+                        ),
+                      if (_error != null)
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            _error!,
+                            style: const TextStyle(color: _red),
+                          ),
+                        ),
+                      if (widget.focusTranscript) ...[
+                        const Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text('语音原文', style: TextStyle(color: _sub)),
+                        ),
+                        Expanded(child: _editor(_transcript)),
+                      ] else ...[
+                        Expanded(child: _editor(_body)),
+                        if (widget.showTranscript &&
+                            _transcript.text.isNotEmpty) ...[
+                          const Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text('语音原文', style: TextStyle(color: _sub)),
+                          ),
+                          SizedBox(
+                            height: 220,
+                            child: _MarkdownEditor(controller: _transcript),
+                          ),
+                        ],
+                      ],
                     ],
                   ),
                 ),
-              ),
-          ],
+                if (!_editing && _note != null && !_quotes.deleting)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 28,
+                    child: Center(
+                      child: ListenableBuilder(
+                        listenable: _quotes,
+                        builder: (context, _) => ActionPill(
+                          children: [
+                            AiChatButton(
+                              noteId: '${_note!['id']}',
+                              machine: widget.machine,
+                              onPressed: _saving ? null : _ai,
+                              pill: true,
+                            ),
+                            PillButton(
+                              icon: Icons.edit_outlined,
+                              label: '编辑',
+                              onPressed: _saving ? null : _beginEdit,
+                            ),
+                            if (_quotes.pending.isNotEmpty)
+                              PillButton(
+                                icon: Icons.check_box_outlined,
+                                label: '应用',
+                                onPressed: _saving || widget.machine == null
+                                    ? null
+                                    : () => _ai(initialMessage: '应用这些修改意见'),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -2327,6 +2363,7 @@ class _RecordingDetailState extends State<RecordingDetail> {
     _player.onDurationChanged.listen((value) {
       if (mounted) setState(() => _audioDuration = value);
     });
+    _quotes.addListener(_rebuild);
     _contentHistory.addListener(_rebuild);
     _transcriptHistory.addListener(_rebuild);
   }
@@ -2337,6 +2374,7 @@ class _RecordingDetailState extends State<RecordingDetail> {
 
   @override
   void dispose() {
+    _quotes.removeListener(_rebuild);
     _quotes.dispose();
     _contentHistory.removeListener(_rebuild);
     _transcriptHistory.removeListener(_rebuild);
@@ -2675,179 +2713,200 @@ class _RecordingDetailState extends State<RecordingDetail> {
   @override
   Widget build(BuildContext context) {
     final lines = parseTranscript('${_note['transcript'] ?? ''}');
-    return EditExitGuard(
-      editing: _editing,
-      busy: _saving,
-      popping: _popping,
-      onDiscard: _discard,
-      child: Scaffold(
-        resizeToAvoidBottomInset: false,
-        backgroundColor: Colors.white,
-        body: SafeArea(
-          minimum: EdgeInsets.only(bottom: inputBottomInset(context)),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(
-                height: 54,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: Row(
-                    children: [
-                      if (_editing)
-                        TextButton(
-                          onPressed: _saving ? null : _discardEdit,
-                          child: const Text(
-                            '放弃',
-                            style: TextStyle(color: _ink, fontSize: 16),
-                          ),
-                        )
-                      else
-                        _round(
-                          label: '返回',
-                          onTap: _leave,
-                          child: const Icon(Icons.arrow_back, size: 22),
-                        ),
-                      Expanded(child: DetailTitle('${_note['title'] ?? ''}')),
-                      if (!_editing) ...[
-                        AiChatButton(
-                          noteId: '${_note['id']}',
-                          machine: widget.machine,
-                          onPressed: _saving ? null : _ai,
-                        ),
-                        NoteActions(
-                          note: _note,
-                          enabled: !_saving,
-                          onEdit: _beginEdit,
-                          onTag: _markTag,
-                          onAiTag: _aiTag,
-                          onRename: _renameRecording,
-                          onAiRename: _aiRename,
-                          onDelete: _confirmDelete,
-                        ),
-                      ],
-                      if (_editing) ...[
-                        IconButton(
-                          tooltip: '撤销',
-                          onPressed: _activeHistory.value.canUndo
-                              ? _activeHistory.undo
-                              : null,
-                          icon: const Icon(Icons.undo),
-                        ),
-                        IconButton(
-                          tooltip: '重做',
-                          onPressed: _activeHistory.value.canRedo
-                              ? _activeHistory.redo
-                              : null,
-                          icon: const Icon(Icons.redo),
-                        ),
-                        TextButton(
-                          onPressed: _saving ? null : _save,
-                          child: const Text(
-                            '保存',
-                            style: TextStyle(
-                              color: _blue,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Row(
-                  children: [
-                    _tabButton('原文', 0),
-                    const SizedBox(width: 22),
-                    _tabButton('笔记', 1),
-                  ],
-                ),
-              ),
-              if (_error != null)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
-                  child: Text(_error!, style: const TextStyle(color: _red)),
-                ),
-              const SizedBox(height: 8),
-              Expanded(child: _editing ? _editors() : _reading(lines)),
-              if (!_editing)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 20),
-                  child: Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
+    return PopScope(
+      canPop: !_quotes.deleting,
+      child: EditExitGuard(
+        editing: _editing,
+        busy: _saving,
+        popping: _popping,
+        onDiscard: _discard,
+        child: Scaffold(
+          resizeToAvoidBottomInset: false,
+          backgroundColor: Colors.white,
+          body: SafeArea(
+            minimum: EdgeInsets.only(bottom: inputBottomInset(context)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  height: 54,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Row(
                       children: [
-                        if (_audioLoaded)
-                          SizedBox(
-                            width: 280,
-                            child: Column(
-                              children: [
-                                Slider(
-                                  min: 0,
-                                  max: _audioDuration.inMilliseconds > 0
-                                      ? _audioDuration.inMilliseconds.toDouble()
-                                      : 1,
-                                  value: _audioPosition.inMilliseconds
-                                      .clamp(
-                                        0,
-                                        _audioDuration.inMilliseconds > 0
-                                            ? _audioDuration.inMilliseconds
-                                            : 1,
-                                      )
-                                      .toDouble(),
-                                  onChanged: (value) => _player.seek(
-                                    Duration(milliseconds: value.round()),
-                                  ),
-                                ),
-                                Text(
-                                  '${_playbackTime(_audioPosition)} / ${_playbackTime(_audioDuration)}',
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: _sub,
-                                  ),
-                                ),
-                              ],
+                        if (_quotes.deleting)
+                          TextButton(
+                            onPressed: _quotes.cancelDeletion,
+                            child: const Text('取消'),
+                          )
+                        else if (_editing)
+                          TextButton(
+                            onPressed: _saving ? null : _discardEdit,
+                            child: const Text(
+                              '放弃',
+                              style: TextStyle(color: _ink, fontSize: 16),
+                            ),
+                          )
+                        else
+                          _round(
+                            label: '返回',
+                            onTap: _leave,
+                            child: const Icon(Icons.arrow_back, size: 22),
+                          ),
+                        Expanded(child: DetailTitle('${_note['title'] ?? ''}')),
+                        if (_quotes.deleting)
+                          TextButton(
+                            onPressed: _quotes.selected.isEmpty
+                                ? null
+                                : _quotes.deleteSelected,
+                            child: const Text(
+                              '删除',
+                              style: TextStyle(color: _red),
+                            ),
+                          )
+                        else if (!_editing) ...[
+                          AiChatButton(
+                            noteId: '${_note['id']}',
+                            machine: widget.machine,
+                            onPressed: _saving ? null : _ai,
+                          ),
+                          NoteActions(
+                            note: _note,
+                            enabled: !_saving,
+                            onEdit: _beginEdit,
+                            onTag: _markTag,
+                            onAiTag: _aiTag,
+                            onRename: _renameRecording,
+                            onAiRename: _aiRename,
+                            onDelete: _confirmDelete,
+                          ),
+                        ],
+                        if (_editing) ...[
+                          IconButton(
+                            tooltip: '撤销',
+                            onPressed: _activeHistory.value.canUndo
+                                ? _activeHistory.undo
+                                : null,
+                            icon: const Icon(Icons.undo),
+                          ),
+                          IconButton(
+                            tooltip: '重做',
+                            onPressed: _activeHistory.value.canRedo
+                                ? _activeHistory.redo
+                                : null,
+                            icon: const Icon(Icons.redo),
+                          ),
+                          TextButton(
+                            onPressed: _saving ? null : _save,
+                            child: const Text(
+                              '保存',
+                              style: TextStyle(
+                                color: _blue,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
-                        ActionPill(
-                          children: [
-                            PillButton(
-                              dark: true,
-                              icon: _loadingAudio
-                                  ? Icons.hourglass_top
-                                  : (_playing ? Icons.pause : Icons.play_arrow),
-                              label: _loadingAudio
-                                  ? '读取中'
-                                  : (_playing
-                                        ? '暂停'
-                                        : (_note['audio'] is Map &&
-                                                  (_note['audio']
-                                                          as Map)['file'] ==
-                                                      'audio.wav'
-                                              ? '播放'
-                                              : '无原始录音')),
-                              onPressed:
-                                  _note['audio'] is Map &&
-                                      (_note['audio'] as Map)['file'] ==
-                                          'audio.wav'
-                                  ? _togglePlayback
-                                  : null,
-                            ),
-                            PillButton(
-                              icon: Icons.auto_awesome,
-                              label: 'AI+',
-                              onPressed: _ai,
-                            ),
-                          ],
-                        ),
+                        ],
                       ],
                     ),
                   ),
                 ),
-            ],
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Row(
+                    children: [
+                      _tabButton('原文', 0),
+                      const SizedBox(width: 22),
+                      _tabButton('笔记', 1),
+                    ],
+                  ),
+                ),
+                if (_error != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+                    child: Text(_error!, style: const TextStyle(color: _red)),
+                  ),
+                const SizedBox(height: 8),
+                Expanded(child: _editing ? _editors() : _reading(lines)),
+                if (!_editing && !_quotes.deleting)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 20),
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (_audioLoaded)
+                            SizedBox(
+                              width: 280,
+                              child: Column(
+                                children: [
+                                  Slider(
+                                    min: 0,
+                                    max: _audioDuration.inMilliseconds > 0
+                                        ? _audioDuration.inMilliseconds
+                                              .toDouble()
+                                        : 1,
+                                    value: _audioPosition.inMilliseconds
+                                        .clamp(
+                                          0,
+                                          _audioDuration.inMilliseconds > 0
+                                              ? _audioDuration.inMilliseconds
+                                              : 1,
+                                        )
+                                        .toDouble(),
+                                    onChanged: (value) => _player.seek(
+                                      Duration(milliseconds: value.round()),
+                                    ),
+                                  ),
+                                  Text(
+                                    '${_playbackTime(_audioPosition)} / ${_playbackTime(_audioDuration)}',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: _sub,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ActionPill(
+                            children: [
+                              PillButton(
+                                dark: true,
+                                icon: _loadingAudio
+                                    ? Icons.hourglass_top
+                                    : (_playing
+                                          ? Icons.pause
+                                          : Icons.play_arrow),
+                                label: _loadingAudio
+                                    ? '读取中'
+                                    : (_playing
+                                          ? '暂停'
+                                          : (_note['audio'] is Map &&
+                                                    (_note['audio']
+                                                            as Map)['file'] ==
+                                                        'audio.wav'
+                                                ? '播放'
+                                                : '无原始录音')),
+                                onPressed:
+                                    _note['audio'] is Map &&
+                                        (_note['audio'] as Map)['file'] ==
+                                            'audio.wav'
+                                    ? _togglePlayback
+                                    : null,
+                              ),
+                              PillButton(
+                                icon: Icons.auto_awesome,
+                                label: 'AI+',
+                                onPressed: _ai,
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),

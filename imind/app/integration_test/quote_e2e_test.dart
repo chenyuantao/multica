@@ -19,4 +19,18 @@ void main() {
       },
     );
   });
+  testWidgets(
+    'tap marks, multi-select, delete and explicitly cancel the mode',
+    (tester) async {
+      await runMarkDeletionFlow(
+        tester,
+        capture: (name) async {
+          debugPrint('QUOTE_CAPTURE: $name');
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(seconds: 3)),
+          );
+        },
+      );
+    },
+  );
 }

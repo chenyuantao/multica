@@ -30,3 +30,18 @@
 - 普通 iOS Release 包构建、签名成功，覆盖安装到已连接的 iPhone（iOS 26.3），bundle ID `ai.multica.imindApp`，启动成功。沿用默认 HTTPS 服务，没有 E2E 入口、测试会话或 API_BASE 编译参数。
 - 将暂存区中的 App 文件导出到独立目录，`flutter analyze` 无问题，Markdown/选区/群聊/详情相关 41 项测试通过，验证本次提交不依赖其他未提交的 UI 或分发改动。
 - 签名、安装与启动日志位于 `outputs/imind/quotes/ios-device-*.log/json`；暂存区验证日志为 `outputs/imind/quotes/staged-verification.log`。真机确认范围为安装和启动，未执行真机完整功能 E2E。
+
+## 一键应用划词意见
+
+- 普通笔记及剪藏预览有待发送的划词标记时，底部胶囊最右侧显示带复选框图标的「应用」。标记全部删除或已发送后隐藏。
+- 点击后打开文件 AI+ 群聊，沿用既有引用和逐条指令拼接规则，追加「应用这些修改意见」，通过已有初始消息发送流程自动发送一次；再次打开群聊不重发。
+- `flutter test test/quote_flow_test.dart test/widget_test.dart --concurrency=1`：35 项通过，包含普通笔记与剪藏的按钮显示、位置、自动发送、发送后隐藏及重开不重复发送。后续验证与真机安装结果见下方标记删除模式一节。
+
+## 标记多选删除模式
+
+- 点击正文标记范围或编号进入删除模式；再次点击同一标记可取消选中，支持多选。选中范围和编号显示橙色，其他标记保持蓝色。
+- 顶部左侧显示「取消」，右侧原菜单显示「删除」；无选中项时删除不可用。底部胶囊隐藏，屏蔽正文划词及链接点击，拦截系统返回。仅「取消」退出模式，删除后或全部取消选中后仍保留模式。
+- 删除同时移除正文标记与待发引用，不改变笔记正文及已发送的群聊消息；普通笔记、剪藏和录音正文共用该行为。
+- `flutter analyze` 无问题；完整 Flutter 回归 217 项通过，后补 `test/quote_flow_test.dart` 7 项通过（含录音正文回归）。
+- iOS 27 模拟器 UI E2E 2 项通过（群聊 API 仍为测试替身）。截图 `outputs/imind/mark-delete/06-single-selected.png`、`07-multi-selected.png`、`08-after-delete.png` 及同目录 `e2e.log` 可审阅单选、多选和删除后不退出的状态。
+- 普通 iOS Release 包已构建、签名并覆盖安装到已连接的 iPhone（iOS 26.3），bundle ID `ai.multica.imindApp`，启动成功。沿用默认服务地址，无 E2E/测试会话或 API_BASE 编译参数；此次真机确认范围为安装和启动。日志为 `outputs/imind/mark-delete/ios-device-*.log/json`。

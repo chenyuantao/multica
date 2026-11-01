@@ -3,12 +3,27 @@ import 'package:flutter/material.dart';
 import 'package:imind_app/quoted_markdown.dart';
 import 'package:imind_app/note_quotes.dart';
 import 'package:imind_app/ai_chat.dart';
+import 'package:imind_app/main.dart';
 
 import 'ai_chat_test.dart' show ChatApi, noteId;
 
 import 'package:flutter_test/flutter_test.dart';
 
 import 'quote_flow.dart';
+
+class _ApplyApi extends QuoteFlowApi {
+  _ApplyApi(this.type);
+  final String type;
+  Map<String, dynamic> get note => {
+    'id': noteId,
+    'revision': 'r',
+    'type': type,
+    'title': '应用修改',
+    'content': '**第一段**\n\n第二段',
+  };
+  @override
+  Future<Map<String, dynamic>> getNote(String machine, String id) async => note;
+}
 
 void main() {
   testWidgets('selection copy, staged comments and explicit chat send', (
@@ -112,6 +127,61 @@ void main() {
       expect(api.sent, [original, original]);
       expect(api.clientIds[0], api.clientIds[1]);
       expect(draft.pending.single.markdown, 'B');
+    },
+  );
+  for (final type in ['note', 'clip']) {
+    testWidgets(
+      '$type apply pill opens chat and automatically sends queued suggestions once',
+      (tester) async {
+        final api = _ApplyApi(type);
+        addTearDown(api.close);
+        await tester.pumpWidget(
+          MaterialApp(
+            home: NoteEditor(api: api, machine: 'mbp', note: api.note),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('应用'), findsNothing);
+        final draft = tester
+            .widget<QuotedMarkdown>(find.byType(QuotedMarkdown))
+            .draft;
+        draft.add(0, 3, '**第一段**', '补充原因');
+        draft.add(5, 8, '第二段', '精简措辞');
+        await tester.pumpAndSettle();
+        final pill = find.byType(ActionPill);
+        final labels = tester
+            .widgetList<PillButton>(
+              find.descendant(of: pill, matching: find.byType(PillButton)),
+            )
+            .map((b) => b.label);
+        expect(labels, ['AI+', '编辑', '应用']);
+        expect(api.sent, isEmpty);
+        final expected = draft.compose('应用这些修改意见');
+        await tester.tap(find.text('应用'));
+        await tester.pumpAndSettle();
+        expect(find.byType(NoteAiChatSheet), findsOneWidget);
+        expect(api.sent, [expected]);
+        expect(draft.pending, isEmpty);
+        expect(draft.quotes.length, 2);
+        await tester.tap(find.byTooltip('关闭'));
+        await tester.pumpAndSettle();
+        expect(find.text('应用'), findsNothing);
+        await tester.tap(find.text('AI+'));
+        await tester.pumpAndSettle();
+        expect(api.sent, [expected]);
+      },
+    );
+  }
+  testWidgets(
+    'tap marks to multi-select and delete; only cancel exits deletion mode',
+    (tester) async {
+      await runMarkDeletionFlow(tester);
+    },
+  );
+  testWidgets(
+    'recording note marks have the same cancellable deletion controls',
+    (tester) async {
+      await runMarkDeletionFlow(tester, recording: true);
     },
   );
 }

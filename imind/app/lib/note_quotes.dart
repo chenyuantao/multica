@@ -23,6 +23,29 @@ class NoteQuote {
 class NoteQuoteDraft extends ChangeNotifier {
   final _quotes = <NoteQuote>[];
   int _nextNumber = 1;
+  bool _deleting = false;
+  final _selected = <int>{};
+  bool get deleting => _deleting;
+  Set<int> get selected => Set.unmodifiable(_selected);
+  void toggleSelected(NoteQuote quote) {
+    if (!_quotes.contains(quote)) return;
+    _deleting = true;
+    if (!_selected.add(quote.number)) _selected.remove(quote.number);
+    notifyListeners();
+  }
+
+  void cancelDeletion() {
+    _deleting = false;
+    _selected.clear();
+    notifyListeners();
+  }
+
+  void deleteSelected() {
+    _quotes.removeWhere((quote) => _selected.contains(quote.number));
+    _selected.clear();
+    notifyListeners();
+  }
+
   String? _source;
   void bindSource(String source) {
     if (_source != null && _source != source) {
@@ -48,6 +71,7 @@ class NoteQuoteDraft extends ChangeNotifier {
 
   void remove(NoteQuote quote) {
     _quotes.remove(quote);
+    _selected.remove(quote.number);
     notifyListeners();
   }
 
@@ -60,6 +84,7 @@ class NoteQuoteDraft extends ChangeNotifier {
 
   void clear() {
     _quotes.clear();
+    _selected.clear();
     notifyListeners();
   }
 

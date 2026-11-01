@@ -1,6 +1,8 @@
 import 'dart:math' as math;
+import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
@@ -36,14 +38,19 @@ class QuotedMarkdown extends StatefulWidget {
 }
 
 class _QuotedMarkdownState extends State<QuotedMarkdown> {
+  PointerDownEvent? _pointerDown;
+  Timer? _tapTimer;
   final _contentKey = GlobalKey();
+  final _areaKey = GlobalKey<SelectionAreaState>();
   final _selectionNotifier = SelectionListenerNotifier();
   late MarkdownSelectionDocument _document;
   @override
   void initState() {
     super.initState();
     _document = MarkdownSelectionDocument(widget.data);
-    widget.draft.bindSource(widget.data);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) widget.draft.bindSource(widget.data);
+    });
     widget.draft.addListener(_refresh);
   }
 
@@ -63,11 +70,16 @@ class _QuotedMarkdownState extends State<QuotedMarkdown> {
   }
 
   void _refresh() {
+    if (widget.draft.deleting) {
+      _areaKey.currentState?.selectableRegion.clearSelection();
+      FocusManager.instance.primaryFocus?.unfocus();
+    }
     if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
+    _tapTimer?.cancel();
     widget.draft.removeListener(_refresh);
     super.dispose();
   }
@@ -139,46 +151,100 @@ class _QuotedMarkdownState extends State<QuotedMarkdown> {
     }
   }
 
+  List<_QuoteGeometry> _geometry(Size size) {
+    final root = _contentKey.currentContext?.findRenderObject();
+    if (root is! RenderBox) return [];
+    final parts = _paragraphs();
+    return [
+      for (final quote in widget.draft.quotes)
+        _QuoteGeometry.fromParagraphs(quote, parts, root, size),
+    ];
+  }
+
+  void _tapMark(Offset globalPosition) {
+    final root = _contentKey.currentContext?.findRenderObject();
+    if (root is! RenderBox) return;
+    final point = root.globalToLocal(globalPosition);
+    for (final mark in _geometry(root.size).reversed) {
+      if ((mark.badge?.inflate(4).contains(point) ?? false) ||
+          mark.rects.any((rect) => rect.contains(point))) {
+        widget.draft.toggleSelected(mark.quote);
+        return;
+      }
+    }
+  }
+
   @override
-  Widget build(BuildContext context) => SelectionArea(
-    contextMenuBuilder: (context, region) {
-      final range = _selection();
-      if (range == null) return const SizedBox.shrink();
-      final (start, end) = range;
-      final markdown = _document.slice(start, end);
-      return AdaptiveTextSelectionToolbar.buttonItems(
-        anchors: region.contextMenuAnchors,
-        buttonItems: [
-          ContextMenuButtonItem(
-            label: '复制',
-            onPressed: () async {
-              await Clipboard.setData(ClipboardData(text: markdown));
-              region.hideToolbar();
-            },
-          ),
-          ContextMenuButtonItem(
-            label: 'AI+',
-            onPressed: () => _comment(region, start, end, markdown),
-          ),
-        ],
-      );
+  Widget build(BuildContext context) => Listener(
+    behavior: HitTestBehavior.opaque,
+    onPointerDown: (event) {
+      _pointerDown = event;
+      _tapTimer?.cancel();
+      _tapTimer = Timer(kLongPressTimeout, () => _pointerDown = null);
     },
-    child: SelectionListener(
-      selectionNotifier: _selectionNotifier,
-      child: CustomPaint(
-        foregroundPainter: _QuotePainter(
-          _paragraphs,
-          widget.draft.quotes,
-          _contentKey,
-        ),
-        child: SizedBox(
-          key: _contentKey,
-          width: double.infinity,
-          child: IMindMarkdown(
-            data: widget.data,
-            api: widget.api,
-            machine: widget.machine,
-            noteId: widget.noteId,
+    onPointerMove: (event) {
+      if (_pointerDown != null &&
+          (event.position - _pointerDown!.position).distance > kTouchSlop) {
+        _pointerDown = null;
+      }
+    },
+    onPointerCancel: (_) {
+      _tapTimer?.cancel();
+      _pointerDown = null;
+    },
+    onPointerUp: (event) {
+      final down = _pointerDown;
+      _pointerDown = null;
+      if (down != null &&
+          event.timeStamp - down.timeStamp < kLongPressTimeout) {
+        _tapMark(event.position);
+      }
+    },
+    child: CustomPaint(
+      foregroundPainter: _QuotePainter(
+        _geometry,
+        widget.draft.selected,
+        onTap: widget.draft.toggleSelected,
+      ),
+      child: IgnorePointer(
+        ignoring: widget.draft.deleting,
+        child: SelectionArea(
+          key: _areaKey,
+          contextMenuBuilder: (context, region) {
+            if (widget.draft.deleting) return const SizedBox.shrink();
+            final range = _selection();
+            if (range == null) return const SizedBox.shrink();
+            final (start, end) = range;
+            final markdown = _document.slice(start, end);
+            return AdaptiveTextSelectionToolbar.buttonItems(
+              anchors: region.contextMenuAnchors,
+              buttonItems: [
+                ContextMenuButtonItem(
+                  label: '复制',
+                  onPressed: () async {
+                    await Clipboard.setData(ClipboardData(text: markdown));
+                    region.hideToolbar();
+                  },
+                ),
+                ContextMenuButtonItem(
+                  label: 'AI+',
+                  onPressed: () => _comment(region, start, end, markdown),
+                ),
+              ],
+            );
+          },
+          child: SelectionListener(
+            selectionNotifier: _selectionNotifier,
+            child: SizedBox(
+              key: _contentKey,
+              width: double.infinity,
+              child: IMindMarkdown(
+                data: widget.data,
+                api: widget.api,
+                machine: widget.machine,
+                noteId: widget.noteId,
+              ),
+            ),
           ),
         ),
       ),
@@ -260,72 +326,111 @@ class _SelectionCommentState extends State<_SelectionComment> {
   );
 }
 
+class _QuoteGeometry {
+  _QuoteGeometry(this.quote, this.rects, this.badge);
+  final NoteQuote quote;
+  final List<Rect> rects;
+  final Rect? badge;
+
+  factory _QuoteGeometry.fromParagraphs(
+    NoteQuote quote,
+    List<_ParagraphRange> parts,
+    RenderBox root,
+    Size size,
+  ) {
+    final rects = <Rect>[];
+    for (final part in parts) {
+      final length = part.paragraph.text.toPlainText().length;
+      final a = math.max(quote.start - part.start, 0);
+      final b = math.min(quote.end - part.start, length);
+      if (a >= b) continue;
+      final origin = part.paragraph.localToGlobal(Offset.zero, ancestor: root);
+      for (final box in part.paragraph.getBoxesForSelection(
+        TextSelection(baseOffset: a, extentOffset: b),
+      )) {
+        rects.add(box.toRect().shift(origin));
+      }
+    }
+    final last = rects.lastOrNull;
+    final width = math.max(18.0, _quoteLabel(quote.number).width + 8);
+    final badge = last == null
+        ? null
+        : Rect.fromLTWH(
+            math.min(last.right, math.max(0, size.width - width)),
+            math.max(0, last.top - 9),
+            width,
+            16,
+          );
+    return _QuoteGeometry(quote, rects, badge);
+  }
+}
+
+TextPainter _quoteLabel(int number) => TextPainter(
+  text: TextSpan(
+    text: '$number',
+    style: const TextStyle(
+      fontSize: 10,
+      color: Colors.white,
+      fontWeight: FontWeight.w600,
+    ),
+  ),
+  textDirection: TextDirection.ltr,
+)..layout();
+
 class _QuotePainter extends CustomPainter {
-  _QuotePainter(this.paragraphs, this.quotes, this.contentKey);
-  final List<_ParagraphRange> Function() paragraphs;
-  final List<NoteQuote> quotes;
-  final GlobalKey contentKey;
+  _QuotePainter(this.geometry, this.selected, {required this.onTap});
+  final List<_QuoteGeometry> Function(Size) geometry;
+  final Set<int> selected;
+  final ValueChanged<NoteQuote> onTap;
   @override
   void paint(Canvas canvas, Size size) {
-    final root = contentKey.currentContext?.findRenderObject();
-    if (root is! RenderBox) return;
-    final parts = paragraphs();
-    for (final quote in quotes) {
-      Rect? last;
-      for (final part in parts) {
-        final length = part.paragraph.text.toPlainText().length;
-        final a = math.max(quote.start - part.start, 0);
-        final b = math.min(quote.end - part.start, length);
-        if (a >= b) continue;
-        final origin = part.paragraph.localToGlobal(
-          Offset.zero,
-          ancestor: root,
-        );
-        for (final box in part.paragraph.getBoxesForSelection(
-          TextSelection(baseOffset: a, extentOffset: b),
-        )) {
-          final rect = box.toRect().shift(origin);
-          canvas.drawRRect(
-            RRect.fromRectAndRadius(rect, const Radius.circular(3)),
-            Paint()..color = const Color(0x443478F6),
-          );
-          last = rect;
-        }
-      }
-      if (last != null) {
-        final label = TextPainter(
-          text: TextSpan(
-            text: '${quote.number}',
-            style: const TextStyle(
-              fontSize: 10,
-              color: Colors.white,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          textDirection: TextDirection.ltr,
-        )..layout();
-        final width = math.max(18.0, label.width + 8);
-        final rect = Rect.fromLTWH(
-          math.min(last.right, math.max(0, size.width - width)),
-          math.max(0, last.top - 9),
-          width,
-          16,
-        );
+    for (final mark in geometry(size)) {
+      final active = selected.contains(mark.quote.number);
+      for (final rect in mark.rects) {
         canvas.drawRRect(
-          RRect.fromRectAndRadius(rect, const Radius.circular(8)),
-          Paint()..color = const Color(0xFF3478F6),
-        );
-        label.paint(
-          canvas,
-          Offset(
-            rect.center.dx - label.width / 2,
-            rect.center.dy - label.height / 2,
-          ),
+          RRect.fromRectAndRadius(rect, const Radius.circular(3)),
+          Paint()
+            ..color = active
+                ? const Color(0x66FF9F0A)
+                : const Color(0x443478F6),
         );
       }
+      final badge = mark.badge;
+      if (badge == null) continue;
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(badge, const Radius.circular(8)),
+        Paint()
+          ..color = active ? const Color(0xFFB85C00) : const Color(0xFF3478F6),
+      );
+      final label = _quoteLabel(mark.quote.number);
+      label.paint(
+        canvas,
+        Offset(
+          badge.center.dx - label.width / 2,
+          badge.center.dy - label.height / 2,
+        ),
+      );
     }
   }
 
+  @override
+  SemanticsBuilderCallback get semanticsBuilder =>
+      (size) => [
+        for (final mark in geometry(size))
+          if (mark.badge != null)
+            CustomPainterSemantics(
+              rect: mark.badge!.inflate(6),
+              properties: SemanticsProperties(
+                label: '标记 ${mark.quote.number}',
+                button: true,
+                selected: selected.contains(mark.quote.number),
+                textDirection: TextDirection.ltr,
+                onTap: () => onTap(mark.quote),
+              ),
+            ),
+      ];
+  @override
+  bool shouldRebuildSemantics(_QuotePainter oldDelegate) => true;
   @override
   bool shouldRepaint(_QuotePainter oldDelegate) => true;
 }

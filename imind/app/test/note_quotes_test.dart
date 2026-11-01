@@ -61,4 +61,21 @@ void main() {
       expect(draft.quotes, isEmpty);
     },
   );
+  test('deletion mode persists after deselecting or deleting every mark', () {
+    final draft = NoteQuoteDraft();
+    addTearDown(draft.dispose);
+    draft.add(0, 1, 'A', 'explain');
+    final quote = draft.quotes.single;
+    draft.toggleSelected(quote);
+    draft.toggleSelected(quote);
+    expect(draft.selected, isEmpty);
+    expect(draft.deleting, isTrue);
+    draft.toggleSelected(quote);
+    draft.deleteSelected();
+    expect(draft.quotes, isEmpty);
+    expect(draft.pending, isEmpty);
+    expect(draft.deleting, isTrue);
+    draft.cancelDeletion();
+    expect(draft.deleting, isFalse);
+  });
 }
