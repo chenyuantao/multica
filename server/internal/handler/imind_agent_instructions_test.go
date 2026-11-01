@@ -36,6 +36,10 @@ func TestIMindBackendDistributesGuideToExistingDirectories(t *testing.T) {
 					t.Fatalf("bootstrap = %d %s", w.Code, w.Body.String())
 				}
 			}
+			readme, err := os.ReadFile(filepath.Join(root, iMindDir, "README.md"))
+			if err != nil || string(readme) != imind.AgentInstructions {
+				t.Fatalf("unexpected README: %v", err)
+			}
 			want := imind.AgentInstructions
 			if initial == "user-owned instructions\n" {
 				want = initial

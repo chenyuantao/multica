@@ -22,7 +22,15 @@ func (h *Handler) syncIMindAgentInstructions(w http.ResponseWriter, r *http.Requ
 // distributeIMindAgentInstructions uses the existing protocol so guide changes
 // only require a backend release. User-owned files are never overwritten.
 func distributeIMindAgentInstructions(ctx context.Context, peer fileshare.Peer) error {
-	const guidePath = iMindDir + "/AGENTS.md"
+	for _, name := range []string{"AGENTS.md", "README.md"} {
+		if err := distributeIMindGuide(ctx, peer, iMindDir+"/"+name); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func distributeIMindGuide(ctx context.Context, peer fileshare.Peer, guidePath string) error {
 	var file fileshare.ReadResult
 	err := peer.Call(ctx, fileshare.OpRead, map[string]string{
 		"path": guidePath, "scope": fileshare.IMindScope,

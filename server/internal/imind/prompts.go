@@ -31,6 +31,7 @@ Loaded revision: {{FILE_REVISION}}
 Complete Markdown:
 {{FILE_CONTENT}}`,
 	"clip": `Clipping task: fetch the source URL and write the clipped article into this existing iMind file, not a new file or a second chat. Use the available shared-document tools to read the complete Markdown and update it with revision protection. Preserve its YAML metadata (especially id, type, clip and source_url), both unique content delimiters and the empty transcript section. The filename is the title; rename this same file to a suitable article title if supported. Never claim success until the file write succeeds. If fetching or writing fails, explain the failure in this chat so the saved placeholder can be retried.
+Set the YAML author field to the original article author from the source. Never use the clipping user, agent, or website name as the author. If the author cannot be verified, leave author as an empty string.
 When assigning tags, prefer matching the existing tags. Existing tags (JSON): {{EXISTING_TAGS}}
 Target: {{FILE_PATH}}
 Relative path: {{FILE_RELATIVE_PATH}}

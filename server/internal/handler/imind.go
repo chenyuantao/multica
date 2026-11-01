@@ -221,6 +221,15 @@ func (h *Handler) PostIMindNotes(w http.ResponseWriter, r *http.Request) {
 	}
 	note.Tags, note.SourceURL, note.Content, note.Transcript, note.Audio = req.Tags, req.SourceURL, req.Content, req.Transcript, req.Audio
 	note.Clip = req.Clip
+	if note.Type != "clip" && h.Queries != nil {
+		member, _ := ctxMember(r.Context())
+		user, err := h.Queries.GetUser(r.Context(), member.UserID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to load note author")
+			return
+		}
+		note.Author = user.Name
+	}
 	if note.Type == "clip" {
 		note.Title = "生成中的剪藏"
 		if note.Clip == nil {

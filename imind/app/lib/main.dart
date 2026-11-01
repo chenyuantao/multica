@@ -1151,6 +1151,7 @@ class _HomePageState extends State<HomePage> {
     final audio = note['audio'];
     final duration = audio is Map ? audio['duration_ms'] : null;
     final host = sourceHost(note['source_url']);
+    final author = (note['author'] as String? ?? '').trim();
     final unread =
         ChatUnreadScope.maybeOf(context)?.unreadForNote(id, _machine) ?? 0;
     return _GeneratingNoteFade(
@@ -1204,6 +1205,16 @@ class _HomePageState extends State<HomePage> {
                           formatWhen(note['updated_at'] as String?),
                           style: const TextStyle(fontSize: 12, color: _sub),
                         ),
+                        if (author.isNotEmpty)
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 180),
+                            child: Text(
+                              author,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 12, color: _sub),
+                            ),
+                          ),
                         if (duration is num && duration > 0)
                           _Meta(
                             icon: Icons.schedule,

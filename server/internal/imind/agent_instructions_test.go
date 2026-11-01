@@ -18,7 +18,7 @@ func TestAgentInstructionsExampleParses(t *testing.T) {
 	if err != nil {
 		t.Fatalf("guide example no longer matches the note contract: %v", err)
 	}
-	if note.Type != "note" || note.Content == "" || note.Transcript != "" {
+	if note.Author != "当前操作用户的名称" || note.Type != "note" || note.Content == "" || note.Transcript != "" {
 		t.Fatalf("unexpected example: %+v", note)
 	}
 }

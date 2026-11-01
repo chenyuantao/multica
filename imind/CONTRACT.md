@@ -92,7 +92,7 @@ audio: null
 
 ### `POST /api/imind/notes`
 
-创建普通笔记、剪藏或空录音笔记。请求携带 `share_machine`、`type`、`title`、可选 `tags`、`source_url`、`content`、`audio` 和 `clip`。服务端生成 UUID、时间和完整文件内容。
+创建普通笔记、剪藏或空录音笔记。请求携带 `share_machine`、`type`、`title`、可选 `tags`、`source_url`、`content`、`audio` 和 `clip`。服务端生成 UUID、时间和完整文件内容。普通笔记和录音的 YAML `author` 由后端设置为当前操作用户名称；剪藏初始为空，由剪藏 agent 从原文提取署名作者，无法确认时保留空字符串。列表和详情 API 返回顶层 `author`，客户端列表直接显示非空作者。旧文件缺少作者仍可读取，编辑不改变作者。笔记规则从后端同步到笔记目录的 README.md 和 AGENTS.md。
 
 ### `POST /api/imind/notes/get`
 

@@ -123,7 +123,7 @@ Workspace-scoped queries filter by `workspace_id`; membership gates access and `
 
 ## Change and Delivery Rules
 
-- When changing iMind note format, filename, parsing, media, or directory rules, update `server/internal/imind/agent-instructions.md` and its example validation in the same change. The backend embeds this guide and distributes it through existing scoped file-share operations on iMind directory initialization/listing. Publish the updated backend to refresh managed `iMind/AGENTS.md` files; daemon updates are not required for guide content changes.
+- When changing iMind note format, filename, parsing, media, or directory rules, update `server/internal/imind/agent-instructions.md` and its example validation in the same change. The backend embeds this guide and distributes it through existing scoped file-share operations on iMind directory initialization/listing. Publish the updated backend to refresh managed `iMind/AGENTS.md` and `iMind/README.md` files; daemon updates are not required for guide content changes.
 
 - Keep changes scoped; reuse existing patterns. Code comments are English.
 - Do not add internal compatibility shims, dual writes, fallback paths, or legacy adapters unless requested. This does not relax API response compatibility above.

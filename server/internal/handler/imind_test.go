@@ -708,3 +708,35 @@ func TestIMindRenameUsesFilenameAndResolvesDuplicates(t *testing.T) {
 		t.Fatalf("got = %#v", got)
 	}
 }
+
+func TestIMindAuthorUsesOperatingUserExceptClips(t *testing.T) {
+	h := *testHandler
+	h.FileShares = fileshare.NewHub()
+	peer := fileshare.NewLocal(fileshare.ShareMeta{DaemonID: "author-test", Machine: "author-test", OwnerUserID: testUserID, WorkspaceID: testWorkspaceID, Visibility: fileshare.VisibilityWorkspace, Enabled: true}, t.TempDir())
+	if err := h.FileShares.Register(peer); err != nil {
+		t.Fatal(err)
+	}
+	user, err := h.Queries.GetUser(t.Context(), parseUUID(testUserID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, kind := range []string{"note", "recording", "clip"} {
+		t.Run(kind, func(t *testing.T) {
+			var note iMindNoteResponse
+			req := groupChatRequestAs(t, testUserID, "POST", "/api/imind/notes", map[string]any{"share_machine": "author-test", "type": kind, "title": kind})
+			testutil.Call(t, h.PostIMindNotes, req).Want(201).JSON(&note)
+			want := user.Name
+			if kind == "clip" {
+				want = ""
+			}
+			if note.Author != want {
+				t.Fatalf("author = %q, want %q", note.Author, want)
+			}
+			req = groupChatRequestAs(t, testUserID, "POST", "/api/imind/notes/get", map[string]string{"share_machine": "author-test", "id": note.ID})
+			testutil.Call(t, h.PostIMindNote, req).Want(200).JSON(&note)
+			if note.Author != want {
+				t.Fatalf("saved author = %q, want %q", note.Author, want)
+			}
+		})
+	}
+}

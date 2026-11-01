@@ -79,6 +79,7 @@ func metadataJSONValue(value any) any {
 }
 
 type Note struct {
+	Author     string        `yaml:"author" json:"author"`
 	Metadata   Metadata      `yaml:"-" json:"metadata,omitempty"`
 	ID         string        `yaml:"id" json:"id"`
 	Summary    string        `yaml:"summary,omitempty" json:"summary,omitempty"`
@@ -95,6 +96,7 @@ type Note struct {
 }
 
 type frontmatter struct {
+	Author    string        `yaml:"author"`
 	Metadata  Metadata      `yaml:",inline"`
 	Summary   string        `yaml:"summary,omitempty"`
 	Clip      *ClipMetadata `yaml:"clip,omitempty"`
@@ -140,7 +142,7 @@ func (n Note) Validate() error {
 	if n.CreatedAt.IsZero() || n.UpdatedAt.IsZero() {
 		return fmt.Errorf("%w: timestamps", ErrInvalidNote)
 	}
-	values := append([]string{n.Title, n.Content, n.Transcript, n.Summary}, n.Tags...)
+	values := append([]string{n.Title, n.Content, n.Transcript, n.Summary, n.Author}, n.Tags...)
 	if n.Clip != nil {
 		if n.Type != "clip" {
 			return fmt.Errorf("%w: clip metadata", ErrInvalidNote)
@@ -183,7 +185,7 @@ func (n Note) Markdown() (string, error) {
 		return "", err
 	}
 	fm, err := yaml.Marshal(frontmatter{
-		Version: Version, ID: n.ID, Type: n.Type, Summary: n.Summary, Clip: n.Clip, Metadata: n.Metadata,
+		Author: n.Author, Version: Version, ID: n.ID, Type: n.Type, Summary: n.Summary, Clip: n.Clip, Metadata: n.Metadata,
 		CreatedAt: n.CreatedAt.UTC(), UpdatedAt: n.UpdatedAt.UTC(),
 		Tags: n.Tags, SourceURL: n.SourceURL, Audio: n.Audio,
 	})
@@ -239,7 +241,7 @@ func Parse(markdown, title string) (Note, error) {
 		return Note{}, fmt.Errorf("%w: transcript delimiter", ErrInvalidNote)
 	}
 	note := Note{
-		ID: fm.ID, Type: fm.Type, Title: title, Summary: fm.Summary, Clip: fm.Clip, CreatedAt: fm.CreatedAt, UpdatedAt: fm.UpdatedAt,
+		Author: fm.Author, ID: fm.ID, Type: fm.Type, Title: title, Summary: fm.Summary, Clip: fm.Clip, CreatedAt: fm.CreatedAt, UpdatedAt: fm.UpdatedAt,
 		Tags: nonNil(fm.Tags), SourceURL: fm.SourceURL, Audio: fm.Audio,
 		Content: strings.TrimSpace(content), Transcript: strings.TrimSpace(transcript),
 		Metadata: fm.Metadata,
@@ -270,7 +272,7 @@ func validFrontmatterTypes(header string) bool {
 	for i := 0; i < len(fields); i += 2 {
 		key, value := fields[i].Value, fields[i+1]
 		switch key {
-		case "id", "type", "summary":
+		case "id", "type", "summary", "author":
 			if value.Tag != "!!str" {
 				return false
 			}

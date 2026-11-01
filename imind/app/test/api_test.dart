@@ -182,6 +182,7 @@ void main() {
                   'revision': 'named-r',
                   'title': 'Generated',
                   'summary': 'Summary',
+                  'author': 'Article writer',
                 }),
                 200,
               );
@@ -193,11 +194,13 @@ void main() {
     final note = await api.nameNote('mbp', noteId, 'saved-r');
     expect(note['title'], 'Generated');
     expect(note['summary'], 'Summary');
+    expect(note['author'], 'Article writer');
     expect(note['revision'], 'named-r');
   });
   for (final body in [
     {'id': workspaceId, 'revision': 'r'},
     {'id': noteId, 'revision': 'r', 'summary': 42},
+    {'id': noteId, 'revision': 'r', 'author': 42},
     {'id': noteId, 'summary': 'missing revision'},
   ]) {
     test('AI命名拒绝畸形返回 $body', () async {

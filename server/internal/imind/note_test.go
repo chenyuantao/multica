@@ -85,6 +85,7 @@ func TestParseRejectsAmbiguousBoundariesAndFields(t *testing.T) {
 		"crossed sections":   strings.Replace(raw, contentEnd+"\n\n"+transcriptStart, transcriptStart+"\n"+contentEnd, 1),
 		"inline marker":      strings.Replace(raw, contentStart+"\n", contentStart+"inline\n", 1),
 		"multiple yaml docs": strings.Replace(raw, "imind_version: 1", "imind_version: 1\n...\n---\npath: other", 1),
+		"invalid author":     strings.Replace(raw, `author: ""`, "author: 42", 1),
 		"scalar tag":         strings.Replace(raw, "tags: []", "tags: [42]", 1),
 		"oversize":           raw + strings.Repeat(" ", 4<<20),
 		"invalid utf8":       strings.Replace(raw, contentStart+"\n", contentStart+"\n"+string([]byte{0xff}), 1),
@@ -149,7 +150,7 @@ func TestExtraYAMLFieldsSurviveEditsAndJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw = strings.Replace(raw, "imind_version: 1", "imind_version: 1\ntitle: Article title\nauthor: Writer\ncustom:\n  published: true\n  rating: 4\n  topics: [one, two]\n  missing: null\nmetrics:\n  2026: .inf", 1)
+	raw = strings.Replace(raw, "imind_version: 1", "imind_version: 1\ntitle: Article title\ncustom:\n  published: true\n  rating: 4\n  topics: [one, two]\n  missing: null\nmetrics:\n  2026: .inf", 1)
 	got, err := Parse(raw, note.Title)
 	if err != nil {
 		t.Fatalf("extra YAML fields rejected: %v", err)
@@ -157,6 +158,7 @@ func TestExtraYAMLFieldsSurviveEditsAndJSON(t *testing.T) {
 	if got.Title != note.Title {
 		t.Fatalf("metadata replaced filename title: %q", got.Title)
 	}
+	got.Author = "Writer"
 	got.Content = "Edited content"
 	got.Title = "Renamed filename"
 	saved, err := got.Markdown()
@@ -167,7 +169,7 @@ func TestExtraYAMLFieldsSurviveEditsAndJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(reopened.Metadata, got.Metadata) || reopened.Metadata["author"] != "Writer" || reopened.Metadata["title"] != "Article title" {
+	if !reflect.DeepEqual(reopened.Metadata, got.Metadata) || reopened.Author != "Writer" || reopened.Metadata["title"] != "Article title" {
 		t.Fatalf("extra fields lost: %#v", reopened.Metadata)
 	}
 	encoded, err := json.Marshal(reopened)
@@ -178,7 +180,17 @@ func TestExtraYAMLFieldsSurviveEditsAndJSON(t *testing.T) {
 	if err := json.Unmarshal(encoded, &response); err != nil {
 		t.Fatal(err)
 	}
-	if response["title"] != "Renamed filename" || response["metadata"].(map[string]any)["author"] != "Writer" {
+	if response["title"] != "Renamed filename" || response["author"] != "Writer" {
 		t.Fatalf("wrong response: %s", encoded)
+	}
+}
+
+func TestAuthorOptionalForExistingNotes(t *testing.T) {
+	note, _ := New("note", "Legacy", time.Now())
+	raw, _ := note.Markdown()
+	raw = strings.Replace(raw, "author: \"\"\n", "", 1)
+	got, err := Parse(raw, note.Title)
+	if err != nil || got.Author != "" {
+		t.Fatalf("legacy author = %q, error = %v", got.Author, err)
 	}
 }

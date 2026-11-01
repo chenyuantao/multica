@@ -699,6 +699,7 @@ class MulticaApi {
       'transcript': _string(data, 'transcript'),
       'source_url': source,
       'summary': _string(data, 'summary'),
+      'author': _string(data, 'author'),
       'metadata': data['metadata'] is Map<String, dynamic>
           ? data['metadata']
           : <String, dynamic>{},

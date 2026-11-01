@@ -22,6 +22,7 @@ Map<String, dynamic> _note([String content = '示例正文']) => {
   'id': _id,
   'revision': 'r',
   'title': '示例笔记',
+  'author': '笔记作者',
   'type': 'note',
   'content': content,
 };
@@ -323,6 +324,7 @@ void main() {
       ),
     );
     expect(find.text('示例笔记'), findsOneWidget);
+    expect(find.text('笔记作者'), findsOneWidget);
     expect(
       requests.any((request) => request.url.path == '/api/workspaces'),
       isTrue,

@@ -498,6 +498,9 @@ func (h *Handler) iMindNoteContext(ctx context.Context, issue db.Issue) (groupch
 			values["EXISTING_TAGS"] = string(tagsJSON)
 			text, err := h.renderIMindPrompt(ctx, issue.WorkspaceID, kind, values)
 			if err == nil {
+				if note.Type == "clip" {
+					text += "\nSet YAML author to the source article's verified author. If unknown, use an empty string; never substitute the clipping user, agent, or website name."
+				}
 				text += "\nExisting tags (JSON): " + string(tagsJSON) + "\nWhen assigning tags, prefer matching existing tags."
 			}
 			if err != nil {
