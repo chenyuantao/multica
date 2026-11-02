@@ -1,12 +1,12 @@
 name: Branch images
 
-# Manually publishes moving GHCR tags for the self-hosted images of the
-# selected branch. The tag is the branch name, sanitized to a Docker tag
-# (`/` becomes `-`). `latest` and release versions stay on the Release
-# workflow. Branch pushes no longer trigger it: deployments build from the
-# GitHub repository directly.
+# Publishes moving GHCR tags for self-hosted images on production-branch pushes
+# or a manual run. The tag is the branch name, sanitized to a Docker tag
+# (`/` becomes `-`). `latest` and release versions stay on the Release workflow.
 
 on:
+  push:
+    branches: [feat/group-chat-im]
   workflow_dispatch:
 
 permissions:

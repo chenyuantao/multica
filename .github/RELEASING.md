@@ -15,8 +15,8 @@ version tag such as `v0.18.4`. The Release workflow intentionally has no manual
 trigger: a tag push, or a push to an automatic release branch (see
 [Automatic branch releases](#automatic-branch-releases)), is the only event
 that publishes binaries, Homebrew formulae, the Helm chart, and the `latest` /
-version container tags. Moving branch image tags are published separately and
-on demand; see [Branch images](#branch-images).
+version container tags. Moving branch image tags are published separately;
+see [Branch images](#branch-images).
 
 The verification job runs the Go tests and `govulncheck` before any publishing
 job starts. The vulnerability scan is fail-closed by default.
@@ -33,15 +33,22 @@ creates no tag.
 
 ## Branch images
 
-`.github/workflows/branch-images.yml` runs only when triggered manually from
-the Actions tab for a selected branch. It builds multi-arch `multica-backend`
-and `multica-web` images and pushes them to GHCR tagged with the branch name.
+`.github/workflows/branch-images.yml` runs on pushes to the deployed
+`feat/group-chat-im` branch or when triggered manually from the Actions tab
+for a selected branch. It builds multi-arch `multica-backend` and `multica-web`
+images and pushes them to GHCR tagged with the branch name.
 Characters Docker rejects, including `/`, become `-`, so `feat/foo` is
 published as `feat-foo`.
 
 These tags move on the next run for that branch. The workflow refuses `latest`
 and semver tags such as `v1.2.3`, so a branch cannot overwrite a release. It
 does not publish binaries, Homebrew formulae, or the Helm chart.
+
+The Alibaba Cloud ECS deployment checks the latest successful branch-images
+run every five minutes. It pulls both matching images, verifies their revision
+labels, and recreates only the backend and frontend containers. The server's
+Compose file, `.env`, PostgreSQL volume, and upload volumes stay on the ECS
+host. A failed or incomplete image build is not deployed.
 
 ## Emergency vulnerability-scan bypass
 
