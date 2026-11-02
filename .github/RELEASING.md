@@ -1,5 +1,13 @@
 # Release runbook
 
+## iMind Android release builds
+
+The independent `iMind Android Release` workflow publishes release-mode APKs
+and updates the fixed `imind-android-latest/imind-release.apk` download. It uses
+the existing development signing key and does not change Multica's stable
+release. Local publication and signing/version constraints are documented in
+[`imind/app/README.md`](../imind/app/README.md#android-release-download).
+
 ## iMind Android debug builds
 
 The independent `iMind Android Debug` workflow publishes versioned APK

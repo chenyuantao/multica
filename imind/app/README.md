@@ -14,6 +14,35 @@ white background; Android adaptive icons use a white background layer and a
 transparent foreground with mask-safe padding. App IDs remain unchanged for
 in-place updates.
 
+## Android release download
+
+The fixed URL for the latest release-mode APK is:
+
+[Download iMind for Android](https://github.com/chenyuantao/multica/releases/download/imind-android-latest/imind-release.apk)
+
+`.github/workflows/imind-android-release.yml` verifies and publishes builds on
+the same branches and app paths as the debug workflow, or through a manual
+Actions run. Each build also has an immutable `imind-android-<version_code>`
+prerelease with the APK and `version.json` (checksum, source revision and local
+working-tree status). The `imind-android-latest` prerelease holds the moving
+download and manifest without changing Multica's latest stable release.
+
+To build and publish the current checkout locally, authenticate `gh` and run
+from `imind/app/`:
+
+```sh
+bash tool/publish_android_release.sh
+```
+
+Release mode currently uses the same existing development signing key as the
+debug builds. CI restores `IMIND_ANDROID_DEBUG_KEYSTORE_BASE64`; local builds
+use `~/.android/debug.keystore` or `IMIND_DEBUG_KEYSTORE`. This supports
+in-place installation with matching keys; it is not store distribution signing.
+Release version codes use Unix seconds and exceed the debug channel's version
+codes. Release builds do not check the debug update channel; install future
+release builds from the fixed URL. Returning to a lower-version debug build
+requires a separate migration and should not be done by uninstalling user data.
+
 ## Android debug distribution and updates
 
 `.github/workflows/imind-android-debug.yml` builds and publishes on pushes that
