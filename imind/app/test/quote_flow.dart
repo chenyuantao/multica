@@ -3,6 +3,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:imind_app/main.dart';
+import 'package:imind_app/action_button.dart';
 import 'package:imind_app/ai_chat.dart';
 import 'package:imind_app/quoted_markdown.dart';
 
@@ -12,6 +13,20 @@ const article =
     '# 把想法写清楚\n\n**Clarity** makes an idea useful. Start with the reader and keep the next step concrete.\n\nA [reference](https://example.com) gives readers context. Explain why it matters before adding more detail.\n\nKeep the draft small. Review one decision at a time, then turn feedback into the next version.';
 
 class QuoteFlowApi extends ChatApi {
+  QuoteFlowApi({this.detailNote});
+  final Map<String, dynamic>? detailNote;
+
+  @override
+  Future<Map<String, dynamic>> getNote(String machine, String id) async =>
+      detailNote ??
+      const {
+        'id': noteId,
+        'revision': 'r1',
+        'type': 'note',
+        'title': '把想法写清楚',
+        'content': article,
+      };
+
   @override
   Future<Map<String, dynamic>> noteChatHistory(
     String issueId, {
@@ -123,7 +138,7 @@ Future<void> runQuoteFlow(
   expect(draft.pending.length, 2);
   await comment('draft', '删除这条引用');
   await shot('03-highlighted-quotes');
-  await tester.tap(find.text('AI+').last);
+  await tester.tap(find.byTooltip('AI+'));
   await tester.pumpAndSettle();
   expect(find.byType(NoteAiChatSheet), findsOneWidget);
   expect(find.byKey(const ValueKey('quote-chip-1')), findsOneWidget);
@@ -159,7 +174,6 @@ Future<void> runMarkDeletionFlow(
   Future<void> Function(String)? capture,
   bool recording = false,
 }) async {
-  final api = QuoteFlowApi();
   final note = {
     'id': noteId,
     'revision': 'r',
@@ -167,6 +181,7 @@ Future<void> runMarkDeletionFlow(
     'title': '标记删除',
     'content': '**第一段**\n\n第二段',
   };
+  final api = QuoteFlowApi(detailNote: note);
   addTearDown(api.close);
   await tester.pumpWidget(
     MaterialApp(
@@ -209,8 +224,8 @@ Future<void> runMarkDeletionFlow(
   expect(draft.deleting, isTrue);
   expect(draft.selected, {1});
   if (capture != null) await capture('06-single-selected');
-  expect(find.text('取消'), findsOneWidget);
-  expect(find.text('删除'), findsOneWidget);
+  expect(find.byTooltip('取消'), findsOneWidget);
+  expect(find.byTooltip('删除'), findsOneWidget);
   expect(find.byTooltip('返回'), findsNothing);
   expect(find.byTooltip('更多'), findsNothing);
   expect(find.byType(ActionPill), findsNothing);
@@ -229,19 +244,25 @@ Future<void> runMarkDeletionFlow(
   if (capture != null) await capture('07-multi-selected');
   await tapMark('第二段');
   expect(draft.selected, {1});
-  await tester.tap(find.text('删除'));
+  await tester.tap(find.byTooltip('删除'));
   await tester.pumpAndSettle();
   expect(draft.quotes.single.number, 2);
   expect(draft.pending.single.number, 2);
   expect(draft.deleting, isTrue);
   expect(draft.selected, isEmpty);
   expect(
-    tester.widget<TextButton>(find.widgetWithText(TextButton, '删除')).onPressed,
+    tester
+        .widget<AppActionButton>(
+          find.byWidgetPredicate(
+            (widget) => widget is AppActionButton && widget.tooltip == '删除',
+          ),
+        )
+        .onPressed,
     isNull,
   );
   expect(find.byType(ActionPill), findsNothing);
   if (capture != null) await capture('08-after-delete');
-  await tester.tap(find.text('取消'));
+  await tester.tap(find.byTooltip('取消'));
   await tester.pumpAndSettle();
   expect(draft.deleting, isFalse);
   expect(find.byType(ActionPill), findsOneWidget);

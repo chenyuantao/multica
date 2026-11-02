@@ -112,6 +112,108 @@ class MulticaApi {
     return [for (final item in value) _object(item)];
   }
 
+  /// Lists group conversations the current member has joined in this workspace.
+  Future<List<Map<String, dynamic>>> groupChats() async {
+    final data = _object(await _request('GET', '/api/group-chats'));
+    final rawChats = data['chats'];
+    if (rawChats is! List) throw _malformed('chats');
+    return [for (final value in rawChats) _groupChat(value)];
+  }
+
+  /// Uses the same idempotent direct-chat endpoint as Multica IM contacts.
+  Future<Map<String, dynamic>> openDirectGroupChat({
+    required String memberType,
+    required String memberId,
+  }) async {
+    _checkId(memberId);
+    if (memberType != 'member' && memberType != 'agent') {
+      throw ApiException(400, '联系人类型无效');
+    }
+    return _groupChat(
+      await _request(
+        'POST',
+        '/api/group-chats/direct',
+        body: {'member_type': memberType, 'member_id': memberId},
+      ),
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> searchGroupChats(String query) async {
+    final q = query.trim();
+    if (q.isEmpty) return [];
+    final data = _object(
+      await _request(
+        'GET',
+        '/api/group-chats/search?${Uri(queryParameters: {'q': q}).query}',
+      ),
+    );
+    return [
+      for (final value in _list(data['hits'], 'hits'))
+        _groupChatSearchHit(value),
+    ];
+  }
+
+  static Map<String, dynamic> _groupChatSearchHit(Object? value) {
+    final hit = _object(value);
+    if (!validWorkspaceId(hit['chat_id']) ||
+        !validWorkspaceId(hit['message_id'])) {
+      throw _malformed('search.hit');
+    }
+    final count = hit['hit_count'];
+    if (count != null && (count is! int || count < 0)) {
+      throw _malformed('search.hit_count');
+    }
+    return {
+      ...hit,
+      'snippet': _string(hit, 'snippet'),
+      'message_at': _string(hit, 'message_at'),
+      'hit_count': count ?? 0,
+    };
+  }
+
+  static Map<String, dynamic> _groupChat(Object? value) {
+    final data = _object(value);
+    if (!validWorkspaceId(data['id'])) throw _malformed('chat.id');
+    final members = <Map<String, dynamic>>[];
+    final rawMembers = data['members'];
+    if (rawMembers is! List) throw _malformed('chat.members');
+    for (final value in rawMembers) {
+      final member = _object(value);
+      final type = _string(member, 'member_type');
+      if ((type != 'member' && type != 'agent') ||
+          !validWorkspaceId(member['member_id'])) {
+        throw _malformed('chat.member');
+      }
+      members.add({
+        ...member,
+        'member_type': type,
+        'member_id': member['member_id'],
+      });
+    }
+    final lastMessage = data['last_message'];
+    if (lastMessage != null && lastMessage is! Map<String, dynamic>) {
+      throw _malformed('chat.last_message');
+    }
+    final unreadCount = data['unread_count'];
+    if (unreadCount != null && (unreadCount is! int || unreadCount < 0)) {
+      throw _malformed('chat.unread_count');
+    }
+    return {
+      ...data,
+      'id': data['id'],
+      'title': _string(data, 'title', '未命名会话'),
+      'description': _string(data, 'description'),
+      'members': members,
+      'last_message': lastMessage,
+      'last_comment_at': _string(data, 'last_comment_at'),
+      'unread_count': unreadCount ?? 0,
+      'pinned': data['pinned'] == true,
+      'is_direct': data['is_direct'] == true,
+      'task': data['task'] == true,
+      'status': _string(data, 'status'),
+    };
+  }
+
   Future<List<Map<String, dynamic>>> workspaceMembers() async {
     final workspace = workspaceId;
     if (!validWorkspaceId(workspace)) throw ApiException(400, '请先选择工作区');

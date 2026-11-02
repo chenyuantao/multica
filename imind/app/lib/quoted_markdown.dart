@@ -6,7 +6,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
-import 'ai_composer.dart';
+import 'selection_comment.dart';
 import 'media.dart';
 import 'api.dart';
 import 'note_quotes.dart';
@@ -142,7 +142,11 @@ class _QuotedMarkdownState extends State<QuotedMarkdown> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (_) => _SelectionComment(markdown: markdown),
+      builder: (_) => SelectionCommentSheet(
+        markdown: markdown,
+        api: widget.api,
+        machine: widget.machine,
+      ),
     );
     if (!mounted) return;
     if (instruction != null && instruction.trim().isNotEmpty) {
@@ -246,80 +250,6 @@ class _QuotedMarkdownState extends State<QuotedMarkdown> {
               ),
             ),
           ),
-        ),
-      ),
-    ),
-  );
-}
-
-class _SelectionComment extends StatefulWidget {
-  const _SelectionComment({required this.markdown});
-  final String markdown;
-  @override
-  State<_SelectionComment> createState() => _SelectionCommentState();
-}
-
-class _SelectionCommentState extends State<_SelectionComment> {
-  final _input = TextEditingController();
-  @override
-  void dispose() {
-    _input.dispose();
-    super.dispose();
-  }
-
-  void _submit() {
-    if (_input.text.trim().isNotEmpty) {
-      Navigator.pop(context, _input.text.trim());
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-    child: SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Text(
-                  'AI+ 划词评论',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-                const Spacer(),
-                IconButton(
-                  tooltip: '取消划词评论',
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close),
-                ),
-              ],
-            ),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              margin: const EdgeInsets.only(bottom: 12),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF2F2F6),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                widget.markdown,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Color(0xFF6C6C70)),
-              ),
-            ),
-            AiComposer(
-              controller: _input,
-              autofocus: true,
-              onSend: _submit,
-              onTapOutside: () => Navigator.pop(context),
-            ),
-          ],
         ),
       ),
     ),

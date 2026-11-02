@@ -102,6 +102,27 @@ adb -s emulator-5554 shell am start -n ai.multica.imind_app/.MainActivity
 
 Export and recycle-bin recovery remain unavailable. AI naming remains Mock. AI+ uses persisted file-specific Multica group chats; images and original WAV recordings use the authenticated shared-media contract in `../CONTRACT.md`.
 
+## Home navigation acceptance
+
+The home screen has Notes, Conversations, and Me tabs. Note creation, clipping,
+and recording are in the top-right menu above sorting. Conversations lists
+joined chats in the selected workspace; its contacts drawer contains only
+agents and members. Opening a chat reuses the AI+ composer and message UI in a
+full page. Me shows the current profile and sign-out action.
+
+Run the isolated native navigation check from this directory:
+
+```sh
+flutter drive --driver=test_driver/navigation_driver.dart \
+  --target=integration_test/navigation_e2e_test.dart -d <iOS-simulator-ID>
+```
+
+It uses in-memory API/session fixtures, checks menu order, tabs, contacts,
+message sending, return navigation and sign-out, and captures nine screenshots
+under `outputs/imind/navigation/` in the repository root. It does
+not verify a live backend, WebSocket delivery, or real agent execution. Restore
+a normal app build after running the integration entry point.
+
 ## Production verification
 
 Remote profiles require explicit `--production` and HTTPS. Use a dedicated private share whose served prefix starts with `imind-prod-e2e-`, an authorized account session, and uniquely named test fixtures. Never repoint an existing user directory for testing. The runner uses the remote API directly rather than the emulator's host loopback address.
@@ -175,3 +196,43 @@ The `detail` suite creates temporary notes, clips and recordings through the loc
 Run `python3 tool/run_feature_e2e.py --platform ios --device <booted-iOS-27-UDID> --suite interaction` against the dedicated local acceptance environment. This suite covers home placement, pull refresh (including empty filtered results), OR tag chips, reading/editing exit gestures on notes/clips/recordings, manual and real DeepSeek tagging, revision conflicts, authorized native image preview, and editor dictation. It requires the existing local DeepSeek and ASR configuration. Native microphone capture is checked separately from paced synthetic PCM sent through real ASR; the latter verifies selection replacement and preservation of text after the cursor.
 
 The image case prints `E2E_INTERACTION_NATIVE_VIEWER` and pauses for native inspection. During that pause, inspect Quick Look and close it with Done using the iOS UI tools; the Flutter test resumes and checks the detail menu. The dictation error case restarts only the local acceptance backend to verify an actual WebSocket disconnect and retry. Results, sanitized logs, and screenshots use `ios-interaction-p1` under `outputs/imind/`. Restore a normal local build afterward to remove the integration entry point and temporary defines. See [INTERACTION_VALIDATION.md](../INTERACTION_VALIDATION.md) for results and coverage boundaries.
+
+## Cached reading and conversation search
+
+Notes and conversations race encrypted local reads against network reads for
+both lists and details. A cached result can render first; a successful network
+result replaces it and updates the cache. Late cache results never replace
+network data. Cache namespaces include the API origin, account session,
+workspace and shared root. Network confirmation is required before writing,
+sending, renaming, tagging, deleting or starting a contact conversation; a
+shared interceptor shows a toast while keeping the local draft. Failed note
+reads retain the cached content and offer a sync retry.
+
+The Conversations header opens search inline. Search combines cached message
+history with the existing `/api/group-chats/search` endpoint; ranking follows
+Multica IM's title match, match count and latest activity order. Local search
+covers downloaded history; network search covers accessible server history.
+Contacts use the same actor avatar renderer as conversation rows and reuse the
+existing direct conversation or the idempotent direct-chat endpoint.
+
+Native fixture acceptance covers navigation, contact creation, message search,
+cache-first rendering and mutation blocking. To keep platform screenshots apart:
+
+```sh
+IMIND_NAVIGATION_OUTPUT=../../outputs/imind/navigation-android \
+  flutter drive --driver=test_driver/navigation_driver.dart \
+  --target=integration_test/navigation_e2e_test.dart -d <Android-emulator-ID>
+```
+
+For real local API, message persistence, content search, encrypted cache reopen
+and delayed-history interception, run:
+
+```sh
+python3 tool/run_feature_e2e.py --platform ios --device <iOS-simulator-ID> --suite navigation
+python3 tool/run_feature_e2e.py --platform android --device <Android-emulator-ID> --suite navigation --mirror
+```
+
+The live suite requires the dedicated `imind-validation` workspace, an active
+`imindhost` share, no executable agents, and the existing `iMind device peer`
+fixture. It removes its unique test message afterward. It keeps the dedicated
+peer conversation for reuse. Restore a normal build after native acceptance.

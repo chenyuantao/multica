@@ -1,3 +1,5 @@
+import 'package:imind_app/action_button.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -199,7 +201,7 @@ void main() {
         await capture(tester, 'home-or-tags');
         await chip(a);
         expect(find.text('${notes[0]['title']}'), findsNothing);
-        await f.tap(find.widgetWithText(TextButton, '取消'));
+        await f.tap(find.byTooltip('取消'));
         expect(find.text('${notes[2]['title']}'), findsNothing);
         expect(find.text('${notes[0]['title']}'), findsOneWidget);
         await f.menu('全部');
@@ -380,7 +382,7 @@ void main() {
           await f.tap(find.text('${note['title']}'));
           await menu(f, '编辑');
           await f.text(find.byType(TextField).last, '顶部放弃草稿');
-          await f.tap(find.widgetWithText(TextButton, '放弃'));
+          await f.tap(find.byTooltip('放弃'));
           await f.wait(find.byTooltip('返回'));
           expect(find.byType(TextField), findsNothing);
           expect(find.text('顶部放弃草稿'), findsNothing);
@@ -422,7 +424,7 @@ void main() {
         await f.tap(find.text('${note['title']}'));
         await menu(f, '标记');
         await f.tap(find.widgetWithText(CheckboxListTile, '学习'));
-        await f.tap(find.widgetWithText(TextButton, '保存'));
+        await f.tap(find.byTooltip('保存'));
         await readyDetail(f);
         var saved = await f.api.getNote(Flow.machine, '${note['id']}');
         expect(saved['tags'], contains('学习'));
@@ -431,7 +433,7 @@ void main() {
         await f.wait(find.byType(TextField));
         await f.text(find.byType(TextField).last, '手建标签');
         await f.tap(find.widgetWithText(TextButton, '添加'));
-        await f.tap(find.widgetWithText(TextButton, '保存'));
+        await f.tap(find.byTooltip('保存'));
         await readyDetail(f);
         saved = await f.api.getNote(Flow.machine, '${note['id']}');
         expect(saved['tags'], containsAll(['原有标签', '学习', '手建标签']));
@@ -581,7 +583,7 @@ void main() {
         debugPrint(
           'E2E_INTERACTION: editor actual native mic ready/start/stop passed',
         );
-        await f.tap(find.widgetWithText(TextButton, '放弃'));
+        await f.tap(find.byTooltip('放弃'));
         await f.wait(find.byTooltip('返回'));
         await tester.pump(const Duration(seconds: 1));
         RecordPlatform.instance = pcm;
@@ -600,13 +602,18 @@ void main() {
         expect(tester.widget<TextField>(field).readOnly, isTrue);
         expect(
           tester
-              .widget<TextButton>(find.widgetWithText(TextButton, '加粗'))
+              .widget<AppActionButton>(
+                find.byWidgetPredicate(
+                  (widget) =>
+                      widget is AppActionButton && widget.tooltip == '加粗',
+                ),
+              )
               .onPressed,
           isNull,
         );
         await capture(tester, 'editor-streaming-cursor');
         // Save during capture must stop and drain before persisting.
-        await tester.tap(find.widgetWithText(TextButton, '保存'));
+        await tester.tap(find.byTooltip('保存'));
         await f.wait(find.byTooltip('返回'));
         final saved = await f.api.getNote(Flow.machine, '${note['id']}');
         expect(saved['content'], contains('测试'));
@@ -647,7 +654,7 @@ void main() {
               tester.widget<TextField>(field).readOnly && pcm.timers.isNotEmpty,
         );
         final stopsBeforeDiscard = pcm.stops;
-        await f.tap(find.widgetWithText(TextButton, '放弃'));
+        await f.tap(find.byTooltip('放弃'));
         await f.wait(find.byTooltip('返回'));
         expect(find.byType(TextField), findsNothing);
         expect(pcm.timers, isEmpty);

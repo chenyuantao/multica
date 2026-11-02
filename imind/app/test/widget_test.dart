@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:imind_app/api.dart';
+import 'package:imind_app/app_tabs.dart';
 import 'package:imind_app/chat_unread.dart';
 import 'package:imind_app/ai_chat.dart';
 import 'package:imind_app/main.dart';
@@ -42,6 +43,7 @@ MemorySessionStorage _storage({
 }
 
 MulticaApi _api({
+  Map<String, dynamic>? detailNote,
   Future<http.Response?> Function(http.Request request)? intercept,
 }) {
   final api = MulticaApi(
@@ -63,6 +65,7 @@ MulticaApi _api({
         '/api/imind/notes/list' => {
           'notes': [_note()],
         },
+        '/api/imind/notes/get' => detailNote ?? _note(),
         '/api/imind/chats/unread' => {'chats': []},
         '/api/imind/bootstrap' => {},
         '/api/imind/chats/ensure' => {
@@ -92,6 +95,8 @@ MulticaApi _api({
       );
     }),
   );
+  api.token = 'test-session';
+  api.workspaceId = _workspace;
   addTearDown(api.close);
   return api;
 }
@@ -116,7 +121,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: NoteEditor(
-            api: _api(),
+            api: _api(detailNote: {..._note(), 'type': type}),
             machine: 'mbp',
             note: {..._note(), 'type': type},
           ),
@@ -137,7 +142,10 @@ void main() {
       expect(buttons.map((button) => button.label), ['AI+', '编辑']);
       expect(buttons.map((button) => button.dark), [true, false]);
       expect(
-        find.descendant(of: find.byType(AppBar), matching: find.text('AI+')),
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.byTooltip('AI+'),
+        ),
         findsNothing,
       );
       await tester.tap(find.byTooltip('更多'));
@@ -150,8 +158,8 @@ void main() {
       await tester.tap(find.text('编辑'));
       await tester.pumpAndSettle();
       expect(find.byType(ActionPill), findsNothing);
-      expect(find.text('保存'), findsOneWidget);
-      await tester.tap(find.text('放弃'));
+      expect(find.byTooltip('保存'), findsOneWidget);
+      await tester.tap(find.byTooltip('放弃'));
       await tester.pumpAndSettle();
       expect(find.byType(ActionPill), findsOneWidget);
       expect(tester.takeException(), isNull);
@@ -162,7 +170,11 @@ void main() {
     final content = '${List.filled(80, '文章段落').join('\n\n')}\n\n文章结尾';
     await tester.pumpWidget(
       MaterialApp(
-        home: NoteEditor(api: _api(), machine: 'mbp', note: _note(content)),
+        home: NoteEditor(
+          api: _api(detailNote: _note(content)),
+          machine: 'mbp',
+          note: _note(content),
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -208,7 +220,7 @@ void main() {
       expect(ensures, 1);
       expect(histories, 1);
       expect(reads, 0);
-      await tester.tap(find.text('AI+'));
+      await tester.tap(find.byTooltip('AI+'));
       await tester.pumpAndSettle();
       expect(find.byType(NoteAiChatSheet), findsOneWidget);
       expect(ensures, 1);
@@ -245,7 +257,7 @@ void main() {
     await _pump(tester, _storage(), api);
     await tester.tap(find.text('示例笔记'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('AI+'));
+    await tester.tap(find.byTooltip('AI+'));
     await tester.pump(const Duration(milliseconds: 350));
     expect(find.byType(NoteAiChatSheet), findsOneWidget);
     ensureGate.complete();
@@ -277,10 +289,10 @@ void main() {
       await tester.pumpAndSettle();
       expect(ensures, 1);
       expect(tester.takeException(), isNull);
-      await tester.tap(find.text('AI+'));
+      await tester.tap(find.byTooltip('AI+'));
       await tester.pumpAndSettle();
       expect(find.text('无法打开此文件的群聊'), findsOneWidget);
-      await tester.tap(find.text('重试'));
+      await tester.tap(find.byTooltip('重试'));
       await tester.pumpAndSettle();
       expect(ensures, 2);
       expect(find.text('围绕这份文件开始讨论'), findsOneWidget);
@@ -332,7 +344,7 @@ void main() {
   });
   testWidgets('login is the signed-out home', (tester) async {
     await tester.pumpWidget(const IMindApp(initialToken: ''));
-    expect(find.text('发送验证码'), findsOneWidget);
+    expect(find.byTooltip('发送验证码'), findsOneWidget);
     expect(find.text('在这里，记录你的一切。'), findsOneWidget);
   });
   testWidgets('首页与详情显示文件群聊未读，展开后清除', (tester) async {
@@ -378,7 +390,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('3'), findsOneWidget);
     expect(tester.getSize(find.byType(ChatUnreadBadge)), const Size(19, 19));
-    await tester.tap(find.text('AI+').first);
+    await tester.tap(find.byTooltip('AI+').first);
     await tester.pumpAndSettle();
     expect(reads, greaterThan(0));
     expect(find.text('3'), findsNothing);
@@ -496,7 +508,7 @@ void main() {
           : null,
     );
     await _pump(tester, storage, api);
-    expect(find.text('发送验证码'), findsOneWidget);
+    expect(find.byTooltip('发送验证码'), findsOneWidget);
     expect(storage.values, isEmpty);
     expect(api.token, isNull);
     expect(api.workspaceId, isNull);
@@ -517,9 +529,9 @@ void main() {
     await tester.tap(find.text('编辑'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, '修改后的正文');
-    await tester.tap(find.text('保存'));
+    await tester.tap(find.byTooltip('保存'));
     await tester.pumpAndSettle();
-    expect(find.text('发送验证码'), findsOneWidget);
+    expect(find.byTooltip('发送验证码'), findsOneWidget);
     expect(find.byType(NoteEditor), findsNothing);
     expect(storage.values, isEmpty);
     expect(tester.takeException(), isNull);
@@ -550,9 +562,9 @@ void main() {
     await tester.tap(find.text('编辑'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, '修改后的正文');
-    await tester.tap(find.text('保存'));
+    await tester.tap(find.byTooltip('保存'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('AI+'));
+    await tester.tap(find.byTooltip('AI+'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, '整理重点');
     await tester.tap(find.byTooltip('发送'));
@@ -595,9 +607,9 @@ void main() {
     }
     await tester.tap(find.text('编辑'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('保存'));
+    await tester.tap(find.byTooltip('保存'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('AI+'));
+    await tester.tap(find.byTooltip('AI+'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, '请整理重点');
     await tester.tap(find.byTooltip('发送'));
@@ -656,9 +668,9 @@ void main() {
     }
     await tester.tap(find.text('编辑'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('保存'));
+    await tester.tap(find.byTooltip('保存'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('AI+'));
+    await tester.tap(find.byTooltip('AI+'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, '请总结这份笔记');
     await tester.tap(find.byTooltip('发送'));
@@ -759,9 +771,9 @@ void main() {
     }
     await tester.tap(find.text('编辑'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('保存'));
+    await tester.tap(find.byTooltip('保存'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('AI+'));
+    await tester.tap(find.byTooltip('AI+'));
     await tester.pumpAndSettle();
     expect(requests, contains('GET /api/issues/$_otherWorkspace/task-runs'));
     expect(find.byTooltip('终止 Agent A 的运行'), findsOneWidget);
@@ -816,7 +828,11 @@ void main() {
 
   for (final recording in [false, true]) {
     testWidgets('iOS 边缘滑动确认退出详情 recording=$recording', (tester) async {
-      final api = _api();
+      final api = _api(
+        detailNote: recording
+            ? {..._note(), 'type': 'recording', 'transcript': '原文'}
+            : _note(),
+      );
       await tester.pumpWidget(
         MaterialApp(
           theme: ThemeData(platform: TargetPlatform.iOS),
@@ -877,7 +893,11 @@ void main() {
     });
 
     testWidgets('顶部放弃恢复原文并停留详情 recording=$recording', (tester) async {
-      final api = _api();
+      final api = _api(
+        detailNote: recording
+            ? {..._note(), 'type': 'recording', 'transcript': '原文'}
+            : _note(),
+      );
       await tester.pumpWidget(
         MaterialApp(
           home: Builder(
@@ -914,7 +934,7 @@ void main() {
       await tester.tap(find.text('编辑'));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField).last, '未保存的草稿');
-      await tester.tap(find.text('放弃'));
+      await tester.tap(find.byTooltip('放弃'));
       await tester.pumpAndSettle();
       expect(find.text('放弃修改？'), findsNothing);
       expect(find.text('打开详情'), findsNothing);
@@ -930,7 +950,7 @@ void main() {
         tester.widget<TextField>(find.byType(TextField).last).controller!.text,
         recording ? '原文' : '示例正文',
       );
-      await tester.tap(find.text('放弃'));
+      await tester.tap(find.byTooltip('放弃'));
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('返回'));
       await tester.pumpAndSettle();
@@ -955,10 +975,10 @@ void main() {
       find.byType(TextField).first,
       'example@example.test',
     );
-    await tester.tap(find.text('发送验证码'));
+    await tester.tap(find.byTooltip('发送验证码'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, 'test-code');
-    await tester.tap(find.text('登录'));
+    await tester.tap(find.byTooltip('登录'));
     await tester.pumpAndSettle();
     expect(find.text('示例笔记'), findsOneWidget);
     final saved = jsonDecode(storage.values[SessionStore.sessionKey]!);
@@ -968,12 +988,54 @@ void main() {
   testWidgets('手动退出清理工作区与共享根', (tester) async {
     final storage = _storage();
     await _pump(tester, storage, _api());
-    await tester.tap(find.byTooltip('菜单'));
+    await tester.tap(find.text('我的'));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('退出登录'));
     await tester.pumpAndSettle();
-    expect(find.text('发送验证码'), findsOneWidget);
+    expect(find.byTooltip('发送验证码'), findsOneWidget);
     expect(storage.values, isEmpty);
+  });
+
+  testWidgets('底部三栏切换保留笔记搜索并显示个人资料', (tester) async {
+    final storage = _storage();
+    await _pump(
+      tester,
+      storage,
+      _api(
+        intercept: (request) async {
+          if (request.url.path == '/api/me') {
+            return http.Response(
+              jsonEncode({
+                'id': _id,
+                'name': 'Ada Lovelace',
+                'email': 'ada@example.test',
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          return null;
+        },
+      ),
+    );
+    Finder tab(String label) =>
+        find.descendant(of: find.byType(AppTabs), matching: find.text(label));
+    expect(tab('笔记'), findsOneWidget);
+    expect(tab('会话'), findsOneWidget);
+    expect(tab('我的'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('搜索'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '示例');
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(tab('我的'));
+    await tester.pumpAndSettle();
+    expect(find.text('Ada Lovelace'), findsOneWidget);
+
+    await tester.tap(tab('笔记'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('返回'), findsOneWidget);
+    expect(find.text('示例笔记'), findsOneWidget);
   });
   testWidgets('首页手动重命名读取完整笔记并保留正文转写音频', (tester) async {
     tester.platformDispatcher.accessibilityFeaturesTestValue =
@@ -1073,9 +1135,9 @@ void main() {
     }
     await tester.tap(find.text('编辑'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('保存'));
+    await tester.tap(find.byTooltip('保存'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('AI+'));
+    await tester.tap(find.byTooltip('AI+'));
     await tester.pumpAndSettle();
     expect(find.byTooltip('终止 Agent 的运行'), findsOneWidget);
     expect(find.text('Agent'), findsOneWidget);

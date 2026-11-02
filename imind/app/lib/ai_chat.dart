@@ -10,10 +10,13 @@ import 'package:uuid/uuid.dart';
 import 'package:web_socket_channel/io.dart';
 
 import 'api.dart';
+import 'action_button.dart';
+import 'note_actions.dart';
 import 'ai_composer.dart';
 import 'note_quotes.dart';
 import 'agent_mentions.dart';
 import 'note_chat_prefetch.dart';
+import 'offline_cache.dart';
 import 'chat_unread.dart';
 import 'chat_time.dart';
 import 'input_insets.dart';
@@ -67,6 +70,7 @@ class NoteAiChatSheet extends StatefulWidget {
     this.voiceRecorder,
     this.voiceSessionFactory,
     this.unread,
+    this.conversation,
   });
   final MulticaApi api;
   final String machine;
@@ -78,8 +82,36 @@ class NoteAiChatSheet extends StatefulWidget {
   final VoiceSessionFactory? voiceSessionFactory;
   final ChatUnreadController? unread;
 
+  /// When supplied, opens an existing issue conversation without note setup.
+  final Map<String, dynamic>? conversation;
+
   @override
   State<NoteAiChatSheet> createState() => _NoteAiChatSheetState();
+}
+
+/// Full-page chat for an existing conversation, such as a workspace issue chat.
+/// This shares message, history, realtime, mention, and retry behavior with the
+/// note chat sheet while skipping note-specific setup.
+class ConversationChatPage extends StatelessWidget {
+  const ConversationChatPage({
+    super.key,
+    required this.api,
+    required this.machine,
+    required this.conversation,
+  });
+
+  final MulticaApi api;
+  final String machine;
+  final Map<String, dynamic> conversation;
+
+  @override
+  Widget build(BuildContext context) => NoteAiChatSheet(
+    api: api,
+    machine: machine,
+    note: const {},
+    conversation: conversation,
+    unread: ChatUnreadScope.maybeOf(context),
+  );
 }
 
 class _PendingMessage {
@@ -128,6 +160,7 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
   bool _initialMessageSent = false;
   double _keyboardInset = 0;
   bool _prefetchUsed = false;
+  OfflineResource<Map<String, dynamic>>? _history;
 
   @override
   void initState() {
@@ -155,6 +188,7 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
   @override
   void dispose() {
     _disposed = true;
+    _history?.dispose();
     widget.unread?.setActiveChat(null);
     _retry?.cancel();
     _historyRetry?.cancel();
@@ -171,6 +205,30 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
 
   Future<void> _load() async {
     try {
+      final conversation = widget.conversation;
+      if (conversation != null) {
+        final issueId = conversation['issue_id'] ?? conversation['id'];
+        if (issueId is! String || !validWorkspaceId(issueId)) {
+          throw ApiException(400, '无法打开此对话');
+        }
+        _issueId = issueId;
+        widget.unread?.setActiveChat(_issueId);
+        unawaited(widget.unread?.refresh() ?? Future<void>.value());
+        unawaited(_loadUser(widget.api.getMe()));
+        unawaited(_loadMembers());
+        unawaited(_loadAgentNames());
+        if (widget.unread != null) {
+          _globalSubscription = widget.unread!.events.listen(
+            (frame) => _onFrame(jsonEncode(frame)),
+          );
+        } else {
+          _connect();
+        }
+        unawaited(_loadRuns());
+        await _loadLatest();
+        if (!_disposed) unawaited(_refreshHistory());
+        return;
+      }
       final noteId = '${widget.note['id'] ?? ''}';
       if (!validWorkspaceId(noteId)) throw ApiException(400, '请先保存笔记再使用 AI+');
       final prepared =
@@ -201,8 +259,6 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
       }
       unawaited(_loadRuns(prepared.runs));
       await _loadLatest(initial: prepared.history);
-      // Render the prepared window first, then catch changes since preparation.
-      if (!_disposed) unawaited(_refreshHistory());
       if (!_disposed &&
           !_initialMessageSent &&
           (widget.initialMessage?.trim().isNotEmpty ?? false)) {
@@ -210,6 +266,9 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
         _input.text = widget.initialMessage!.trim();
         await _send();
       }
+      // Send any initial selection against confirmed history before a new read
+      // temporarily locks mutations while refreshing the prepared window.
+      if (!_disposed) unawaited(_refreshHistory());
     } catch (error) {
       if (!_disposed) setState(() => _error = '$error');
     } finally {
@@ -250,6 +309,7 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
   }
 
   Future<void> _markRead(String issueId) async {
+    if (!(_history?.networkReady ?? false)) return;
     try {
       await (widget.unread?.markRead(issueId) ??
           widget.api.markNoteChatRead(issueId));
@@ -264,44 +324,75 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
   }) async {
     final issueId = _issueId;
     if (issueId == null) return;
-    var page = await (initial ?? widget.api.noteChatHistory(issueId));
-    final incoming = (page['comments'] as List)
-        .cast<Map<String, dynamic>>()
-        .toList();
-    // Refresh the loaded window, including removals missed while disconnected.
-    // Retaining a merge-only cache would keep deleted messages forever.
-    final oldest = _messages.isEmpty
-        ? null
-        : '${_messages.first['created_at']}';
-    while (!replace &&
-        page['has_more'] == true &&
-        incoming.isNotEmpty &&
-        oldest != null &&
-        '${incoming.first['created_at']}'.compareTo(oldest) > 0) {
-      final first = incoming.first;
-      page = await widget.api.noteChatHistory(
-        issueId,
-        beforeCreatedAt: first['created_at'] as String?,
-        beforeId: first['id'] as String?,
-      );
-      final older = (page['comments'] as List).cast<Map<String, dynamic>>();
-      if (older.isEmpty) break;
-      incoming.insertAll(0, older);
-    }
-    if (_disposed) return;
-    setState(() {
-      for (final message in incoming) {
-        final status = message['imind_agent_status'];
-        if (status is String) _dispatchStates[message['id'] as String] = status;
-      }
-      _messages
-        ..clear()
-        ..addAll(incoming);
-      _hasMore = page['has_more'] == true;
-      _loading = false;
-    });
-    _scrollToEnd();
-    unawaited(_markRead(issueId));
+    _history ??= OfflineResource<Map<String, dynamic>>(
+      scope: OfflineCacheScope.capture(widget.api, machine: widget.machine),
+      key: 'chat:$issueId:history',
+      decode: (value) {
+        final page = Map<String, dynamic>.from(value as Map);
+        if (page['comments'] is! List || page['has_more'] is! bool) {
+          throw const FormatException('Invalid cached chat history');
+        }
+        page['comments'] = (page['comments'] as List)
+            .map((item) => Map<String, dynamic>.from(item as Map))
+            .toList();
+        return page;
+      },
+    );
+    Object? failure;
+    await _history!.load(
+      network: () async {
+        var page = await (initial ?? widget.api.noteChatHistory(issueId));
+        final incoming = (page['comments'] as List)
+            .cast<Map<String, dynamic>>()
+            .toList();
+        // Refresh the full visible window so missed removals disappear too.
+        final oldest = _messages.isEmpty
+            ? null
+            : '${_messages.first['created_at']}';
+        while (!replace &&
+            page['has_more'] == true &&
+            incoming.isNotEmpty &&
+            oldest != null &&
+            '${incoming.first['created_at']}'.compareTo(oldest) > 0) {
+          final first = incoming.first;
+          page = await widget.api.noteChatHistory(
+            issueId,
+            beforeCreatedAt: first['created_at'] as String?,
+            beforeId: first['id'] as String?,
+          );
+          final older = (page['comments'] as List).cast<Map<String, dynamic>>();
+          if (older.isEmpty) break;
+          incoming.insertAll(0, older);
+        }
+        return {'comments': incoming, 'has_more': page['has_more'] == true};
+      },
+      onData: (page, fromCache) {
+        if (_disposed ||
+            !_history!.scope.matches(widget.api, machine: widget.machine)) {
+          _history?.dispose();
+          return;
+        }
+        final incoming = (page['comments'] as List)
+            .cast<Map<String, dynamic>>();
+        setState(() {
+          for (final message in incoming) {
+            final status = message['imind_agent_status'];
+            if (status is String) {
+              _dispatchStates[message['id'] as String] = status;
+            }
+          }
+          _messages
+            ..clear()
+            ..addAll(incoming);
+          _hasMore = page['has_more'] == true;
+          _loading = false;
+        });
+        _scrollToEnd();
+        if (!fromCache) unawaited(_markRead(issueId));
+      },
+      onError: (error) => failure = error,
+    );
+    if (failure != null) throw failure!;
   }
 
   Future<void> _refreshHistory() async {
@@ -341,6 +432,7 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
   }
 
   Future<void> _loadMore() async {
+    if (!(_history?.networkReady ?? false)) return;
     if (_loadingMore || !_hasMore || _messages.isEmpty || _issueId == null) {
       return;
     }
@@ -363,6 +455,7 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
         );
         _hasMore = page['has_more'] == true;
       });
+      _persistHistory();
     } catch (error) {
       if (!_disposed) setState(() => _error = '$error');
     } finally {
@@ -538,17 +631,14 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
           : payload;
       _upsert(comment);
       if (type == 'comment:created') {
-        unawaited(
-          (widget.unread?.markRead(_issueId!) ??
-                  widget.api.markNoteChatRead(_issueId!))
-              .catchError((Object _) {}),
-        );
+        unawaited(_markRead(_issueId!));
       }
       unawaited(_loadRuns());
     } else if (type == 'comment:deleted') {
       final id = payload['comment_id'] ?? payload['id'];
       if (id is String && !_disposed) {
         setState(() => _messages.removeWhere((m) => m['id'] == id));
+        _persistHistory();
       }
     } else if (type == 'group_chat:updated') {
       unawaited(_refreshHistory());
@@ -563,6 +653,20 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
     } else if ('$type'.startsWith('task:')) {
       unawaited(_loadRuns());
     }
+  }
+
+  void _persistHistory() {
+    final history = _history;
+    if (history == null ||
+        !history.scope.matches(widget.api, machine: widget.machine)) {
+      return;
+    }
+    unawaited(
+      history.updateCache({
+        'comments': List<Map<String, dynamic>>.of(_messages),
+        'has_more': _hasMore,
+      }),
+    );
   }
 
   void _upsert(Map<String, dynamic> comment) {
@@ -586,9 +690,17 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
         _messages[index] = comment;
       }
     });
+    _persistHistory();
   }
 
+  bool _allowMutation() => allowNetworkAction(
+    context,
+    (_history?.networkReady ?? false) &&
+        (_history?.scope.matches(widget.api, machine: widget.machine) ?? false),
+  );
+
   Future<void> _send([_PendingMessage? retry]) async {
+    if (!_allowMutation()) return;
     if (retry == null && _voice.active) return;
     final message = _mentions.encode(_input.text).trim();
     final text = retry?.text ?? widget.quotes?.compose(message) ?? message;
@@ -629,6 +741,7 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
   }
 
   Future<void> _cancel(Map<String, dynamic> run) async {
+    if (!_allowMutation()) return;
     final taskId = run['id'] ?? run['task_id'];
     if (taskId is! String ||
         _issueId == null ||
@@ -655,6 +768,7 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
   }
 
   Future<void> _retryRun(Map<String, dynamic> run) async {
+    if (!_allowMutation()) return;
     final taskId = run['id'] ?? run['task_id'];
     final commentId = run['trigger_comment_id'];
     if (taskId is! String || commentId is! String || _issueId == null) return;
@@ -667,6 +781,7 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
   }
 
   Future<void> _retryDispatch(String commentId) async {
+    if (!_allowMutation()) return;
     if (_issueId == null || _retryingComments.contains(commentId)) return;
     setState(() => _retryingComments.add(commentId));
     try {
@@ -790,6 +905,7 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
   Widget build(BuildContext context) {
     final mention = _voice.active ? null : _mentions.active(_input.value);
     final noteTitle = '${widget.note['title'] ?? '未命名'}';
+    final fullPage = widget.conversation != null;
     final media = MediaQuery.of(context);
     if (_keyboardInset != media.viewInsets.bottom) {
       _keyboardInset = media.viewInsets.bottom;
@@ -797,174 +913,201 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
     }
     final availableHeight =
         media.size.height - inputBottomInset(context) - media.padding.top;
+    final chatContent = Column(
+      children: [
+        if (!fullPage) ...[
+          const SizedBox(height: 8),
+          Container(
+            width: 38,
+            height: 5,
+            decoration: BoxDecoration(
+              color: const Color(0xFFD8D8DD),
+              borderRadius: BorderRadius.circular(3),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 15, 12, 0),
+            child: Row(
+              children: [
+                const Icon(Icons.auto_awesome, color: Color(0xFF6E56CF)),
+                const SizedBox(width: 8),
+                const Text(
+                  'AI+ 群聊',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                ),
+                const Spacer(),
+                AppActionButton(
+                  tooltip: '关闭',
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close, size: 18),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                '文件：$noteTitle',
+                style: const TextStyle(color: _aiMuted),
+              ),
+            ),
+          ),
+        ],
+        if (_error != null)
+          _notice(
+            _error!,
+            action: _issueId == null
+                ? () {
+                    setState(() {
+                      _error = null;
+                      _loading = true;
+                    });
+                    unawaited(_load());
+                  }
+                : fullPage
+                ? () {
+                    unawaited(_refreshHistory());
+                    unawaited(_loadRuns());
+                  }
+                : null,
+            actionLabel: '重试',
+            dismiss: () => setState(() => _error = null),
+          ),
+        if (_loading)
+          const Expanded(child: Center(child: CircularProgressIndicator()))
+        else if (_issueId == null)
+          const Expanded(child: Center(child: Text('无法打开此文件的群聊')))
+        else ...[
+          if (_runError != null)
+            _notice('无法读取 Agent 运行状态。', action: _loadRuns, actionLabel: '重试'),
+          Expanded(
+            child: NotificationListener<ScrollNotification>(
+              onNotification: (event) {
+                if (event.metrics.extentAfter <= 24 && _hasMore) {
+                  unawaited(_loadMore());
+                }
+                return false;
+              },
+              child: ListView(
+                controller: _scroll,
+                // Keep the newest message anchored as the keyboard resizes the list.
+                reverse: true,
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+                children: [
+                  if (_loadingMore)
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(8),
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
+                  if (_messages.isEmpty && _pending.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Center(
+                        child: Text(fullPage ? '开始讨论' : '围绕这份文件开始讨论'),
+                      ),
+                    ),
+                  ..._conversation(),
+                  for (final pending in _pending) _pendingBubble(pending),
+                ].reversed.toList(),
+              ),
+            ),
+          ),
+          if (mention != null) _agentPicker(mention),
+          if (_voice.error != null) _notice(_voice.error!),
+          if (_voice.active)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Text(
+                _voice.connecting
+                    ? '正在连接语音服务…'
+                    : _voice.stopping
+                    ? '正在完成识别…'
+                    : '正在聆听，识别文字将填入输入框',
+              ),
+            ),
+          Padding(
+            key: const ValueKey('ai-composer'),
+            padding: EdgeInsets.fromLTRB(16, 2, 16, fullPage ? 8 : 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (widget.quotes != null)
+                  ListenableBuilder(
+                    listenable: widget.quotes!,
+                    builder: (context, _) => Wrap(
+                      spacing: 8,
+                      children: [
+                        for (final quote in widget.quotes!.pending)
+                          InputChip(
+                            key: ValueKey('quote-chip-${quote.number}'),
+                            shape: const StadiumBorder(),
+                            label: Text('${quote.number}'),
+                            tooltip: '${quote.markdown}\n${quote.instruction}',
+                            deleteButtonTooltipMessage: '删除引用 ${quote.number}',
+                            onDeleted: () => widget.quotes!.remove(quote),
+                          ),
+                      ],
+                    ),
+                  ),
+                AiComposer(
+                  controller: _input,
+                  inputFormatters: [
+                    if (_voice.active)
+                      TextInputFormatter.withFunction(
+                        (oldValue, _) => oldValue,
+                      ),
+                  ],
+                  onSend: _issueId == null || _voice.active
+                      ? null
+                      : () => _send(),
+                  voiceActive: _voice.active,
+                  onVoice:
+                      widget.machine.trim().isEmpty ||
+                          _issueId == null ||
+                          _voice.connecting ||
+                          _voice.stopping
+                      ? null
+                      : () {
+                          if (_voice.active) {
+                            _voice.stop();
+                          } else if (_allowMutation()) {
+                            _voice.start();
+                          }
+                        },
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+    if (fullPage) {
+      final title = '${widget.conversation!['title'] ?? '对话'}'.trim();
+      return Scaffold(
+        backgroundColor: Colors.white,
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          centerTitle: true,
+          title: DetailTitle(title.isEmpty ? '对话' : title),
+          leading: AppActionButton(
+            tooltip: '返回',
+            onPressed: () => Navigator.maybePop(context),
+            icon: const Icon(Icons.arrow_back),
+          ),
+        ),
+        body: SafeArea(child: chatContent),
+      );
+    }
     return Padding(
       padding: EdgeInsets.only(bottom: inputBottomInset(context)),
       child: SizedBox(
         height: min(media.size.height * .9, availableHeight),
-        child: Column(
-          children: [
-            const SizedBox(height: 8),
-            Container(
-              width: 38,
-              height: 5,
-              decoration: BoxDecoration(
-                color: const Color(0xFFD8D8DD),
-                borderRadius: BorderRadius.circular(3),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 15, 12, 0),
-              child: Row(
-                children: [
-                  const Icon(Icons.auto_awesome, color: Color(0xFF6E56CF)),
-                  const SizedBox(width: 8),
-                  const Text(
-                    'AI+ 群聊',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    tooltip: '关闭',
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close, size: 18),
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  '文件：$noteTitle',
-                  style: const TextStyle(color: _aiMuted),
-                ),
-              ),
-            ),
-            if (_error != null)
-              _notice(
-                _error!,
-                action: _issueId == null
-                    ? () {
-                        setState(() {
-                          _error = null;
-                          _loading = true;
-                        });
-                        unawaited(_load());
-                      }
-                    : null,
-                actionLabel: '重试',
-                dismiss: () => setState(() => _error = null),
-              ),
-            if (_loading)
-              const Expanded(child: Center(child: CircularProgressIndicator()))
-            else if (_issueId == null)
-              const Expanded(child: Center(child: Text('无法打开此文件的群聊')))
-            else ...[
-              if (_runError != null)
-                _notice(
-                  '无法读取 Agent 运行状态。',
-                  action: _loadRuns,
-                  actionLabel: '重试',
-                ),
-              Expanded(
-                child: NotificationListener<ScrollNotification>(
-                  onNotification: (event) {
-                    if (event.metrics.extentAfter <= 24 && _hasMore) {
-                      unawaited(_loadMore());
-                    }
-                    return false;
-                  },
-                  child: ListView(
-                    controller: _scroll,
-                    // Keep the newest message anchored as the keyboard resizes the list.
-                    reverse: true,
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
-                    children: [
-                      if (_loadingMore)
-                        const Center(
-                          child: Padding(
-                            padding: EdgeInsets.all(8),
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                        ),
-                      if (_messages.isEmpty && _pending.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.all(24),
-                          child: Center(child: Text('围绕这份文件开始讨论')),
-                        ),
-                      ..._conversation(),
-                      for (final pending in _pending) _pendingBubble(pending),
-                    ].reversed.toList(),
-                  ),
-                ),
-              ),
-              if (mention != null) _agentPicker(mention),
-              if (_voice.error != null) _notice(_voice.error!),
-              if (_voice.active)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Text(
-                    _voice.connecting
-                        ? '正在连接语音服务…'
-                        : _voice.stopping
-                        ? '正在完成识别…'
-                        : '正在聆听，识别文字将填入输入框',
-                  ),
-                ),
-              Padding(
-                // Voice notices insert siblings without replacing the focused input.
-                key: const ValueKey('ai-composer'),
-                padding: const EdgeInsets.fromLTRB(16, 2, 16, 14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (widget.quotes != null)
-                      ListenableBuilder(
-                        listenable: widget.quotes!,
-                        builder: (context, _) => Wrap(
-                          spacing: 8,
-                          children: [
-                            for (final quote in widget.quotes!.pending)
-                              InputChip(
-                                key: ValueKey('quote-chip-${quote.number}'),
-                                shape: const StadiumBorder(),
-                                label: Text('${quote.number}'),
-                                tooltip:
-                                    '${quote.markdown}\n${quote.instruction}',
-                                deleteButtonTooltipMessage:
-                                    '删除引用 ${quote.number}',
-                                onDeleted: () => widget.quotes!.remove(quote),
-                              ),
-                          ],
-                        ),
-                      ),
-                    AiComposer(
-                      controller: _input,
-                      inputFormatters: [
-                        if (_voice.active)
-                          TextInputFormatter.withFunction(
-                            (oldValue, _) => oldValue,
-                          ),
-                      ],
-                      onSend: _issueId == null || _voice.active
-                          ? null
-                          : () => _send(),
-                      voiceActive: _voice.active,
-                      onVoice:
-                          _issueId == null ||
-                              _voice.connecting ||
-                              _voice.stopping
-                          ? null
-                          : () =>
-                                _voice.active ? _voice.stop() : _voice.start(),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ],
-        ),
+        child: chatContent,
       ),
     );
   }
@@ -993,9 +1136,13 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
           ),
         ),
         if (action != null)
-          TextButton(onPressed: action, child: Text(actionLabel ?? '重试')),
+          AppActionButton(
+            tooltip: actionLabel ?? '重试',
+            onPressed: action,
+            icon: const Icon(Icons.refresh),
+          ),
         if (dismiss != null)
-          IconButton(
+          AppActionButton(
             tooltip: '关闭提示',
             onPressed: dismiss,
             icon: const Icon(Icons.close, size: 16),
@@ -1076,19 +1223,11 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
                   Positioned(
                     top: 12,
                     left: 12,
-                    child: ElevatedButton.icon(
+                    child: AppActionButton(
                       key: const ValueKey('ai-message-close'),
                       onPressed: () => Navigator.of(pageContext).pop(),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _aiInk,
-                        foregroundColor: Colors.white,
-                        elevation: 4,
-                        minimumSize: const Size(0, 44),
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        shape: const StadiumBorder(),
-                      ),
-                      icon: const Icon(Icons.close, size: 18),
-                      label: const Text('关闭'),
+                      tooltip: '关闭',
+                      icon: const Icon(Icons.close),
                     ),
                   ),
                 ],
@@ -1291,7 +1430,7 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
           label: const Text('查看'),
         ),
         if (_active(run))
-          IconButton(
+          AppActionButton(
             tooltip: stopping ? '正在终止' : '终止 $agent 的运行',
             onPressed: stopping ? null : () => _cancel(run),
             icon: Icon(
@@ -1301,7 +1440,7 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
           )
         else if (run['status'] == 'failed' &&
             run['trigger_comment_id'] is String)
-          IconButton(
+          AppActionButton(
             tooltip: '重试 $agent 的运行',
             onPressed: () => _retryRun(run),
             icon: const Icon(Icons.refresh, color: _aiRed),
@@ -1419,10 +1558,10 @@ class _NoteAiChatSheetState extends State<NoteAiChatSheet> {
               ),
             )
           else
-            IconButton(
+            AppActionButton(
               tooltip: '重试',
               onPressed: () => _send(message),
-              icon: const Icon(Icons.refresh, color: Colors.white, size: 18),
+              icon: const Icon(Icons.refresh),
             ),
           if (message.error != null)
             Tooltip(

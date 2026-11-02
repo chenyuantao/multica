@@ -127,7 +127,7 @@ void main() {
     );
     await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(TextButton, '保存'));
+    await tester.tap(find.byTooltip('保存'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('开始'));
     await recordFor(175);
@@ -141,8 +141,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(TextButton, '保存'));
     if (!const bool.fromEnvironment('E2E_NAMING_CONFIGURED')) {
-      await until(find.text('保留原标题'));
-      await tester.tap(find.text('保留原标题'));
+      await until(find.byTooltip('保留原标题'));
+      await tester.tap(find.byTooltip('保留原标题'));
     }
     await until(find.text('Open recorder'));
     final created = (await api.notes(machine))

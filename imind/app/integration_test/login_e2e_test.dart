@@ -63,17 +63,17 @@ void main() {
       }
 
       Future<void> login({required bool wrongCode}) async {
-        await waitFor(find.text('发送验证码'));
+        await waitFor(find.byTooltip('发送验证码'));
         await tester.enterText(find.byType(TextField).first, email);
         await host('/begin');
-        await tester.tap(find.text('发送验证码'));
+        await tester.tap(find.byTooltip('发送验证码'));
         await waitFor(find.text('验证码'));
         final payload = await host('/code');
         final code = payload['code'] as String;
         if (wrongCode) {
           final wrong = code == '000000' ? '111111' : '000000';
           await tester.enterText(find.byType(TextField).last, wrong);
-          await tester.tap(find.widgetWithText(FilledButton, '登录'));
+          await tester.tap(find.byTooltip('登录'));
           await waitFor(
             find.byWidgetPredicate(
               (widget) =>
@@ -86,7 +86,7 @@ void main() {
           expect(find.byType(LoginPage), findsOneWidget);
         }
         await tester.enterText(find.byType(TextField).last, code);
-        await tester.tap(find.widgetWithText(FilledButton, '登录'));
+        await tester.tap(find.byTooltip('登录'));
         await home();
       }
 
@@ -133,7 +133,7 @@ void main() {
         'OTP note edited in App',
       );
       await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
-      await tester.tap(find.text('保存'));
+      await tester.tap(find.byTooltip('保存'));
       await tester.pumpAndSettle();
       await waitFor(find.byTooltip('返回'));
       expect(tester.takeException(), isNull);
@@ -148,7 +148,7 @@ void main() {
       await tester.pumpAndSettle();
       await waitFor(find.byTooltip('退出登录'));
       await tester.tap(find.byTooltip('退出登录'));
-      await waitFor(find.text('发送验证码'));
+      await waitFor(find.byTooltip('发送验证码'));
       expect(await store.read(defaultApiBase()), isNull);
       await login(wrongCode: false);
       debugPrint(

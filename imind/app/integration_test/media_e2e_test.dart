@@ -96,8 +96,8 @@ void main() {
       await tester.tap(find.text('Keep original text'));
       await tester.pumpAndSettle();
       await tester.pump(const Duration(seconds: 1));
-      await tester.ensureVisible(find.text('选图'));
-      await tester.tap(find.text('选图'));
+      await tester.ensureVisible(find.byTooltip('选图'));
+      await tester.tap(find.byTooltip('选图'));
       await tester.pumpAndSettle();
       await wait(
         find.byWidgetPredicate(
@@ -120,7 +120,7 @@ void main() {
         contains('media/'),
       );
       await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
-      await tester.tap(find.text('保存'));
+      await tester.tap(find.byTooltip('保存'));
       await wait(find.byTooltip('返回'));
       final saved = await real(
         () => api.getNote(machine, note['id'] as String),

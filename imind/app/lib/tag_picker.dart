@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'api.dart';
+import 'action_button.dart';
 
 List<String> normalizedTags(Iterable<String> tags) => {
   for (final tag in tags)
@@ -242,11 +243,17 @@ class _TagPageState extends State<_TagPage> {
     canPop: !_saving,
     child: Scaffold(
       appBar: AppBar(
+        leading: AppActionButton(
+          tooltip: '返回',
+          onPressed: _saving ? null : () => Navigator.maybePop(context),
+          icon: const Icon(Icons.arrow_back),
+        ),
         title: Text(_managing ? '标签管理' : '标记'),
         actions: [
-          TextButton(
+          AppActionButton(
+            tooltip: _saving ? '保存中' : '保存',
             onPressed: _notes == null || _saving ? null : _save,
-            child: Text(_saving ? '保存中' : '保存'),
+            icon: const Icon(Icons.check),
           ),
         ],
       ),
@@ -264,7 +271,11 @@ class _TagPageState extends State<_TagPage> {
             if (_error == null)
               const LinearProgressIndicator()
             else
-              TextButton(onPressed: _load, child: const Text('重试')),
+              AppActionButton(
+                tooltip: '重试',
+                onPressed: _load,
+                icon: const Icon(Icons.refresh),
+              ),
           ] else ...[
             if (!_managing)
               ListTile(
@@ -287,16 +298,17 @@ class _TagPageState extends State<_TagPage> {
                         onSubmitted: (_) => _managing ? _rename() : _add(),
                       ),
                     ),
-                    TextButton(
+                    AppActionButton(
+                      tooltip: _managing ? '修改' : '添加',
                       onPressed: _locked
                           ? null
                           : _managing
                           ? _rename
                           : _add,
-                      child: Text(_managing ? '修改' : '添加'),
+                      icon: Icon(_managing ? Icons.check : Icons.add),
                     ),
                     if (_managing)
-                      IconButton(
+                      AppActionButton(
                         tooltip: '删除标签',
                         onPressed: _locked
                             ? null

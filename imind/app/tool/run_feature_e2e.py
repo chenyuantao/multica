@@ -35,7 +35,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--platform', choices=['ios', 'android'], required=True)
     parser.add_argument('--device', required=True)
-    parser.add_argument('--suite', choices=['media', 'features', 'chat', 'main', 'web', 'voice', 'optimization', 'progress', 'detail', 'interaction', 'notifications'], default='media')
+    parser.add_argument('--suite', choices=['media', 'features', 'chat', 'main', 'web', 'voice', 'optimization', 'progress', 'detail', 'interaction', 'notifications', 'navigation'], default='media')
     parser.add_argument('--mirror', action='store_true')
     parser.add_argument('--plain-name', help='Run one named Flutter integration case')
     parser.add_argument('--notifications-denied', action='store_true')
@@ -57,7 +57,7 @@ def main():
     if args.mirror:
         env['IMIND_MAVEN_MIRROR'] = 'aliyun'
     files = {'main': 'ios_e2e_test.dart', 'chat': 'chat_e2e_test.dart',
-             'media': 'media_e2e_test.dart', 'features': 'features_e2e_test.dart', 'web': 'web_interop_e2e_test.dart', 'voice': 'voice_e2e_test.dart', 'optimization': 'optimization_e2e_test.dart', 'progress': 'progress_e2e_test.dart', 'detail': 'detail_e2e_test.dart', 'interaction': 'interaction_e2e_test.dart', 'notifications': 'notifications_e2e_test.dart'}
+             'media': 'media_e2e_test.dart', 'features': 'features_e2e_test.dart', 'web': 'web_interop_e2e_test.dart', 'voice': 'voice_e2e_test.dart', 'optimization': 'optimization_e2e_test.dart', 'progress': 'progress_e2e_test.dart', 'detail': 'detail_e2e_test.dart', 'interaction': 'interaction_e2e_test.dart', 'notifications': 'notifications_e2e_test.dart', 'navigation': 'navigation_live_e2e_test.dart'}
     prefix = f'{args.platform}-{args.suite}' + ('-restore' if args.restore_media else '') + '-p1'
     if args.notifications_denied: prefix += '-denied'
     if args.plain_name: prefix += '-filtered-' + hashlib.sha256(args.plain_name.encode()).hexdigest()[:8]
@@ -91,6 +91,20 @@ def main():
         configured = json.load(response)['configured'] is True
     defines['E2E_NAMING_CONFIGURED'] = 'true' if configured else 'false'
     report['naming_configured'] = configured
+    if args.suite == 'navigation':
+        database = CheckoutDatabase()
+        workspace = sql_literal(config['workspace_id'])
+        if database.query(f'SELECT slug FROM workspace WHERE id={workspace};') != 'imind-validation':
+            raise SystemExit('Navigation acceptance requires its dedicated imind-validation workspace')
+        headers = {'Authorization': 'Bearer ' + config['token'], 'X-Workspace-ID': config['workspace_id']}
+        request = urllib.request.Request(config['server_url'].rstrip('/') + '/api/agents?workspace_id=' + config['workspace_id'], headers=headers)
+        with opener.open(request, timeout=10) as response:
+            if json.load(response):
+                raise SystemExit('Navigation acceptance requires an agent-free workspace')
+        request = urllib.request.Request(config['server_url'].rstrip('/') + '/api/workspaces/' + config['workspace_id'] + '/members', headers=headers)
+        with opener.open(request, timeout=10) as response:
+            if not any(member.get('name') == 'iMind device peer' for member in json.load(response)):
+                raise SystemExit('Navigation acceptance requires an existing iMind device peer fixture; no login code is sent by this suite')
     if args.suite in ('chat', 'web', 'notifications'):
         database = CheckoutDatabase()
         workspace = sql_literal(config['workspace_id'])
@@ -271,8 +285,13 @@ COMMIT;''')
                         if captured: image.write_bytes(capture.stdout)
                     if captured: report.setdefault('screenshots',[]).append(str(image))
                     else: report['screenshot_failed'] = True
-                if match := re.search(r'E2E_(?:DETAIL|PROGRESS_FOLD)_CAPTURE: ([a-z-]+)', line):
+                if match := re.search(r'E2E_(?:DETAIL|PROGRESS_FOLD|NAVIGATION)_CAPTURE: ([a-z-]+)', line):
                     image = output / f'{prefix}-{match[1]}.png'
+                    if args.platform == 'ios' and args.suite == 'navigation':
+                        # Flutter test may leave the simulator scene in the background.
+                        # Launch without terminating so captures show the running test UI.
+                        subprocess.run(['xcrun', 'simctl', 'launch', args.device, 'ai.multica.imindApp'], capture_output=True, check=True, timeout=20)
+                        time.sleep(0.4)
                     if args.platform == 'ios':
                         capture = subprocess.run(['xcrun', 'simctl', 'io', args.device, 'screenshot', '--type=png', str(image)], capture_output=True, timeout=20)
                         captured = capture.returncode == 0

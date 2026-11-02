@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'action_button.dart';
+
 /// The same input and send controls for chat messages and selection comments.
 class AiComposer extends StatelessWidget {
   const AiComposer({
@@ -52,7 +54,7 @@ class AiComposer extends StatelessWidget {
       ),
       if (onVoice != null)
         TextFieldTapRegion(
-          child: IconButton(
+          child: AppActionButton(
             tooltip: voiceActive ? '停止语音输入' : '语音输入',
             onPressed: onVoice,
             icon: Icon(
@@ -65,7 +67,7 @@ class AiComposer extends StatelessWidget {
         ),
       const SizedBox(width: 8),
       TextFieldTapRegion(
-        child: IconButton.filled(
+        child: AppActionButton(
           tooltip: '发送',
           onPressed: onSend,
           icon: const Icon(Icons.arrow_upward),

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
 import 'api.dart';
+import 'action_button.dart';
 
 bool isActiveNoteRun(Map<String, dynamic> run) => const {
   'queued',
@@ -139,7 +140,14 @@ class _NoteRunProgressPageState extends State<NoteRunProgressPage> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('执行过程')),
+    appBar: AppBar(
+      leading: AppActionButton(
+        tooltip: '返回',
+        onPressed: () => Navigator.maybePop(context),
+        icon: const Icon(Icons.arrow_back),
+      ),
+      title: const Text('执行过程'),
+    ),
     body: SafeArea(
       child: Column(
         children: [
@@ -172,7 +180,11 @@ class _NoteRunProgressPageState extends State<NoteRunProgressPage> {
               child: Row(
                 children: [
                   Expanded(child: Text(_error!)),
-                  TextButton(onPressed: _refresh, child: const Text('重试')),
+                  AppActionButton(
+                    tooltip: '重试',
+                    onPressed: _refresh,
+                    icon: const Icon(Icons.refresh),
+                  ),
                 ],
               ),
             ),

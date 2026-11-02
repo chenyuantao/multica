@@ -56,6 +56,95 @@ const operations = [
 ];
 
 void main() {
+  test('direct chat uses shared endpoint and validates response', () async {
+    final requests = <http.Request>[];
+    final api =
+        MulticaApi(
+            baseUrl: 'http://localhost',
+            client: MockClient((request) async {
+              requests.add(request);
+              return http.Response(
+                jsonEncode({
+                  'id': noteId,
+                  'title': 'Peer',
+                  'members': [],
+                  'is_direct': true,
+                }),
+                201,
+              );
+            }),
+          )
+          ..token = 'session'
+          ..workspaceId = workspaceId;
+    addTearDown(api.close);
+    final chat = await api.openDirectGroupChat(
+      memberType: 'agent',
+      memberId: noteId,
+    );
+    expect(chat['is_direct'], true);
+    expect(requests.single.url.path, '/api/group-chats/direct');
+    expect(jsonDecode(requests.single.body), {
+      'member_type': 'agent',
+      'member_id': noteId,
+    });
+    final invalid = responding({'id': 'bad', 'members': []});
+    addTearDown(invalid.close);
+    await expectLater(
+      invalid.openDirectGroupChat(memberType: 'member', memberId: noteId),
+      throwsA(apiError(502)),
+    );
+  });
+
+  test(
+    'chat content search encodes query and rejects malformed hits',
+    () async {
+      final requests = <http.Request>[];
+      final api =
+          MulticaApi(
+              baseUrl: 'http://localhost',
+              client: MockClient((request) async {
+                requests.add(request);
+                return http.Response(
+                  jsonEncode({
+                    'hits': [
+                      {
+                        'chat_id': noteId,
+                        'message_id': workspaceId,
+                        'snippet': 'hello',
+                        'hit_count': 2,
+                      },
+                    ],
+                  }),
+                  200,
+                );
+              }),
+            )
+            ..token = 'session'
+            ..workspaceId = workspaceId;
+      addTearDown(api.close);
+      expect(
+        (await api.searchGroupChats('  中文 & notes ')).single['hit_count'],
+        2,
+      );
+      expect(requests.single.url.path, '/api/group-chats/search');
+      expect(requests.single.url.queryParameters['q'], '中文 & notes');
+      for (final hit in [
+        {'chat_id': 'bad', 'message_id': workspaceId},
+        {'chat_id': noteId, 'message_id': workspaceId, 'hit_count': -1},
+        {'chat_id': noteId, 'message_id': workspaceId, 'snippet': 42},
+      ]) {
+        final invalid = responding({
+          'hits': [hit],
+        });
+        addTearDown(invalid.close);
+        await expectLater(
+          invalid.searchGroupChats('test'),
+          throwsA(apiError(502)),
+        );
+      }
+    },
+  );
+
   test(
     'workspace members parse profile fields and reject malformed identities',
     () async {
@@ -79,6 +168,84 @@ void main() {
         addTearDown(invalid.close);
         await expectLater(invalid.workspaceMembers(), throwsA(apiError(502)));
       }
+    },
+  );
+
+  test('group chat list validates joined conversation rows', () async {
+    final requests = <http.Request>[];
+    final api =
+        MulticaApi(
+            baseUrl: 'http://localhost',
+            client: MockClient((request) async {
+              requests.add(request);
+              return http.Response(
+                jsonEncode({
+                  'chats': [
+                    {
+                      'id': noteId,
+                      'title': 'Planning',
+                      'members': [
+                        {'member_type': 'member', 'member_id': workspaceId},
+                        {'member_type': 'agent', 'member_id': noteId},
+                      ],
+                      'last_message': {'content': 'Hello'},
+                      'unread_count': 3,
+                      'pinned': true,
+                      'is_direct': false,
+                    },
+                  ],
+                }),
+                200,
+                headers: {'content-type': 'application/json'},
+              );
+            }),
+          )
+          ..token = 'test-session'
+          ..workspaceId = workspaceId;
+    addTearDown(api.close);
+
+    final chats = await api.groupChats();
+    expect(requests.single.url.path, '/api/group-chats');
+    expect(requests.single.headers['x-workspace-id'], workspaceId);
+    expect(chats.single['id'], noteId);
+    expect(chats.single['title'], 'Planning');
+    expect(chats.single['members'], hasLength(2));
+    expect(chats.single['unread_count'], 3);
+    expect(chats.single['pinned'], isTrue);
+  });
+
+  test(
+    'group chat list rejects malformed chat and member identities',
+    () async {
+      for (final chat in [
+        <String, dynamic>{'id': 'bad'},
+        <String, dynamic>{'id': noteId},
+        <String, dynamic>{'id': noteId, 'members': 'bad'},
+        <String, dynamic>{
+          'id': noteId,
+          'members': [
+            {'member_type': 'robot', 'member_id': workspaceId},
+          ],
+        },
+        <String, dynamic>{
+          'id': noteId,
+          'members': [
+            {'member_type': 'member', 'member_id': 'bad'},
+          ],
+        },
+      ]) {
+        final api = responding({
+          'chats': [chat],
+        });
+        addTearDown(api.close);
+        await expectLater(api.groupChats(), throwsA(apiError(502)));
+      }
+      final missingChats = responding({});
+      addTearDown(missingChats.close);
+      await expectLater(missingChats.groupChats(), throwsA(apiError(502)));
+      final invalidContainer = responding({'chats': 'bad'});
+      addTearDown(invalidContainer.close);
+      await expectLater(invalidContainer.groupChats(), throwsA(apiError(502)));
     },
   );
 

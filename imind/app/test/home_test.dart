@@ -141,11 +141,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('First'), findsOneWidget);
     expect(find.text('Second'), findsOneWidget);
-    await tester.tap(find.text('取消'));
+    await tester.tap(find.byTooltip('取消'));
     await tester.pumpAndSettle();
-    expect(find.text('取消'), findsNothing);
+    expect(find.byTooltip('取消'), findsNothing);
     expect(find.text('Second'), findsOneWidget);
-    expect(find.text('剪藏'), findsOneWidget);
+    expect(find.text('剪藏'), findsNothing);
   });
 
   testWidgets('empty home refresh waits for the list request', (tester) async {
@@ -190,7 +190,7 @@ void main() {
     expect(find.text('标签管理'), findsOneWidget);
     expect(find.text('Work'), findsOneWidget);
     expect(find.text('新建标签'), findsNothing);
-    await tester.pageBack();
+    await tester.tap(find.byTooltip('返回'));
     await tester.pumpAndSettle();
     expect(find.text('First'), findsOneWidget);
   });
@@ -253,6 +253,74 @@ void main() {
       expect(positions[1], lessThan(positions[2]));
     });
   }
+
+  testWidgets(
+    'home menu orders creation actions before sort and disables them without a machine',
+    (tester) async {
+      final storage = MemorySessionStorage();
+      storage.values[SessionStore.sessionKey] = jsonEncode({
+        'base_url': 'http://localhost',
+        'token': 'test',
+      });
+      final api = MulticaApi(
+        baseUrl: 'http://localhost',
+        enableRealtime: false,
+        client: MockClient((request) async {
+          final Object result = switch (request.url.path) {
+            '/api/workspaces' => [
+              {'id': workspace},
+            ],
+            '/api/imind/shares' => {'shares': []},
+            _ => <String, dynamic>{},
+          };
+          return http.Response(
+            jsonEncode(result),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+      addTearDown(api.close);
+      await tester.pumpWidget(
+        IMindApp(
+          api: api,
+          sessionStore: SessionStore(storage: storage),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('更多'));
+      await tester.pumpAndSettle();
+
+      final labels = ['剪藏', '笔记', '录音', '排序方式'];
+      final tops = [
+        for (final label in labels)
+          tester.getTopLeft(find.text(label).first).dy,
+      ];
+      expect(tops, orderedEquals([...tops]..sort()));
+      for (final label in labels.take(3)) {
+        final item = find
+            .ancestor(
+              of: find.text(label).first,
+              matching: find.byType(InkWell),
+            )
+            .first;
+        expect(tester.widget<InkWell>(item).onTap, isNull);
+      }
+      expect(
+        tester
+            .widget<InkWell>(
+              find
+                  .ancestor(
+                    of: find.text('排序方式'),
+                    matching: find.byType(InkWell),
+                  )
+                  .first,
+            )
+            .onTap,
+        isNotNull,
+      );
+    },
+  );
 
   testWidgets(
     'search debounces, matches titles or bodies, and clears on back',

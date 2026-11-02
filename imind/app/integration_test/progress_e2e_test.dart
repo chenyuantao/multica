@@ -115,7 +115,7 @@ void main() {
       await tester.tap(find.widgetWithText(TextButton, '终止'));
       await wait(find.textContaining('已取消'));
       expect(find.widgetWithText(TextButton, '终止'), findsNothing);
-      await tester.tap(find.byType(BackButton));
+      await tester.tap(find.byTooltip('返回'));
       await wait(find.text('执行过程'), absent: true);
       await wait(find.byType(TextField));
       final runs = await real(

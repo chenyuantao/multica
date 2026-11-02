@@ -6,6 +6,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:imind_app/ai_chat.dart';
 import 'package:imind_app/api.dart';
 import 'package:imind_app/note_chat_prefetch.dart';
+import 'package:imind_app/offline_cache.dart';
+import 'package:imind_app/session.dart';
 
 const issueId = '11111111-1111-4111-8111-111111111111';
 const noteId = '22222222-2222-4222-8222-222222222222';
@@ -14,6 +16,11 @@ class ChatApi extends MulticaApi {
   ChatApi() : super(baseUrl: 'http://localhost', enableRealtime: false);
   final read = Completer<void>();
   int olderRequests = 0;
+  int ensureRequests = 0;
+  int historyRequests = 0;
+  int meRequests = 0;
+  int agentRequests = 0;
+  int historyFailuresRemaining = 0;
   List<Map<String, dynamic>> agentRows = [];
   final sent = <String>[];
   final clientIds = <String>[];
@@ -43,11 +50,17 @@ class ChatApi extends MulticaApi {
     String machine,
     String noteId, {
     required String revision,
-  }) async => {'issue_id': issueId};
+  }) async {
+    ensureRequests++;
+    return {'issue_id': issueId};
+  }
+
   @override
-  Future<Map<String, dynamic>> getMe() async => {'id': 'me'};
-  @override
-  Future<List<Map<String, dynamic>>> workspaceAgents() async => agentRows;
+  Future<List<Map<String, dynamic>>> workspaceAgents() async {
+    agentRequests++;
+    return agentRows;
+  }
+
   @override
   Future<List<Map<String, dynamic>>> workspaceMembers() async => [];
   @override
@@ -61,6 +74,11 @@ class ChatApi extends MulticaApi {
     String? beforeId,
     int limit = 50,
   }) async {
+    historyRequests++;
+    if (historyFailuresRemaining > 0) {
+      historyFailuresRemaining--;
+      throw ApiException(503, 'history unavailable');
+    }
     if (beforeId != null) olderRequests++;
     return {
       'has_more': beforeId == null,
@@ -81,6 +99,38 @@ class ChatApi extends MulticaApi {
       ],
     };
   }
+
+  @override
+  Future<Map<String, dynamic>> getMe() async {
+    meRequests++;
+    return {'id': 'me'};
+  }
+}
+
+class _ChatCacheStorage implements SessionStorage {
+  final values = <String, String>{};
+  @override
+  Future<String?> read(String key) async => values[key];
+  @override
+  Future<void> write(String key, String value) async {
+    values[key] = value;
+  }
+
+  @override
+  Future<void> delete(String key) async {
+    values.remove(key);
+  }
+}
+
+class _DelayedHistoryApi extends ChatApi {
+  final history = Completer<Map<String, dynamic>>();
+  @override
+  Future<Map<String, dynamic>> noteChatHistory(
+    String issueId, {
+    String? beforeCreatedAt,
+    String? beforeId,
+    int limit = 50,
+  }) => history.future;
 }
 
 class DisplayChatApi extends ChatApi {
@@ -151,6 +201,33 @@ Future<ChatApi> openChat(WidgetTester tester, {ChatApi? providedApi}) async {
   return api;
 }
 
+Future<ChatApi> openConversationChat(
+  WidgetTester tester, {
+  ChatApi? providedApi,
+  String machine = '',
+}) async {
+  tester.view.devicePixelRatio = 1;
+  tester.view.physicalSize = const Size(400, 800);
+  addTearDown(tester.view.resetDevicePixelRatio);
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetViewInsets);
+  final api = providedApi ?? ChatApi();
+  addTearDown(api.close);
+  await tester.pumpWidget(
+    MaterialApp(
+      home: ConversationChatPage(
+        api: api,
+        machine: machine,
+        conversation: {'id': issueId, 'title': 'Issue discussion'},
+      ),
+    ),
+  );
+  await tester.pump(const Duration(milliseconds: 500));
+  await tester.pumpAndSettle();
+  api.read.complete();
+  return api;
+}
+
 void expectLatestVisible(WidgetTester tester) {
   final latest = find.text('消息 39');
   expect(latest.hitTestable(), findsOneWidget);
@@ -162,6 +239,146 @@ void expectLatestVisible(WidgetTester tester) {
 }
 
 void main() {
+  testWidgets(
+    'cached conversation renders while send is intercepted until network confirmation',
+    (tester) async {
+      final original = OfflineCache.instance;
+      OfflineCache.instance = OfflineCache(storage: _ChatCacheStorage());
+      addTearDown(() => OfflineCache.instance = original);
+      final api = _DelayedHistoryApi();
+      final scope = OfflineCacheScope.capture(api, machine: '');
+      await OfflineCache.instance.write(scope, 'chat:$issueId:history', {
+        'has_more': false,
+        'comments': [
+          {
+            'id': 'cached',
+            'issue_id': issueId,
+            'created_at': '2026-10-30T00:00:00Z',
+            'author_type': 'member',
+            'author_id': 'me',
+            'content': '离线消息',
+          },
+        ],
+      });
+      await openConversationChat(tester, providedApi: api);
+      expect(find.text('离线消息'), findsOneWidget);
+      await tester.enterText(
+        find.byKey(const ValueKey('ai-composer-input')),
+        '保留草稿',
+      );
+      await tester.tap(find.byTooltip('发送'));
+      await tester.pump();
+      expect(api.sent, isEmpty);
+      expect(find.text('正在同步，请联网后重试'), findsOneWidget);
+      expect(find.text('保留草稿'), findsOneWidget);
+      api.history.complete({
+        'has_more': false,
+        'comments': <Map<String, dynamic>>[],
+      });
+      await tester.pumpAndSettle();
+      expect(find.text('离线消息'), findsNothing);
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('发送'));
+      await tester.pumpAndSettle();
+      expect(api.sent, ['保留草稿']);
+    },
+  );
+
+  testWidgets('existing conversation opens full-page without note setup', (
+    tester,
+  ) async {
+    final api = await openConversationChat(tester);
+    expect(find.text('Issue discussion'), findsOneWidget);
+    expect(find.byType(AppBar), findsOneWidget);
+    expect(find.byTooltip('返回'), findsOneWidget);
+    expect(find.text('消息 39'), findsOneWidget);
+    expect(api.ensureRequests, 0);
+    expect(find.byTooltip('语音输入'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'full-page chat retries a failed history load without setup again',
+    (tester) async {
+      final api = await openConversationChat(
+        tester,
+        providedApi: ChatApi()..historyFailuresRemaining = 1,
+      );
+      expect(api.historyRequests, 1);
+      expect(api.meRequests, 1);
+      expect(api.agentRequests, 1);
+      expect(find.text('history unavailable'), findsOneWidget);
+      await tester.tap(find.byTooltip('重试').first);
+      await tester.pumpAndSettle();
+      expect(api.historyRequests, 2);
+      expect(api.meRequests, 1);
+      expect(api.agentRequests, 1);
+      expect(find.text('消息 39'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('full-page chat supports @ send and stable retry', (
+    tester,
+  ) async {
+    const agentId = '33333333-3333-4333-8333-333333333333';
+    final api = ChatApi()
+      ..agentRows = [
+        {'id': agentId, 'name': 'Dev Ops'},
+      ];
+    await openConversationChat(tester, providedApi: api, machine: 'mbp');
+    final field = find.byType(TextField);
+    await tester.enterText(field, '@');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Dev Ops'));
+    await tester.pumpAndSettle();
+    final controller = tester.widget<TextField>(field).controller!;
+    controller.value = TextEditingValue(
+      text: '${controller.text}check the file',
+      selection: TextSelection.collapsed(offset: controller.text.length + 14),
+    );
+    await tester.pumpAndSettle();
+    api.failSend = true;
+    await tester.tap(find.byTooltip('发送'));
+    await tester.pumpAndSettle();
+    expect(api.sent, ['[@Dev Ops](mention://agent/$agentId) check the file']);
+    expect(find.byTooltip('重试'), findsOneWidget);
+    api.failSend = false;
+    await tester.tap(find.byTooltip('重试'));
+    await tester.pumpAndSettle();
+    expect(api.sent[1], api.sent[0]);
+    expect(api.clientIds[1], api.clientIds[0]);
+    expect(controller.text, '');
+    expect(api.ensureRequests, 0);
+  });
+
+  testWidgets('full-page chat keeps latest message above resized keyboard', (
+    tester,
+  ) async {
+    await openConversationChat(tester);
+    expectLatestVisible(tester);
+    await tester.drag(find.byType(ListView), const Offset(0, 450));
+    await tester.pumpAndSettle();
+    expect(find.text('消息 39').hitTestable(), findsNothing);
+    await tester.tap(find.byType(TextField));
+    tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+    await tester.pumpAndSettle();
+    expectLatestVisible(tester);
+    expect(
+      tester.getRect(find.byKey(const ValueKey('ai-composer'))).bottom,
+      lessThanOrEqualTo(500),
+    );
+    tester.view.viewInsets = const FakeViewPadding(bottom: 340);
+    await tester.pumpAndSettle();
+    expectLatestVisible(tester);
+    expect(
+      tester.getBottomLeft(find.byKey(const ValueKey('ai-composer'))).dy,
+      lessThanOrEqualTo(460),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('peer message shows name, avatar and centered time', (
     tester,
   ) async {

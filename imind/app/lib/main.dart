@@ -12,6 +12,7 @@ import 'ai_chat.dart';
 import 'note_chat_prefetch.dart';
 import 'chat_unread.dart';
 import 'api.dart';
+import 'action_button.dart';
 import 'session.dart';
 import 'transcript.dart';
 import 'media.dart';
@@ -23,6 +24,12 @@ import 'voice_input.dart';
 import 'debug_update.dart';
 import 'note_quotes.dart';
 import 'quoted_markdown.dart';
+import 'app_tabs.dart';
+import 'conversations.dart';
+import 'home_chrome.dart';
+import 'profile.dart';
+import 'offline_cache.dart';
+import 'note_cache.dart';
 
 const _bg = Color(0xFFF2F2F6);
 const _ink = Color(0xFF1C1C1E);
@@ -231,9 +238,12 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                 ),
               const SizedBox(height: 16),
-              FilledButton(
+              AppActionButton(
+                tooltip: _sent ? '登录' : '发送验证码',
                 onPressed: _busy ? null : _submit,
-                child: Text(_sent ? '登录' : '发送验证码'),
+                icon: Icon(
+                  _sent ? Icons.login : Icons.mark_email_unread_outlined,
+                ),
               ),
               const Spacer(),
             ],
@@ -330,6 +340,7 @@ class _HomePageState extends State<HomePage> {
   final _scaffold = GlobalKey<ScaffoldState>();
   MulticaApi get _api => widget.session.api;
   Future<void>? _reloadInProgress;
+  OfflineResource<Map<String, dynamic>>? _notesResource;
   var _naming = false;
   List<Map<String, dynamic>> _notes = const [];
   String? _machine;
@@ -347,6 +358,8 @@ class _HomePageState extends State<HomePage> {
   var _menu = false;
   var _tagging = false;
   final _selected = <String>{};
+  var _tab = AppTab.notes;
+  final _visitedTabs = <AppTab>{AppTab.notes};
 
   @override
   void initState() {
@@ -356,6 +369,7 @@ class _HomePageState extends State<HomePage> {
 
   @override
   void dispose() {
+    _notesResource?.dispose();
     _searchTimer?.cancel();
     _generationTimer?.cancel();
     _searchInput.dispose();
@@ -417,86 +431,128 @@ class _HomePageState extends State<HomePage> {
     return future.whenComplete(() => _reloadInProgress = null);
   }
 
+  bool _allowNoteAction() => allowNetworkAction(
+    context,
+    _notesResource?.networkReady == true &&
+        _notesResource!.scope.matches(
+          _api,
+          machine: widget.session.data?.machine,
+        ),
+  );
+
   Future<void> _loadNotes() async {
-    try {
-      final workspaces = await _api.workspaces();
-      if (!mounted) return;
-      if (workspaces.isEmpty) {
-        await widget.session.select(null, null);
-        if (!mounted) return;
+    // The home snapshot includes its selected shared root; detail entries are
+    // separately scoped to that root. Start reading before discovery requests.
+    final scope = OfflineCacheScope.capture(
+      _api,
+      machine: widget.session.data?.machine,
+    );
+    if (_notesResource == null ||
+        !_notesResource!.scope.matches(
+          _api,
+          machine: widget.session.data?.machine,
+        )) {
+      _notesResource?.dispose();
+      _notesResource = OfflineResource<Map<String, dynamic>>(
+        scope: scope,
+        key: 'notes-home',
+        decode: decodeCachedNote,
+      );
+    }
+    await _notesResource!.load(
+      network: _fetchNotes,
+      onData: (snapshot, fromCache) {
+        if (!mounted ||
+            !scope.matches(_api, machine: widget.session.data?.machine)) {
+          _notesResource?.dispose();
+          return;
+        }
+        final notes = decodeCachedNotes(snapshot['notes']);
+        setState(() {
+          _machine = snapshot['machine'] as String?;
+          _notes = notes;
+          _tags.removeWhere((tag) => !_allTags.contains(tag));
+          _error = null;
+          _ready = true;
+          _selected.removeWhere((id) => !notes.any((note) => note['id'] == id));
+        });
+        _generationTimer?.cancel();
+        _generationTimer = !fromCache && notes.any(_isGeneratingNote)
+            ? Timer.periodic(const Duration(seconds: 3), (_) => _reload())
+            : null;
+      },
+      onError: (error) {
+        if (!mounted || error is ApiException && error.status == 401) return;
         setState(() {
           _ready = true;
-          _machine = null;
-          _notes = const [];
-          _error = '当前账号没有可访问的工作区';
+          // Keep cached content readable when discovery or the network fails.
+          if (_notes.isEmpty) _error = '$error';
         });
-        return;
-      }
-      final savedSession = widget.session.data;
-      final workspaceIds = [
-        for (final workspace in workspaces) workspace['id'] as String,
-      ];
-      final workspaceId = workspaceIds.contains(savedSession?.workspaceId)
-          ? savedSession!.workspaceId!
-          : workspaceIds.first;
-      final savedMachine = savedSession?.workspaceId == workspaceId
-          ? savedSession?.machine
-          : null;
-      if (savedSession?.workspaceId != workspaceId) {
-        setState(() {
-          _machine = null;
-          _notes = const [];
-          _selected.clear();
-        });
-      }
-      await widget.session.select(workspaceId, savedMachine);
-      if (!mounted) return;
-      final shares = await _api.shares();
-      if (shares.isEmpty) {
-        await widget.session.select(workspaceId, null);
-        if (!mounted) return;
-        setState(() {
-          _ready = true;
-          _machine = null;
-          _notes = const [];
-          _error = '当前工作区还没有已连接的共享知识库';
-        });
-        return;
-      }
-      final names = [for (final share in shares) share['machine'] as String];
-      final machine = names.contains(savedMachine)
-          ? savedMachine!
-          : names.first;
-      await widget.session.select(workspaceId, machine);
-      if (!mounted) return;
-      await _api.bootstrap(machine);
-      final notes = await _api.notes(machine);
-      if (!mounted) return;
+      },
+    );
+    // First login may have selected a workspace during discovery.
+    if (mounted &&
+        !scope.matches(_api, machine: widget.session.data?.machine) &&
+        _api.token != null) {
+      _notesResource?.dispose();
+      _notesResource = null;
+      await _loadNotes();
+    }
+  }
+
+  Future<Map<String, dynamic>> _fetchNotes() async {
+    final workspaces = await _api.workspaces();
+    if (!mounted) throw StateError('Page disposed');
+    if (workspaces.isEmpty) {
+      await widget.session.select(null, null);
+      if (!mounted) throw StateError('Page disposed');
       setState(() {
-        _machine = machine;
-        _notes = notes;
-        _tags.removeWhere((tag) => !_allTags.contains(tag));
-        _error = null;
         _ready = true;
-        _selected.removeWhere((id) => !notes.any((note) => note['id'] == id));
+        _machine = null;
+        _notes = const [];
+        _error = '当前账号没有可访问的工作区';
       });
-      _generationTimer?.cancel();
-      _generationTimer = notes.any(_isGeneratingNote)
-          ? Timer.periodic(const Duration(seconds: 3), (_) => _reload())
-          : null;
-    } on ApiException catch (error) {
-      if (error.status == 401 || !mounted) return;
+      throw ApiException(403, _error ?? '无法加载笔记');
+    }
+    final savedSession = widget.session.data;
+    final workspaceIds = [
+      for (final workspace in workspaces) workspace['id'] as String,
+    ];
+    final workspaceId = workspaceIds.contains(savedSession?.workspaceId)
+        ? savedSession!.workspaceId!
+        : workspaceIds.first;
+    final savedMachine = savedSession?.workspaceId == workspaceId
+        ? savedSession?.machine
+        : null;
+    if (savedSession?.workspaceId != workspaceId) {
       setState(() {
-        _ready = true;
-        _error = error.message;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _ready = true;
-        _error = '无法加载笔记，请重试';
+        _machine = null;
+        _notes = const [];
+        _selected.clear();
       });
     }
+    await widget.session.select(workspaceId, savedMachine);
+    if (!mounted) throw StateError('Page disposed');
+    final shares = await _api.shares();
+    if (shares.isEmpty) {
+      await widget.session.select(workspaceId, null);
+      if (!mounted) throw StateError('Page disposed');
+      setState(() {
+        _ready = true;
+        _machine = null;
+        _notes = const [];
+        _error = '当前工作区还没有已连接的共享知识库';
+      });
+      throw ApiException(403, _error ?? '无法加载笔记');
+    }
+    final names = [for (final share in shares) share['machine'] as String];
+    final machine = names.contains(savedMachine) ? savedMachine! : names.first;
+    await widget.session.select(workspaceId, machine);
+    if (!mounted) throw StateError('Page disposed');
+    await _api.bootstrap(machine);
+    final notes = await _api.notes(machine);
+    if (!mounted) throw StateError('Page disposed');
+    return {'machine': machine, 'notes': notes};
   }
 
   List<Map<String, dynamic>> get _visible {
@@ -555,6 +611,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _openEditor() async {
+    if (!_allowNoteAction()) return;
     await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => NoteEditor(api: _api, machine: _machine),
@@ -564,6 +621,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _openRecord() async {
+    if (!_allowNoteAction()) return;
     final machine = _machine;
     if (machine == null) return;
     final saved = await Navigator.of(context).push<bool>(
@@ -575,6 +633,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _clip() async {
+    if (!_allowNoteAction()) return;
     final controller = TextEditingController();
     final prompt = TextEditingController();
     var error = '';
@@ -653,26 +712,23 @@ class _HomePageState extends State<HomePage> {
                   SizedBox(
                     width: double.infinity,
                     height: 48,
-                    child: FilledButton(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: _dark,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
+                    child: Center(
+                      child: AppActionButton(
+                        tooltip: '剪藏',
+                        icon: const Icon(Icons.link),
+                        onPressed: () {
+                          final found = firstUrl(controller.text);
+                          if (found == null) {
+                            setSheet(() => error = '没有识别到链接');
+                            return;
+                          }
+                          Navigator.pop(context, {
+                            'url': found,
+                            'original': controller.text,
+                            'prompt': prompt.text.trim(),
+                          });
+                        },
                       ),
-                      onPressed: () {
-                        final found = firstUrl(controller.text);
-                        if (found == null) {
-                          setSheet(() => error = '没有识别到链接');
-                          return;
-                        }
-                        Navigator.pop(context, {
-                          'url': found,
-                          'original': controller.text,
-                          'prompt': prompt.text.trim(),
-                        });
-                      },
-                      child: const Text('剪藏'),
                     ),
                   ),
                 ],
@@ -719,6 +775,7 @@ class _HomePageState extends State<HomePage> {
   Future<void> _patchChosen(
     Map<String, dynamic> Function(Map<String, dynamic> note) patch,
   ) async {
+    if (!_allowNoteAction()) return;
     final machine = _machine;
     if (machine == null) return;
     try {
@@ -749,6 +806,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _tagChosen() async {
+    if (!_allowNoteAction()) return;
     final machine = _machine;
     if (machine == null) return;
     final saved = await assignNoteTags(
@@ -767,6 +825,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _manageTags() async {
+    if (!_allowNoteAction()) return;
     final machine = _machine;
     if (machine == null) return;
     Navigator.pop(context);
@@ -775,6 +834,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _renameChosen() async {
+    if (!_allowNoteAction()) return;
     final chosen = _chosen;
     if (chosen.length != 1) return;
     final controller = TextEditingController(text: '${chosen.first['title']}');
@@ -797,6 +857,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _aiNameChosen() async {
+    if (!_allowNoteAction()) return;
     final machine = _machine;
     if (machine == null || _naming) return;
     setState(() => _naming = true);
@@ -819,6 +880,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _aiTagChosen() async {
+    if (!_allowNoteAction()) return;
     final machine = _machine;
     if (machine == null || _tagging) return;
     setState(() => _tagging = true);
@@ -845,6 +907,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _deleteChosen() async {
+    if (!_allowNoteAction()) return;
     final machine = _machine;
     final chosen = _chosen;
     if (machine == null || chosen.isEmpty) return;
@@ -921,81 +984,117 @@ class _HomePageState extends State<HomePage> {
         _tags.isEmpty &&
         _query.isEmpty;
     return PopScope(
-      canPop: !_searching,
+      canPop: _tab != AppTab.notes || !_searching,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && _searching) _closeSearch();
+        if (!didPop && _tab == AppTab.notes && _searching) _closeSearch();
       },
       child: Scaffold(
-        key: _scaffold,
         backgroundColor: _bg,
-        drawer: _drawer(),
-        body: Stack(
+        body: IndexedStack(
+          index: _tab.index,
           children: [
-            SafeArea(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _header(),
-                  if (_allTags.isNotEmpty) _tagFilters(),
-                  if (_kind != null)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
-                      child: Text(
-                        _heading,
-                        style: const TextStyle(
-                          fontSize: 34,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.6,
-                        ),
-                      ),
-                    ),
-                  if (_tags.isNotEmpty || _kind != null || _query.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(18, 0, 18, 6),
-                      child: Text(
-                        '${visible.length} 个文件',
-                        style: const TextStyle(fontSize: 13, color: _sub),
-                      ),
-                    ),
-                  Expanded(child: _body(showHero, visible)),
-                ],
-              ),
-            ),
-            if (!_selecting)
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 28,
-                child: Center(
-                  child: ActionPill(
-                    children: [
-                      PillButton(
-                        dark: true,
-                        icon: Icons.mic_none,
-                        label: '录音',
-                        onPressed: _machine == null ? null : _openRecord,
-                      ),
-                      PillButton(
-                        icon: Icons.link,
-                        label: '剪藏',
-                        onPressed: _machine == null ? null : _clip,
-                      ),
-                      PillButton(
-                        icon: Icons.edit_outlined,
-                        label: '笔记',
-                        onPressed: _machine == null ? null : _openEditor,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            if (_selecting)
-              Positioned(left: 0, right: 0, bottom: 0, child: _selectBar()),
-            if (_menu) _menuLayer(),
+            _notesPage(showHero, visible),
+            if (_visitedTabs.contains(AppTab.conversations))
+              _conversationPage()
+            else
+              const SizedBox.shrink(),
+            if (_visitedTabs.contains(AppTab.profile))
+              ProfilePage(api: _api, session: widget.session)
+            else
+              const SizedBox.shrink(),
           ],
+        ),
+        bottomNavigationBar: AppTabs(
+          selected: _tab,
+          onSelected: (tab) => setState(() {
+            _tab = tab;
+            _visitedTabs.add(tab);
+            _menu = false;
+          }),
         ),
       ),
     );
+  }
+
+  Widget _notesPage(bool showHero, List<Map<String, dynamic>> visible) {
+    return Scaffold(
+      key: _scaffold,
+      backgroundColor: _bg,
+      drawer: _drawer(),
+      body: Stack(
+        children: [
+          SafeArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _header(),
+                if (_allTags.isNotEmpty) _tagFilters(),
+                if (_kind != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+                    child: Text(
+                      _heading,
+                      style: const TextStyle(
+                        fontSize: 34,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.6,
+                      ),
+                    ),
+                  ),
+                if (_tags.isNotEmpty || _kind != null || _query.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 0, 18, 6),
+                    child: Text(
+                      '${visible.length} 个文件',
+                      style: const TextStyle(fontSize: 13, color: _sub),
+                    ),
+                  ),
+                Expanded(child: _body(showHero, visible)),
+              ],
+            ),
+          ),
+          if (_selecting)
+            Positioned(left: 0, right: 0, bottom: 0, child: _selectBar()),
+          if (_menu) _menuLayer(),
+        ],
+      ),
+    );
+  }
+
+  Widget _conversationPage() {
+    final machine = validShareMachine(_machine) ? _machine : null;
+    if (!validWorkspaceId(_api.workspaceId)) {
+      return Scaffold(
+        backgroundColor: _bg,
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(28),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _ready ? (_error ?? '当前账号没有可访问的工作区') : '正在加载工作区',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: _sub),
+                ),
+                if (_ready) ...[
+                  const SizedBox(height: 12),
+                  AppActionButton(
+                    tooltip: '重试',
+                    onPressed: _reload,
+                    icon: const Icon(Icons.refresh),
+                  ),
+                ] else ...[
+                  const SizedBox(height: 16),
+                  const CircularProgressIndicator(),
+                ],
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+    return ConversationsPage(api: _api, machine: machine);
   }
 
   Widget _header() {
@@ -1012,14 +1111,7 @@ class _HomePageState extends State<HomePage> {
                 _selecting = false;
                 _selected.clear();
               }),
-              child: const Text(
-                '完成',
-                style: TextStyle(
-                  color: _blue,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 16,
-                ),
-              ),
+              child: const Icon(Icons.check, color: _blue),
             ),
           ),
         ),
@@ -1055,38 +1147,31 @@ class _HomePageState extends State<HomePage> {
         ),
       );
     }
-    return SizedBox(
-      height: 54,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: Row(
-          children: [
-            _round(
-              label: '菜单',
-              onTap: () => _scaffold.currentState?.openDrawer(),
-              child: const Icon(Icons.menu, size: 22),
+    return HomeHeader(
+      title: 'iMind',
+      leadingLabel: '菜单',
+      onLeadingPressed: () => _scaffold.currentState?.openDrawer(),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_tags.isNotEmpty)
+            AppActionButton(
+              onPressed: () => setState(_tags.clear),
+              tooltip: '取消',
+              icon: const Icon(Icons.close),
             ),
-            const SizedBox(width: 12),
-            const DetailTitle('iMind'),
-            const Spacer(),
-            if (_tags.isNotEmpty)
-              TextButton(
-                onPressed: () => setState(_tags.clear),
-                child: const Text('取消'),
-              ),
-            _round(
-              label: '搜索',
-              onTap: () => setState(() => _searching = true),
-              child: const Icon(Icons.search, size: 22),
-            ),
-            const SizedBox(width: 8),
-            _round(
-              label: '更多',
-              onTap: () => setState(() => _menu = true),
-              child: const Icon(Icons.more_horiz, size: 22),
-            ),
-          ],
-        ),
+          _round(
+            label: '搜索',
+            onTap: () => setState(() => _searching = true),
+            child: const Icon(Icons.search, size: 22),
+          ),
+          const SizedBox(width: 8),
+          _round(
+            label: '更多',
+            onTap: () => setState(() => _menu = true),
+            child: const Icon(Icons.more_horiz, size: 22),
+          ),
+        ],
       ),
     );
   }
@@ -1112,7 +1197,7 @@ class _HomePageState extends State<HomePage> {
         onRefresh: _reload,
         child: ListView.builder(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(16, 6, 16, 120),
+          padding: const EdgeInsets.fromLTRB(16, 6, 16, 24),
           itemCount: visible.length,
           itemBuilder: (_, index) => _tile(visible[index]),
         ),
@@ -1362,6 +1447,22 @@ class _HomePageState extends State<HomePage> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          _menuItem(
+                            Icons.link,
+                            '剪藏',
+                            _machine == null ? null : _clip,
+                          ),
+                          _menuItem(
+                            Icons.edit_outlined,
+                            '笔记',
+                            _machine == null ? null : _openEditor,
+                          ),
+                          _menuItem(
+                            Icons.mic_none,
+                            '录音',
+                            _machine == null ? null : _openRecord,
+                          ),
+                          const Divider(height: 1, indent: 16, endIndent: 16),
                           _menuItem(Icons.swap_vert, '排序方式', _chooseSort),
                         ],
                       ),
@@ -1376,19 +1477,24 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _menuItem(IconData icon, String label, VoidCallback onTap) {
+  Widget _menuItem(IconData icon, String label, VoidCallback? onTap) {
+    final color = onTap == null
+        ? const Color(0xFFB8B8BD)
+        : const Color(0xFF3A3A3C);
     return InkWell(
-      onTap: () {
-        setState(() => _menu = false);
-        onTap();
-      },
+      onTap: onTap == null
+          ? null
+          : () {
+              setState(() => _menu = false);
+              onTap();
+            },
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
         child: Row(
           children: [
-            Icon(icon, size: 22, color: const Color(0xFF3A3A3C)),
+            Icon(icon, size: 22, color: color),
             const SizedBox(width: 16),
-            Text(label, style: const TextStyle(fontSize: 17)),
+            Text(label, style: TextStyle(fontSize: 17, color: color)),
           ],
         ),
       ),
@@ -1403,24 +1509,7 @@ class _HomePageState extends State<HomePage> {
         child: ListView(
           padding: const EdgeInsets.only(bottom: 24),
           children: [
-            Align(
-              alignment: Alignment.centerRight,
-              child: Padding(
-                padding: const EdgeInsets.only(right: 12),
-                child: _round(
-                  label: '退出登录',
-                  onTap: widget.session.logout,
-                  child: const Icon(Icons.person_outline, size: 22),
-                ),
-              ),
-            ),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 12, 20, 12),
-              child: Text(
-                '文件',
-                style: TextStyle(fontSize: 34, fontWeight: FontWeight.w800),
-              ),
-            ),
+            const AppDrawerHeading('文件'),
             _nav(
               '全部',
               Icons.layers_outlined,
@@ -1463,7 +1552,7 @@ class _HomePageState extends State<HomePage> {
                       ),
                     ),
                   ),
-                  IconButton(
+                  AppActionButton(
                     tooltip: '编辑标签',
                     onPressed: _manageTags,
                     icon: const Icon(Icons.edit_outlined),
@@ -1697,6 +1786,8 @@ class _NoteEditorState extends State<NoteEditor> {
   UndoHistoryController _history = UndoHistoryController();
   Map<String, dynamic>? _note;
   NoteChatPrefetch? _chatPrefetch;
+  OfflineResource<Map<String, dynamic>>? _detailResource;
+  bool _creationReady = false;
   var _editing = false;
   var _focusTitle = false;
   var _changed = false;
@@ -1711,22 +1802,79 @@ class _NoteEditorState extends State<NoteEditor> {
         ? null
         : Map<String, dynamic>.from(widget.note!);
     _editing = widget.note == null;
-    _prepareChat();
+    unawaited(_loadDetail());
     _history.addListener(_refresh);
     _body.addListener(_refresh);
     _transcript.addListener(_refresh);
+  }
 
-    if (_note?['type'] == 'clip') {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) unawaited(_openPendingClipChat());
-      });
+  void _cacheCurrentNote() {
+    final resource = _detailResource;
+    if (resource == null || _note == null) return;
+    unawaited(OfflineCache.instance.write(resource.scope, resource.key, _note));
+  }
+
+  bool _allowDetailAction() => allowNetworkAction(
+    context,
+    _note == null ? _creationReady : _detailResource?.networkReady == true,
+  );
+
+  Future<void> _loadDetail() async {
+    final machine = widget.machine;
+    if (machine == null) return;
+    if (_note == null) {
+      try {
+        await widget.api.notes(machine);
+        if (mounted) {
+          setState(() {
+            _creationReady = true;
+            _error = null;
+          });
+        }
+      } catch (error) {
+        if (mounted) setState(() => _error = '$error');
+      }
+      return;
     }
+    final id = '${_note!['id']}';
+    _detailResource?.dispose();
+    final resource = noteResource(widget.api, machine, id);
+    _detailResource = resource;
+    await resource.load(
+      network: () => widget.api.getNote(machine, id),
+      onData: (note, fromCache) {
+        if (!mounted || !resource.scope.matches(widget.api, machine: machine)) {
+          return;
+        }
+        setState(() {
+          _note = note;
+          _title.text = '${note['title'] ?? ''}';
+          _body.text = '${note['content'] ?? ''}';
+          _transcript.text = '${note['transcript'] ?? ''}';
+          _tags
+            ..clear()
+            ..addAll(noteTags(note));
+          if (!fromCache) _error = null;
+        });
+        if (!fromCache) {
+          _prepareChat();
+          if (note['type'] == 'clip') unawaited(_openPendingClipChat());
+        }
+      },
+      onError: (error) {
+        if (mounted) setState(() => _error = '$error');
+      },
+    );
   }
 
   void _prepareChat() {
     final machine = widget.machine;
     final note = _note;
-    if (machine == null || note == null) return;
+    if (machine == null ||
+        note == null ||
+        _detailResource?.networkReady != true) {
+      return;
+    }
     _chatPrefetch = NoteChatPrefetch(widget.api, machine, note);
   }
 
@@ -1761,6 +1909,7 @@ class _NoteEditorState extends State<NoteEditor> {
       if (!mounted || _editing) return;
       setState(() {
         _note = updated;
+        _cacheCurrentNote();
         _title.text = '${updated['title']}';
         _body.text = '${updated['content'] ?? ''}';
       });
@@ -1775,6 +1924,7 @@ class _NoteEditorState extends State<NoteEditor> {
 
   @override
   void dispose() {
+    _detailResource?.dispose();
     _quotes.dispose();
     _history.removeListener(_refresh);
     _body.removeListener(_refresh);
@@ -1788,6 +1938,7 @@ class _NoteEditorState extends State<NoteEditor> {
   }
 
   void _beginEdit({bool title = false}) {
+    if (!_allowDetailAction()) return;
     if (_editing) return;
     _focusTitle = title;
     if (!_body.selection.isValid) {
@@ -1874,6 +2025,15 @@ class _NoteEditorState extends State<NoteEditor> {
             'transcript': _transcript.text,
           });
     _note = saved;
+    _detailResource ??= noteResource(widget.api, machine, '${saved['id']}');
+    _detailResource!.networkReady = true;
+    unawaited(
+      OfflineCache.instance.write(
+        _detailResource!.scope,
+        _detailResource!.key,
+        saved,
+      ),
+    );
     _changed = true;
     if (mounted) {
       setState(() => _title.text = '${saved['title'] ?? title}');
@@ -1881,6 +2041,7 @@ class _NoteEditorState extends State<NoteEditor> {
   }
 
   Future<void> _save() async {
+    if (!_allowDetailAction()) return;
     if (_saving) return;
     setState(() {
       _saving = true;
@@ -1901,6 +2062,7 @@ class _NoteEditorState extends State<NoteEditor> {
   }
 
   Future<void> _delete() async {
+    if (!_allowDetailAction()) return;
     final existing = _note;
     final machine = widget.machine;
     if (existing == null || machine == null) return;
@@ -1914,6 +2076,7 @@ class _NoteEditorState extends State<NoteEditor> {
   }
 
   Future<void> _rename() async {
+    if (!_allowDetailAction()) return;
     final controller = TextEditingController(text: _title.text);
     final title = await showDialog<String>(
       context: context,
@@ -1941,6 +2104,7 @@ class _NoteEditorState extends State<NoteEditor> {
   }
 
   Future<void> _confirmDelete() async {
+    if (!_allowDetailAction()) return;
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -1961,6 +2125,7 @@ class _NoteEditorState extends State<NoteEditor> {
   }
 
   Future<void> _markTag() async {
+    if (!_allowDetailAction()) return;
     final machine = widget.machine;
     if (machine == null || _note == null || _saving) return;
     setState(() => _saving = true);
@@ -1975,6 +2140,7 @@ class _NoteEditorState extends State<NoteEditor> {
       if (!mounted) return;
       setState(() {
         _note = updated;
+        _cacheCurrentNote();
         _tags
           ..clear()
           ..addAll(noteTags(updated));
@@ -1989,6 +2155,7 @@ class _NoteEditorState extends State<NoteEditor> {
   }
 
   Future<void> _aiRename() async {
+    if (!_allowDetailAction()) return;
     final machine = widget.machine;
     final note = _note;
     if (machine == null || note == null || _saving) return;
@@ -2005,6 +2172,7 @@ class _NoteEditorState extends State<NoteEditor> {
       if (!mounted) return;
       setState(() {
         _note = updated;
+        _cacheCurrentNote();
         _title.text = '${updated['title'] ?? ''}';
         _changed = true;
       });
@@ -2016,6 +2184,7 @@ class _NoteEditorState extends State<NoteEditor> {
   }
 
   Future<void> _aiTag() async {
+    if (!_allowDetailAction()) return;
     final machine = widget.machine;
     if (machine == null || _note == null || _saving) return;
     setState(() {
@@ -2031,6 +2200,7 @@ class _NoteEditorState extends State<NoteEditor> {
       if (!mounted) return;
       setState(() {
         _note = updated;
+        _cacheCurrentNote();
         _tags
           ..clear()
           ..addAll(noteTags(updated));
@@ -2044,6 +2214,7 @@ class _NoteEditorState extends State<NoteEditor> {
   }
 
   Future<void> _pickImage(ImageSource source) async {
+    if (!_allowDetailAction()) return;
     final machine = widget.machine;
     if (machine == null || _saving) return;
     setState(() => _saving = true);
@@ -2087,6 +2258,7 @@ class _NoteEditorState extends State<NoteEditor> {
   }
 
   Future<void> _ai({String? initialMessage}) async {
+    if (!_allowDetailAction()) return;
     final machine = widget.machine;
     if (machine == null || _saving) return;
     setState(() {
@@ -2137,21 +2309,20 @@ class _NoteEditorState extends State<NoteEditor> {
               backgroundColor: Colors.white,
               elevation: 0,
               automaticallyImplyLeading: false,
-              leadingWidth: _editing || _quotes.deleting ? 80 : null,
+              leadingWidth: 56,
               leading: _quotes.deleting
-                  ? TextButton(
+                  ? AppActionButton(
                       onPressed: _quotes.cancelDeletion,
-                      child: const Text('取消'),
+                      tooltip: '取消',
+                      icon: const Icon(Icons.close),
                     )
                   : _editing
-                  ? TextButton(
+                  ? AppActionButton(
                       onPressed: _saving ? null : _discardEdit,
-                      child: const Text(
-                        '放弃',
-                        style: TextStyle(color: _ink, fontSize: 16),
-                      ),
+                      tooltip: '放弃',
+                      icon: const Icon(Icons.close),
                     )
-                  : IconButton(
+                  : AppActionButton(
                       tooltip: '返回',
                       onPressed: _leave,
                       icon: const Icon(Icons.arrow_back),
@@ -2161,32 +2332,28 @@ class _NoteEditorState extends State<NoteEditor> {
               title: _editing ? null : DetailTitle(_title.text),
               actions: [
                 if (_quotes.deleting) ...[
-                  TextButton(
+                  AppActionButton(
                     onPressed: _quotes.selected.isEmpty
                         ? null
                         : _quotes.deleteSelected,
-                    child: const Text('删除', style: TextStyle(color: _red)),
+                    tooltip: '删除',
+                    icon: const Icon(Icons.delete_outline, color: _red),
                   ),
                 ] else if (_editing) ...[
-                  IconButton(
+                  AppActionButton(
                     tooltip: '撤销',
                     onPressed: _history.value.canUndo ? _history.undo : null,
                     icon: const Icon(Icons.undo),
                   ),
-                  IconButton(
+                  AppActionButton(
                     tooltip: '重做',
                     onPressed: _history.value.canRedo ? _history.redo : null,
                     icon: const Icon(Icons.redo),
                   ),
-                  TextButton(
+                  AppActionButton(
                     onPressed: _saving ? null : _save,
-                    child: const Text(
-                      '保存',
-                      style: TextStyle(
-                        color: _blue,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                    tooltip: '保存',
+                    icon: const Icon(Icons.check),
                   ),
                 ] else if (_note != null) ...[
                   NoteActions(
@@ -2230,9 +2397,23 @@ class _NoteEditorState extends State<NoteEditor> {
                       if (_error != null)
                         Align(
                           alignment: Alignment.centerLeft,
-                          child: Text(
-                            _error!,
-                            style: const TextStyle(color: _red),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  _error!,
+                                  style: const TextStyle(color: _red),
+                                ),
+                              ),
+                              if ((_note == null && !_creationReady) ||
+                                  (!_editing &&
+                                      _detailResource?.networkReady != true))
+                                AppActionButton(
+                                  tooltip: '重试同步',
+                                  icon: const Icon(Icons.refresh),
+                                  onPressed: _loadDetail,
+                                ),
+                            ],
                           ),
                         ),
                       if (widget.focusTranscript) ...[
@@ -2322,6 +2503,7 @@ class _RecordingDetailState extends State<RecordingDetail> {
   final _quotes = NoteQuoteDraft();
   final AudioPlayer _player = AudioPlayer();
   NoteChatPrefetch? _chatPrefetch;
+  late final OfflineResource<Map<String, dynamic>> _detailResource;
   late Map<String, dynamic> _note = widget.note;
   late final _content = TextEditingController(
     text: '${widget.note['content'] ?? ''}',
@@ -2347,7 +2529,12 @@ class _RecordingDetailState extends State<RecordingDetail> {
   @override
   void initState() {
     super.initState();
-    _chatPrefetch = NoteChatPrefetch(widget.api, widget.machine, _note);
+    _detailResource = noteResource(
+      widget.api,
+      widget.machine,
+      '${_note['id']}',
+    );
+    unawaited(_loadDetail());
     _player.onPlayerComplete.listen((_) {
       if (mounted) {
         setState(() {
@@ -2368,12 +2555,47 @@ class _RecordingDetailState extends State<RecordingDetail> {
     _transcriptHistory.addListener(_rebuild);
   }
 
+  void _cacheCurrentNote() {
+    unawaited(
+      OfflineCache.instance.write(
+        _detailResource.scope,
+        _detailResource.key,
+        _note,
+      ),
+    );
+  }
+
+  bool _allowDetailAction() => _detailResource.allowAction(context);
+
+  Future<void> _loadDetail() => _detailResource.load(
+    network: () => widget.api.getNote(widget.machine, '${widget.note['id']}'),
+    onData: (note, fromCache) {
+      if (!mounted ||
+          !_detailResource.scope.matches(widget.api, machine: widget.machine)) {
+        return;
+      }
+      setState(() {
+        _note = note;
+        _content.text = '${note['content'] ?? ''}';
+        _transcriptText.text = '${note['transcript'] ?? ''}';
+        if (!fromCache) _error = null;
+      });
+      if (!fromCache) {
+        _chatPrefetch = NoteChatPrefetch(widget.api, widget.machine, note);
+      }
+    },
+    onError: (error) {
+      if (mounted) setState(() => _error = '$error');
+    },
+  );
+
   void _rebuild() {
     if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
+    _detailResource.dispose();
     _quotes.removeListener(_rebuild);
     _quotes.dispose();
     _contentHistory.removeListener(_rebuild);
@@ -2438,6 +2660,7 @@ class _RecordingDetailState extends State<RecordingDetail> {
       _tab == 0 ? _transcriptHistory : _contentHistory;
 
   void _beginEdit() {
+    if (!_allowDetailAction()) return;
     if (_editing) return;
     setState(() {
       _editing = true;
@@ -2491,6 +2714,7 @@ class _RecordingDetailState extends State<RecordingDetail> {
   }
 
   Future<void> _save() async {
+    if (!_allowDetailAction()) return;
     if (_saving) return;
     setState(() {
       _saving = true;
@@ -2510,6 +2734,7 @@ class _RecordingDetailState extends State<RecordingDetail> {
       if (!mounted) return;
       setState(() {
         _note = {..._note, ...saved};
+        _cacheCurrentNote();
         _changed = true;
       });
       _closeEdit();
@@ -2521,6 +2746,7 @@ class _RecordingDetailState extends State<RecordingDetail> {
   }
 
   Future<void> _pickImage(ImageSource source) async {
+    if (!_allowDetailAction()) return;
     try {
       final selected = await MediaService(widget.api)
           .pickImage(source, picker: widget.imagePicker);
@@ -2540,6 +2766,7 @@ class _RecordingDetailState extends State<RecordingDetail> {
   }
 
   Future<void> _confirmDelete() async {
+    if (!_allowDetailAction()) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -2571,6 +2798,7 @@ class _RecordingDetailState extends State<RecordingDetail> {
   }
 
   Future<void> _renameRecording() async {
+    if (!_allowDetailAction()) return;
     final controller = TextEditingController(text: '${_note['title']}');
     final title = await showDialog<String>(
       context: context,
@@ -2601,6 +2829,7 @@ class _RecordingDetailState extends State<RecordingDetail> {
       if (mounted) {
         setState(() {
           _note = updated;
+          _cacheCurrentNote();
           _changed = true;
           _error = null;
         });
@@ -2613,6 +2842,7 @@ class _RecordingDetailState extends State<RecordingDetail> {
   }
 
   Future<void> _markTag() async {
+    if (!_allowDetailAction()) return;
     if (_saving) return;
     setState(() => _saving = true);
     try {
@@ -2629,6 +2859,7 @@ class _RecordingDetailState extends State<RecordingDetail> {
       if (mounted) {
         setState(() {
           _note = updated;
+          _cacheCurrentNote();
           _changed = true;
           _error = null;
         });
@@ -2641,6 +2872,7 @@ class _RecordingDetailState extends State<RecordingDetail> {
   }
 
   Future<void> _aiRename() async {
+    if (!_allowDetailAction()) return;
     if (_saving) return;
     setState(() {
       _saving = true;
@@ -2655,6 +2887,7 @@ class _RecordingDetailState extends State<RecordingDetail> {
       if (!mounted) return;
       setState(() {
         _note = updated;
+        _cacheCurrentNote();
         _changed = true;
       });
     } catch (error) {
@@ -2665,6 +2898,7 @@ class _RecordingDetailState extends State<RecordingDetail> {
   }
 
   Future<void> _aiTag() async {
+    if (!_allowDetailAction()) return;
     if (_saving) return;
     setState(() {
       _saving = true;
@@ -2679,6 +2913,7 @@ class _RecordingDetailState extends State<RecordingDetail> {
       if (mounted) {
         setState(() {
           _note = updated;
+          _cacheCurrentNote();
           _changed = true;
         });
       }
@@ -2690,6 +2925,7 @@ class _RecordingDetailState extends State<RecordingDetail> {
   }
 
   Future<void> _ai() async {
+    if (!_allowDetailAction()) return;
     if (_editing) {
       await _save();
       if (_error != null || !mounted) return;
@@ -2735,17 +2971,16 @@ class _RecordingDetailState extends State<RecordingDetail> {
                     child: Row(
                       children: [
                         if (_quotes.deleting)
-                          TextButton(
+                          AppActionButton(
                             onPressed: _quotes.cancelDeletion,
-                            child: const Text('取消'),
+                            tooltip: '取消',
+                            icon: const Icon(Icons.close),
                           )
                         else if (_editing)
-                          TextButton(
+                          AppActionButton(
                             onPressed: _saving ? null : _discardEdit,
-                            child: const Text(
-                              '放弃',
-                              style: TextStyle(color: _ink, fontSize: 16),
-                            ),
+                            tooltip: '放弃',
+                            icon: const Icon(Icons.close),
                           )
                         else
                           _round(
@@ -2755,14 +2990,12 @@ class _RecordingDetailState extends State<RecordingDetail> {
                           ),
                         Expanded(child: DetailTitle('${_note['title'] ?? ''}')),
                         if (_quotes.deleting)
-                          TextButton(
+                          AppActionButton(
                             onPressed: _quotes.selected.isEmpty
                                 ? null
                                 : _quotes.deleteSelected,
-                            child: const Text(
-                              '删除',
-                              style: TextStyle(color: _red),
-                            ),
+                            tooltip: '删除',
+                            icon: const Icon(Icons.delete_outline, color: _red),
                           )
                         else if (!_editing) ...[
                           AiChatButton(
@@ -2782,29 +3015,24 @@ class _RecordingDetailState extends State<RecordingDetail> {
                           ),
                         ],
                         if (_editing) ...[
-                          IconButton(
+                          AppActionButton(
                             tooltip: '撤销',
                             onPressed: _activeHistory.value.canUndo
                                 ? _activeHistory.undo
                                 : null,
                             icon: const Icon(Icons.undo),
                           ),
-                          IconButton(
+                          AppActionButton(
                             tooltip: '重做',
                             onPressed: _activeHistory.value.canRedo
                                 ? _activeHistory.redo
                                 : null,
                             icon: const Icon(Icons.redo),
                           ),
-                          TextButton(
+                          AppActionButton(
                             onPressed: _saving ? null : _save,
-                            child: const Text(
-                              '保存',
-                              style: TextStyle(
-                                color: _blue,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
+                            tooltip: '保存',
+                            icon: const Icon(Icons.check),
                           ),
                         ],
                       ],
@@ -2824,7 +3052,22 @@ class _RecordingDetailState extends State<RecordingDetail> {
                 if (_error != null)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
-                    child: Text(_error!, style: const TextStyle(color: _red)),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            _error!,
+                            style: const TextStyle(color: _red),
+                          ),
+                        ),
+                        if (!_editing && !_detailResource.networkReady)
+                          AppActionButton(
+                            tooltip: '重试同步',
+                            icon: const Icon(Icons.refresh),
+                            onPressed: _loadDetail,
+                          ),
+                      ],
+                    ),
                   ),
                 const SizedBox(height: 8),
                 Expanded(child: _editing ? _editors() : _reading(lines)),
@@ -3588,15 +3831,17 @@ class _RecordPageState extends State<RecordPage> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  TextButton(
+                  AppActionButton(
+                    tooltip: '重试 AI 命名',
                     onPressed: _saving ? null : _retryRecordingName,
-                    child: const Text('重试 AI 命名'),
+                    icon: const Icon(Icons.refresh),
                   ),
-                  TextButton(
+                  AppActionButton(
+                    tooltip: '保留原标题',
                     onPressed: _saving
                         ? null
                         : () => Navigator.pop(context, true),
-                    child: const Text('保留原标题'),
+                    icon: const Icon(Icons.check),
                   ),
                 ],
               ),
@@ -3623,9 +3868,9 @@ class _RecordPageState extends State<RecordPage> {
                         : _start,
                   ),
                   if (!_recording && _elapsed.value > Duration.zero)
-                    PillButton(
-                      icon: Icons.save_outlined,
-                      label: '保存',
+                    AppActionButton(
+                      icon: const Icon(Icons.check),
+                      tooltip: '保存',
                       onPressed: _connecting || _finalizing || _saving
                           ? null
                           : _save,
@@ -3718,6 +3963,11 @@ class _SideNoteState extends State<_SideNote> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
+        leading: AppActionButton(
+          tooltip: '返回',
+          onPressed: () => Navigator.maybePop(context),
+          icon: const Icon(Icons.arrow_back),
+        ),
         title: ValueListenableBuilder<bool>(
           valueListenable: widget.live,
           builder: (_, recording, _) {
@@ -3732,25 +3982,23 @@ class _SideNoteState extends State<_SideNote> {
           },
         ),
         actions: [
-          IconButton(
+          AppActionButton(
             tooltip: '撤回',
             onPressed: _history.value.canUndo ? _history.undo : null,
             icon: const Icon(Icons.undo),
           ),
-          IconButton(
+          AppActionButton(
             tooltip: '重做',
             onPressed: _history.value.canRedo ? _history.redo : null,
             icon: const Icon(Icons.redo),
           ),
-          TextButton(
+          AppActionButton(
             onPressed: () async {
               await _stopEditorVoice(widget.body);
               if (context.mounted) Navigator.pop(context);
             },
-            child: const Text(
-              '保存',
-              style: TextStyle(color: _blue, fontWeight: FontWeight.w600),
-            ),
+            tooltip: '保存',
+            icon: const Icon(Icons.check),
           ),
         ],
       ),
@@ -3942,7 +4190,7 @@ class _MarkdownEditorState extends State<_MarkdownEditor> {
                   _tool('重做', _undo.value.canRedo ? _undo.redo : null),
                 ],
                 if (_voice != null)
-                  IconButton(
+                  AppActionButton(
                     tooltip: _voice!.active ? '停止语音输入' : '语音输入',
                     onPressed: _voice!.connecting || _voice!.stopping
                         ? null
@@ -4050,15 +4298,21 @@ class _MarkdownEditorState extends State<_MarkdownEditor> {
   }
 
   Widget _tool(String label, VoidCallback? onPressed, {Color? color}) {
-    return TextButton(
-      style: TextButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        minimumSize: const Size(0, 40),
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        foregroundColor: color,
-      ),
+    final icon = switch (label) {
+      '撤回' => Icons.undo,
+      '重做' => Icons.redo,
+      '拍照' => Icons.photo_camera_outlined,
+      '选图' => Icons.photo_library_outlined,
+      '标题' => Icons.title,
+      '加粗' => Icons.format_bold,
+      '列表' => Icons.format_list_bulleted,
+      '有序列表' => Icons.format_list_numbered,
+      _ => Icons.edit_outlined,
+    };
+    return AppActionButton(
+      tooltip: label,
       onPressed: onPressed,
-      child: Text(label),
+      icon: Icon(icon, color: color),
     );
   }
 }
@@ -4114,16 +4368,19 @@ class AiChatButton extends StatelessWidget {
         trailing: unread > 0 ? ChatUnreadBadge(count: unread) : null,
       );
     }
-    return TextButton(
+    return AppActionButton(
+      tooltip: 'AI+',
       onPressed: onPressed,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+      icon: Stack(
+        clipBehavior: Clip.none,
         children: [
-          const Text('AI+'),
-          if (unread > 0) ...[
-            const SizedBox(width: 5),
-            ChatUnreadBadge(count: unread),
-          ],
+          const Icon(Icons.auto_awesome),
+          if (unread > 0)
+            Positioned(
+              right: -10,
+              top: -10,
+              child: ChatUnreadBadge(count: unread),
+            ),
         ],
       ),
     );
@@ -4168,35 +4425,41 @@ class PillButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final enabled = onPressed != null;
     final foreground = !enabled ? _sub : (dark ? Colors.white : _ink);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 2),
-      child: Material(
-        color: !enabled
-            ? const Color(0xFFE5E5EA)
-            : dark
-            ? _dark
-            : Colors.transparent,
-        borderRadius: BorderRadius.circular(20),
-        child: InkWell(
-          onTap: onPressed,
+    return Tooltip(
+      message: label,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        child: Material(
+          color: !enabled
+              ? const Color(0xFFE5E5EA)
+              : dark
+              ? _dark
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(20),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 16, 8),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, size: 16, color: foreground),
-                const SizedBox(width: 8),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: foreground,
+          child: InkWell(
+            onTap: onPressed,
+            borderRadius: BorderRadius.circular(20),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 16, 8),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: 16, color: foreground),
+                  const SizedBox(width: 8),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: foreground,
+                    ),
                   ),
-                ),
-                if (trailing != null) ...[const SizedBox(width: 5), trailing!],
-              ],
+                  if (trailing != null) ...[
+                    const SizedBox(width: 5),
+                    trailing!,
+                  ],
+                ],
+              ),
             ),
           ),
         ),
@@ -4210,20 +4473,7 @@ Widget _round({
   required VoidCallback onTap,
   required Widget child,
 }) {
-  return Tooltip(
-    message: label,
-    child: Material(
-      color: Colors.white,
-      shape: const CircleBorder(),
-      elevation: 2,
-      shadowColor: const Color(0x12141432),
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: onTap,
-        child: SizedBox(width: 44, height: 44, child: Center(child: child)),
-      ),
-    ),
-  );
+  return HomeRoundButton(label: label, onTap: onTap, child: child);
 }
 
 class _Meta extends StatelessWidget {

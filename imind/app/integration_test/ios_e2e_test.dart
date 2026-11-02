@@ -97,7 +97,7 @@ void main() {
       find.byType(TextField).last,
       'iOS E2E saved **Markdown**',
     );
-    await tester.tap(find.text('AI+'));
+    await tester.tap(find.byTooltip('AI+'));
     await tester.pumpAndSettle();
     expect(find.text('AI+ 群聊'), findsOneWidget);
     final savedAfterAiOpen = await api.getNote(machine, note['id'] as String);
@@ -148,7 +148,7 @@ void main() {
     expect(saved['content'], 'iOS E2E saved **Markdown**');
     await tester.tap(find.textContaining('iOS E2E saved'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('AI+'));
+    await tester.tap(find.byTooltip('AI+'));
     await tester.pumpAndSettle();
     expect(find.text('AI+ 群聊'), findsOneWidget);
     final reopened = await api.ensureNoteChat(
@@ -196,7 +196,7 @@ void main() {
     final clipUrl =
         'https://example.com/ios-e2e?run=${DateTime.now().millisecondsSinceEpoch}';
     await tester.enterText(find.byType(TextField).first, '收藏这个链接：$clipUrl。');
-    await tester.tap(find.widgetWithText(FilledButton, '剪藏'));
+    await tester.tap(find.byTooltip('剪藏'));
     await tester.pumpAndSettle();
     final clips = (await api.notes(machine))
         .where((n) => n['source_url'] == clipUrl)
@@ -240,7 +240,7 @@ void main() {
       find.byType(TextField).last,
       'Native recording companion',
     );
-    await tester.tap(find.widgetWithText(TextButton, '保存'));
+    await tester.tap(find.byTooltip('保存'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();
@@ -248,10 +248,10 @@ void main() {
     await waitFor(find.text('injected upload failure'));
     expect(find.byTooltip('菜单'), findsNothing);
     expect(transport.attempts, 1);
-    await tester.tap(find.widgetWithText(PillButton, '保存'));
+    await tester.tap(find.byTooltip('保存'));
     if (!const bool.fromEnvironment('E2E_NAMING_CONFIGURED')) {
-      await waitFor(find.text('保留原标题'));
-      await tester.tap(find.text('保留原标题'));
+      await waitFor(find.byTooltip('保留原标题'));
+      await tester.tap(find.byTooltip('保留原标题'));
     }
     await waitFor(find.byTooltip('菜单'));
     expect(transport.attempts, 2);

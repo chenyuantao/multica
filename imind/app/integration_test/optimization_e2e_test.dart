@@ -24,7 +24,7 @@ void main() {
       final original = '收藏这篇文章：$url。';
       await f.text(find.byType(TextField).first, original);
       await f.text(find.byType(TextField).last, '提取三条结论');
-      await f.tap(find.widgetWithText(FilledButton, '剪藏'));
+      await f.tap(find.byTooltip('剪藏'));
       await f.wait(find.text('AI+ 群聊'));
       await f.wait(find.textContaining('Agent 暂不可用'));
       final notes = await f.api.notes(Flow.machine);

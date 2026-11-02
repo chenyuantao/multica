@@ -86,16 +86,16 @@ void main() {
       await f.tap(find.byType(TextField).first);
       await f.text(find.byType(TextField).first, title);
       await f.text(find.byType(TextField).last, 'Android body');
-      await f.tap(find.widgetWithText(TextButton, '加粗'));
+      await f.tap(find.byTooltip('加粗'));
       expect(
         tester.widget<TextField>(find.byType(TextField).last).controller!.text,
         '**Android body**',
       );
       await f.tap(find.widgetWithText(TextButton, '标签'));
       await f.text(find.byType(TextField).last, tag);
-      await f.tap(find.widgetWithText(TextButton, '添加'));
-      await f.tap(find.widgetWithText(TextButton, '保存'));
-      await f.gone(find.widgetWithText(TextButton, '保存'));
+      await f.tap(find.byTooltip('添加'));
+      await f.tap(find.byTooltip('保存'));
+      await f.gone(find.byTooltip('保存'));
       var note = (await f.api.notes(Flow.machine))
           .singleWhere((n) => n['title'] == title);
       var saved = await f.api.getNote(Flow.machine, note['id'] as String);
@@ -103,7 +103,7 @@ void main() {
       expect(saved['tags'], contains(tag));
       await f.tap(find.text('Android body'));
       await f.text(find.byType(TextField).last, 'discard me');
-      await f.tap(find.text('放弃'));
+      await f.tap(find.byTooltip('放弃'));
       expect(find.text('discard me'), findsNothing);
       expect(find.text('Android body'), findsOneWidget);
       await f.tap(find.byTooltip('更多'));
@@ -158,7 +158,7 @@ void main() {
       }
       await f.tap(find.text('标记'));
       await f.text(find.byType(TextField).last, '$tag-batch');
-      await f.tap(find.widgetWithText(TextButton, '保存'));
+      await f.tap(find.byTooltip('保存'));
       await f.gone(find.text('导出'));
       saved = await f.api.getNote(Flow.machine, note['id'] as String);
       expect(saved['tags'], contains('$tag-batch'));
@@ -195,7 +195,7 @@ void main() {
       await f.tap(find.byTooltip('更多'));
       await f.tap(find.text('网页剪藏').last);
       await f.text(find.byType(TextField).first, 'invalid text');
-      await f.tap(find.widgetWithText(FilledButton, '剪藏'));
+      await f.tap(find.byTooltip('剪藏'));
       expect(find.text('没有识别到链接'), findsOneWidget);
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
@@ -205,7 +205,7 @@ void main() {
       );
       expect(trash.enabled, isFalse);
       await f.tap(find.byTooltip('退出登录'));
-      await f.wait(find.text('发送验证码'));
+      await f.wait(find.byTooltip('发送验证码'));
       expect(await f.store.read(defaultApiBase()), isNull);
       expect(tester.takeException(), isNull);
       f.api.close();
@@ -259,8 +259,8 @@ void main() {
         tester.getSize(find.byType(Scaffold).last).width - 32,
       );
       await f.text(find.byType(TextField).last, 'Updated recording note');
-      await f.tap(find.widgetWithText(TextButton, '保存'));
-      await f.gone(find.widgetWithText(TextButton, '保存'));
+      await f.tap(find.byTooltip('保存'));
+      await f.gone(find.byTooltip('保存'));
       final saved = await f.api.getNote(Flow.machine, note['id'] as String);
       expect(saved['content'], 'Updated recording note');
       expect(saved['transcript'], contains('Updated spoken words'));
@@ -271,7 +271,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.pumpWidget(const IMindApp());
       await f.wait(find.byTooltip('菜单'));
-      expect(find.text('发送验证码'), findsNothing);
+      expect(find.byTooltip('发送验证码'), findsNothing);
       expect(tester.takeException(), isNull);
       f.api.close();
       debugPrint(
@@ -297,7 +297,7 @@ void main() {
       await f.tap(find.text('Original conflict content'));
       await f.text(find.byType(TextField).last, 'Format this line');
       await tester.pump(const Duration(seconds: 1));
-      await f.tap(find.widgetWithText(TextButton, '标题'));
+      await f.tap(find.byTooltip('标题'));
       await tester.pump(const Duration(seconds: 1));
       expect(
         tester.widget<TextField>(find.byType(TextField).last).controller!.text,
@@ -314,13 +314,13 @@ void main() {
         '# Format this line',
       );
       await f.text(find.byType(TextField).last, 'List item');
-      await f.tap(find.widgetWithText(TextButton, '列表'));
+      await f.tap(find.byTooltip('列表'));
       expect(
         tester.widget<TextField>(find.byType(TextField).last).controller!.text,
         '* List item',
       );
       await f.text(find.byType(TextField).last, 'Ordered item');
-      await f.tap(find.widgetWithText(TextButton, '有序列表'));
+      await f.tap(find.byTooltip('有序列表'));
       expect(
         tester.widget<TextField>(find.byType(TextField).last).controller!.text,
         '1. Ordered item',
@@ -338,7 +338,7 @@ void main() {
         'tags': [],
         'transcript': '',
       });
-      await f.tap(find.widgetWithText(TextButton, '保存'));
+      await f.tap(find.byTooltip('保存'));
       await f.wait(find.text('note changed since it was loaded'));
       expect(
         tester.widget<TextField>(find.byType(TextField).last).controller!.text,
@@ -348,7 +348,7 @@ void main() {
         (await f.api.getNote(Flow.machine, note['id'] as String))['content'],
         'Concurrent server edit',
       );
-      await f.tap(find.text('放弃'));
+      await f.tap(find.byTooltip('放弃'));
       await f.tap(find.byTooltip('返回'));
       await f.wait(find.text(title));
       await f.tap(find.text(title));

@@ -99,16 +99,16 @@ void main() {
         await f.tap(find.byTooltip('关闭信息'));
         if (type == 'recording') await f.tap(find.byTooltip('更多'));
         await f.tap(find.text('编辑'));
-        await f.wait(find.widgetWithText(TextButton, '保存'));
+        await f.wait(find.byTooltip('保存'));
         await f.text(find.byType(TextField).last, '已编辑 $type');
-        await f.tap(find.widgetWithText(TextButton, '保存'));
-        await f.gone(find.widgetWithText(TextButton, '保存'));
+        await f.tap(find.byTooltip('保存'));
+        await f.gone(find.byTooltip('保存'));
         final saved = await f.api.getNote(Flow.machine, '${note['id']}');
         expect(
           saved[type == 'recording' ? 'transcript' : 'content'],
           '已编辑 $type',
         );
-        await f.tap(find.widgetWithText(TextButton, 'AI+'));
+        await f.tap(find.byTooltip('AI+'));
         await f.wait(find.text('围绕这份文件开始讨论'));
         final input = find.byType(TextField).last;
         Future<void> keyboard() async {

@@ -306,7 +306,11 @@ void main() {
           () => unread.unreadForNote('${notes[1]['id']}', Flow.machine) == 3,
         );
         await nativeCount(baseline + 3, delivered: chats[1]);
-        expect((await native())['delivered'], ['imind-chat-${chats[1]}'], reason: 'Reconnect must not re-notify historical unread from restored shares');
+        expect(
+          (await native())['delivered'],
+          ['imind-chat-${chats[1]}'],
+          reason: 'Reconnect must not re-notify historical unread from restored shares',
+        );
         await capture('reconnected');
         final home = tester.widget<HomePage>(find.byType(HomePage));
         final original = home.session.data!;
@@ -338,7 +342,7 @@ void main() {
         await f.wait(find.byTooltip('菜单'));
         await f.tap(find.byTooltip('菜单'));
         await f.tap(find.byTooltip('退出登录'));
-        await f.wait(find.text('发送验证码'));
+        await f.wait(find.byTooltip('发送验证码'));
         expect(unread.totalUnread, 0);
         await nativeCount(0);
         await send(0, 'After logout must not notify old session');

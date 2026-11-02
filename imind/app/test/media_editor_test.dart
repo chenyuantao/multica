@@ -76,7 +76,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(reads, 1);
+      expect(reads, 2);
       expect(
         find.byType(NoteAiChatSheet),
         body.trim().isEmpty ? findsOneWidget : findsNothing,
@@ -96,7 +96,7 @@ void main() {
       ),
     );
     expect(find.byType(TextField), findsNWidgets(2));
-    expect(find.text('保存'), findsOneWidget);
+    expect(find.byTooltip('保存'), findsOneWidget);
     expect(find.byTooltip('语音输入'), findsOneWidget);
   });
 
@@ -218,7 +218,7 @@ void main() {
         await tester.tap(find.text('编辑'));
         await tester.pumpAndSettle();
         await tester.pump(const Duration(seconds: 1));
-        await tester.tap(find.text('选图'));
+        await tester.tap(find.byTooltip('选图'));
         await tester.pumpAndSettle();
         final body = tester
             .widget<TextField>(find.byType(TextField).last)
@@ -234,7 +234,7 @@ void main() {
           await tester.tap(find.byTooltip('重做'));
           await tester.pumpAndSettle();
           expect(body.text, contains('media/$id/'));
-          await tester.tap(find.text('保存'));
+          await tester.tap(find.byTooltip('保存'));
           await tester.pumpAndSettle();
           expect(saved['content'], contains('media/$id/'));
         } else {

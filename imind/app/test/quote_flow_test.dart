@@ -166,7 +166,7 @@ void main() {
         await tester.tap(find.byTooltip('关闭'));
         await tester.pumpAndSettle();
         expect(find.text('应用'), findsNothing);
-        await tester.tap(find.text('AI+'));
+        await tester.tap(find.byTooltip('AI+'));
         await tester.pumpAndSettle();
         expect(api.sent, [expected]);
       },

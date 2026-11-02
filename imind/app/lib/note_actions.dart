@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
+import 'action_button.dart';
+
 class DetailTitle extends StatelessWidget {
   const DetailTitle(this.title, {super.key});
   final String title;
@@ -40,6 +42,7 @@ class NoteActions extends StatelessWidget {
   @override
   Widget build(BuildContext context) => PopupMenuButton<String>(
     tooltip: '更多',
+    style: appActionButtonStyle(),
     enabled: enabled,
     icon: const Icon(Icons.more_horiz),
     onSelected: (action) {
@@ -61,7 +64,7 @@ class NoteActions extends StatelessWidget {
                 children: [
                   ListTile(
                     title: const Text('文件信息'),
-                    trailing: IconButton(
+                    trailing: AppActionButton(
                       tooltip: '关闭信息',
                       onPressed: () => Navigator.pop(context),
                       icon: const Icon(Icons.close),

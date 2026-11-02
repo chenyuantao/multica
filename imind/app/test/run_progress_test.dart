@@ -274,7 +274,7 @@ void main() {
       ]);
       expect(find.text('Agent A · 已取消'), findsOneWidget);
       expect(find.text('终止'), findsNothing);
-      await tester.tap(find.byType(BackButton));
+      await tester.tap(find.byTooltip('返回'));
       await tester.pumpAndSettle();
       expect(find.text('查看'), findsOneWidget);
       expect(find.text('执行过程'), findsNothing);
