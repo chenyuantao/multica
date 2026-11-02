@@ -4,9 +4,9 @@
 Usage: scripts/patch-imultica-url.py <binary> <new-base-url>
 
 New strings are written into the zero padding between the Mach-O load
-commands and __text. Every reference found (ADRP+ADD+MOVZ length triples in
-code, {ptr,len} string headers in data) is rewritten; the binary is then
-ad-hoc re-signed. A .orig backup is kept next to the binary.
+commands and __text on a pristine binary. A binary previously patched to the
+Zeabur URL is updated in place. References in code and data are rewritten,
+then the binary is ad-hoc re-signed. A .orig backup is kept next to it.
 """
 import shutil
 import struct
@@ -17,10 +17,63 @@ BASE = 0x100000000
 OLD_API = b"https://api.multica.woa.com"
 OLD_APP = b"https://multica.woa.com"
 OLD_WSNEW = OLD_APP + b"/workspaces/new"
+OLD_PATCHED = b"https://chat.preview.aliyun-zeabur.cn"
 
 
 def u32(d, o):
     return struct.unpack_from("<I", d, o)[0]
+
+
+def repatch(d, text_off, text_size, new):
+    """Update an earlier patch in place, preserving unrelated string references."""
+    words = struct.unpack_from("<%dI" % (text_size // 4), d, text_off)
+    code_refs = data_refs = 0
+    for old, repl in (
+        (OLD_PATCHED + b"/workspaces/new", new + b"/workspaces/new"),
+        (OLD_PATCHED, new),
+    ):
+        if len(repl) > len(old):
+            raise ValueError("new URL does not fit the existing patch slot")
+        start = 0
+        while (idx := d.find(old, start, text_off)) != -1:
+            start = idx + len(old)
+            va = BASE + idx
+            hdr = struct.pack("<QQ", va, len(old))
+            h = d.find(hdr)
+            while h != -1:
+                d[h:h + 16] = struct.pack("<QQ", va, len(repl))
+                data_refs += 1
+                h = d.find(hdr, h + 16)
+            for i, w in enumerate(words):
+                if (w & 0x9F000000) != 0x90000000:
+                    continue
+                rd = w & 0x1F
+                imm = (((w >> 5) & 0x7FFFF) << 2) | ((w >> 29) & 3)
+                if imm & (1 << 20):
+                    imm -= 1 << 21
+                pc = BASE + text_off + i * 4
+                page = (pc & ~0xFFF) + (imm << 12)
+                for k in range(1, 4):
+                    if i + k >= len(words):
+                        break
+                    w2 = words[i + k]
+                    if (w2 & 0xFFC00000) != 0x91000000 or ((w2 >> 5) & 0x1F) != rd:
+                        continue
+                    if page + ((w2 >> 10) & 0xFFF) != va:
+                        continue
+                    for m in range(i + k + 1, min(i + k + 5, len(words))):
+                        w3 = words[m]
+                        if (w3 & 0xFFE00000) == 0xD2800000 and ((w3 >> 5) & 0xFFFF) == len(old):
+                            patched = (w3 & ~(0xFFFF << 5)) | (len(repl) << 5)
+                            struct.pack_into("<I", d, text_off + m * 4, patched)
+                            code_refs += 1
+                            break
+                    break
+            d[idx:idx + len(old)] = repl.ljust(len(old), b"\0")
+    if not code_refs and not data_refs:
+        raise ValueError("no references to the old URL were found")
+    print(f"repatched {code_refs} code refs, {data_refs} data headers")
+    return d
 
 
 def main():
@@ -42,6 +95,13 @@ def main():
                     text_off = u32(d, so + 48)
         o += size
     assert text_off, "__text not found"
+
+    if OLD_PATCHED in d[:text_off]:
+        repatch(d, text_off, text_size, new)
+        shutil.copy2(path, path + ".orig")
+        open(path, "wb").write(d)
+        subprocess.run(["codesign", "-f", "-s", "-", path], check=True)
+        return
 
     # (old string, new string) — pick the occurrence that is actually referenced.
     specs = [(OLD_API, new), (OLD_APP, new), (OLD_WSNEW, new + b"/workspaces/new")]

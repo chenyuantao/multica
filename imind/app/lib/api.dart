@@ -8,7 +8,7 @@ const _apiBaseOverride = String.fromEnvironment('API_BASE');
 
 String defaultApiBase() {
   if (_apiBaseOverride.isNotEmpty) return _apiBaseOverride;
-  return 'https://chat.preview.aliyun-zeabur.cn';
+  return 'https://8.134.201.215';
 }
 
 bool validWorkspaceId(Object? value) =>
