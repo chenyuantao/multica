@@ -133,11 +133,11 @@ void main() {
         'tags': ['two'],
       },
     ]);
-    await tester.tap(find.text('#one'));
+    await tester.tap(find.widgetWithText(FilterChip, '#one'));
     await tester.pumpAndSettle();
     expect(find.text('First'), findsOneWidget);
     expect(find.text('Second'), findsNothing);
-    await tester.tap(find.text('#two'));
+    await tester.tap(find.widgetWithText(FilterChip, '#two'));
     await tester.pumpAndSettle();
     expect(find.text('First'), findsOneWidget);
     expect(find.text('Second'), findsOneWidget);
@@ -412,7 +412,7 @@ void main() {
           'tags': ['one'],
         },
       ]);
-      await tester.tap(find.text('#one'));
+      await tester.tap(find.widgetWithText(FilterChip, '#one'));
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('搜索'));
       await tester.pumpAndSettle();

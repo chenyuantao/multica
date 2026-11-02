@@ -30,6 +30,7 @@ import 'home_chrome.dart';
 import 'profile.dart';
 import 'offline_cache.dart';
 import 'note_cache.dart';
+import 'note_list_preview.dart';
 
 const _bg = Color(0xFFF2F2F6);
 const _ink = Color(0xFF1C1C1E);
@@ -1237,11 +1238,6 @@ class _HomePageState extends State<HomePage> {
 
   Widget _tile(Map<String, dynamic> note) {
     final id = '${note['id']}';
-    final type = note['type'] as String?;
-    final audio = note['audio'];
-    final duration = audio is Map ? audio['duration_ms'] : null;
-    final host = sourceHost(note['source_url']);
-    final author = (note['author'] as String? ?? '').trim();
     final unread =
         ChatUnreadScope.maybeOf(context)?.unreadForNote(id, _machine) ?? 0;
     return _GeneratingNoteFade(
@@ -1268,77 +1264,18 @@ class _HomePageState extends State<HomePage> {
             border: Border(bottom: BorderSide(color: _line)),
           ),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${note['title'] ?? ''}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 15.5, height: 1.4),
-                    ),
-                    const SizedBox(height: 7),
-                    Wrap(
-                      spacing: 12,
-                      runSpacing: 4,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        _Meta(
-                          icon: noteIcon(type),
-                          color: noteColor(type),
-                          text: noteTypeLabel(type),
-                        ),
-                        Text(
-                          formatWhen(note['updated_at'] as String?),
-                          style: const TextStyle(fontSize: 12, color: _sub),
-                        ),
-                        if (author.isNotEmpty)
-                          ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 180),
-                            child: Text(
-                              author,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 12, color: _sub),
-                            ),
-                          ),
-                        if (duration is num && duration > 0)
-                          _Meta(
-                            icon: Icons.schedule,
-                            text: clockFromMs(duration.toInt()),
-                          ),
-                        if (host != null) _Meta(icon: Icons.link, text: host),
-                        for (final tag in noteTags(note))
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFE5E5EA),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              tag,
-                              style: const TextStyle(
-                                fontSize: 10.5,
-                                color: Color(0xFF6C6C70),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ],
+                child: NoteListPreview(
+                  note: note,
+                  unreadBadge: unread > 0
+                      ? ChatUnreadBadge(count: unread)
+                      : null,
                 ),
               ),
-              if (unread > 0)
-                Padding(
-                  padding: const EdgeInsets.only(left: 8, top: 4),
-                  child: ChatUnreadBadge(count: unread),
-                ),
               if (_selecting)
                 Padding(
-                  padding: const EdgeInsets.only(left: 8, top: 8),
+                  padding: const EdgeInsets.only(left: 8),
                   child: Icon(
                     _selected.contains(id)
                         ? Icons.check_box
@@ -4476,34 +4413,8 @@ Widget _round({
   return HomeRoundButton(label: label, onTap: onTap, child: child);
 }
 
-class _Meta extends StatelessWidget {
-  const _Meta({required this.icon, required this.text, this.color = _sub});
-  final IconData icon;
-  final String text;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 13, color: color),
-        const SizedBox(width: 4),
-        Text(text, style: const TextStyle(fontSize: 12, color: _sub)),
-      ],
-    );
-  }
-}
-
 List<String> noteTags(Map note) =>
     ((note['tags'] as List?) ?? const []).map((item) => '$item').toList();
-
-String noteTypeLabel(String? type) => switch (type) {
-  'recording' => '音频',
-  'clip' => '剪藏',
-  'note' => '笔记',
-  _ => type ?? '',
-};
 
 IconData noteIcon(String? type) => switch (type) {
   'recording' => Icons.mic_none,
