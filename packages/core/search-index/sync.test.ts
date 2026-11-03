@@ -129,6 +129,28 @@ describe("WorkspaceIndex", () => {
     expect(index.isServing()).toBe(true);
   });
 
+  it("does not re-download the snapshot when a fresh cursor is also expired", async () => {
+    const server = new FakeServer();
+    server.apply({ kind: "issue", record: issueRecord(1, "Restored") });
+    const { index } = makeIndex(server);
+    await started(index);
+
+    const changes = server.changes.bind(server);
+    server.changes = (cursor: string) => {
+      server.failNext.changes = new IndexFetchError("expired", 410);
+      return changes(cursor);
+    };
+    const snapshotsBefore = server.calls.filter((call) => call === "snapshot").length;
+
+    await index.sync();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // The first expiry rebuilds once. The fresh cursor 410s too, and the next
+    // attempt waits out the backoff instead of downloading again.
+    expect(server.calls.filter((call) => call === "snapshot").length - snapshotsBefore).toBe(1);
+    expect(index.isServing()).toBe(false);
+  });
+
   it("drops the local copy when the workspace is no longer accessible", async () => {
     const server = new FakeServer();
     server.apply({ kind: "issue", record: issueRecord(1, "Private title") });

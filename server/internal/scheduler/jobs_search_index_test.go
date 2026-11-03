@@ -80,3 +80,54 @@ func TestSearchIndexChangePruneJobRemovesExpiredRowsAndRaisesMark(t *testing.T) 
 		t.Fatalf("prune mark must cover the pruned xid %s", expiredXid)
 	}
 }
+
+func TestSearchIndexChangePruneJobIgnoresXidsBeyondCluster(t *testing.T) {
+	pool := integrationPool(t)
+	ctx := context.Background()
+
+	var previousMark *string
+	_ = pool.QueryRow(ctx, `SELECT pruned_through_xid::text FROM search_index_prune_mark`).Scan(&previousMark)
+	t.Cleanup(func() {
+		if previousMark == nil {
+			pool.Exec(context.Background(), `DELETE FROM search_index_prune_mark`)
+			return
+		}
+		pool.Exec(context.Background(), `UPDATE search_index_prune_mark SET pruned_through_xid = $1::xid8`, *previousMark)
+	})
+
+	workspaceID := uuid.New()
+	importedID := uuid.New()
+	t.Cleanup(func() {
+		pool.Exec(context.Background(), `DELETE FROM search_index_change WHERE workspace_id = $1`, workspaceID)
+	})
+	planTime := time.Now().UTC().Truncate(time.Hour)
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO search_index_change (entity_type, entity_id, workspace_id, change_xid, changed_at)
+		VALUES ('comment', $1, $2, '10000000000'::xid8, $3)
+	`, importedID, workspaceID, planTime.Add(-SearchIndexChangeRetention-time.Hour)); err != nil {
+		t.Fatalf("insert imported change: %v", err)
+	}
+
+	job := SearchIndexChangePruneJob(db.New(pool))
+	if _, err := job.Handler(ctx, HandlerInput{Job: &job, Scope: ScopeGlobal, PlanTime: planTime}); err != nil {
+		t.Fatalf("prune: %v", err)
+	}
+
+	var gone bool
+	var markAhead bool
+	if err := pool.QueryRow(ctx, `
+		SELECT NOT EXISTS (
+			SELECT 1 FROM search_index_change WHERE entity_id = $1
+		), EXISTS (
+			SELECT 1 FROM search_index_prune_mark WHERE pruned_through_xid >= '10000000000'::xid8
+		)
+	`, importedID).Scan(&gone, &markAhead); err != nil {
+		t.Fatalf("read prune result: %v", err)
+	}
+	if !gone {
+		t.Fatal("expired imported row should still be deleted")
+	}
+	if markAhead {
+		t.Fatal("prune mark must not advance to an xid this cluster has not issued")
+	}
+}

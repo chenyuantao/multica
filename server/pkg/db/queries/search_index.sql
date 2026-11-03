@@ -61,11 +61,15 @@ WHERE workspace_id = @workspace_id AND id = ANY(@ids::uuid[]);
 -- name: SearchIndexSinceIsPruned :one
 -- True when retention pruning may have removed a change the client has not
 -- seen yet: a pruned xid at or above the snapshot's xmin could be one it has
--- not consumed.
+-- not consumed. The mark also has to be an xid this cluster has issued. A
+-- restore can leave a mark from the source cluster's counter, past this
+-- database's current snapshot; that is not a gap, and treating it as one makes
+-- every fresh cursor look expired.
 SELECT EXISTS (
     SELECT 1 FROM search_index_prune_mark
     WHERE singleton
       AND pruned_through_xid >= pg_snapshot_xmin((@since_snapshot::text)::pg_snapshot)
+      AND pruned_through_xid < pg_snapshot_xmax(pg_current_snapshot())
 ) AS pruned;
 
 -- name: ListSearchIndexChanges :many
@@ -86,7 +90,9 @@ LIMIT @page_limit;
 
 -- name: PruneSearchIndexChanges :one
 -- Deletes one bounded batch of rows older than the cutoff and raises the prune
--- mark to the highest xid removed, in the same statement.
+-- mark to the highest removed xid this cluster has actually issued. Rows whose
+-- xid sits past the current snapshot are still deleted, but they must not move
+-- the mark: a future mark makes every fresh cursor look expired.
 WITH doomed AS (
     SELECT sic.entity_type, sic.entity_id
     FROM search_index_change sic
@@ -103,7 +109,11 @@ WITH doomed AS (
     RETURNING c.change_xid
 ), marked AS (
     INSERT INTO search_index_prune_mark (singleton, pruned_through_xid)
-    SELECT TRUE, deleted.change_xid FROM deleted ORDER BY deleted.change_xid DESC LIMIT 1
+    SELECT TRUE, deleted.change_xid
+    FROM deleted
+    WHERE deleted.change_xid < pg_snapshot_xmax(pg_current_snapshot())
+    ORDER BY deleted.change_xid DESC
+    LIMIT 1
     ON CONFLICT (singleton) DO UPDATE
         SET pruned_through_xid = GREATEST(search_index_prune_mark.pruned_through_xid, EXCLUDED.pruned_through_xid)
     RETURNING 1

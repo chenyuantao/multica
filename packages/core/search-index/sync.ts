@@ -112,6 +112,8 @@ export class WorkspaceIndex {
   private lastSyncOkAt: number | null = null;
   private lastErrorAt: number | null = null;
   private failures = 0;
+  /** Consecutive 410s. One expiry rebuilds immediately; the next waits. */
+  private expiredRebuilds = 0;
   private running: Promise<void> | null = null;
   private rerun = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
@@ -250,6 +252,7 @@ export class WorkspaceIndex {
       await this.catchUp(meta);
       this.lastSyncOkAt = this.options.now();
       this.failures = 0;
+      this.expiredRebuilds = 0;
       this.options.onChange?.();
     } catch (err) {
       if (err instanceof OverBudgetError) await this.declineTooLarge();
@@ -353,9 +356,20 @@ export class WorkspaceIndex {
     const status = err instanceof IndexFetchError ? err.status : undefined;
     if (status === 410) {
       // Retention pruning passed our snapshot: rebuild from a fresh manifest.
+      // A cursor the server just issued can 410 too, when a restored prune mark
+      // sits past this database's xid counter. Rebuilding again immediately
+      // re-downloads the whole snapshot in a loop, so only the first expiry
+      // retries at once.
       await this.store.reset(emptyIndexMeta()).catch(() => undefined);
       this.forgetLoaded();
       this.setState("loading");
+      this.expiredRebuilds += 1;
+      if (this.expiredRebuilds > 1) {
+        this.failures += 1;
+        const backoff = Math.min(this.options.retryBaseMs * 2 ** (this.failures - 1), this.options.retryMaxMs);
+        this.scheduleRetry(backoff * (0.5 + this.options.random()));
+        return;
+      }
       this.scheduleRetry(0);
       return;
     }

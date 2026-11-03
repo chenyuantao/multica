@@ -276,6 +276,35 @@ func TestSearchIndexChangesExpireAfterPruning(t *testing.T) {
 		Want(http.StatusGone)
 }
 
+// A prune mark imported from another cluster can sit past this database's xid
+// counter. It must not expire a cursor the server just issued, or the client
+// rebuilds the snapshot forever.
+func TestSearchIndexChangesIgnorePruneMarkAheadOfCluster(t *testing.T) {
+	if testHandler == nil {
+		t.Skip("database not available")
+	}
+	ctx := context.Background()
+	wsID := searchIndexWorkspace(t, "SIF")
+	cursor := searchIndexManifest(t, wsID).Cursor
+
+	var previous *string
+	_ = testPool.QueryRow(ctx, `SELECT pruned_through_xid::text FROM search_index_prune_mark`).Scan(&previous)
+	t.Cleanup(func() {
+		if previous == nil {
+			testPool.Exec(context.Background(), `DELETE FROM search_index_prune_mark`)
+			return
+		}
+		testPool.Exec(context.Background(), `UPDATE search_index_prune_mark SET pruned_through_xid = $1::xid8`, *previous)
+	})
+	dbfx.Exec(t, `
+		INSERT INTO search_index_prune_mark (singleton, pruned_through_xid)
+		VALUES (TRUE, '10000000000'::xid8)
+		ON CONFLICT (singleton) DO UPDATE SET pruned_through_xid = EXCLUDED.pruned_through_xid
+	`)
+
+	searchIndexChanges(t, wsID, cursor, 100)
+}
+
 func TestSearchIndexChangesRejectInvalidCursors(t *testing.T) {
 	if testHandler == nil {
 		t.Skip("database not available")
